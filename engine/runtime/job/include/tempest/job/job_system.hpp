@@ -9,6 +9,7 @@
 #include <tempest/int.hpp>
 #include <tempest/job/allocator.hpp>
 #include <tempest/job/async_event.hpp>
+#include <tempest/job/context.hpp>
 #include <tempest/job/parallel_for.hpp>
 #include <tempest/job/task.hpp>
 #include <tempest/job/task_graph.hpp>
@@ -73,7 +74,13 @@ namespace tempest::job
         [[nodiscard]] auto performance_worker_count() const noexcept -> uint32_t;
         [[nodiscard]] auto efficiency_worker_count() const noexcept -> uint32_t;
 
+        [[nodiscard]] auto get_dispatch_allocator() noexcept -> job_allocator&;
+        [[nodiscard]] auto allocate_frame(size_t size) -> void*;
+
         auto schedule(coroutine_handle<> handle, task_priority priority = task_priority::normal,
+                      core_class affinity = core_class::any) -> void;
+        auto schedule(const job_context& ctx, coroutine_handle<> handle,
+                      task_priority priority = task_priority::normal,
                       core_class affinity = core_class::any) -> void;
 
         template <typename F>
@@ -89,7 +96,7 @@ namespace tempest::job
 
             if constexpr (detail::is_task_v<ReturnType>)
             {
-                auto runner = [](F fn) -> ReturnType {
+                auto runner = [](job_allocator&, F fn) -> ReturnType {
                     if constexpr (is_void_v<typename ReturnType::value_type>)
                     {
                         co_await fn();
@@ -101,28 +108,28 @@ namespace tempest::job
                     }
                 };
 
-                auto t = runner(forward<F>(callable));
+                auto t = runner(get_dispatch_allocator(), forward<F>(callable));
                 schedule(t.handle(), priority, affinity);
                 return t;
             }
             else if constexpr (is_void_v<ReturnType>)
             {
-                auto runner = [](F fn) -> task<void> {
+                auto runner = [](job_allocator&, F fn) -> task<void> {
                     fn();
                     co_return;
                 };
 
-                auto t = runner(forward<F>(callable));
+                auto t = runner(get_dispatch_allocator(), forward<F>(callable));
                 schedule(t.handle(), priority, affinity);
                 return t;
             }
             else
             {
-                auto runner = [](F fn) -> task<ReturnType> {
+                auto runner = [](job_allocator&, F fn) -> task<ReturnType> {
                     co_return fn();
                 };
 
-                auto t = runner(forward<F>(callable));
+                auto t = runner(get_dispatch_allocator(), forward<F>(callable));
                 schedule(t.handle(), priority, affinity);
                 return t;
             }
@@ -152,7 +159,7 @@ namespace tempest::job
                 auto done_event = make_unique<async_event>(*this);
 
                 auto launch_chunk = [&body, rem = remaining.get(), ev = done_event.get()](
-                                        size_t chunk_start, size_t chunk_end) -> detail::detached_task {
+                                        job_allocator&, size_t chunk_start, size_t chunk_end) -> detail::detached_task {
                     if constexpr (requires { body(range<size_t>{chunk_start, chunk_end}); })
                     {
                         body(range<size_t>{chunk_start, chunk_end});
@@ -175,7 +182,7 @@ namespace tempest::job
                 {
                     auto chunk_start = r.first + c * chunk_sz;
                     auto chunk_end = tempest::min(r.last, chunk_start + chunk_sz);
-                    auto task = launch_chunk(chunk_start, chunk_end);
+                    auto task = launch_chunk(get_dispatch_allocator(), chunk_start, chunk_end);
                     schedule(task.handle, priority, core_class::any);
                 }
 
@@ -189,7 +196,7 @@ namespace tempest::job
                 auto done_event = make_unique<async_event>(*this);
 
                 auto launch_guided = [&body, next = next_idx.get(), r, part, workers,
-                                      rem = remaining.get(), ev = done_event.get()]() -> detail::detached_task {
+                                      rem = remaining.get(), ev = done_event.get()](job_allocator&) -> detail::detached_task {
                     while (true)
                     {
                         auto curr = next->load(memory_order::relaxed);
@@ -226,7 +233,7 @@ namespace tempest::job
 
                 for (auto t = 0u; t < num_tasks; ++t)
                 {
-                    auto task = launch_guided();
+                    auto task = launch_guided(get_dispatch_allocator());
                     schedule(task.handle, priority, core_class::any);
                 }
 

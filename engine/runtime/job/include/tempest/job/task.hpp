@@ -6,6 +6,7 @@
 #include <tempest/coroutine.hpp>
 #include <tempest/expected.hpp>
 #include <tempest/job/allocator.hpp>
+#include <tempest/job/context.hpp>
 #include <tempest/job/types.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
@@ -16,6 +17,8 @@
 
 namespace tempest::job
 {
+    class job_system;
+
     inline atomic<uint64_t> g_next_coroutine_id{1};
 
     template <typename T = void, typename E = job_error>
@@ -23,18 +26,98 @@ namespace tempest::job
 
     namespace detail
     {
+        struct alignas(16) coroutine_frame_header
+        {
+            job_allocator* owner{nullptr};
+            uint32_t frame_size{0};
+            uint16_t size_class{0};
+            uint16_t is_heap{0};
+        };
+        static_assert(sizeof(coroutine_frame_header) == 16);
+
+        template <typename T>
+        concept complete_type = requires { sizeof(T); };
+
+        template <typename T>
+        constexpr auto get_allocator_from_arg([[maybe_unused]] T&& arg) noexcept -> job_allocator*
+        {
+            using CleanT = remove_cvref_t<T>;
+            if constexpr (is_same_v<CleanT, job_allocator>)
+            {
+                return const_cast<job_allocator*>(&arg);
+            }
+            else if constexpr (is_same_v<CleanT, job_context>)
+            {
+                return arg.allocator.get();
+            }
+            else if constexpr (complete_type<CleanT>)
+            {
+                if constexpr (requires { { arg.get_dispatch_allocator() } -> same_as<job_allocator&>; })
+                {
+                    return &arg.get_dispatch_allocator();
+                }
+                else if constexpr (requires { { arg.get_job_allocator() } -> same_as<job_allocator&>; })
+                {
+                    return &arg.get_job_allocator();
+                }
+                else
+                {
+                    return nullptr;
+                }
+            }
+            else
+            {
+                return nullptr;
+            }
+        }
+
+        template <typename... Args>
+        constexpr auto find_allocator(Args&&... args) noexcept -> job_allocator*
+        {
+            job_allocator* result = nullptr;
+            auto check = [&result](job_allocator* alloc) {
+                if (result == nullptr && alloc != nullptr)
+                {
+                    result = alloc;
+                }
+            };
+            (check(get_allocator_from_arg(forward<Args>(args))), ...);
+            return result;
+        }
+
         struct promise_allocator_base
         {
-            static auto operator new(size_t size) -> void*
+            template <typename... Args>
+            static auto operator new(size_t size, Args&&... args) -> void*
             {
-                auto* alloc = job_allocator::get_current();
+                constexpr auto header_size = sizeof(coroutine_frame_header);
+                const auto total_size = size + header_size;
+                auto* alloc = find_allocator(forward<Args>(args)...);
+
                 if (alloc != nullptr)
                 {
-                    return alloc->allocate(size);
+                    auto* raw = static_cast<byte*>(alloc->allocate(total_size));
+                    auto* header = reinterpret_cast<coroutine_frame_header*>(raw);
+                    header->owner = alloc;
+                    header->frame_size = static_cast<uint32_t>(size);
+                    const auto sc = get_size_class(total_size);
+                    header->size_class = (sc >= 0) ? static_cast<uint16_t>(sc) : 0xFFFF;
+                    header->is_heap = (sc < 0) ? 1 : 0;
+                    return raw + header_size;
                 }
-                auto* raw = static_cast<byte*>(tempest::aligned_alloc(size + 16, 16));
-                *reinterpret_cast<uint64_t*>(raw) = 0xDEADBEEFULL;
-                return raw + 16;
+
+                auto* raw = static_cast<byte*>(tempest::aligned_alloc(total_size, 16));
+                auto* header = reinterpret_cast<coroutine_frame_header*>(raw);
+                header->owner = nullptr;
+                header->frame_size = static_cast<uint32_t>(size);
+                header->size_class = 0xFFFF;
+                header->is_heap = 1;
+                return raw + header_size;
+            }
+
+            static auto operator new(size_t size) -> void*
+            {
+                return operator new<>(size);
             }
 
             static auto operator delete(void* ptr, size_t size) noexcept -> void
@@ -43,14 +126,17 @@ namespace tempest::job
                 {
                     return;
                 }
-                auto* prefix = static_cast<byte*>(ptr) - 16;
-                if (*reinterpret_cast<uint64_t*>(prefix) == 0xDEADBEEFULL)
+                constexpr auto header_size = sizeof(coroutine_frame_header);
+                const auto total_size = size + header_size;
+                auto* header = reinterpret_cast<coroutine_frame_header*>(static_cast<byte*>(ptr) - header_size);
+
+                if (header->owner != nullptr)
                 {
-                    tempest::aligned_free(prefix);
+                    header->owner->deallocate(header, total_size);
                 }
                 else
                 {
-                    job_allocator::deallocate(ptr, size);
+                    tempest::aligned_free(header);
                 }
             }
         };
@@ -235,6 +321,11 @@ namespace tempest::job
                     {
                         promise.current_slice_index++;
                         ctx->begin_coroutine_slice(promise.coroutine_id, promise.current_slice_index, promise.name);
+                        auto h = coroutine_handle<Promise>::from_promise(promise);
+                        auto* header = reinterpret_cast<const coroutine_frame_header*>(
+                            static_cast<const byte*>(h.address()) - sizeof(coroutine_frame_header));
+                        ctx->add_metric("frame_bytes", static_cast<double>(header->frame_size), profiler::metric_unit::bytes);
+                        ctx->add_metric("is_heap", header->is_heap ? 1.0 : 0.0, profiler::metric_unit::raw);
                     }
                 }
                 return awaiter.await_resume();
@@ -261,6 +352,11 @@ namespace tempest::job
                 if (ctx != nullptr && ctx->get_session().is_enabled())
                 {
                     ctx->begin_coroutine_slice(promise.coroutine_id, promise.current_slice_index, promise.name);
+                    auto h = coroutine_handle<Promise>::from_promise(promise);
+                    auto* header = reinterpret_cast<const coroutine_frame_header*>(
+                        static_cast<const byte*>(h.address()) - sizeof(coroutine_frame_header));
+                    ctx->add_metric("frame_bytes", static_cast<double>(header->frame_size), profiler::metric_unit::bytes);
+                    ctx->add_metric("is_heap", header->is_heap ? 1.0 : 0.0, profiler::metric_unit::raw);
                 }
             }
         };

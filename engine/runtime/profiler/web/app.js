@@ -1540,10 +1540,29 @@
       reasonTag.className = 'metric-tag';
       reasonTag.innerHTML = `<span class="tag-name">suspend_reason:</span><span class="tag-value">${zone.suspend_reason || 'none'}</span>`;
       dom.inspMetricsList.appendChild(reasonTag);
+
+      const frameBytesMet = zone.metrics?.find(m => m.name === 'frame_bytes');
+      const isHeapMet = zone.metrics?.find(m => m.name === 'is_heap');
+      if (frameBytesMet !== undefined) {
+        const frameTag = document.createElement('div');
+        frameTag.className = 'metric-tag';
+        frameTag.innerHTML = `<span class="tag-name">frame_bytes:</span><span class="tag-value">${frameBytesMet.value.toLocaleString()} B</span>`;
+        dom.inspMetricsList.appendChild(frameTag);
+      }
+      if (isHeapMet !== undefined) {
+        const storageTag = document.createElement('div');
+        storageTag.className = 'metric-tag';
+        const isHeap = isHeapMet.value > 0.5;
+        storageTag.innerHTML = `<span class="tag-name">storage:</span><span class="tag-value" style="color: ${isHeap ? '#f59e0b' : '#10b981'}; font-weight: 600;">${isHeap ? 'Heap' : 'Slab'}</span>`;
+        dom.inspMetricsList.appendChild(storageTag);
+      }
     }
 
     if (zone.metrics && zone.metrics.length > 0) {
       for (const m of zone.metrics) {
+        if (zone.coroutine_id && (m.name === 'frame_bytes' || m.name === 'is_heap')) {
+          continue;
+        }
         const tag = document.createElement('div');
         tag.className = 'metric-tag';
         tag.innerHTML = `<span class="tag-name">${m.name}:</span><span class="tag-value">${m.value.toLocaleString()}</span>`;
@@ -2065,6 +2084,15 @@
         ${z.coroutine_id ? `
           <div class="tt-row"><span>Coroutine:</span><span class="tt-val">#${z.coroutine_id} (Slice ${z.slice_index || 0})</span></div>
           <div class="tt-row"><span>Suspend Reason:</span><span class="tt-val">${z.suspend_reason || 'none'}</span></div>
+          ${(() => {
+            const fb = z.metrics?.find(m => m.name === 'frame_bytes');
+            const ih = z.metrics?.find(m => m.name === 'is_heap');
+            if (fb !== undefined) {
+              const storage = (ih && ih.value > 0.5) ? 'Heap' : 'Slab';
+              return `<div class="tt-row"><span>Frame:</span><span class="tt-val">${fb.value} B (${storage})</span></div>`;
+            }
+            return '';
+          })()}
         ` : ''}
       `;
     } else {

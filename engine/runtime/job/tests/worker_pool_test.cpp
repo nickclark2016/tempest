@@ -197,4 +197,49 @@ namespace tempest::job::tests
         EXPECT_EQ(perf_task_executed_by_p.load(memory_order::relaxed), heavy_task_count);
         EXPECT_FALSE(forbidden_theft_detected.load(memory_order::relaxed));
     }
+
+    /// @brief Verify direct coroutine scheduling via job_context without ambient TLS or thread lookups.
+    TEST(worker_pool_test, job_context_direct_schedule)
+    {
+        // 1. Setup: Multi-threaded worker pool with 2 workers
+        auto log = logger{};
+        auto prof = profiler::profiler_session{false};
+        auto config = job_system_config{
+            .performance_worker_count = 2,
+            .efficiency_worker_count = 0,
+            .enable_work_stealing = true,
+        };
+        auto sys = job_system{log, prof, config};
+
+        auto executed = atomic<int>{0};
+
+        // 2. Act: Construct an explicit job_context pointing to worker 0
+        auto ctx = job_context{
+            .system = sys,
+            .allocator = sys.get_dispatch_allocator(),
+            .worker_index = 0,
+            .core_type = core_class::performance,
+        };
+
+        auto child_coroutine = [](atomic<int>& counter) -> task<void> {
+            counter.fetch_add(1, memory_order::relaxed);
+            co_return;
+        };
+
+        constexpr auto task_count = 20;
+        auto tasks = vector<task<void>>{};
+        tasks.reserve(task_count);
+
+        for (auto i = 0; i < task_count; ++i)
+        {
+            auto t = child_coroutine(executed);
+            ctx.schedule(t.handle());
+            tasks.push_back(move(t));
+        }
+
+        sys.wait_idle();
+
+        // 3. Assert: All coroutines scheduled through job_context executed to completion
+        EXPECT_EQ(executed.load(memory_order::relaxed), task_count);
+    }
 } // namespace tempest::job::tests

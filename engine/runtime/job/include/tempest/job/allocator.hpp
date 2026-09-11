@@ -13,6 +13,35 @@ namespace tempest::job
     inline constexpr size_t slab_class_sizes[slab_class_count] = {64, 128, 256, 512, 1024, 2048};
     inline constexpr size_t slab_chunk_size = 64 * 1024; // 64 KB
 
+    constexpr auto get_size_class(size_t size) noexcept -> int32_t
+    {
+        if (size <= 64)
+        {
+            return 0;
+        }
+        if (size <= 128)
+        {
+            return 1;
+        }
+        if (size <= 256)
+        {
+            return 2;
+        }
+        if (size <= 512)
+        {
+            return 3;
+        }
+        if (size <= 1024)
+        {
+            return 4;
+        }
+        if (size <= 2048)
+        {
+            return 5;
+        }
+        return -1;
+    }
+
     struct allocator_telemetry
     {
         array<uint64_t, slab_class_count> allocations_per_class{};
@@ -65,10 +94,8 @@ namespace tempest::job
 
         [[nodiscard]] auto get_telemetry() const noexcept -> allocator_telemetry;
 
-        [[nodiscard]] static auto get_current() noexcept -> job_allocator*;
-        static auto set_current(job_allocator* alloc) noexcept -> job_allocator*;
-
         auto push_remote_free(void* ptr) noexcept -> void;
+        auto decrement_live_frames() noexcept -> void;
 
       private:
         auto _allocate_slab_chunk(size_t size_class) -> void;
@@ -81,19 +108,6 @@ namespace tempest::job
         atomic<uint64_t> _heap_fallback_count{0};
         atomic<int64_t> _active_live_frames{0};
         atomic<uint64_t> _committed_slab_chunks{0};
-    };
-
-    class TEMPEST_API job_allocator_scope
-    {
-      public:
-        explicit job_allocator_scope(job_allocator& alloc) noexcept;
-        ~job_allocator_scope();
-
-        job_allocator_scope(const job_allocator_scope&) = delete;
-        job_allocator_scope& operator=(const job_allocator_scope&) = delete;
-
-      private:
-        job_allocator* _prev{nullptr};
     };
 } // namespace tempest::job
 

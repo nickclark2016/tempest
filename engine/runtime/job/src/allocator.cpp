@@ -3,50 +3,12 @@
 
 namespace tempest::job
 {
-    namespace
-    {
-        thread_local job_allocator* tl_current_allocator = nullptr;
-
-        auto get_size_class(size_t size) noexcept -> int32_t
-        {
-            if (size <= 64)
-            {
-                return 0;
-            }
-            if (size <= 128)
-            {
-                return 1;
-            }
-            if (size <= 256)
-            {
-                return 2;
-            }
-            if (size <= 512)
-            {
-                return 3;
-            }
-            if (size <= 1024)
-            {
-                return 4;
-            }
-            if (size <= 2048)
-            {
-                return 5;
-            }
-            return -1;
-        }
-    } // namespace
 
     job_allocator::job_allocator() = default;
 
     job_allocator::~job_allocator()
     {
         drain_remote_frees();
-
-        if (tl_current_allocator == this)
-        {
-            tl_current_allocator = nullptr;
-        }
 
         for (size_t cls = 0; cls < slab_class_count; ++cls)
         {
@@ -69,10 +31,11 @@ namespace tempest::job
         const auto cls = get_size_class(size);
         if (cls < 0)
         {
-            auto* ptr = aligned_alloc(size, 16);
+            auto* raw = static_cast<byte*>(aligned_alloc(size + 16, 16));
+            *reinterpret_cast<job_allocator**>(raw) = this;
             _heap_fallback_count.fetch_add(1, memory_order::relaxed);
             _active_live_frames.fetch_add(1, memory_order::acq_rel);
-            return ptr;
+            return raw + 16;
         }
 
         const auto class_idx = static_cast<size_t>(cls);
@@ -155,31 +118,25 @@ namespace tempest::job
 
         if (size > 2048)
         {
-            aligned_free(ptr);
-            auto* curr = get_current();
-            if (curr != nullptr)
+            auto* raw = static_cast<byte*>(ptr) - 16;
+            auto* owner = *reinterpret_cast<job_allocator**>(raw);
+            if (owner != nullptr)
             {
-                curr->_active_live_frames.fetch_sub(1, memory_order::acq_rel);
+                owner->_active_live_frames.fetch_sub(1, memory_order::acq_rel);
             }
+            aligned_free(raw);
             return;
         }
 
         auto* chunk = slab_chunk::from_pointer(ptr);
         auto* owner = chunk->owner;
         owner->_active_live_frames.fetch_sub(1, memory_order::acq_rel);
+        owner->push_remote_free(ptr);
+    }
 
-        auto* current = get_current();
-        if (current == owner)
-        {
-            const auto cls = chunk->size_class;
-            auto* slot = reinterpret_cast<free_slot_node*>(ptr);
-            slot->next = owner->_local_free_list[cls];
-            owner->_local_free_list[cls] = slot;
-        }
-        else
-        {
-            owner->push_remote_free(ptr);
-        }
+    auto job_allocator::decrement_live_frames() noexcept -> void
+    {
+        _active_live_frames.fetch_sub(1, memory_order::acq_rel);
     }
 
     auto job_allocator::get_telemetry() const noexcept -> allocator_telemetry
@@ -193,27 +150,5 @@ namespace tempest::job
         t.active_live_frames = _active_live_frames.load(memory_order::relaxed);
         t.committed_slab_chunks = _committed_slab_chunks.load(memory_order::relaxed);
         return t;
-    }
-
-    auto job_allocator::get_current() noexcept -> job_allocator*
-    {
-        return tl_current_allocator;
-    }
-
-    auto job_allocator::set_current(job_allocator* alloc) noexcept -> job_allocator*
-    {
-        auto* prev = tl_current_allocator;
-        tl_current_allocator = alloc;
-        return prev;
-    }
-
-    job_allocator_scope::job_allocator_scope(job_allocator& alloc) noexcept
-        : _prev{job_allocator::set_current(&alloc)}
-    {
-    }
-
-    job_allocator_scope::~job_allocator_scope()
-    {
-        job_allocator::set_current(_prev);
     }
 } // namespace tempest::job

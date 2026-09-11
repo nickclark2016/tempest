@@ -225,6 +225,11 @@ namespace tempest
 #endif
         }
 
+        constexpr auto operator==(const id& other) const noexcept -> bool
+        {
+            return (*this <=> other) == 0;
+        }
+
         [[nodiscard]] constexpr auto to_uint64() const noexcept -> uint64_t
         {
 #ifdef TEMPEST_WIN_THREADS

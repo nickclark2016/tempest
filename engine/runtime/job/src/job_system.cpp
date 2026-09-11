@@ -78,10 +78,11 @@ namespace tempest::job
         tempest::thread worker_thread{};
     };
 
-    namespace
+    struct worker_thread_info
     {
-        thread_local worker_state* tl_current_worker = nullptr;
-    }
+        tempest::thread::id thread_id{};
+        worker_state* state{nullptr};
+    };
 
     struct job_system::impl
     {
@@ -92,6 +93,7 @@ namespace tempest::job
 
         // Multi-threaded worker pool
         vector<unique_ptr<worker_state>> workers{};
+        vector<worker_thread_info> worker_threads{};
         atomic<bool> stop_requested{false};
         alignas(64) atomic<uint64_t> idle_mask{0};
         atomic<size_t> next_injection_worker{0};
@@ -102,6 +104,77 @@ namespace tempest::job
         array<deque<queue_item>, static_cast<size_t>(task_priority::count)> single_stepped_queues{};
         uint32_t single_stepped_anti_starvation{0};
         job_allocator single_stepped_allocator{};
+        job_allocator dispatch_allocator{};
+
+        [[nodiscard]] auto find_current_worker() const noexcept -> worker_state*
+        {
+            const auto self_id = this_thread::get_id();
+            for (const auto& entry : worker_threads)
+            {
+                if (entry.thread_id == self_id)
+                {
+                    return entry.state;
+                }
+            }
+            return nullptr;
+        }
+
+        auto wake_idle_worker() -> void
+        {
+            auto idle = idle_mask.load(memory_order::relaxed);
+            if (idle != 0)
+            {
+                for (auto i = 0u; i < workers.size(); ++i)
+                {
+                    if (idle & (1ULL << i))
+                    {
+                        idle_mask.fetch_and(~(1ULL << i), memory_order::acq_rel);
+                        workers[i]->park_state.store(0, memory_order::release);
+                        futex_wake_one(&workers[i]->park_state);
+                        break;
+                    }
+                }
+            }
+        }
+
+        auto schedule_external(const queue_item& item, core_class affinity) -> void
+        {
+            auto target_idx = 0u;
+            if (affinity == core_class::performance)
+            {
+                auto p_count = perf_worker_count;
+                if (p_count > 0)
+                {
+                    auto next = next_injection_worker.fetch_add(1, memory_order::relaxed);
+                    target_idx = next % p_count;
+                }
+            }
+            else if (affinity == core_class::efficiency)
+            {
+                auto e_count = eff_worker_count;
+                auto p_count = perf_worker_count;
+                if (e_count > 0)
+                {
+                    auto next = next_injection_worker.fetch_add(1, memory_order::relaxed);
+                    target_idx = p_count + (next % e_count);
+                }
+                else
+                {
+                    auto next = next_injection_worker.fetch_add(1, memory_order::relaxed);
+                    target_idx = next % workers.size();
+                }
+            }
+            else
+            {
+                auto next = next_injection_worker.fetch_add(1, memory_order::relaxed);
+                target_idx = next % workers.size();
+            }
+
+            workers[target_idx]->injection_queue.push(item);
+            idle_mask.fetch_and(~(1ULL << target_idx), memory_order::acq_rel);
+            workers[target_idx]->park_state.store(0, memory_order::release);
+            futex_wake_one(&workers[target_idx]->park_state);
+        }
     };
 
     job_system::job_system(logger& log, profiler::profiler_session& profiler, const job_system_config& config)
@@ -211,9 +284,6 @@ namespace tempest::job
         for (auto& w : _impl->workers)
         {
             w->worker_thread = tempest::thread([this, worker = w.get()] {
-                auto alloc_scope = job_allocator_scope{worker->allocator};
-                tl_current_worker = worker;
-
                 auto& prof_ctx = _profiler.get_or_register_thread();
                 prof_ctx.set_thread_name(worker->type == core_class::performance ? "JobWorker-P" : "JobWorker-E");
 
@@ -471,8 +541,14 @@ namespace tempest::job
                     _impl->idle_mask.fetch_and(~(1ULL << worker->worker_index), memory_order::acq_rel);
                     worker->park_state.store(0, memory_order::release);
                 }
+            });
+        }
 
-                tl_current_worker = nullptr;
+        for (const auto& w : _impl->workers)
+        {
+            _impl->worker_threads.push_back(worker_thread_info{
+                .thread_id = w->worker_thread.get_id(),
+                .state = w.get(),
             });
         }
     }
@@ -523,20 +599,77 @@ namespace tempest::job
 
     auto job_system::current_worker_core_class() const noexcept -> optional<core_class>
     {
-        if (tl_current_worker != nullptr && tl_current_worker->owner == this)
+        auto* worker = _impl->find_current_worker();
+        if (worker != nullptr && worker->owner == this)
         {
-            return tl_current_worker->type;
+            return worker->type;
         }
         return nullopt;
     }
 
     auto job_system::current_worker_index() const noexcept -> optional<size_t>
     {
-        if (tl_current_worker != nullptr && tl_current_worker->owner == this)
+        auto* worker = _impl->find_current_worker();
+        if (worker != nullptr && worker->owner == this)
         {
-            return tl_current_worker->worker_index;
+            return worker->worker_index;
         }
         return nullopt;
+    }
+
+    auto job_system::schedule(const job_context& ctx, coroutine_handle<> handle, task_priority priority,
+                               core_class affinity) -> void
+    {
+        if (!handle || handle.done())
+        {
+            return;
+        }
+
+        auto prio_idx = static_cast<size_t>(priority);
+        if (prio_idx >= static_cast<size_t>(task_priority::count))
+        {
+            prio_idx = static_cast<size_t>(task_priority::normal);
+        }
+
+        auto item = queue_item{
+            .handle = handle,
+            .priority = priority,
+            .affinity = affinity,
+        };
+
+        _impl->active_tasks.fetch_add(1, memory_order::relaxed);
+
+        if (_impl->is_single_stepped || _impl->workers.empty())
+        {
+            auto guard = lock_guard{_impl->single_stepped_mutex};
+            _impl->single_stepped_queues[prio_idx].push_back(item);
+            return;
+        }
+
+        if (ctx.worker_index < _impl->workers.size())
+        {
+            auto* curr_worker = _impl->workers[ctx.worker_index].get();
+            auto compatible = (affinity == core_class::any) || (affinity == curr_worker->type);
+            if (compatible)
+            {
+                if (this_thread::get_id() == curr_worker->worker_thread.get_id())
+                {
+                    curr_worker->deques[prio_idx].push(item);
+                    _impl->wake_idle_worker();
+                    return;
+                }
+                else
+                {
+                    curr_worker->injection_queue.push(item);
+                    _impl->idle_mask.fetch_and(~(1ULL << ctx.worker_index), memory_order::acq_rel);
+                    curr_worker->park_state.store(0, memory_order::release);
+                    futex_wake_one(&curr_worker->park_state);
+                    return;
+                }
+            }
+        }
+
+        _impl->schedule_external(item, affinity);
     }
 
     auto job_system::schedule(coroutine_handle<> handle, task_priority priority, core_class affinity) -> void
@@ -567,69 +700,19 @@ namespace tempest::job
             return;
         }
 
-        auto* curr_worker = tl_current_worker;
+        auto* curr_worker = _impl->find_current_worker();
         if (curr_worker != nullptr && curr_worker->owner == this)
         {
-            // Worker thread scheduling
             auto compatible = (affinity == core_class::any) || (affinity == curr_worker->type);
             if (compatible)
             {
                 curr_worker->deques[prio_idx].push(item);
-
-                // Wake an idle worker to steal if available
-                auto idle = _impl->idle_mask.load(memory_order::relaxed);
-                if (idle != 0)
-                {
-                    for (auto i = 0u; i < _impl->workers.size(); ++i)
-                    {
-                        if (idle & (1ULL << i))
-                        {
-                            _impl->workers[i]->park_state.store(0, memory_order::release);
-                            futex_wake_one(&_impl->workers[i]->park_state);
-                            break;
-                        }
-                    }
-                }
+                _impl->wake_idle_worker();
                 return;
             }
         }
 
-        // External thread or cross-affinity scheduling
-        auto target_idx = 0u;
-        if (affinity == core_class::performance)
-        {
-            auto p_count = _impl->perf_worker_count;
-            if (p_count > 0)
-            {
-                auto next = _impl->next_injection_worker.fetch_add(1, memory_order::relaxed);
-                target_idx = next % p_count;
-            }
-        }
-        else if (affinity == core_class::efficiency)
-        {
-            auto e_count = _impl->eff_worker_count;
-            auto p_count = _impl->perf_worker_count;
-            if (e_count > 0)
-            {
-                auto next = _impl->next_injection_worker.fetch_add(1, memory_order::relaxed);
-                target_idx = p_count + (next % e_count);
-            }
-            else
-            {
-                // Fallback to P-core if no E-cores
-                auto next = _impl->next_injection_worker.fetch_add(1, memory_order::relaxed);
-                target_idx = next % _impl->workers.size();
-            }
-        }
-        else
-        {
-            auto next = _impl->next_injection_worker.fetch_add(1, memory_order::relaxed);
-            target_idx = next % _impl->workers.size();
-        }
-
-        _impl->workers[target_idx]->injection_queue.push(item);
-        _impl->workers[target_idx]->park_state.store(0, memory_order::release);
-        futex_wake_one(&_impl->workers[target_idx]->park_state);
+        _impl->schedule_external(item, affinity);
     }
 
     auto job_system::step() -> bool
@@ -680,7 +763,6 @@ namespace tempest::job
 
             if (item.handle && !item.handle.done())
             {
-                auto alloc_scope = job_allocator_scope{_impl->single_stepped_allocator};
                 item.handle.resume();
             }
 
@@ -696,7 +778,6 @@ namespace tempest::job
             {
                 if (res->handle && !res->handle.done())
                 {
-                    auto alloc_scope = job_allocator_scope{_impl->workers[0]->allocator};
                     res->handle.resume();
                 }
                 _impl->active_tasks.fetch_sub(1, memory_order::release);
@@ -854,5 +935,15 @@ namespace tempest::job
         }
 
         co_return expected<void, error_code>{};
+    }
+
+    auto job_system::get_dispatch_allocator() noexcept -> job_allocator&
+    {
+        return _impl->dispatch_allocator;
+    }
+
+    auto job_system::allocate_frame(size_t size) -> void*
+    {
+        return _impl->dispatch_allocator.allocate(size);
     }
 } // namespace tempest::job

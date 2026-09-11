@@ -2,6 +2,9 @@
 
 #include <tempest/array.hpp>
 #include <tempest/job/allocator.hpp>
+#include <tempest/job/context.hpp>
+#include <tempest/job/task.hpp>
+#include <tempest/profiler/session.hpp>
 #include <tempest/thread.hpp>
 #include <tempest/vector.hpp>
 
@@ -17,7 +20,6 @@ namespace tempest::job::tests
     {
         // 1. Setup
         auto alloc = job_allocator{};
-        auto scope = job_allocator_scope{alloc};
 
         // 2. Act
         auto* p0 = alloc.allocate(48);   // Class 0: <= 64B
@@ -147,6 +149,118 @@ namespace tempest::job::tests
         for (auto* ptr : pointers)
         {
             job_allocator::deallocate(ptr, slot_size);
+        }
+    }
+
+    // =========================================================================
+    // SECTION: Argument-Forwarded Coroutine Allocation Tests
+    // =========================================================================
+
+    namespace
+    {
+        auto coro_with_allocator(job_allocator&, int val) -> task<int>
+        {
+            co_return val * 2;
+        }
+
+        auto coro_heap_fallback(int val) -> task<int>
+        {
+            co_return val + 1;
+        }
+    } // namespace
+
+    /// @brief Verifies that coroutines accepting job_allocator& route their frame
+    ///        allocation to slabs and track frame_bytes / is_heap profiler metrics,
+    ///        while coroutines without an allocator gracefully fall back to heap.
+    TEST(allocator_test, argument_forwarded_coroutine_allocation)
+    {
+        // 1. Setup
+        auto alloc = job_allocator{};
+
+        // 2. Act & Assert: Coroutine with job_allocator& parameter
+        {
+            const auto telem_before = alloc.get_telemetry();
+            auto t = coro_with_allocator(alloc, 21);
+            const auto telem_after_alloc = alloc.get_telemetry();
+
+            EXPECT_EQ(telem_after_alloc.active_live_frames, telem_before.active_live_frames + 1);
+            bool allocated_in_slab = false;
+            for (size_t i = 0; i < slab_class_count; ++i)
+            {
+                if (telem_after_alloc.allocations_per_class[i] > telem_before.allocations_per_class[i])
+                {
+                    allocated_in_slab = true;
+                    break;
+                }
+            }
+            EXPECT_TRUE(allocated_in_slab);
+
+            t.handle().resume();
+            EXPECT_TRUE(t.handle().done());
+            EXPECT_EQ(t.handle().promise().result.value(), 42);
+
+            t = {};
+            alloc.drain_remote_frees();
+            const auto telem_after_free = alloc.get_telemetry();
+            EXPECT_EQ(telem_after_free.active_live_frames, telem_before.active_live_frames);
+        }
+
+        // 3. Act & Assert: Coroutine without allocator parameters (pure heap fallback)
+        {
+            const auto telem_before = alloc.get_telemetry();
+            auto t = coro_heap_fallback(100);
+            const auto telem_after_alloc = alloc.get_telemetry();
+
+            // Slabs should NOT be incremented
+            EXPECT_EQ(telem_after_alloc.active_live_frames, telem_before.active_live_frames);
+
+            t.handle().resume();
+            EXPECT_TRUE(t.handle().done());
+            EXPECT_EQ(t.handle().promise().result.value(), 101);
+
+            t = {};
+        }
+
+        // 4. Act & Assert: Profiler metrics tracking (frame_bytes and is_heap)
+        {
+            auto prof = profiler::profiler_session{true};
+            auto& thread_ctx = prof.get_or_register_thread();
+            profiler::thread_profiler_context::set_current_thread_context(&thread_ctx);
+
+            {
+                auto t = coro_with_allocator(alloc, 5);
+                t.handle().resume();
+                EXPECT_TRUE(t.handle().done());
+                EXPECT_EQ(t.handle().promise().result.value(), 10);
+            }
+
+            profiler::thread_profiler_context::set_current_thread_context(nullptr);
+
+            auto chunks = prof.drain_completed_chunks();
+            ASSERT_FALSE(chunks.empty());
+            const auto zones = chunks[0]->zones();
+            ASSERT_FALSE(zones.empty());
+
+            const auto& zone = zones[0];
+            bool found_frame_bytes = false;
+            bool found_is_heap = false;
+            for (const auto& met : zone.metrics)
+            {
+                if (met.name == "frame_bytes")
+                {
+                    found_frame_bytes = true;
+                    EXPECT_GT(met.value, 0.0);
+                }
+                else if (met.name == "is_heap")
+                {
+                    found_is_heap = true;
+                    EXPECT_EQ(met.value, 0.0); // Slab allocation
+                }
+            }
+            EXPECT_TRUE(found_frame_bytes);
+            EXPECT_TRUE(found_is_heap);
+
+            alloc.drain_remote_frees();
         }
     }
 } // namespace tempest::job::tests
