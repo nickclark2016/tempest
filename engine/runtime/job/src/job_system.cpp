@@ -139,6 +139,11 @@ namespace tempest::job
 
         auto schedule_external(const queue_item& item, core_class affinity) -> void
         {
+            if (job_allocator::get_current() == nullptr)
+            {
+                job_allocator::set_current(&dispatch_allocator);
+            }
+
             auto target_idx = 0u;
             if (affinity == core_class::performance)
             {
@@ -284,6 +289,7 @@ namespace tempest::job
         for (auto& w : _impl->workers)
         {
             w->worker_thread = tempest::thread([this, worker = w.get()] {
+                job_allocator::set_current(&worker->allocator);
                 auto& prof_ctx = _profiler.get_or_register_thread();
                 prof_ctx.set_thread_name(worker->type == core_class::performance ? "JobWorker-P" : "JobWorker-E");
 
@@ -541,6 +547,8 @@ namespace tempest::job
                     _impl->idle_mask.fetch_and(~(1ULL << worker->worker_index), memory_order::acq_rel);
                     worker->park_state.store(0, memory_order::release);
                 }
+
+                job_allocator::set_current(nullptr);
             });
         }
 
@@ -573,6 +581,15 @@ namespace tempest::job
                 {
                     w->worker_thread.join();
                 }
+            }
+        }
+
+        if (_impl)
+        {
+            if (job_allocator::get_current() == &_impl->dispatch_allocator ||
+                job_allocator::get_current() == &_impl->single_stepped_allocator)
+            {
+                job_allocator::set_current(nullptr);
             }
         }
     }
@@ -620,6 +637,11 @@ namespace tempest::job
     auto job_system::schedule(const job_context& ctx, coroutine_handle<> handle, task_priority priority,
                                core_class affinity) -> void
     {
+        if (job_allocator::get_current() == nullptr)
+        {
+            job_allocator::set_current(&_impl->dispatch_allocator);
+        }
+
         if (!handle || handle.done())
         {
             return;
@@ -674,6 +696,10 @@ namespace tempest::job
 
     auto job_system::schedule(coroutine_handle<> handle, task_priority priority, core_class affinity) -> void
     {
+        if (job_allocator::get_current() == nullptr)
+        {
+            job_allocator::set_current(&_impl->dispatch_allocator);
+        }
         if (!handle || handle.done())
         {
             return;
@@ -763,10 +789,13 @@ namespace tempest::job
                 return false;
             }
 
+            auto* prev_alloc = job_allocator::get_current();
+            job_allocator::set_current(&_impl->single_stepped_allocator);
             if (item.handle && !item.handle.done())
             {
                 item.handle.resume();
             }
+            job_allocator::set_current(prev_alloc);
 
             _impl->active_tasks.fetch_sub(1, memory_order::release);
             return true;
@@ -778,10 +807,13 @@ namespace tempest::job
             auto res = _impl->workers[0]->deques[p].pop();
             if (res.has_value())
             {
+                auto* prev_alloc = job_allocator::get_current();
+                job_allocator::set_current(&_impl->single_stepped_allocator);
                 if (res->handle && !res->handle.done())
                 {
                     res->handle.resume();
                 }
+                job_allocator::set_current(prev_alloc);
                 _impl->active_tasks.fetch_sub(1, memory_order::release);
                 return true;
             }
@@ -792,11 +824,14 @@ namespace tempest::job
 
     auto job_system::step_for(size_t max_tasks) -> size_t
     {
+        auto* prev_alloc = job_allocator::get_current();
+        job_allocator::set_current(&_impl->single_stepped_allocator);
         auto executed = 0u;
         while (executed < max_tasks && step())
         {
             ++executed;
         }
+        job_allocator::set_current(prev_alloc);
         return executed;
     }
 
@@ -819,6 +854,11 @@ namespace tempest::job
 
     auto job_system::execute(task_graph& graph) -> task<expected<void, error_code>>
     {
+        if (job_allocator::get_current() == nullptr)
+        {
+            job_allocator::set_current(&_impl->dispatch_allocator);
+        }
+
         if (graph.empty())
         {
             co_return expected<void, error_code>{};

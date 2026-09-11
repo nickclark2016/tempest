@@ -127,6 +127,12 @@ namespace tempest::tests
             [[maybe_unused]] auto& wm = ctx.get_window_manager();
             [[maybe_unused]] auto& dev = ctx.get_device();
             [[maybe_unused]] auto& renderer = ctx.get_renderer();
+            [[maybe_unused]] auto& jobs = ctx.get_job_system();
+        });
+
+        const auto& const_ctx = ctx;
+        EXPECT_NO_THROW({
+            [[maybe_unused]] const auto& jobs = const_ctx.get_job_system();
         });
 
         EXPECT_FALSE(ctx.should_close());

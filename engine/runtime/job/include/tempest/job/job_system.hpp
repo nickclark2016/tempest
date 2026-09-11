@@ -92,6 +92,11 @@ namespace tempest::job
         template <typename F>
         auto async(task_priority priority, core_class affinity, F&& callable)
         {
+            if (job_allocator::get_current() == nullptr)
+            {
+                job_allocator::set_current(&get_dispatch_allocator());
+            }
+
             using ReturnType = invoke_result_t<F>;
 
             if constexpr (detail::is_task_v<ReturnType>)

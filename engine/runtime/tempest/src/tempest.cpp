@@ -1,5 +1,7 @@
 #include <tempest/default_importers.hpp>
 #include <tempest/input.hpp>
+#include <tempest/job/job_system.hpp>
+#include <tempest/job/topology.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/render_system/renderer.hpp>
@@ -74,6 +76,11 @@ namespace tempest
             }
         }
 
+        _job_system = make_unique<job::job_system>(_logger, _profiler_session, job::job_system_config{
+            .enable_core_pinning = true,
+            .topology = job::discover_cpu_topology(),
+        });
+
         if (_device)
         {
             constexpr uint32_t default_render_width = 1920;
@@ -93,6 +100,7 @@ namespace tempest
                 .asset_db = &_asset_database,
                 .profiler = &_profiler_session,
             });
+            builder.set_job_system(*_job_system);
             _renderer = builder.build(*_device, _logger);
         }
     }
@@ -114,6 +122,12 @@ namespace tempest
             }
             _windows.clear();
         }
+        else
+        {
+            _renderer.reset();
+        }
+
+        _job_system.reset();
     }
 
     auto standalone_engine_context::register_window(window_desc desc, [[maybe_unused]] bool install_swapchain_blit)

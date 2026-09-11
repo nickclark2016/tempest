@@ -401,6 +401,15 @@ namespace tempest::profiler
         }
     }
 
+    auto thread_profiler_context::set_current_zone_name(string_view name) -> void
+    {
+        lock_guard guard(_mutex);
+        if (!_open_zones.empty())
+        {
+            _open_zones.back().name = name;
+        }
+    }
+
     auto thread_profiler_context::set_thread_name(string_view name) -> void
     {
         lock_guard guard(_mutex);

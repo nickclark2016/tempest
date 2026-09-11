@@ -636,6 +636,16 @@ html, body {
   color: #0d1117;
 }
 
+.badge-coroutine {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--accent-purple-light);
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
 .zone-name {
   font-size: 16px;
   font-weight: 700;

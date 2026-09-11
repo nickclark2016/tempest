@@ -3,11 +3,27 @@
 
 namespace tempest::job
 {
+    static thread_local job_allocator* t_current_allocator = nullptr;
+
+    auto job_allocator::get_current() noexcept -> job_allocator*
+    {
+        return t_current_allocator;
+    }
+
+    auto job_allocator::set_current(job_allocator* alloc) noexcept -> void
+    {
+        t_current_allocator = alloc;
+    }
 
     job_allocator::job_allocator() = default;
 
     job_allocator::~job_allocator()
     {
+        if (t_current_allocator == this)
+        {
+            t_current_allocator = nullptr;
+        }
+
         drain_remote_frees();
 
         for (size_t cls = 0; cls < slab_class_count; ++cls)

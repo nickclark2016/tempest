@@ -8,6 +8,7 @@
 #include <tempest/event_registry.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/input.hpp>
+#include <tempest/job/job_system.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/profiler/profiler.hpp>
 #include <tempest/render_system/renderer.hpp>
@@ -77,6 +78,9 @@ namespace tempest
         [[nodiscard]] virtual auto get_assets() -> assets::asset_database& = 0;
         [[nodiscard]] virtual auto get_assets() const -> const assets::asset_database& = 0;
 
+        [[nodiscard]] virtual auto get_job_system() -> job::job_system& = 0;
+        [[nodiscard]] virtual auto get_job_system() const -> const job::job_system& = 0;
+
         [[nodiscard]] virtual auto get_renderer() -> render_system::renderer& = 0;
         [[nodiscard]] virtual auto get_renderer() const -> const render_system::renderer& = 0;
 
@@ -144,6 +148,16 @@ namespace tempest
         [[nodiscard]] auto get_assets() -> assets::asset_database& override;
         [[nodiscard]] auto get_assets() const -> const assets::asset_database& override;
 
+        [[nodiscard]] auto get_job_system() -> job::job_system& override
+        {
+            return *_job_system;
+        }
+
+        [[nodiscard]] auto get_job_system() const -> const job::job_system& override
+        {
+            return *_job_system;
+        }
+
         [[nodiscard]] auto get_renderer() -> render_system::renderer& override;
         [[nodiscard]] auto get_renderer() const -> const render_system::renderer& override;
 
@@ -199,6 +213,7 @@ namespace tempest
         window_manager _window_manager;
         unique_ptr<rhi::context> _rhi_context;
         unique_ptr<rhi::device> _device;
+        unique_ptr<job::job_system> _job_system;
         unique_ptr<render_system::renderer> _renderer;
 
         vector<window_context> _windows;

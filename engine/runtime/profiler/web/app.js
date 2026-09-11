@@ -129,6 +129,7 @@
     inspectorPlaceholder: document.getElementById('inspector-placeholder'),
     inspectorDetails: document.getElementById('inspector-details'),
     inspCategory: document.getElementById('insp-category'),
+    inspCoroutineBadge: document.getElementById('insp-coroutine-badge'),
     inspName: document.getElementById('insp-name'),
     inspTrack: document.getElementById('insp-track'),
     inspLocation: document.getElementById('insp-location'),
@@ -217,6 +218,30 @@
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(k));
     return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+  }
+
+  const LABEL_MAP = {
+    coroutine_id: 'Coroutine ID',
+    slice_index: 'Slice Index',
+    suspend_reason: 'Suspension Reason',
+    frame_bytes: 'Frame Size',
+    is_heap: 'Storage',
+    task_id: 'Task ID',
+    pipeline_stat_vertices: 'Input Vertices',
+    pipeline_stat_primitives: 'Input Primitives',
+    pipeline_stat_vs_invocations: 'Vertex Shader Invocations',
+    pipeline_stat_fs_invocations: 'Fragment Shader Invocations',
+    pipeline_stat_cs_invocations: 'Compute Shader Invocations',
+  };
+
+  function formatLabel(key) {
+    if (!key) return '';
+    if (LABEL_MAP[key]) {
+      return LABEL_MAP[key];
+    }
+    return String(key)
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
   }
 
   function hashString(str) {
@@ -1056,8 +1081,9 @@
 
               timelineCtx.fillStyle = zone.isWait ? '#8b949e' : '#ffffff';
               timelineCtx.font = '10px monospace';
+              const coroPrefix = (zone.coroutine_id && zone.coroutine_id > 0) ? '⟳ ' : '';
               const slicePrefix = (zone.coroutine_id && !zone.isWait) ? `[#${zone.coroutine_id}:${zone.slice_index}] ` : '';
-              const label = `${slicePrefix}${zone.name} (${formatTime(zone.duration_ns)})`;
+              const label = `${coroPrefix}${slicePrefix}${zone.name} (${formatTime(zone.duration_ns)})`;
               timelineCtx.fillText(label, zStartX + 4, rowY + 12);
               timelineCtx.restore();
             }
@@ -1500,9 +1526,15 @@
     dom.inspCategory.className = `category-pill ${zone.category || 'cpu'}`;
     dom.inspName.textContent = zone.name;
     dom.inspTrack.textContent = `${zone.trackName || 'Thread'} (Depth ${zone.depth})`;
-    if (zone.coroutine_id) {
-      dom.inspLocation.textContent = `Coroutine #${zone.coroutine_id} (Slice ${zone.slice_index || 0}) | Suspend: ${zone.suspend_reason || 'none'}`;
+    if (zone.coroutine_id && zone.coroutine_id > 0) {
+      if (dom.inspCoroutineBadge) {
+        dom.inspCoroutineBadge.style.display = 'inline-block';
+      }
+      dom.inspLocation.textContent = `Coroutine #${zone.coroutine_id} (Slice ${zone.slice_index || 0}) | ${formatLabel('suspend_reason')}: ${zone.suspend_reason || 'none'}`;
     } else {
+      if (dom.inspCoroutineBadge) {
+        dom.inspCoroutineBadge.style.display = 'none';
+      }
       dom.inspLocation.textContent = zone.location ? `${zone.location.file || 'source.cpp'}:${zone.location.line || 0}` : 'native';
     }
 
@@ -1525,20 +1557,20 @@
 
     // Attached Metrics & GPU Stats
     dom.inspMetricsList.innerHTML = '';
-    if (zone.coroutine_id) {
+    if (zone.coroutine_id && zone.coroutine_id > 0) {
       const coroTag = document.createElement('div');
       coroTag.className = 'metric-tag';
-      coroTag.innerHTML = `<span class="tag-name">coroutine_id:</span><span class="tag-value">${zone.coroutine_id}</span>`;
+      coroTag.innerHTML = `<span class="tag-name">${formatLabel('coroutine_id')}:</span><span class="tag-value">${zone.coroutine_id}</span>`;
       dom.inspMetricsList.appendChild(coroTag);
 
       const sliceTag = document.createElement('div');
       sliceTag.className = 'metric-tag';
-      sliceTag.innerHTML = `<span class="tag-name">slice_index:</span><span class="tag-value">${zone.slice_index || 0}</span>`;
+      sliceTag.innerHTML = `<span class="tag-name">${formatLabel('slice_index')}:</span><span class="tag-value">${zone.slice_index || 0}</span>`;
       dom.inspMetricsList.appendChild(sliceTag);
 
       const reasonTag = document.createElement('div');
       reasonTag.className = 'metric-tag';
-      reasonTag.innerHTML = `<span class="tag-name">suspend_reason:</span><span class="tag-value">${zone.suspend_reason || 'none'}</span>`;
+      reasonTag.innerHTML = `<span class="tag-name">${formatLabel('suspend_reason')}:</span><span class="tag-value">${zone.suspend_reason || 'none'}</span>`;
       dom.inspMetricsList.appendChild(reasonTag);
 
       const frameBytesMet = zone.metrics?.find(m => m.name === 'frame_bytes');
@@ -1546,16 +1578,14 @@
       if (frameBytesMet !== undefined) {
         const frameTag = document.createElement('div');
         frameTag.className = 'metric-tag';
-        frameTag.innerHTML = `<span class="tag-name">frame_bytes:</span><span class="tag-value">${frameBytesMet.value.toLocaleString()} B</span>`;
+        frameTag.innerHTML = `<span class="tag-name">${formatLabel('frame_bytes')}:</span><span class="tag-value">${frameBytesMet.value.toLocaleString()} B</span>`;
         dom.inspMetricsList.appendChild(frameTag);
       }
-      if (isHeapMet !== undefined) {
-        const storageTag = document.createElement('div');
-        storageTag.className = 'metric-tag';
-        const isHeap = isHeapMet.value > 0.5;
-        storageTag.innerHTML = `<span class="tag-name">storage:</span><span class="tag-value" style="color: ${isHeap ? '#f59e0b' : '#10b981'}; font-weight: 600;">${isHeap ? 'Heap' : 'Slab'}</span>`;
-        dom.inspMetricsList.appendChild(storageTag);
-      }
+      const isHeap = isHeapMet ? isHeapMet.value > 0.5 : false;
+      const storageTag = document.createElement('div');
+      storageTag.className = 'metric-tag';
+      storageTag.innerHTML = `<span class="tag-name">${formatLabel('is_heap')}:</span><span class="tag-value" style="color: ${isHeap ? '#f59e0b' : '#10b981'}; font-weight: 600;">${isHeap ? 'Heap Fallback' : 'Slab Pool'}</span>`;
+      dom.inspMetricsList.appendChild(storageTag);
     }
 
     if (zone.metrics && zone.metrics.length > 0) {
@@ -1565,10 +1595,10 @@
         }
         const tag = document.createElement('div');
         tag.className = 'metric-tag';
-        tag.innerHTML = `<span class="tag-name">${m.name}:</span><span class="tag-value">${m.value.toLocaleString()}</span>`;
+        tag.innerHTML = `<span class="tag-name">${formatLabel(m.name)}:</span><span class="tag-value">${m.value.toLocaleString()}</span>`;
         dom.inspMetricsList.appendChild(tag);
       }
-    } else if (!zone.coroutine_id) {
+    } else if (!zone.coroutine_id || zone.coroutine_id <= 0) {
       dom.inspMetricsList.innerHTML = '<span class="empty-text">No custom metrics attached to this zone.</span>';
     }
 
@@ -2081,19 +2111,23 @@
         <div class="tt-row"><span>Track:</span><span>${z.trackName || 'Main'}</span></div>
         <div class="tt-row"><span>Depth:</span><span>${z.depth}</span></div>
         ${parentFrame ? `<div class="tt-row"><span>Frame:</span><span class="tt-val">#${parentFrame.frame_index}</span></div>` : ''}
-        ${z.coroutine_id ? `
+        ${(z.coroutine_id && z.coroutine_id > 0) ? `
           <div class="tt-row"><span>Coroutine:</span><span class="tt-val">#${z.coroutine_id} (Slice ${z.slice_index || 0})</span></div>
-          <div class="tt-row"><span>Suspend Reason:</span><span class="tt-val">${z.suspend_reason || 'none'}</span></div>
+          <div class="tt-row"><span>${formatLabel('suspend_reason')}:</span><span class="tt-val">${z.suspend_reason || 'none'}</span></div>
           ${(() => {
             const fb = z.metrics?.find(m => m.name === 'frame_bytes');
             const ih = z.metrics?.find(m => m.name === 'is_heap');
             if (fb !== undefined) {
-              const storage = (ih && ih.value > 0.5) ? 'Heap' : 'Slab';
-              return `<div class="tt-row"><span>Frame:</span><span class="tt-val">${fb.value} B (${storage})</span></div>`;
+              const isHeap = ih && ih.value > 0.5;
+              const storage = isHeap ? 'Heap Fallback' : 'Slab Pool';
+              return `<div class="tt-row"><span>${formatLabel('frame_bytes')}:</span><span class="tt-val">${fb.value} B (${storage})</span></div>`;
             }
             return '';
           })()}
         ` : ''}
+        ${(z.metrics && z.metrics.length > 0) ? z.metrics.filter(m => m.name !== 'frame_bytes' && m.name !== 'is_heap').map(m => `
+          <div class="tt-row"><span>${formatLabel(m.name)}:</span><span class="tt-val">${m.value.toLocaleString()}</span></div>
+        `).join('') : ''}
       `;
     } else {
       // Check if mouseX is inside any frame boundary box in empty track space

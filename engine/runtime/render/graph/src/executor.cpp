@@ -36,6 +36,8 @@ namespace tempest::render_graph
     auto render_graph_executor::execute(rhi::device& dev, render_graph& graph, const frame_sync_options& frame_sync)
         -> job::task<expected<void, execution_error>>
     {
+        co_await job::set_task_name{"render_graph_executor::execute"};
+
         const auto compile_res = graph.compile();
         if (!compile_res.has_value())
         {
@@ -587,7 +589,7 @@ namespace tempest::render_graph
                     port, dev, *_jobs, pass, plan, p_alloc,
                     flight_state.timestamp_pool, q_state.pool,
                     ctx, allocator, reg_textures, reg_buffers,
-                    &pass_commands[i]));
+                    &pass_commands[i]).with_name(pass.name));
             }
 
             if (!pass_tasks.empty())

@@ -24,8 +24,28 @@ namespace tempest::job
     template <typename T = void, typename E = job_error>
     class [[nodiscard]] task;
 
+    /// @brief Awaitable used to set or update the active task name from within a coroutine body.
+    struct set_task_name
+    {
+        string_view name;
+    };
+
     namespace detail
     {
+        struct set_task_name_awaiter
+        {
+            constexpr auto await_ready() const noexcept -> bool
+            {
+                return true;
+            }
+            constexpr auto await_suspend(coroutine_handle<>) const noexcept -> void
+            {
+            }
+            constexpr auto await_resume() const noexcept -> void
+            {
+            }
+        };
+
         struct alignas(16) coroutine_frame_header
         {
             job_allocator* owner{nullptr};
@@ -93,6 +113,10 @@ namespace tempest::job
                 constexpr auto header_size = sizeof(coroutine_frame_header);
                 const auto total_size = size + header_size;
                 auto* alloc = find_allocator(forward<Args>(args)...);
+                if (alloc == nullptr)
+                {
+                    alloc = job_allocator::get_current();
+                }
 
                 if (alloc != nullptr)
                 {
@@ -651,6 +675,17 @@ namespace tempest::job
                     *this, exp_awaiter{move(exp)}, profiler::suspend_reason::yield};
             }
 
+            auto await_transform(set_task_name stn) noexcept -> detail::set_task_name_awaiter
+            {
+                this->name = stn.name;
+                auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
+                if (ctx != nullptr)
+                {
+                    ctx->set_current_zone_name(stn.name);
+                }
+                return {};
+            }
+
             // Fallthrough for generic awaitables
             template <typename Awaitable>
             auto await_transform(Awaitable&& awaitable)
@@ -791,6 +826,37 @@ namespace tempest::job
         [[nodiscard]] auto coroutine_id() const noexcept -> uint64_t
         {
             return _handle ? _handle.promise().coroutine_id : 0;
+        }
+
+        auto with_name(string_view name) & noexcept -> task&
+        {
+            if (_handle)
+            {
+                _handle.promise().name = name;
+            }
+            return *this;
+        }
+
+        auto with_name(string_view name) && noexcept -> task&&
+        {
+            if (_handle)
+            {
+                _handle.promise().name = name;
+            }
+            return move(*this);
+        }
+
+        auto set_name(string_view name) noexcept -> void
+        {
+            if (_handle)
+            {
+                _handle.promise().name = name;
+            }
+        }
+
+        [[nodiscard]] auto name() const noexcept -> string_view
+        {
+            return _handle ? _handle.promise().name : string_view{"task"};
         }
 
         auto operator co_await() &&
@@ -1016,6 +1082,17 @@ namespace tempest::job
                     *this, exp_awaiter{move(exp)}, profiler::suspend_reason::yield};
             }
 
+            auto await_transform(set_task_name stn) noexcept -> detail::set_task_name_awaiter
+            {
+                this->name = stn.name;
+                auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
+                if (ctx != nullptr)
+                {
+                    ctx->set_current_zone_name(stn.name);
+                }
+                return {};
+            }
+
             template <typename Awaitable>
             auto await_transform(Awaitable&& awaitable)
             {
@@ -1152,6 +1229,37 @@ namespace tempest::job
             return _handle ? _handle.promise().coroutine_id : 0;
         }
 
+        auto with_name(string_view name) & noexcept -> task&
+        {
+            if (_handle)
+            {
+                _handle.promise().name = name;
+            }
+            return *this;
+        }
+
+        auto with_name(string_view name) && noexcept -> task&&
+        {
+            if (_handle)
+            {
+                _handle.promise().name = name;
+            }
+            return move(*this);
+        }
+
+        auto set_name(string_view name) noexcept -> void
+        {
+            if (_handle)
+            {
+                _handle.promise().name = name;
+            }
+        }
+
+        [[nodiscard]] auto name() const noexcept -> string_view
+        {
+            return _handle ? _handle.promise().name : string_view{"task"};
+        }
+
         auto operator co_await() &&
         {
             return task_awaiter<void, E>{move(*this)};
@@ -1213,6 +1321,17 @@ namespace tempest::job
             auto unhandled_exception() noexcept -> void
             {
                 TEMPEST_ASSERT(false);
+            }
+
+            auto await_transform(set_task_name stn) noexcept -> detail::set_task_name_awaiter
+            {
+                this->name = stn.name;
+                auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
+                if (ctx != nullptr)
+                {
+                    ctx->set_current_zone_name(stn.name);
+                }
+                return {};
             }
 
             template <typename Awaitable>
@@ -1312,6 +1431,37 @@ namespace tempest::job
             return _handle ? _handle.promise().coroutine_id : 0;
         }
 
+        auto with_name(string_view name) & noexcept -> task&
+        {
+            if (_handle)
+            {
+                _handle.promise().name = name;
+            }
+            return *this;
+        }
+
+        auto with_name(string_view name) && noexcept -> task&&
+        {
+            if (_handle)
+            {
+                _handle.promise().name = name;
+            }
+            return move(*this);
+        }
+
+        auto set_name(string_view name) noexcept -> void
+        {
+            if (_handle)
+            {
+                _handle.promise().name = name;
+            }
+        }
+
+        [[nodiscard]] auto name() const noexcept -> string_view
+        {
+            return _handle ? _handle.promise().name : string_view{"task"};
+        }
+
         auto operator co_await() &&
         {
             return task_awaiter<T, void>{move(*this)};
@@ -1366,6 +1516,17 @@ namespace tempest::job
             auto unhandled_exception() noexcept -> void
             {
                 TEMPEST_ASSERT(false);
+            }
+
+            auto await_transform(set_task_name stn) noexcept -> detail::set_task_name_awaiter
+            {
+                this->name = stn.name;
+                auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
+                if (ctx != nullptr)
+                {
+                    ctx->set_current_zone_name(stn.name);
+                }
+                return {};
             }
 
             template <typename Awaitable>
@@ -1452,6 +1613,37 @@ namespace tempest::job
         [[nodiscard]] auto coroutine_id() const noexcept -> uint64_t
         {
             return _handle ? _handle.promise().coroutine_id : 0;
+        }
+
+        auto with_name(string_view name) & noexcept -> task&
+        {
+            if (_handle)
+            {
+                _handle.promise().name = name;
+            }
+            return *this;
+        }
+
+        auto with_name(string_view name) && noexcept -> task&&
+        {
+            if (_handle)
+            {
+                _handle.promise().name = name;
+            }
+            return move(*this);
+        }
+
+        auto set_name(string_view name) noexcept -> void
+        {
+            if (_handle)
+            {
+                _handle.promise().name = name;
+            }
+        }
+
+        [[nodiscard]] auto name() const noexcept -> string_view
+        {
+            return _handle ? _handle.promise().name : string_view{"task"};
         }
 
         auto operator co_await() &&

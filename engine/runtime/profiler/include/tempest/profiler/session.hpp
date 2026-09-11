@@ -51,6 +51,7 @@ namespace tempest::profiler
         auto add_marker(string_view name, source_location loc = source_location::current()) -> void;
         auto add_metric(string_view name, double val, metric_unit unit = metric_unit::raw) -> void;
         auto set_current_zone_task_id(uint64_t task_id) -> void;
+        auto set_current_zone_name(string_view name) -> void;
 
         auto set_current_coroutine_id(uint64_t id) noexcept -> void;
         [[nodiscard]] auto get_current_coroutine_id() const noexcept -> uint64_t;

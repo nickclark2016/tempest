@@ -1303,6 +1303,7 @@ namespace tempest::render_system
     auto renderer::render_async(const render_graph::frame_sync_options& sync)
         -> job::task<expected<void, render_graph::execution_error>>
     {
+        co_await job::set_task_name{"renderer::render_async"};
         auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::render_async"};
         if (_device == nullptr)
         {

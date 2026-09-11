@@ -495,4 +495,86 @@ namespace tempest::job::tests
 
         profiler::thread_profiler_context::set_current_thread_context(nullptr);
     }
+
+    /// @brief Verify that task naming via with_name() and set_name() updates task name and profiler slice zone names
+    TEST(task_test, task_custom_naming_fluent)
+    {
+        // 1. Setup profiler
+        auto prof = profiler::profiler_session{true};
+        auto& ctx = prof.get_or_register_thread();
+        profiler::thread_profiler_context::set_current_thread_context(&ctx);
+
+        auto test_coro = []() -> task<int> {
+            co_return 99;
+        };
+
+        // 2. Act: Name coroutine fluently before running
+        auto t = test_coro().with_name("MyCustomRenderPass");
+        EXPECT_EQ(t.name(), "MyCustomRenderPass");
+        const auto coro_id = t.coroutine_id();
+
+        const auto completed = t.resume();
+        EXPECT_TRUE(completed);
+        EXPECT_EQ(t.value(), 99);
+
+        // 3. Assert: Verify profiler slice zone has custom name
+        auto chunks = prof.drain_completed_chunks();
+        ASSERT_FALSE(chunks.empty());
+
+        auto found_custom_name = false;
+        for (const auto& chunk : chunks)
+        {
+            for (const auto& z : chunk->zones())
+            {
+                if (z.coroutine_id == coro_id && z.name == "MyCustomRenderPass")
+                {
+                    found_custom_name = true;
+                }
+            }
+        }
+        EXPECT_TRUE(found_custom_name);
+
+        profiler::thread_profiler_context::set_current_thread_context(nullptr);
+    }
+
+    /// @brief Verify that co_await set_task_name dynamically renames the task and active profiler slice
+    TEST(task_test, task_custom_naming_co_await_set_task_name)
+    {
+        // 1. Setup profiler
+        auto prof = profiler::profiler_session{true};
+        auto& ctx = prof.get_or_register_thread();
+        profiler::thread_profiler_context::set_current_thread_context(&ctx);
+
+        auto test_coro = []() -> task<void> {
+            co_await set_task_name{"DynamicPassName"};
+            co_return;
+        };
+
+        // 2. Act: Run coroutine that self-renames
+        auto t = test_coro();
+        const auto coro_id = t.coroutine_id();
+
+        const auto completed = t.resume();
+        EXPECT_TRUE(completed);
+        EXPECT_EQ(t.name(), "DynamicPassName");
+
+        // 3. Assert: Verify profiler recorded zone with DynamicPassName
+        auto chunks = prof.drain_completed_chunks();
+        ASSERT_FALSE(chunks.empty());
+
+        auto found_dynamic_name = false;
+        for (const auto& chunk : chunks)
+        {
+            for (const auto& z : chunk->zones())
+            {
+                if (z.coroutine_id == coro_id && z.name == "DynamicPassName")
+                {
+                    found_dynamic_name = true;
+                }
+            }
+        }
+        EXPECT_TRUE(found_dynamic_name);
+
+        profiler::thread_profiler_context::set_current_thread_context(nullptr);
+    }
 } // namespace tempest::job::tests

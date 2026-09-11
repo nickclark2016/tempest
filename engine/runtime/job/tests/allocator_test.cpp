@@ -263,4 +263,66 @@ namespace tempest::job::tests
             alloc.drain_remote_frees();
         }
     }
+
+    /// @brief Verifies that job_allocator::set_current binds a thread-local fallback
+    ///        allocator so coroutines without explicit allocator arguments allocate
+    ///        from the thread-local slab pool rather than heap fallback.
+    TEST(allocator_test, thread_local_current_allocator_fallback)
+    {
+        // 1. Setup
+        auto alloc = job_allocator{};
+        EXPECT_EQ(job_allocator::get_current(), nullptr);
+
+        job_allocator::set_current(&alloc);
+        EXPECT_EQ(job_allocator::get_current(), &alloc);
+
+        // 2. Act: Coroutine without allocator parameters while current allocator is set
+        {
+            const auto telem_before = alloc.get_telemetry();
+            auto t = coro_heap_fallback(200);
+            const auto telem_after_alloc = alloc.get_telemetry();
+
+            // Slabs SHOULD be incremented because get_current() provided the slab allocator
+            EXPECT_EQ(telem_after_alloc.active_live_frames, telem_before.active_live_frames + 1);
+            EXPECT_EQ(telem_after_alloc.heap_fallback_count, telem_before.heap_fallback_count);
+
+            bool allocated_in_slab = false;
+            for (size_t i = 0; i < slab_class_count; ++i)
+            {
+                if (telem_after_alloc.allocations_per_class[i] > telem_before.allocations_per_class[i])
+                {
+                    allocated_in_slab = true;
+                    break;
+                }
+            }
+            EXPECT_TRUE(allocated_in_slab);
+
+            t.handle().resume();
+            EXPECT_TRUE(t.handle().done());
+            EXPECT_EQ(t.handle().promise().result.value(), 201);
+
+            t = {};
+            alloc.drain_remote_frees();
+            const auto telem_after_free = alloc.get_telemetry();
+            EXPECT_EQ(telem_after_free.active_live_frames, telem_before.active_live_frames);
+        }
+
+        // 3. Reset and Assert heap fallback when get_current() is null
+        job_allocator::set_current(nullptr);
+        EXPECT_EQ(job_allocator::get_current(), nullptr);
+
+        {
+            const auto telem_before = alloc.get_telemetry();
+            auto t = coro_heap_fallback(300);
+            const auto telem_after_alloc = alloc.get_telemetry();
+
+            EXPECT_EQ(telem_after_alloc.active_live_frames, telem_before.active_live_frames);
+
+            t.handle().resume();
+            EXPECT_TRUE(t.handle().done());
+            EXPECT_EQ(t.handle().promise().result.value(), 301);
+
+            t = {};
+        }
+    }
 } // namespace tempest::job::tests

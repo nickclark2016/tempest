@@ -87,6 +87,9 @@ namespace tempest::job
         job_allocator(job_allocator&&) noexcept = delete;
         job_allocator& operator=(job_allocator&&) noexcept = delete;
 
+        [[nodiscard]] static auto get_current() noexcept -> job_allocator*;
+        static auto set_current(job_allocator* alloc) noexcept -> void;
+
         [[nodiscard]] auto allocate(size_t size) -> void*;
         static auto deallocate(void* ptr, size_t size) noexcept -> void;
 
