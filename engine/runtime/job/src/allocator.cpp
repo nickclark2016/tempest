@@ -6,7 +6,6 @@ namespace tempest::job
     namespace
     {
         thread_local job_allocator* tl_current_allocator = nullptr;
-        thread_local job_allocator* tl_default_instance = nullptr;
 
         auto get_size_class(size_t size) noexcept -> int32_t
         {
@@ -47,10 +46,6 @@ namespace tempest::job
         if (tl_current_allocator == this)
         {
             tl_current_allocator = nullptr;
-        }
-        if (tl_default_instance == this)
-        {
-            tl_default_instance = nullptr;
         }
 
         for (size_t cls = 0; cls < slab_class_count; ++cls)
@@ -202,16 +197,7 @@ namespace tempest::job
 
     auto job_allocator::get_current() noexcept -> job_allocator*
     {
-        if (tl_current_allocator != nullptr)
-        {
-            return tl_current_allocator;
-        }
-        if (tl_default_instance == nullptr)
-        {
-            static thread_local job_allocator default_alloc;
-            tl_default_instance = &default_alloc;
-        }
-        return tl_default_instance;
+        return tl_current_allocator;
     }
 
     auto job_allocator::set_current(job_allocator* alloc) noexcept -> job_allocator*

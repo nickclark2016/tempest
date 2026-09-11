@@ -50,6 +50,35 @@ namespace tempest::job
     } // namespace detail
 
     template <typename T, typename E = job_error>
+    auto when_all(job_system& sys, vector<task<T, E>> tasks) -> task<vector<expected<T, E>>>
+    {
+        auto count = tasks.size();
+        if (count == 0)
+        {
+            co_return vector<expected<T, E>>{};
+        }
+
+        auto results = vector<expected<T, E>>{};
+        results.resize(count);
+
+        auto remaining = make_unique<atomic<size_t>>(count);
+        auto done_event = make_unique<async_event>(sys);
+
+        auto runners = vector<task<void>>{};
+        runners.reserve(count);
+
+        for (auto i = 0u; i < count; ++i)
+        {
+            runners.push_back(
+                detail::when_all_leaf_runner(tempest::move(tasks[i]), &results[i], remaining.get(), done_event.get()));
+            sys.schedule(runners.back().handle());
+        }
+
+        co_await done_event->wait();
+        co_return tempest::move(results);
+    }
+
+    template <typename T, typename E = job_error>
     auto when_all(vector<task<T, E>> tasks) -> task<vector<expected<T, E>>>
     {
         auto count = tasks.size();
@@ -67,20 +96,11 @@ namespace tempest::job
         auto runners = vector<task<void>>{};
         runners.reserve(count);
 
-        auto* js = job_system::get_current();
-
         for (auto i = 0u; i < count; ++i)
         {
             runners.push_back(
                 detail::when_all_leaf_runner(tempest::move(tasks[i]), &results[i], remaining.get(), done_event.get()));
-            if (js != nullptr)
-            {
-                js->schedule(runners.back().handle());
-            }
-            else
-            {
-                runners.back().resume();
-            }
+            runners.back().resume();
         }
 
         co_await done_event->wait();
@@ -89,7 +109,7 @@ namespace tempest::job
 
     template <typename... Tasks>
         requires(sizeof...(Tasks) > 0)
-    auto when_all(Tasks&&... tasks) -> task<tuple<typename remove_cvref_t<Tasks>::result_type...>>
+    auto when_all(job_system& sys, Tasks&&... tasks) -> task<tuple<typename remove_cvref_t<Tasks>::result_type...>>
     {
         constexpr auto count = sizeof...(Tasks);
 
@@ -97,25 +117,16 @@ namespace tempest::job
         auto results = make_unique<ResultTuple>();
 
         auto remaining = make_unique<atomic<size_t>>(count);
-        auto done_event = make_unique<async_event>();
+        auto done_event = make_unique<async_event>(sys);
 
         auto runners = vector<task<void>>{};
         runners.reserve(count);
 
-        auto* js = job_system::get_current();
-
-        auto launch_leaf = [&runners, js, rem = remaining.get(), ev = done_event.get()]<typename Tsk, typename Res>(
+        auto launch_leaf = [&runners, &sys, rem = remaining.get(), ev = done_event.get()]<typename Tsk, typename Res>(
                                Tsk&& tsk, Res* out) {
             runners.push_back(
                 detail::when_all_leaf_runner(tempest::forward<Tsk>(tsk), out, rem, ev));
-            if (js != nullptr)
-            {
-                js->schedule(runners.back().handle());
-            }
-            else
-            {
-                runners.back().resume();
-            }
+            sys.schedule(runners.back().handle());
         };
 
         [&]<size_t... Is>(index_sequence<Is...>) {
@@ -124,6 +135,52 @@ namespace tempest::job
 
         co_await done_event->wait();
         co_return tempest::move(*results);
+    }
+
+    template <typename FirstTask, typename... Tasks>
+        requires(!is_same_v<remove_cvref_t<FirstTask>, job_system>)
+    auto when_all(FirstTask&& first, Tasks&&... rest)
+        -> task<tuple<typename remove_cvref_t<FirstTask>::result_type, typename remove_cvref_t<Tasks>::result_type...>>
+    {
+        constexpr auto count = 1 + sizeof...(Tasks);
+
+        using ResultTuple =
+            tuple<typename remove_cvref_t<FirstTask>::result_type, typename remove_cvref_t<Tasks>::result_type...>;
+        auto results = make_unique<ResultTuple>();
+
+        auto remaining = make_unique<atomic<size_t>>(count);
+        auto done_event = make_unique<async_event>();
+
+        auto runners = vector<task<void>>{};
+        runners.reserve(count);
+
+        auto launch_leaf = [&runners, rem = remaining.get(), ev = done_event.get()]<typename Tsk, typename Res>(
+                               Tsk&& tsk, Res* out) {
+            runners.push_back(
+                detail::when_all_leaf_runner(tempest::forward<Tsk>(tsk), out, rem, ev));
+            runners.back().resume();
+        };
+
+        launch_leaf(tempest::forward<FirstTask>(first), &get<0>(*results));
+        [&]<size_t... Is>(index_sequence<Is...>) {
+            (launch_leaf(tempest::forward<Tasks>(rest), &get<Is + 1>(*results)), ...);
+        }(make_index_sequence<sizeof...(Tasks)>{});
+
+        co_await done_event->wait();
+        co_return tempest::move(*results);
+    }
+
+    template <typename T, typename E>
+    inline auto job_system::when_all(vector<task<T, E>> tasks) -> task<vector<expected<T, E>>>
+    {
+        return tempest::job::when_all(*this, tempest::move(tasks));
+    }
+
+    template <typename... Tasks>
+        requires(sizeof...(Tasks) > 0)
+    inline auto job_system::when_all(Tasks&&... tasks) -> task<tuple<typename remove_cvref_t<Tasks>::result_type...>>
+    {
+        return tempest::job::when_all(*this, tempest::forward<Tasks>(tasks)...);
     }
 } // namespace tempest::job
 

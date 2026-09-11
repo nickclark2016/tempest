@@ -24,6 +24,9 @@ namespace tempest::job
         static constexpr size_t capacity = Capacity;
 
         spsc_channel() = default;
+        explicit spsc_channel(job_system& sys) noexcept : _sys{&sys}
+        {
+        }
 
         ~spsc_channel()
         {
@@ -214,12 +217,11 @@ namespace tempest::job
             return item_awaiter{.chan = *this};
         }
 
-        static auto _resume(coroutine_handle<> h) -> void
+        auto _resume(coroutine_handle<> h) noexcept -> void
         {
-            auto* js = job_system::get_current();
-            if (js != nullptr)
+            if (_sys != nullptr)
             {
-                js->schedule(h);
+                _sys->schedule(h);
             }
             else
             {
@@ -238,6 +240,7 @@ namespace tempest::job
         atomic<uintptr_t> _consumer_waiter{0};
 
         atomic<bool> _closed{false};
+        job_system* _sys{nullptr};
     };
 } // namespace tempest::job
 

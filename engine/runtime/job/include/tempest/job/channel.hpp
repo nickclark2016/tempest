@@ -40,6 +40,14 @@ namespace tempest::job
             }
         }
 
+        explicit channel(job_system& sys) : _sys{&sys}
+        {
+            for (size_t i = 0; i < Capacity; ++i)
+            {
+                _cells[i].sequence.store(i, memory_order::relaxed);
+            }
+        }
+
         ~channel()
         {
             close();
@@ -219,7 +227,7 @@ namespace tempest::job
             auto await_suspend(coroutine_handle<> h) noexcept -> bool
             {
                 node.handle = h;
-                node.scheduler = job_system::get_current();
+                node.scheduler = chan._sys;
                 auto* old_head = chan._producer_waiters.load(memory_order::relaxed);
                 do
                 {
@@ -252,7 +260,7 @@ namespace tempest::job
             auto await_suspend(coroutine_handle<> h) noexcept -> bool
             {
                 node.handle = h;
-                node.scheduler = job_system::get_current();
+                node.scheduler = chan._sys;
                 auto* old_head = chan._consumer_waiters.load(memory_order::relaxed);
                 do
                 {
@@ -289,15 +297,7 @@ namespace tempest::job
             }
             else
             {
-                auto* js = job_system::get_current();
-                if (js != nullptr)
-                {
-                    js->schedule(node->handle);
-                }
-                else
-                {
-                    node->handle.resume();
-                }
+                node->handle.resume();
             }
         }
 
@@ -333,6 +333,7 @@ namespace tempest::job
         atomic<bool> _closed{false};
         atomic<channel_wait_node*> _producer_waiters{nullptr};
         atomic<channel_wait_node*> _consumer_waiters{nullptr};
+        job_system* _sys{nullptr};
     };
 } // namespace tempest::job
 

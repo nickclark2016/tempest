@@ -33,10 +33,15 @@ namespace tempest::job
         async_mutex* _mutex{nullptr};
     };
 
+    class job_system;
+
     class TEMPEST_API async_mutex
     {
       public:
         async_mutex() noexcept = default;
+        explicit async_mutex(job_system& sys) noexcept : _sys{&sys}
+        {
+        }
         ~async_mutex() = default;
 
         async_mutex(const async_mutex&) = delete;
@@ -101,6 +106,9 @@ namespace tempest::job
         atomic<uint32_t> _locked{0};
         atomic<async_mutex_waiter*> _waiters_in{nullptr};
         async_mutex_waiter* _waiters_out{nullptr};
+        job_system* _sys{nullptr};
+
+        auto _resume(coroutine_handle<> h) noexcept -> void;
     };
 } // namespace tempest::job
 

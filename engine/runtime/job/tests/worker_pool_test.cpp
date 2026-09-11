@@ -100,8 +100,8 @@ namespace tempest::job::tests
         for (auto i = 0; i < 20; ++i)
         {
             tasks.push_back(sys.async(task_priority::normal, core_class::performance,
-                                      [&p_executed_count, &p_routed_correctly] {
-                                          auto cls = job_system::get_current_worker_core_class();
+                                      [&sys, &p_executed_count, &p_routed_correctly] {
+                                          auto cls = sys.current_worker_core_class();
                                           if (!cls.has_value() || *cls != core_class::performance)
                                           {
                                               p_routed_correctly.store(false, memory_order::relaxed);
@@ -110,8 +110,8 @@ namespace tempest::job::tests
                                       }));
 
             tasks.push_back(sys.async(task_priority::normal, core_class::efficiency,
-                                      [&e_executed_count, &e_routed_correctly] {
-                                          auto cls = job_system::get_current_worker_core_class();
+                                      [&sys, &e_executed_count, &e_routed_correctly] {
+                                          auto cls = sys.current_worker_core_class();
                                           if (!cls.has_value() || *cls != core_class::efficiency)
                                           {
                                               e_routed_correctly.store(false, memory_order::relaxed);
@@ -178,8 +178,8 @@ namespace tempest::job::tests
         for (auto i = 0; i < heavy_task_count; ++i)
         {
             tasks.push_back(sys.async(task_priority::normal, core_class::performance,
-                                      [&perf_task_executed_by_p, &forbidden_theft_detected] {
-                                          auto cls = job_system::get_current_worker_core_class();
+                                      [&sys, &perf_task_executed_by_p, &forbidden_theft_detected] {
+                                          auto cls = sys.current_worker_core_class();
                                           if (cls.has_value() && *cls == core_class::efficiency)
                                           {
                                               forbidden_theft_detected.store(true, memory_order::relaxed);

@@ -3,21 +3,17 @@
 
 namespace tempest::job
 {
-    namespace
+    auto async_mutex::_resume(coroutine_handle<> h) noexcept -> void
     {
-        auto resume_coroutine(coroutine_handle<> h) -> void
+        if (_sys != nullptr)
         {
-            auto* js = job_system::get_current();
-            if (js != nullptr)
-            {
-                js->schedule(h);
-            }
-            else
-            {
-                h.resume();
-            }
+            _sys->schedule(h);
         }
-    } // namespace
+        else
+        {
+            h.resume();
+        }
+    }
 
     scoped_lock_guard::scoped_lock_guard(async_mutex& m) noexcept : _mutex{&m}
     {
@@ -95,7 +91,7 @@ namespace tempest::job
             auto* w = _waiters_out;
             _waiters_out = _waiters_out->next;
             // Hand off lock ownership directly to waiter
-            resume_coroutine(w->handle);
+            _resume(w->handle);
             return;
         }
 
@@ -114,7 +110,7 @@ namespace tempest::job
             }
 
             _waiters_out = reversed->next;
-            resume_coroutine(reversed->handle);
+            _resume(reversed->handle);
             return;
         }
 

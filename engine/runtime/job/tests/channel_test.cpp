@@ -170,7 +170,7 @@ namespace tempest::job::tests
         };
         auto sys = job_system{log, prof, config};
 
-        auto chan = channel<int, 2>{};
+        auto chan = channel<int, 2>{sys};
         EXPECT_TRUE(chan.try_push(41).has_value());
         EXPECT_TRUE(chan.try_push(42).has_value()); // Fill the channel
 

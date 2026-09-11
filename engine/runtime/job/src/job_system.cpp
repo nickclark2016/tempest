@@ -23,28 +23,6 @@ namespace tempest::job
 {
     namespace
     {
-        thread_local job_system* tl_current_job_system = nullptr;
-
-        class current_job_system_scope
-        {
-          public:
-            explicit current_job_system_scope(job_system* sys) noexcept : _prev{tl_current_job_system}
-            {
-                tl_current_job_system = sys;
-            }
-
-            ~current_job_system_scope()
-            {
-                tl_current_job_system = _prev;
-            }
-
-            current_job_system_scope(const current_job_system_scope&) = delete;
-            current_job_system_scope& operator=(const current_job_system_scope&) = delete;
-
-          private:
-            job_system* _prev{nullptr};
-        };
-
         inline auto cpu_pause() noexcept -> void
         {
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
@@ -88,6 +66,7 @@ namespace tempest::job
 
     struct worker_state
     {
+        job_system* owner{nullptr};
         size_t worker_index{0};
         core_class type{core_class::performance};
         uint64_t affinity_mask{0};
@@ -177,6 +156,7 @@ namespace tempest::job
         for (auto i = 0u; i < perf; ++i)
         {
             auto w = make_unique<worker_state>();
+            w->owner = this;
             w->worker_index = _impl->workers.size();
             w->type = core_class::performance;
 
@@ -204,6 +184,7 @@ namespace tempest::job
         for (auto i = 0u; i < eff; ++i)
         {
             auto w = make_unique<worker_state>();
+            w->owner = this;
             w->worker_index = _impl->workers.size();
             w->type = core_class::efficiency;
 
@@ -230,7 +211,6 @@ namespace tempest::job
         for (auto& w : _impl->workers)
         {
             w->worker_thread = tempest::thread([this, worker = w.get()] {
-                auto sys_scope = current_job_system_scope{this};
                 auto alloc_scope = job_allocator_scope{worker->allocator};
                 tl_current_worker = worker;
 
@@ -488,6 +468,8 @@ namespace tempest::job
                     _impl->idle_mask.fetch_and(~(1ULL << worker->worker_index), memory_order::acq_rel);
                     worker->park_state.store(0, memory_order::release);
                 }
+
+                tl_current_worker = nullptr;
             });
         }
     }
@@ -536,23 +518,18 @@ namespace tempest::job
         return _impl->eff_worker_count;
     }
 
-    auto job_system::get_current() noexcept -> job_system*
+    auto job_system::current_worker_core_class() const noexcept -> optional<core_class>
     {
-        return tl_current_job_system;
-    }
-
-    auto job_system::get_current_worker_core_class() noexcept -> optional<core_class>
-    {
-        if (tl_current_worker != nullptr)
+        if (tl_current_worker != nullptr && tl_current_worker->owner == this)
         {
             return tl_current_worker->type;
         }
         return nullopt;
     }
 
-    auto job_system::get_current_worker_index() noexcept -> optional<size_t>
+    auto job_system::current_worker_index() const noexcept -> optional<size_t>
     {
-        if (tl_current_worker != nullptr)
+        if (tl_current_worker != nullptr && tl_current_worker->owner == this)
         {
             return tl_current_worker->worker_index;
         }
@@ -588,7 +565,7 @@ namespace tempest::job
         }
 
         auto* curr_worker = tl_current_worker;
-        if (curr_worker != nullptr)
+        if (curr_worker != nullptr && curr_worker->owner == this)
         {
             // Worker thread scheduling
             auto compatible = (affinity == core_class::any) || (affinity == curr_worker->type);
@@ -699,7 +676,6 @@ namespace tempest::job
 
             if (item.handle && !item.handle.done())
             {
-                auto sys_scope = current_job_system_scope{this};
                 auto alloc_scope = job_allocator_scope{_impl->single_stepped_allocator};
                 item.handle.resume();
             }
@@ -716,7 +692,6 @@ namespace tempest::job
             {
                 if (res->handle && !res->handle.done())
                 {
-                    auto sys_scope = current_job_system_scope{this};
                     auto alloc_scope = job_allocator_scope{_impl->workers[0]->allocator};
                     res->handle.resume();
                 }
@@ -765,7 +740,7 @@ namespace tempest::job
         auto count = graph.size();
         auto remaining = make_unique<atomic<size_t>>(count);
         auto first_error = make_unique<atomic<uint8_t>>(static_cast<uint8_t>(job_error::none));
-        auto completion_event = make_unique<async_event>();
+        auto completion_event = make_unique<async_event>(*this);
         auto node_tasks = make_unique<vector<task<void>>>();
         auto tasks_mutex = make_unique<mutex>();
 

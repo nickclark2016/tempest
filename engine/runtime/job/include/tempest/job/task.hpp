@@ -7,6 +7,7 @@
 #include <tempest/expected.hpp>
 #include <tempest/job/allocator.hpp>
 #include <tempest/job/types.hpp>
+#include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
@@ -22,12 +23,31 @@ namespace tempest::job
         {
             static auto operator new(size_t size) -> void*
             {
-                return job_allocator::get_current()->allocate(size);
+                auto* alloc = job_allocator::get_current();
+                if (alloc != nullptr)
+                {
+                    return alloc->allocate(size);
+                }
+                auto* raw = static_cast<byte*>(tempest::aligned_alloc(size + 16, 16));
+                *reinterpret_cast<uint64_t*>(raw) = 0xDEADBEEFULL;
+                return raw + 16;
             }
 
             static auto operator delete(void* ptr, size_t size) noexcept -> void
             {
-                job_allocator::deallocate(ptr, size);
+                if (ptr == nullptr)
+                {
+                    return;
+                }
+                auto* prefix = static_cast<byte*>(ptr) - 16;
+                if (*reinterpret_cast<uint64_t*>(prefix) == 0xDEADBEEFULL)
+                {
+                    tempest::aligned_free(prefix);
+                }
+                else
+                {
+                    job_allocator::deallocate(ptr, size);
+                }
             }
         };
 

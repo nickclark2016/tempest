@@ -35,9 +35,9 @@ namespace tempest::job::tests
             co_return 100;
         };
 
-        // 2. Act: Execute when_all with variadic tasks
+        // 2. Act: Execute when_all with variadic tasks dispatched to job_system
         auto run = [&]() -> task<void> {
-            auto results = co_await when_all(t1(), t2(), t3());
+            auto results = co_await when_all(sys, t1(), t2(), t3());
 
             // 3. Assert: Verify each tuple element
             EXPECT_TRUE(get<0>(results).has_value());
@@ -87,7 +87,7 @@ namespace tempest::job::tests
 
         // 2. Act: Execute dynamic when_all
         auto run = [&]() -> task<void> {
-            auto results = co_await when_all(tempest::move(tasks));
+            auto results = co_await when_all(sys, tempest::move(tasks));
 
             // 3. Assert: All 8 results match
             EXPECT_EQ(results.size(), static_cast<size_t>(count));
@@ -136,9 +136,9 @@ namespace tempest::job::tests
             co_return;
         };
 
-        // 2. Act: Execute when_all containing both success and failure tasks
+        // 2. Act: Execute when_all containing both success and failure tasks via sys.when_all
         auto run = [&]() -> task<void> {
-            auto results = co_await when_all(success_task(), fail_task(), void_fail_task());
+            auto results = co_await sys.when_all(success_task(), fail_task(), void_fail_task());
 
             // 3. Assert:
             // Element 0: Succeeded with value 999
@@ -187,9 +187,9 @@ namespace tempest::job::tests
             co_return;
         };
 
-        // 2. Act: Structured bindings with co_await when_all(...)
+        // 2. Act: Structured bindings with co_await sys.when_all(...)
         auto run = [&]() -> task<void> {
-            auto [r1, r2, r3] = co_await when_all(t1(), t2(), t3());
+            auto [r1, r2, r3] = co_await sys.when_all(t1(), t2(), t3());
 
             // 3. Assert: Unpacked expected results
             EXPECT_TRUE(r1.has_value());
@@ -243,5 +243,32 @@ namespace tempest::job::tests
         sys.wait_idle();
 
         ASSERT_TRUE(main_task.is_ready());
+    }
+
+    /// @brief Verifies that dynamic vector when_all executes standalone without any job_system.
+    TEST(when_all_test, standalone_vector_when_all)
+    {
+        // 1. Setup
+        auto t1 = []() -> task<int> { co_return 100; };
+        auto t2 = []() -> task<int> { co_return 200; };
+        auto tasks = vector<task<int>>{};
+        tasks.push_back(t1());
+        tasks.push_back(t2());
+
+        // 2. Act
+        auto run = [&]() -> task<void> {
+            auto res = co_await when_all(tempest::move(tasks));
+
+            // 3. Assert
+            EXPECT_EQ(res.size(), 2u);
+            EXPECT_TRUE(res[0].has_value());
+            EXPECT_EQ(res[0].value(), 100);
+            EXPECT_TRUE(res[1].has_value());
+            EXPECT_EQ(res[1].value(), 200);
+        };
+
+        auto main_task = run();
+        main_task.resume();
+        EXPECT_TRUE(main_task.is_ready());
     }
 } // namespace tempest::job::tests

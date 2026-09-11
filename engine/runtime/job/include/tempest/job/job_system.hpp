@@ -18,6 +18,7 @@
 #include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/profiler/session.hpp>
+#include <tempest/tuple.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
 
@@ -148,7 +149,7 @@ namespace tempest::job
                 }
                 auto num_chunks = (count + chunk_sz - 1) / chunk_sz;
                 auto remaining = make_unique<atomic<size_t>>(num_chunks);
-                auto done_event = make_unique<async_event>();
+                auto done_event = make_unique<async_event>(*this);
                 auto chunk_tasks = vector<task<void>>{};
                 chunk_tasks.reserve(num_chunks);
 
@@ -184,7 +185,7 @@ namespace tempest::job
                 auto num_tasks = tempest::min(static_cast<size_t>(workers * 2), count);
                 auto next_idx = make_unique<atomic<size_t>>(r.first);
                 auto remaining = make_unique<atomic<size_t>>(num_tasks);
-                auto done_event = make_unique<async_event>();
+                auto done_event = make_unique<async_event>(*this);
                 auto chunk_tasks = vector<task<void>>{};
                 chunk_tasks.reserve(num_tasks);
 
@@ -256,9 +257,15 @@ namespace tempest::job
         auto step() -> bool;
         auto step_for(size_t max_tasks) -> size_t;
 
-        [[nodiscard]] static auto get_current() noexcept -> job_system*;
-        [[nodiscard]] static auto get_current_worker_core_class() noexcept -> optional<core_class>;
-        [[nodiscard]] static auto get_current_worker_index() noexcept -> optional<size_t>;
+        template <typename T, typename E = job_error>
+        auto when_all(vector<task<T, E>> tasks) -> task<vector<expected<T, E>>>;
+
+        template <typename... Tasks>
+            requires(sizeof...(Tasks) > 0)
+        auto when_all(Tasks&&... tasks) -> task<tuple<typename remove_cvref_t<Tasks>::result_type...>>;
+
+        [[nodiscard]] auto current_worker_core_class() const noexcept -> optional<core_class>;
+        [[nodiscard]] auto current_worker_index() const noexcept -> optional<size_t>;
 
       private:
         logger& _logger;

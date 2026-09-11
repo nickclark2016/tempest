@@ -20,10 +20,14 @@ namespace tempest::job
         async_event_waiter* next{nullptr};
     };
 
+    class job_system;
+
     class TEMPEST_API async_event
     {
       public:
         explicit async_event(bool initial_state = false, event_reset_mode mode = event_reset_mode::auto_reset) noexcept;
+        explicit async_event(job_system& sys, bool initial_state = false,
+                             event_reset_mode mode = event_reset_mode::auto_reset) noexcept;
         ~async_event() = default;
 
         async_event(const async_event&) = delete;
@@ -60,12 +64,11 @@ namespace tempest::job
       private:
         friend struct event_awaiter;
 
-        auto _try_consume_signal() noexcept -> bool;
-        auto _enqueue_waiter(async_event_waiter* waiter, coroutine_handle<> h) noexcept -> bool;
-
         event_reset_mode _mode{event_reset_mode::auto_reset};
-        atomic<bool> _signaled{false};
         atomic<async_event_waiter*> _waiters{nullptr};
+        job_system* _sys{nullptr};
+
+        auto _resume(coroutine_handle<> h) noexcept -> void;
     };
 } // namespace tempest::job
 
