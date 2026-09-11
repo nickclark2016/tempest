@@ -294,6 +294,22 @@ scoped.workspace('Tempest', function()
     end)
 
     scoped.filter({
+        'options:use-tsan'
+    }, function()
+        sanitize { 'Thread' }
+
+        scoped.filter({
+            'toolset:clang',
+            'system:not windows',
+        }, function()
+            buildoptions {
+                '-fno-omit-frame-pointer',
+                '-g'
+            }
+        end)
+    end)
+
+    scoped.filter({
         'toolset:msc*',
         'configurations:RelWithDebugInfo',
     }, function()
@@ -331,5 +347,11 @@ end)
 newoption {
     trigger = 'use-asan',
     description = 'Use AddressSanitizer',
+    category = 'Tempest Engine',
+}
+
+newoption {
+    trigger = 'use-tsan',
+    description = 'Use ThreadSanitizer',
     category = 'Tempest Engine',
 }

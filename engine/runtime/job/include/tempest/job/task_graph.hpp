@@ -99,6 +99,7 @@ namespace tempest::job
         expected<void, job_error> _result{expected<void, job_error>{}};
 
         unique_ptr<node_invoker> _invoker{};
+        task<void> _task{};
     };
 
     template <typename F>

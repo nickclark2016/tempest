@@ -71,13 +71,13 @@ namespace tempest::job
         {
             auto* ptr = aligned_alloc(size, 16);
             _heap_fallback_count.fetch_add(1, memory_order::relaxed);
-            _active_live_frames.fetch_add(1, memory_order::relaxed);
+            _active_live_frames.fetch_add(1, memory_order::acq_rel);
             return ptr;
         }
 
         const auto class_idx = static_cast<size_t>(cls);
         _allocations_per_class[class_idx].fetch_add(1, memory_order::relaxed);
-        _active_live_frames.fetch_add(1, memory_order::relaxed);
+        _active_live_frames.fetch_add(1, memory_order::acq_rel);
 
         if (_local_free_list[class_idx] == nullptr)
         {
@@ -122,16 +122,16 @@ namespace tempest::job
     auto job_allocator::push_remote_free(void* ptr) noexcept -> void
     {
         auto* node = reinterpret_cast<remote_free_node*>(ptr);
-        auto* old_head = _remote_free_head.load(memory_order::relaxed);
+        auto* old_head = _remote_free_head.load(memory_order::acquire);
         do
         {
             node->next = old_head;
-        } while (!_remote_free_head.compare_exchange_weak(old_head, node, memory_order::release));
+        } while (!_remote_free_head.compare_exchange_weak(old_head, node, memory_order::acq_rel, memory_order::acquire));
     }
 
     auto job_allocator::drain_remote_frees() noexcept -> void
     {
-        auto* head = _remote_free_head.exchange(nullptr, memory_order::acquire);
+        auto* head = _remote_free_head.exchange(nullptr, memory_order::acq_rel);
         while (head != nullptr)
         {
             auto* next = head->next;
@@ -159,14 +159,14 @@ namespace tempest::job
             auto* curr = get_current();
             if (curr != nullptr)
             {
-                curr->_active_live_frames.fetch_sub(1, memory_order::relaxed);
+                curr->_active_live_frames.fetch_sub(1, memory_order::acq_rel);
             }
             return;
         }
 
         auto* chunk = slab_chunk::from_pointer(ptr);
         auto* owner = chunk->owner;
-        owner->_active_live_frames.fetch_sub(1, memory_order::relaxed);
+        owner->_active_live_frames.fetch_sub(1, memory_order::acq_rel);
 
         auto* current = get_current();
         if (current == owner)

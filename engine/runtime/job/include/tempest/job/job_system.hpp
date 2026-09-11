@@ -129,7 +129,7 @@ namespace tempest::job
         }
 
         template <typename Partitioner = partitioner::guided, typename F>
-        auto parallel_for(range<size_t> r, task_priority priority, F&& body) -> task<void>
+        auto parallel_for(range<size_t> r, task_priority priority, F body) -> task<void>
         {
             if (r.empty())
             {
@@ -150,16 +150,60 @@ namespace tempest::job
                 auto num_chunks = (count + chunk_sz - 1) / chunk_sz;
                 auto remaining = make_unique<atomic<size_t>>(num_chunks);
                 auto done_event = make_unique<async_event>(*this);
-                auto chunk_tasks = vector<task<void>>{};
-                chunk_tasks.reserve(num_chunks);
+
+                auto launch_chunk = [&body, rem = remaining.get(), ev = done_event.get()](
+                                        size_t chunk_start, size_t chunk_end) -> detail::detached_task {
+                    if constexpr (requires { body(range<size_t>{chunk_start, chunk_end}); })
+                    {
+                        body(range<size_t>{chunk_start, chunk_end});
+                    }
+                    else
+                    {
+                        for (auto i = chunk_start; i < chunk_end; ++i)
+                        {
+                            body(i);
+                        }
+                    }
+                    if (rem->fetch_sub(1, memory_order::acq_rel) == 1)
+                    {
+                        ev->set();
+                    }
+                    co_return;
+                };
 
                 for (auto c = 0u; c < num_chunks; ++c)
                 {
                     auto chunk_start = r.first + c * chunk_sz;
                     auto chunk_end = tempest::min(r.last, chunk_start + chunk_sz);
-                    chunk_tasks.push_back(async(
-                        priority, core_class::any,
-                        [&body, chunk_start, chunk_end, rem = remaining.get(), ev = done_event.get()]() {
+                    auto task = launch_chunk(chunk_start, chunk_end);
+                    schedule(task.handle, priority, core_class::any);
+                }
+
+                co_await done_event->wait();
+            }
+            else
+            {
+                auto num_tasks = tempest::min(static_cast<size_t>(workers * 2), count);
+                auto next_idx = make_unique<atomic<size_t>>(r.first);
+                auto remaining = make_unique<atomic<size_t>>(num_tasks);
+                auto done_event = make_unique<async_event>(*this);
+
+                auto launch_guided = [&body, next = next_idx.get(), r, part, workers,
+                                      rem = remaining.get(), ev = done_event.get()]() -> detail::detached_task {
+                    while (true)
+                    {
+                        auto curr = next->load(memory_order::relaxed);
+                        if (curr >= r.last)
+                        {
+                            break;
+                        }
+                        auto remaining_items = r.last - curr;
+                        auto chunk = tempest::max(part.min_chunk_size, remaining_items / (2 * workers));
+                        chunk = tempest::min(remaining_items, chunk);
+                        if (next->compare_exchange_weak(curr, curr + chunk, memory_order::relaxed))
+                        {
+                            auto chunk_start = curr;
+                            auto chunk_end = curr + chunk;
                             if constexpr (requires { body(range<size_t>{chunk_start, chunk_end}); })
                             {
                                 body(range<size_t>{chunk_start, chunk_end});
@@ -171,62 +215,19 @@ namespace tempest::job
                                     body(i);
                                 }
                             }
-                            if (rem->fetch_sub(1, memory_order::acq_rel) == 1)
-                            {
-                                ev->set();
-                            }
-                        }));
-                }
-
-                co_await done_event->wait();
-            }
-            else
-            {
-                auto num_tasks = tempest::min(static_cast<size_t>(workers * 2), count);
-                auto next_idx = make_unique<atomic<size_t>>(r.first);
-                auto remaining = make_unique<atomic<size_t>>(num_tasks);
-                auto done_event = make_unique<async_event>(*this);
-                auto chunk_tasks = vector<task<void>>{};
-                chunk_tasks.reserve(num_tasks);
+                        }
+                    }
+                    if (rem->fetch_sub(1, memory_order::acq_rel) == 1)
+                    {
+                        ev->set();
+                    }
+                    co_return;
+                };
 
                 for (auto t = 0u; t < num_tasks; ++t)
                 {
-                    chunk_tasks.push_back(async(
-                        priority, core_class::any,
-                        [&body, next = next_idx.get(), r, part, workers, rem = remaining.get(),
-                         ev = done_event.get()]() {
-                            while (true)
-                            {
-                                auto curr = next->load(memory_order::relaxed);
-                                if (curr >= r.last)
-                                {
-                                    break;
-                                }
-                                auto remaining_items = r.last - curr;
-                                auto chunk = tempest::max(part.min_chunk_size, remaining_items / (2 * workers));
-                                chunk = tempest::min(remaining_items, chunk);
-                                if (next->compare_exchange_weak(curr, curr + chunk, memory_order::relaxed))
-                                {
-                                    auto chunk_start = curr;
-                                    auto chunk_end = curr + chunk;
-                                    if constexpr (requires { body(range<size_t>{chunk_start, chunk_end}); })
-                                    {
-                                        body(range<size_t>{chunk_start, chunk_end});
-                                    }
-                                    else
-                                    {
-                                        for (auto i = chunk_start; i < chunk_end; ++i)
-                                        {
-                                            body(i);
-                                        }
-                                    }
-                                }
-                            }
-                            if (rem->fetch_sub(1, memory_order::acq_rel) == 1)
-                            {
-                                ev->set();
-                            }
-                        }));
+                    auto task = launch_guided();
+                    schedule(task.handle, priority, core_class::any);
                 }
 
                 co_await done_event->wait();
@@ -234,21 +235,21 @@ namespace tempest::job
         }
 
         template <typename Partitioner = partitioner::guided, typename F>
-        auto parallel_for(range<size_t> r, F&& body) -> task<void>
+        auto parallel_for(range<size_t> r, F body) -> task<void>
         {
-            return parallel_for<Partitioner>(r, task_priority::normal, forward<F>(body));
+            return parallel_for<Partitioner>(r, task_priority::normal, tempest::move(body));
         }
 
         template <typename Partitioner = partitioner::guided, typename F>
-        auto parallel_for(size_t count, task_priority priority, F&& body) -> task<void>
+        auto parallel_for(size_t count, task_priority priority, F body) -> task<void>
         {
-            return parallel_for<Partitioner>(range<size_t>{0, count}, priority, forward<F>(body));
+            return parallel_for<Partitioner>(range<size_t>{0, count}, priority, tempest::move(body));
         }
 
         template <typename Partitioner = partitioner::guided, typename F>
-        auto parallel_for(size_t count, F&& body) -> task<void>
+        auto parallel_for(size_t count, F body) -> task<void>
         {
-            return parallel_for<Partitioner>(range<size_t>{0, count}, task_priority::normal, forward<F>(body));
+            return parallel_for<Partitioner>(range<size_t>{0, count}, task_priority::normal, tempest::move(body));
         }
 
         auto execute(task_graph& graph) -> task<expected<void, error_code>>;

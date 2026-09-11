@@ -132,9 +132,8 @@ namespace tempest::job
             {
                 return false;
             }
-            _buffer[static_cast<size_t>(b & Mask)] = tempest::move(item);
-            atomic_thread_fence(memory_order::release);
-            _bottom.store(b + 1, memory_order::relaxed);
+            _buffer[static_cast<size_t>(b & Mask)].store(item, memory_order::relaxed);
+            _bottom.store(b + 1, memory_order::release);
             return true;
         }
 
@@ -167,17 +166,17 @@ namespace tempest::job
             auto t = _top.load(memory_order::seq_cst);
             if (t <= b)
             {
-                auto item = tempest::move(_buffer[static_cast<size_t>(b & Mask)]);
+                auto item = _buffer[static_cast<size_t>(b & Mask)].load(memory_order::relaxed);
                 if (t != b)
                 {
-                    return optional<T>{tempest::move(item)};
+                    return optional<T>{item};
                 }
 
                 auto expected_t = t;
                 if (_top.compare_exchange_strong(expected_t, t + 1, memory_order::seq_cst, memory_order::relaxed))
                 {
                     _bottom.store(b + 1, memory_order::relaxed);
-                    return optional<T>{tempest::move(item)};
+                    return optional<T>{item};
                 }
                 _bottom.store(b + 1, memory_order::relaxed);
                 return nullopt;
@@ -193,11 +192,11 @@ namespace tempest::job
             auto b = _bottom.load(memory_order::acquire);
             if (t < b)
             {
-                auto item = _buffer[static_cast<size_t>(t & Mask)];
+                auto item = _buffer[static_cast<size_t>(t & Mask)].load(memory_order::relaxed);
                 auto expected_t = t;
                 if (_top.compare_exchange_strong(expected_t, t + 1, memory_order::seq_cst, memory_order::relaxed))
                 {
-                    return optional<T>{tempest::move(item)};
+                    return optional<T>{item};
                 }
                 return nullopt;
             }
@@ -212,16 +211,15 @@ namespace tempest::job
             auto b = _bottom.load(memory_order::acquire);
             if (t < b)
             {
-                const auto& item = _buffer[static_cast<size_t>(t & Mask)];
+                auto item = _buffer[static_cast<size_t>(t & Mask)].load(memory_order::relaxed);
                 if (!predicate(item))
                 {
                     return nullopt;
                 }
-                auto item_copy = item;
                 auto expected_t = t;
                 if (_top.compare_exchange_strong(expected_t, t + 1, memory_order::seq_cst, memory_order::relaxed))
                 {
-                    return optional<T>{tempest::move(item_copy)};
+                    return optional<T>{item};
                 }
                 return nullopt;
             }
@@ -231,7 +229,7 @@ namespace tempest::job
       private:
         alignas(64) atomic<int64_t> _top{0};
         alignas(64) atomic<int64_t> _bottom{0};
-        array<T, Capacity> _buffer{};
+        array<atomic<T>, Capacity> _buffer{};
         concurrent_queue<T>* _spill_queue{nullptr};
     };
 } // namespace tempest::job

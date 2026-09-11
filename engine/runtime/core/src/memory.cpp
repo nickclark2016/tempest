@@ -194,6 +194,10 @@ namespace tempest
 #ifdef _MSC_VER
         return _aligned_malloc(n, alignment);
 #else
+        if (alignment != 0)
+        {
+            n = (n + alignment - 1) & ~(alignment - 1);
+        }
         return ::aligned_alloc(alignment, n);
 #endif
     }

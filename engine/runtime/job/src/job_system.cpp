@@ -741,8 +741,6 @@ namespace tempest::job
         auto remaining = make_unique<atomic<size_t>>(count);
         auto first_error = make_unique<atomic<uint8_t>>(static_cast<uint8_t>(job_error::none));
         auto completion_event = make_unique<async_event>(*this);
-        auto node_tasks = make_unique<vector<task<void>>>();
-        auto tasks_mutex = make_unique<mutex>();
 
         // 1. Reset runtime counters with zero allocations
         for (auto& n : graph.nodes())
@@ -750,82 +748,96 @@ namespace tempest::job
             n->_runtime_in_degree.store(n->_static_in_degree, memory_order::relaxed);
             n->_failed.store(false, memory_order::relaxed);
             n->_result = expected<void, job_error>{};
+            n->_task = task<void>{};
         }
 
-        // Helper to prune downstream nodes when an ancestor fails
-        auto prune_node = [&remaining, &completion_event](auto& self, task_node* n) -> void {
-            n->_failed.store(true, memory_order::release);
-            for (auto* succ : n->_successors)
+        struct executor_context
+        {
+            job_system* sys;
+            atomic<size_t>* remaining;
+            atomic<uint8_t>* first_error;
+            async_event* completion_event;
+
+            auto prune_node(task_node* n) -> void
             {
-                succ->_failed.store(true, memory_order::release);
-                if (succ->_runtime_in_degree.fetch_sub(1, memory_order::acq_rel) == 1)
+                n->_failed.store(true, memory_order::release);
+                for (auto* succ : n->_successors)
                 {
-                    self(self, succ);
+                    succ->_failed.store(true, memory_order::release);
+                    if (succ->_runtime_in_degree.fetch_sub(1, memory_order::acq_rel) == 1)
+                    {
+                        prune_node(succ);
+                    }
+                }
+                if (remaining->fetch_sub(1, memory_order::acq_rel) == 1)
+                {
+                    completion_event->set();
                 }
             }
-            if (remaining->fetch_sub(1, memory_order::acq_rel) == 1)
+
+            auto node_coro(task_node* n) -> task<void>
             {
-                completion_event->set();
+                co_await n->_invoker->execute(*n);
+                if (!n->_result.has_value())
+                {
+                    auto expected_err = static_cast<uint8_t>(job_error::none);
+                    [[maybe_unused]] auto exchanged =
+                        first_error->compare_exchange_strong(expected_err, static_cast<uint8_t>(n->_result.error()),
+                                                             memory_order::acq_rel);
+
+                    for (auto* succ : n->_successors)
+                    {
+                        succ->_failed.store(true, memory_order::release);
+                        if (succ->_runtime_in_degree.fetch_sub(1, memory_order::acq_rel) == 1)
+                        {
+                            prune_node(succ);
+                        }
+                    }
+                }
+                else
+                {
+                    for (auto* succ : n->_successors)
+                    {
+                        if (succ->_runtime_in_degree.fetch_sub(1, memory_order::acq_rel) == 1)
+                        {
+                            if (succ->_failed.load(memory_order::acquire))
+                            {
+                                prune_node(succ);
+                            }
+                            else
+                            {
+                                schedule_node(succ);
+                            }
+                        }
+                    }
+                }
+
+                if (remaining->fetch_sub(1, memory_order::acq_rel) == 1)
+                {
+                    completion_event->set();
+                }
+            }
+
+            auto schedule_node(task_node* n) -> void
+            {
+                n->_task = node_coro(n);
+                sys->schedule(n->_task.handle());
             }
         };
 
-        // Helper to dispatch a node
-        auto schedule_node = [this, rem = remaining.get(), err = first_error.get(), ev = completion_event.get(),
-                              tasks = node_tasks.get(), t_mutex = tasks_mutex.get(),
-                              &prune_node](auto& self, task_node* n) -> void {
-            auto t = async(task_priority::normal, core_class::any,
-                           [this, n, rem, err, ev, &prune_node, &self]() -> task<void> {
-                               co_await n->_invoker->execute(*n);
-                               if (!n->_result.has_value())
-                               {
-                                   auto expected_err = static_cast<uint8_t>(job_error::none);
-                                   [[maybe_unused]] auto exchanged =
-                                       err->compare_exchange_strong(expected_err, static_cast<uint8_t>(n->_result.error()),
-                                                                    memory_order::acq_rel);
-
-                                   for (auto* succ : n->_successors)
-                                   {
-                                       succ->_failed.store(true, memory_order::release);
-                                       if (succ->_runtime_in_degree.fetch_sub(1, memory_order::acq_rel) == 1)
-                                       {
-                                           prune_node(prune_node, succ);
-                                       }
-                                   }
-                               }
-                               else
-                               {
-                                   for (auto* succ : n->_successors)
-                                   {
-                                       if (succ->_runtime_in_degree.fetch_sub(1, memory_order::acq_rel) == 1)
-                                       {
-                                           if (succ->_failed.load(memory_order::acquire))
-                                           {
-                                               prune_node(prune_node, succ);
-                                           }
-                                           else
-                                           {
-                                               self(self, succ);
-                                           }
-                                       }
-                                   }
-                               }
-
-                               if (rem->fetch_sub(1, memory_order::acq_rel) == 1)
-                               {
-                                   ev->set();
-                               }
-                           });
-
-            auto guard = lock_guard{*t_mutex};
-            tasks->push_back(tempest::move(t));
-        };
+        auto ctx = make_unique<executor_context>(executor_context{
+            .sys = this,
+            .remaining = remaining.get(),
+            .first_error = first_error.get(),
+            .completion_event = completion_event.get(),
+        });
 
         // Find and schedule root nodes
         for (auto& n : graph.nodes())
         {
             if (n->_static_in_degree == 0)
             {
-                schedule_node(schedule_node, n.get());
+                ctx->schedule_node(n.get());
             }
         }
 

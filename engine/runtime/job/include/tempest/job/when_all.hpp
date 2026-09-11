@@ -21,7 +21,7 @@ namespace tempest::job
     {
         template <typename TaskType, typename ResultType>
         auto when_all_leaf_runner(TaskType t, ResultType* out, atomic<size_t>* remaining, async_event* done_event)
-            -> task<void>
+            -> detached_task
         {
             struct raw_task_awaiter
             {
@@ -46,6 +46,7 @@ namespace tempest::job
             {
                 done_event->set();
             }
+            co_return;
         }
     } // namespace detail
 
@@ -64,14 +65,11 @@ namespace tempest::job
         auto remaining = make_unique<atomic<size_t>>(count);
         auto done_event = make_unique<async_event>(sys);
 
-        auto runners = vector<task<void>>{};
-        runners.reserve(count);
-
         for (auto i = 0u; i < count; ++i)
         {
-            runners.push_back(
-                detail::when_all_leaf_runner(tempest::move(tasks[i]), &results[i], remaining.get(), done_event.get()));
-            sys.schedule(runners.back().handle());
+            auto runner = detail::when_all_leaf_runner(
+                tempest::move(tasks[i]), &results[i], remaining.get(), done_event.get());
+            sys.schedule(runner.handle);
         }
 
         co_await done_event->wait();
@@ -93,14 +91,11 @@ namespace tempest::job
         auto remaining = make_unique<atomic<size_t>>(count);
         auto done_event = make_unique<async_event>();
 
-        auto runners = vector<task<void>>{};
-        runners.reserve(count);
-
         for (auto i = 0u; i < count; ++i)
         {
-            runners.push_back(
-                detail::when_all_leaf_runner(tempest::move(tasks[i]), &results[i], remaining.get(), done_event.get()));
-            runners.back().resume();
+            auto runner = detail::when_all_leaf_runner(
+                tempest::move(tasks[i]), &results[i], remaining.get(), done_event.get());
+            runner.handle.resume();
         }
 
         co_await done_event->wait();
@@ -119,14 +114,10 @@ namespace tempest::job
         auto remaining = make_unique<atomic<size_t>>(count);
         auto done_event = make_unique<async_event>(sys);
 
-        auto runners = vector<task<void>>{};
-        runners.reserve(count);
-
-        auto launch_leaf = [&runners, &sys, rem = remaining.get(), ev = done_event.get()]<typename Tsk, typename Res>(
+        auto launch_leaf = [&sys, rem = remaining.get(), ev = done_event.get()]<typename Tsk, typename Res>(
                                Tsk&& tsk, Res* out) {
-            runners.push_back(
-                detail::when_all_leaf_runner(tempest::forward<Tsk>(tsk), out, rem, ev));
-            sys.schedule(runners.back().handle());
+            auto runner = detail::when_all_leaf_runner(tempest::forward<Tsk>(tsk), out, rem, ev);
+            sys.schedule(runner.handle);
         };
 
         [&]<size_t... Is>(index_sequence<Is...>) {
@@ -151,14 +142,10 @@ namespace tempest::job
         auto remaining = make_unique<atomic<size_t>>(count);
         auto done_event = make_unique<async_event>();
 
-        auto runners = vector<task<void>>{};
-        runners.reserve(count);
-
-        auto launch_leaf = [&runners, rem = remaining.get(), ev = done_event.get()]<typename Tsk, typename Res>(
+        auto launch_leaf = [rem = remaining.get(), ev = done_event.get()]<typename Tsk, typename Res>(
                                Tsk&& tsk, Res* out) {
-            runners.push_back(
-                detail::when_all_leaf_runner(tempest::forward<Tsk>(tsk), out, rem, ev));
-            runners.back().resume();
+            auto runner = detail::when_all_leaf_runner(tempest::forward<Tsk>(tsk), out, rem, ev);
+            runner.handle.resume();
         };
 
         launch_leaf(tempest::forward<FirstTask>(first), &get<0>(*results));

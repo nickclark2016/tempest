@@ -808,25 +808,29 @@ namespace tempest
 
             auto store(const type& value, memory_order order = memory_order::seq_cst) noexcept -> void
             {
-                __atomic_store_n(&storage, value, convert_memory_order(order));
+                __atomic_store(&storage, const_cast<type*>(&value), convert_memory_order(order));
             }
 
             [[nodiscard]] auto load(memory_order order = memory_order::seq_cst) const noexcept -> type
             {
-                return __atomic_load_n(&storage, convert_memory_order(order));
+                type result{};
+                __atomic_load(&storage, &result, convert_memory_order(order));
+                return result;
             }
 
             [[nodiscard]] auto exchange(const type& desired, memory_order order = memory_order::seq_cst) noexcept
                 -> type
             {
-                return __atomic_exchange_n(&storage, desired, convert_memory_order(order));
+                type result{};
+                __atomic_exchange(&storage, const_cast<type*>(&desired), &result, convert_memory_order(order));
+                return result;
             }
 
             [[nodiscard]] auto compare_exchange_strong(type& expected, const type desired,
                                                        memory_order order = memory_order::seq_cst) noexcept -> bool
             {
-                return __atomic_compare_exchange_n(&storage, &expected, desired, false, convert_memory_order(order),
-                                                   convert_memory_order(order));
+                return __atomic_compare_exchange(&storage, &expected, const_cast<type*>(&desired), false,
+                                                 convert_memory_order(order), convert_memory_order(order));
             }
 
             auto fetch_add(type operand, memory_order order = memory_order::seq_cst) noexcept -> type
@@ -890,7 +894,6 @@ namespace tempest
     {
       public:
         using value_type = T;
-        using difference_type = decltype(declval<T>() - declval<T>());
 
         constexpr atomic() noexcept(is_nothrow_default_constructible_v<T>) : _value()
         {

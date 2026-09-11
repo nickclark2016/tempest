@@ -2,9 +2,9 @@
 #define tempest_job_async_event_hpp
 
 #include <tempest/api.hpp>
-#include <tempest/atomic.hpp>
 #include <tempest/coroutine.hpp>
 #include <tempest/int.hpp>
+#include <tempest/mutex.hpp>
 
 namespace tempest::job
 {
@@ -64,8 +64,10 @@ namespace tempest::job
       private:
         friend struct event_awaiter;
 
+        mutable mutex _mutex{};
         event_reset_mode _mode{event_reset_mode::auto_reset};
-        atomic<async_event_waiter*> _waiters{nullptr};
+        bool _signaled{false};
+        async_event_waiter* _waiters{nullptr};
         job_system* _sys{nullptr};
 
         auto _resume(coroutine_handle<> h) noexcept -> void;

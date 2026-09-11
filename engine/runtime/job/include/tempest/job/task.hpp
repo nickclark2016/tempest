@@ -51,6 +51,33 @@ namespace tempest::job
             }
         };
 
+        struct detached_task
+        {
+            struct promise_type : promise_allocator_base
+            {
+                auto get_return_object() noexcept -> detached_task
+                {
+                    return detached_task{coroutine_handle<promise_type>::from_promise(*this)};
+                }
+                auto initial_suspend() noexcept -> suspend_always
+                {
+                    return {};
+                }
+                auto final_suspend() noexcept -> suspend_never
+                {
+                    return {};
+                }
+                auto return_void() noexcept -> void
+                {
+                }
+                auto unhandled_exception() noexcept -> void
+                {
+                }
+            };
+
+            coroutine_handle<promise_type> handle{nullptr};
+        };
+
         template <typename T>
         struct is_task_helper : false_type
         {

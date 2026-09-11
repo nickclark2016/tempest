@@ -44,6 +44,10 @@ scoped.project('job', function()
         }
     end)
 
+    scoped.filter({ 'system:linux' }, function()
+        links { 'pthread', 'dl', 'atomic' }
+    end)
+
     scoped.usage("job:includedirs", function()
         externalincludedirs {
             'include',
@@ -90,7 +94,7 @@ scoped.group('Tests', function()
         }
 
         scoped.filter({ 'system:linux' }, function()
-            links { 'pthread', 'dl' }
+            links { 'pthread', 'dl', 'atomic' }
         end)
     end)
 end)
