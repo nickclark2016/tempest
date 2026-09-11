@@ -5,6 +5,8 @@
 #include <tempest/array.hpp>
 #include <tempest/expected.hpp>
 #include <tempest/flat_unordered_map.hpp>
+#include <tempest/job/task.hpp>
+#include <tempest/memory.hpp>
 #include <tempest/profiler/profiler.hpp>
 #include <tempest/render_graph/barrier_solver.hpp>
 #include <tempest/render_graph/dag.hpp>
@@ -13,6 +15,11 @@
 #include <tempest/rhi.hpp>
 #include <tempest/span.hpp>
 #include <tempest/vector.hpp>
+
+namespace tempest::job
+{
+    class job_system;
+}
 
 namespace tempest::render_graph
 {
@@ -77,7 +84,7 @@ namespace tempest::render_graph
     class TEMPEST_API render_graph_executor
     {
       public:
-        render_graph_executor() = default;
+        explicit render_graph_executor(job::job_system& jobs) noexcept;
         ~render_graph_executor() = default;
 
         render_graph_executor(const render_graph_executor&) = delete;
@@ -85,8 +92,12 @@ namespace tempest::render_graph
         render_graph_executor(render_graph_executor&&) noexcept = default;
         render_graph_executor& operator=(render_graph_executor&&) noexcept = default;
 
-        /// \brief Execute the render graph on the target device with optional frame sync primitives.
+        /// \brief Execute the render graph on the target device with optional frame sync primitives as a coroutine.
         auto execute(rhi::device& dev, render_graph& graph, const frame_sync_options& frame_sync = {})
+            -> job::task<expected<void, execution_error>>;
+
+        /// \brief Synchronously execute the render graph by driving coroutine completion.
+        auto execute_sync(rhi::device& dev, render_graph& graph, const frame_sync_options& frame_sync = {})
             -> expected<void, execution_error>;
 
         /// \brief Clean up allocated sync primitives and query pools on shutdown.
@@ -105,6 +116,7 @@ namespace tempest::render_graph
       private:
         auto get_execution_port(rhi::device& dev, queue_type queue) -> rhi::execution_port&;
 
+        non_null<job::job_system> _jobs;
         barrier_solver _barrier_solver;
         rhi::semaphore_handle _timeline_semaphore{};
         uint64_t _current_timeline_value{0};

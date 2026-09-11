@@ -22,7 +22,7 @@ scoped.project('render-system', function()
         '{MKDIR} "%{wks.basedir}/assets/shaders/engine"',
     }
 
-    uses { 'vulkan', 'rhi-vk', 'render-graph' }
+    uses { 'vulkan', 'rhi-vk', 'render-graph', 'job' }
 
     scoped.filter({
         'options:shared-engine',
@@ -37,6 +37,7 @@ scoped.project('render-system', function()
             'api',
             'core',
             'ecs',
+            'job',
             'logger',
             'assets',
             'profiler',

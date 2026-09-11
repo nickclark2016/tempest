@@ -1,5 +1,9 @@
 #include <gtest/gtest.h>
 
+#include <tempest/job/job_system.hpp>
+#include <tempest/logger.hpp>
+#include <tempest/mutex.hpp>
+#include <tempest/profiler/session.hpp>
 #include <tempest/render_graph/render_graph.hpp>
 
 namespace tempest::render_graph
@@ -9,6 +13,9 @@ namespace tempest::render_graph
         class mock_cmd_list final : public rhi::command_list
         {
           public:
+            mock_cmd_list* parent{nullptr};
+            mutex* mtx{nullptr};
+
             uint32_t begin_calls = 0;
             uint32_t end_calls = 0;
             uint32_t begin_render_pass_calls = 0;
@@ -18,11 +25,21 @@ namespace tempest::render_graph
             auto begin() const -> void override
             {
                 const_cast<mock_cmd_list*>(this)->begin_calls++;
+                if (parent != nullptr && mtx != nullptr)
+                {
+                    auto lock = lock_guard{*mtx};
+                    parent->begin_calls++;
+                }
             }
 
             auto end() const -> void override
             {
                 const_cast<mock_cmd_list*>(this)->end_calls++;
+                if (parent != nullptr && mtx != nullptr)
+                {
+                    auto lock = lock_guard{*mtx};
+                    parent->end_calls++;
+                }
             }
 
             auto pipeline_barrier([[maybe_unused]] span<const rhi::texture_barrier> texture_barriers,
@@ -30,6 +47,11 @@ namespace tempest::render_graph
                 -> void override
             {
                 const_cast<mock_cmd_list*>(this)->pipeline_barrier_calls++;
+                if (parent != nullptr && mtx != nullptr)
+                {
+                    auto lock = lock_guard{*mtx};
+                    parent->pipeline_barrier_calls++;
+                }
             }
 
             auto signal_event([[maybe_unused]] rhi::event_handle event,
@@ -59,11 +81,21 @@ namespace tempest::render_graph
                                    [[maybe_unused]] uint32_t width, [[maybe_unused]] uint32_t height) -> void override
             {
                 begin_render_pass_calls++;
+                if (parent != nullptr && mtx != nullptr)
+                {
+                    auto lock = lock_guard{*mtx};
+                    parent->begin_render_pass_calls++;
+                }
             }
 
             auto end_render_pass() -> void override
             {
                 end_render_pass_calls++;
+                if (parent != nullptr && mtx != nullptr)
+                {
+                    auto lock = lock_guard{*mtx};
+                    parent->end_render_pass_calls++;
+                }
             }
 
             auto bind_pipeline([[maybe_unused]] rhi::graphics_pipeline_handle pipeline) -> void override
@@ -192,22 +224,42 @@ namespace tempest::render_graph
                 -> void override
             {
                 written_timestamps.push_back({query_pool, query_index, stage});
+                if (parent != nullptr && mtx != nullptr)
+                {
+                    auto lock = lock_guard{*mtx};
+                    parent->written_timestamps.push_back({query_pool, query_index, stage});
+                }
             }
 
             auto begin_query(rhi::query_pool_handle query_pool, uint32_t query_index) -> void override
             {
                 begun_queries.push_back({query_pool, query_index});
+                if (parent != nullptr && mtx != nullptr)
+                {
+                    auto lock = lock_guard{*mtx};
+                    parent->begun_queries.push_back({query_pool, query_index});
+                }
             }
 
             auto end_query(rhi::query_pool_handle query_pool, uint32_t query_index) -> void override
             {
                 ended_queries.push_back({query_pool, query_index});
+                if (parent != nullptr && mtx != nullptr)
+                {
+                    auto lock = lock_guard{*mtx};
+                    parent->ended_queries.push_back({query_pool, query_index});
+                }
             }
 
             auto reset_query_pool(rhi::query_pool_handle query_pool, uint32_t first_query, uint32_t query_count)
                 -> void override
             {
                 reset_queries.push_back({query_pool, first_query, query_count});
+                if (parent != nullptr && mtx != nullptr)
+                {
+                    auto lock = lock_guard{*mtx};
+                    parent->reset_queries.push_back({query_pool, first_query, query_count});
+                }
             }
 
             vector<string> debug_regions;
@@ -220,17 +272,34 @@ namespace tempest::render_graph
             {
                 begin_debug_region_calls++;
                 debug_regions.push_back(string{label.name.data(), label.name.size()});
+                if (parent != nullptr && mtx != nullptr)
+                {
+                    auto lock = lock_guard{*mtx};
+                    parent->begin_debug_region_calls++;
+                    parent->debug_regions.push_back(string{label.name.data(), label.name.size()});
+                }
             }
 
             auto end_debug_region() -> void override
             {
                 end_debug_region_calls++;
+                if (parent != nullptr && mtx != nullptr)
+                {
+                    auto lock = lock_guard{*mtx};
+                    parent->end_debug_region_calls++;
+                }
             }
 
             auto insert_debug_marker(const rhi::debug_label& label) -> void override
             {
                 insert_debug_marker_calls++;
                 debug_markers.push_back(string{label.name.data(), label.name.size()});
+                if (parent != nullptr && mtx != nullptr)
+                {
+                    auto lock = lock_guard{*mtx};
+                    parent->insert_debug_marker_calls++;
+                    parent->debug_markers.push_back(string{label.name.data(), label.name.size()});
+                }
             }
         };
 
@@ -238,7 +307,10 @@ namespace tempest::render_graph
         {
           public:
             mock_cmd_list cmd;
+            mutex mtx;
+            vector<unique_ptr<mock_cmd_list>> allocated_cmds;
             uint32_t submit_calls = 0;
+            vector<const rhi::command_list*> submitted_commands;
             vector<rhi::device_sync_point> last_wait_sync;
             vector<rhi::device_sync_point> last_signal_sync;
             vector<string> debug_regions;
@@ -273,7 +345,13 @@ namespace tempest::render_graph
                 [[maybe_unused]] rhi::command_list_lifetime lifetime = rhi::command_list_lifetime::transient)
                 -> rhi::command_list& override
             {
-                return cmd;
+                auto lock = lock_guard{mtx};
+                auto new_cmd = make_unique<mock_cmd_list>();
+                new_cmd->parent = &cmd;
+                new_cmd->mtx = &mtx;
+                auto& ref = *new_cmd;
+                allocated_cmds.push_back(tempest::move(new_cmd));
+                return ref;
             }
 
             [[nodiscard]] auto submit([[maybe_unused]] span<const rhi::command_list*> commands,
@@ -281,7 +359,13 @@ namespace tempest::render_graph
                                       span<const rhi::device_sync_point> signal_semaphores)
                 -> expected<void, rhi::submit_error> override
             {
+                auto lock = lock_guard{mtx};
                 submit_calls++;
+                submitted_commands.clear();
+                for (const auto* c : commands)
+                {
+                    submitted_commands.push_back(c);
+                }
                 last_wait_sync.clear();
                 for (const auto& w : wait_semaphores)
                 {
@@ -299,6 +383,17 @@ namespace tempest::render_graph
             {
                 return {};
             }
+        };
+
+        struct test_context
+        {
+            logger log{};
+            profiler::profiler_session prof{false};
+            job::job_system jobs{log, prof,
+                                 job::job_system_config{
+                                     .performance_worker_count = 0,
+                                     .efficiency_worker_count = 0,
+                                 }};
         };
 
         struct mock_query_pool
@@ -607,7 +702,8 @@ namespace tempest::render_graph
     TEST(executor_test, execute_raster_and_compute_pipeline)
     {
         auto dev = mock_device_with_ports{};
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
 
         struct gbuffer_data
         {
@@ -677,7 +773,7 @@ namespace tempest::render_graph
                 EXPECT_NE(desc_slot, invalid_descriptor_index);
             });
 
-        const auto exec_res = rg.execute(dev);
+        const auto exec_res = rg.execute_sync(dev);
         ASSERT_TRUE(exec_res.has_value());
 
         EXPECT_TRUE(gbuffer_executed);
@@ -693,7 +789,8 @@ namespace tempest::render_graph
     TEST(executor_test, execute_multi_queue_cross_synchronization)
     {
         auto dev = mock_device_with_ports{};
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
 
         struct transfer_data
         {
@@ -738,7 +835,7 @@ namespace tempest::render_graph
             []([[maybe_unused]] const graphics_data& data, [[maybe_unused]] pass_execution_context& ctx,
                [[maybe_unused]] rhi::command_list& cmd) {});
 
-        const auto exec_res = rg.execute(dev);
+        const auto exec_res = rg.execute_sync(dev);
         ASSERT_TRUE(exec_res.has_value());
 
         // 3 separate queue submissions: Transfer -> Compute -> Graphics
@@ -760,7 +857,8 @@ namespace tempest::render_graph
     TEST(executor_test, execute_conditional_pass_skipped_at_runtime)
     {
         auto dev = mock_device_with_ports{};
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
 
         struct src_data
         {
@@ -812,7 +910,7 @@ namespace tempest::render_graph
                 EXPECT_NE(handle.handle, 0ULL);
             });
 
-        const auto exec_res = rg.execute(dev);
+        const auto exec_res = rg.execute_sync(dev);
         ASSERT_TRUE(exec_res.has_value());
 
         EXPECT_FALSE(disabled_executed);
@@ -822,7 +920,8 @@ namespace tempest::render_graph
     TEST(executor_test, automatic_pass_debug_regions_and_markers)
     {
         auto dev = mock_device_with_ports{};
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
 
         struct pass_a_data
         {
@@ -860,7 +959,7 @@ namespace tempest::render_graph
                 cmd.insert_debug_marker(rhi::debug_label{.name = "DispatchCompute"});
             });
 
-        const auto exec_res = rg.execute(dev);
+        const auto exec_res = rg.execute_sync(dev);
         ASSERT_TRUE(exec_res.has_value());
 
 #if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
@@ -900,7 +999,8 @@ namespace tempest::render_graph
     {
         // 1. Setup device and render graph with multiple passes
         auto dev = mock_device_with_ports{};
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
 
         struct pass_data
         {
@@ -920,13 +1020,13 @@ namespace tempest::render_graph
             "PassB",
             [](pass_builder& builder, pass_data& data) {
                 data.tex = builder.read_write(rg_texture_id{.id = 0, .version = 1}, rhi::pipeline_stage::fragment,
-                                              rhi::resource_access::read_write, rhi::image_layout::general);
+                                               rhi::resource_access::read_write, rhi::image_layout::general);
                 builder.mark_sink();
             },
             [](const pass_data&, pass_execution_context&, rhi::command_list&) {});
 
         // 2. Act: Execute frame
-        const auto exec_res = rg.execute(dev);
+        const auto exec_res = rg.execute_sync(dev);
         ASSERT_TRUE(exec_res.has_value());
 
         // 3. Assert: Verify 6 timestamp writes (2 for submit zone + 4 for 2 passes) and query pool reset
@@ -956,7 +1056,8 @@ namespace tempest::render_graph
         // 1. Setup profiler session and multi-queue render graph
         auto dev = mock_device_with_ports{};
         auto profiler = profiler::profiler_session{true};
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
 
         struct async_data
         {
@@ -995,11 +1096,11 @@ namespace tempest::render_graph
         };
 
         // 2. Act: Record frame 0
-        const auto exec_res0 = rg.execute(dev, sync_opts);
+        const auto exec_res0 = rg.execute_sync(dev, sync_opts);
         ASSERT_TRUE(exec_res0.has_value());
 
         // Execute frame 1 on same slot to trigger readback of frame 0
-        const auto exec_res1 = rg.execute(dev, sync_opts);
+        const auto exec_res1 = rg.execute_sync(dev, sync_opts);
         ASSERT_TRUE(exec_res1.has_value());
 
         // 3. Assert: Drain profiler chunks and verify track IDs
@@ -1049,7 +1150,8 @@ namespace tempest::render_graph
         // 1. Setup device, profiler, and passes with and without pipeline stats
         auto dev = mock_device_with_ports{};
         auto profiler = profiler::profiler_session{true};
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
 
         struct pass_data
         {
@@ -1083,7 +1185,7 @@ namespace tempest::render_graph
         };
 
         // 2. Act: Record frame 0
-        const auto exec_res0 = rg.execute(dev, sync_opts);
+        const auto exec_res0 = rg.execute_sync(dev, sync_opts);
         ASSERT_TRUE(exec_res0.has_value());
 
         // Verify command list recorded begin_query/end_query for GeometryPass but not PostProcessPass
@@ -1102,7 +1204,7 @@ namespace tempest::render_graph
         }
 
         // Execute next frame to trigger readback
-        const auto exec_res1 = rg.execute(dev, sync_opts);
+        const auto exec_res1 = rg.execute_sync(dev, sync_opts);
         ASSERT_TRUE(exec_res1.has_value());
 
         // 3. Assert: Verify metrics attached to GeometryPass zone record
@@ -1137,7 +1239,8 @@ namespace tempest::render_graph
     {
         // 1. Setup device and executor
         auto dev = mock_device_with_ports{};
-        auto executor = render_graph_executor{};
+        auto ctx = test_context{};
+        auto executor = render_graph_executor{ctx.jobs};
         constexpr auto frames_in_flight = 3U;
         constexpr auto num_frames = 15U;
 
@@ -1149,7 +1252,7 @@ namespace tempest::render_graph
         // 2. Act: Loop over 15 frames cycling through 3 flight slots
         for (uint32_t frame = 0; frame < num_frames; ++frame)
         {
-            auto rg = render_graph{1920, 1080};
+            auto rg = render_graph{ctx.jobs, 1920, 1080};
             rg.add_graphics_pass<pass_data>(
                 "RenderPass",
                 [](pass_builder& builder, pass_data& data) {
@@ -1167,7 +1270,7 @@ namespace tempest::render_graph
                 .frames_in_flight = frames_in_flight,
             };
 
-            const auto exec_res = executor.execute(dev, rg, sync_opts);
+            const auto exec_res = executor.execute_sync(dev, rg, sync_opts);
             ASSERT_TRUE(exec_res.has_value());
         }
 
@@ -1176,5 +1279,226 @@ namespace tempest::render_graph
 
         executor.release(dev);
         EXPECT_EQ(dev.query_pools.size(), 0U);
+    }
+
+    // =========================================================================
+    // Concurrent Primary Command Buffer Recording Tests (Phase 5)
+    // =========================================================================
+
+    /// @brief Verify that multiple independent passes in a batch are recorded concurrently into
+    /// separate primary command buffers by worker threads and submitted in a single port.submit call.
+    TEST(executor_test, concurrent_primary_command_buffer_recording)
+    {
+        // 1. Setup device, 4-worker job system, and render graph with 3 parallel passes
+        auto dev = mock_device_with_ports{};
+        auto log = logger{};
+        auto prof = profiler::profiler_session{false};
+        auto jobs = job::job_system{log, prof,
+                                     job::job_system_config{
+                                         .performance_worker_count = 4U,
+                                         .efficiency_worker_count = 0U,
+                                     }};
+        auto rg = render_graph{jobs, 1920, 1080};
+
+        struct pass_a_data
+        {
+            rg_texture_id tex;
+        };
+        struct pass_b_data
+        {
+            rg_texture_id tex;
+        };
+        struct pass_c_data
+        {
+            rg_texture_id tex;
+        };
+
+        auto pass_a_executed = false;
+        auto pass_b_executed = false;
+        auto pass_c_executed = false;
+
+        rg.add_graphics_pass<pass_a_data>(
+            "GBufferPass",
+            [](pass_builder& builder, pass_a_data& data) {
+                auto t = builder.create_texture(rg_texture_desc{.name = "Albedo"});
+                data.tex = builder.write(t, rhi::pipeline_stage::attachment_output, rhi::resource_access::write,
+                                         rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [&pass_a_executed](const pass_a_data&, pass_execution_context&, rhi::command_list&) {
+                pass_a_executed = true;
+            });
+
+        rg.add_graphics_pass<pass_b_data>(
+            "ShadowPass",
+            [](pass_builder& builder, pass_b_data& data) {
+                auto t = builder.create_texture(rg_texture_desc{.name = "ShadowAtlas"});
+                data.tex = builder.write(t, rhi::pipeline_stage::attachment_output, rhi::resource_access::write,
+                                         rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [&pass_b_executed](const pass_b_data&, pass_execution_context&, rhi::command_list&) {
+                pass_b_executed = true;
+            });
+
+        rg.add_graphics_pass<pass_c_data>(
+            "UIPass",
+            [](pass_builder& builder, pass_c_data& data) {
+                auto t = builder.create_texture(rg_texture_desc{.name = "UIAttachment"});
+                data.tex = builder.write(t, rhi::pipeline_stage::attachment_output, rhi::resource_access::write,
+                                         rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [&pass_c_executed](const pass_c_data&, pass_execution_context&, rhi::command_list&) {
+                pass_c_executed = true;
+            });
+
+        // 2. Act: Synchronously execute the graph (which dispatches passes to workers and awaits when_all)
+        const auto exec_res = rg.execute_sync(dev);
+        ASSERT_TRUE(exec_res.has_value());
+
+        // 3. Assert: All passes executed, exactly one unified queue submission occurred,
+        // and submitted commands include prologue + 3 passes + epilogue
+        EXPECT_TRUE(pass_a_executed);
+        EXPECT_TRUE(pass_b_executed);
+        EXPECT_TRUE(pass_c_executed);
+
+        EXPECT_EQ(dev.graphics_port.submit_calls, 1U);
+        EXPECT_EQ(dev.graphics_port.submitted_commands.size(), 5U);
+        EXPECT_GE(dev.graphics_port.allocated_cmds.size(), 5U);
+
+        // Verify prologue is first and epilogue is last in submitted commands
+        EXPECT_EQ(dev.graphics_port.submitted_commands.front(), dev.graphics_port.allocated_cmds[0].get());
+        EXPECT_EQ(dev.graphics_port.submitted_commands.back(), dev.graphics_port.allocated_cmds.back().get());
+    }
+
+    /// @brief Verify that prologue command buffer contains query resets and submit start timestamp,
+    /// while epilogue command buffer contains submit end timestamp and presentation layout transition.
+    TEST(executor_test, prologue_query_reset_and_epilogue_present)
+    {
+        // 1. Setup device, 2-worker job system, profiler, and presentation swapchain texture
+        auto dev = mock_device_with_ports{};
+        auto log = logger{};
+        auto prof = profiler::profiler_session{true};
+        auto jobs = job::job_system{log, prof,
+                                     job::job_system_config{
+                                         .performance_worker_count = 2U,
+                                         .efficiency_worker_count = 0U,
+                                     }};
+        auto rg = render_graph{jobs, 1920, 1080};
+
+        struct pass_data
+        {
+            rg_texture_id tex;
+        };
+
+        rg.add_graphics_pass<pass_data>(
+            "MainPass",
+            [](pass_builder& builder, pass_data& data) {
+                auto t = builder.create_texture(rg_texture_desc{.name = "MainColor"});
+                data.tex = builder.write(t, rhi::pipeline_stage::attachment_output, rhi::resource_access::write,
+                                         rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [](const pass_data&, pass_execution_context&, rhi::command_list&) {});
+
+        const auto presented_tex = rhi::texture_handle{.handle = 999};
+        auto sync_opts = frame_sync_options{
+            .signal_semaphore = rhi::semaphore_handle{.handle = 101},
+            .presented_texture = presented_tex,
+            .flight_slot_index = 0,
+            .frames_in_flight = 2,
+            .profiler = &prof,
+        };
+
+        // 2. Act: Execute frame
+        const auto exec_res = rg.execute_sync(dev, sync_opts);
+        ASSERT_TRUE(exec_res.has_value());
+
+        // 3. Assert: Verify prologue (cmds[0]) and epilogue (cmds.back()) buffers
+        ASSERT_GE(dev.graphics_port.allocated_cmds.size(), 3U);
+        const auto& prologue_cmd = *dev.graphics_port.allocated_cmds[0];
+        const auto& epilogue_cmd = *dev.graphics_port.allocated_cmds.back();
+
+        // Prologue contains query pool reset and submit start timestamp
+        EXPECT_GE(prologue_cmd.reset_queries.size(), 1U);
+        EXPECT_GE(prologue_cmd.written_timestamps.size(), 1U);
+        EXPECT_EQ(prologue_cmd.written_timestamps[0].stage, rhi::pipeline_stage::bottom_of_pipe);
+
+        // Epilogue contains submit end timestamp and pipeline barrier for image_layout::present
+        EXPECT_GE(epilogue_cmd.written_timestamps.size(), 1U);
+        EXPECT_EQ(epilogue_cmd.written_timestamps.back().stage, rhi::pipeline_stage::bottom_of_pipe);
+        EXPECT_GE(epilogue_cmd.pipeline_barrier_calls, 1U);
+    }
+
+    /// @brief Verify multi-queue execution with concurrent primary buffer recording across
+    /// independent graphics and compute queue execution ports.
+    TEST(executor_test, multi_queue_concurrent_recording)
+    {
+        // 1. Setup multi-worker job system and multi-queue DAG
+        auto dev = mock_device_with_ports{};
+        auto log = logger{};
+        auto prof = profiler::profiler_session{false};
+        auto jobs = job::job_system{log, prof,
+                                     job::job_system_config{
+                                         .performance_worker_count = 4U,
+                                         .efficiency_worker_count = 0U,
+                                     }};
+        auto rg = render_graph{jobs, 1920, 1080};
+
+        struct upload_data
+        {
+            rg_buffer_id buf;
+        };
+        rg.add_transfer_pass<upload_data>(
+            "AsyncUpload",
+            [](pass_builder& builder, upload_data& data) {
+                auto b = builder.create_buffer(rg_buffer_desc{.size = 512, .name = "UploadBuf"});
+                data.buf = builder.write(b, rhi::pipeline_stage::copy, rhi::resource_access::write);
+            },
+            []([[maybe_unused]] const upload_data&, pass_execution_context&, rhi::command_list&) {});
+
+        struct compute_data
+        {
+            rg_buffer_id buf;
+        };
+        rg.add_compute_pass<compute_data>(
+            "AsyncCompute",
+            [](pass_builder& builder, compute_data& data) {
+                data.buf = builder.read_write(rg_buffer_id{.id = 0, .version = 1}, rhi::pipeline_stage::compute,
+                                              rhi::resource_access::read_write);
+                builder.set_execution_queue(queue_type::async_compute);
+            },
+            []([[maybe_unused]] const compute_data&, pass_execution_context&, rhi::command_list&) {});
+
+        struct gfx_data
+        {
+            rg_buffer_id buf;
+            rg_texture_id tex;
+        };
+        rg.add_graphics_pass<gfx_data>(
+            "GraphicsRender",
+            [](pass_builder& builder, gfx_data& data) {
+                data.buf = builder.read(rg_buffer_id{.id = 0, .version = 2}, rhi::pipeline_stage::vertex,
+                                        rhi::resource_access::read);
+                auto t = builder.create_texture(rg_texture_desc{.name = "FrameColor"});
+                data.tex = builder.write(t, rhi::pipeline_stage::attachment_output, rhi::resource_access::write,
+                                         rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const gfx_data&, pass_execution_context&, rhi::command_list&) {});
+
+        // 2. Act: Execute multi-queue graph
+        const auto exec_res = rg.execute_sync(dev);
+        ASSERT_TRUE(exec_res.has_value());
+
+        // 3. Assert: All three queues submitted exactly one batch
+        EXPECT_EQ(dev.transfer_port.submit_calls, 1U);
+        EXPECT_EQ(dev.compute_port.submit_calls, 1U);
+        EXPECT_EQ(dev.graphics_port.submit_calls, 1U);
+
+        EXPECT_FALSE(dev.transfer_port.submitted_commands.empty());
+        EXPECT_FALSE(dev.compute_port.submitted_commands.empty());
+        EXPECT_FALSE(dev.graphics_port.submitted_commands.empty());
     }
 } // namespace tempest::render_graph

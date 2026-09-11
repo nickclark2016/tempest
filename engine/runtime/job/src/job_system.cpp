@@ -723,35 +723,37 @@ namespace tempest::job
 
         if (_impl->is_single_stepped || _impl->workers.empty())
         {
-            auto guard = lock_guard{_impl->single_stepped_mutex};
+            {
+                auto guard = lock_guard{_impl->single_stepped_mutex};
 
-            const auto low_idx = static_cast<size_t>(task_priority::low);
-            if (_impl->single_stepped_anti_starvation >= _config.starvation_quantum &&
-                !_impl->single_stepped_queues[low_idx].empty())
-            {
-                item = _impl->single_stepped_queues[low_idx].front();
-                _impl->single_stepped_queues[low_idx].pop_front();
-                _impl->single_stepped_anti_starvation = 0;
-                found = true;
-            }
-            else
-            {
-                for (auto p = 0u; p < static_cast<size_t>(task_priority::count); ++p)
+                const auto low_idx = static_cast<size_t>(task_priority::low);
+                if (_impl->single_stepped_anti_starvation >= _config.starvation_quantum &&
+                    !_impl->single_stepped_queues[low_idx].empty())
                 {
-                    if (!_impl->single_stepped_queues[p].empty())
+                    item = _impl->single_stepped_queues[low_idx].front();
+                    _impl->single_stepped_queues[low_idx].pop_front();
+                    _impl->single_stepped_anti_starvation = 0;
+                    found = true;
+                }
+                else
+                {
+                    for (auto p = 0u; p < static_cast<size_t>(task_priority::count); ++p)
                     {
-                        item = _impl->single_stepped_queues[p].front();
-                        _impl->single_stepped_queues[p].pop_front();
-                        found = true;
-                        if (p != low_idx)
+                        if (!_impl->single_stepped_queues[p].empty())
                         {
-                            ++_impl->single_stepped_anti_starvation;
+                            item = _impl->single_stepped_queues[p].front();
+                            _impl->single_stepped_queues[p].pop_front();
+                            found = true;
+                            if (p != low_idx)
+                            {
+                                ++_impl->single_stepped_anti_starvation;
+                            }
+                            else
+                            {
+                                _impl->single_stepped_anti_starvation = 0;
+                            }
+                            break;
                         }
-                        else
-                        {
-                            _impl->single_stepped_anti_starvation = 0;
-                        }
-                        break;
                     }
                 }
             }

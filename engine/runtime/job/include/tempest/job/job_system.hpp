@@ -266,7 +266,8 @@ namespace tempest::job
         auto step_for(size_t max_tasks) -> size_t;
 
         template <typename T, typename E = job_error>
-        auto when_all(vector<task<T, E>> tasks) -> task<vector<expected<T, E>>>;
+        auto when_all(vector<task<T, E>> tasks, task_priority priority = task_priority::normal,
+                      core_class affinity = core_class::any) -> task<vector<expected<T, E>>>;
 
         template <typename... Tasks>
             requires(sizeof...(Tasks) > 0)

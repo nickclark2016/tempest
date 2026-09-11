@@ -51,7 +51,9 @@ namespace tempest::job
     } // namespace detail
 
     template <typename T, typename E = job_error>
-    auto when_all(job_system& sys, vector<task<T, E>> tasks) -> task<vector<expected<T, E>>>
+    auto when_all(job_system& sys, vector<task<T, E>> tasks,
+                  task_priority priority = task_priority::normal,
+                  core_class affinity = core_class::any) -> task<vector<expected<T, E>>>
     {
         auto count = tasks.size();
         if (count == 0)
@@ -69,7 +71,7 @@ namespace tempest::job
         {
             auto runner = detail::when_all_leaf_runner(
                 tempest::move(tasks[i]), &results[i], remaining.get(), done_event.get());
-            sys.schedule(runner.handle);
+            sys.schedule(runner.handle, priority, affinity);
         }
 
         co_await done_event->wait();
@@ -158,9 +160,10 @@ namespace tempest::job
     }
 
     template <typename T, typename E>
-    inline auto job_system::when_all(vector<task<T, E>> tasks) -> task<vector<expected<T, E>>>
+    inline auto job_system::when_all(vector<task<T, E>> tasks, task_priority priority, core_class affinity)
+        -> task<vector<expected<T, E>>>
     {
-        return tempest::job::when_all(*this, tempest::move(tasks));
+        return tempest::job::when_all(*this, tempest::move(tasks), priority, affinity);
     }
 
     template <typename... Tasks>

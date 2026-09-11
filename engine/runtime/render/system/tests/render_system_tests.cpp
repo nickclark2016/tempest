@@ -618,7 +618,7 @@ namespace tempest::render_system::tests
             []([[maybe_unused]] const sink_pass_data& data, [[maybe_unused]] render_graph::pass_execution_context& ctx,
                [[maybe_unused]] rhi::command_list& cmd) -> void {});
 
-        auto res = graph.execute(*dev);
+        auto res = graph.execute_sync(*dev);
         EXPECT_TRUE(res.has_value());
         dev->wait_idle();
 
@@ -751,13 +751,13 @@ namespace tempest::render_system::tests
         const auto cluster_count = 16U * 9U * 24U;
         auto cluster_bounds_buf = graph.create_buffer(render_graph::rg_buffer_desc{
             .size = cluster_count * sizeof(cluster_bounds),
-            .usage = rhi::buffer_usage::storage_buffer,
+            .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address,
             .name = "ClusterBoundsBuffer",
         });
 
         auto lights_buf = graph.create_buffer(render_graph::rg_buffer_desc{
             .size = 256 * sizeof(light_payload),
-            .usage = rhi::buffer_usage::storage_buffer,
+            .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address,
             .name = "LightsBuffer",
         });
 
@@ -765,7 +765,7 @@ namespace tempest::render_system::tests
         add_light_culling_pass(graph, pool, shaders, cluster_data.cluster_bounds_buffer, lights_buf,
                                cluster_data.create_info, 0);
 
-        auto res = graph.execute(*dev);
+        auto res = graph.execute_sync(*dev);
         EXPECT_TRUE(res.has_value());
 
         dev->wait_idle();
@@ -1230,7 +1230,7 @@ namespace tempest::render_system::tests
             EXPECT_GE(pool.get_texture_descriptor_index(tex_id3), 0);
 
             // Execute the texture upload and mip generation pass
-            const auto exec_res = graph.execute(*dev);
+            const auto exec_res = graph.execute_sync(*dev);
             EXPECT_TRUE(exec_res.has_value());
 
             dev->wait_idle();
@@ -1459,7 +1459,7 @@ namespace tempest::render_system::tests
         pool.load_materials(span<const guid>{&mat_id, 1}, materials, graph);
         pool.load_meshes(span<const guid>{&mesh_id, 1}, meshes, graph);
 
-        const auto sync_res = graph.execute(*dev);
+        const auto sync_res = graph.execute_sync(*dev);
         EXPECT_TRUE(sync_res.has_value());
         dev->wait_idle();
         pool.clear_staging_buffers();
@@ -1517,7 +1517,7 @@ namespace tempest::render_system::tests
         EXPECT_EQ(shadow_res.shadow_data.cascade_count, 4U);
         EXPECT_TRUE(shadow_res.shadow_atlas.is_valid());
 
-        auto exec_res = graph.execute(*dev);
+        auto exec_res = graph.execute_sync(*dev);
         EXPECT_TRUE(exec_res.has_value());
 
         dev->wait_idle();
@@ -1659,7 +1659,7 @@ namespace tempest::render_system::tests
         EXPECT_NE(shaders.get_rhi_pipeline(*masked_pipe_opt).handle, 0ULL);
 
         // Execute render graph and verify clean completion
-        auto exec_res = graph.execute(*dev);
+        auto exec_res = graph.execute_sync(*dev);
         EXPECT_TRUE(exec_res.has_value());
 
         dev->wait_idle();
@@ -2072,7 +2072,7 @@ namespace tempest::render_system::tests
         EXPECT_TRUE(pass_data.moments_texture.is_valid());
         EXPECT_TRUE(pass_data.zeroth_moment_texture.is_valid());
 
-        auto exec_res = graph.execute(*dev);
+        auto exec_res = graph.execute_sync(*dev);
         EXPECT_TRUE(exec_res.has_value());
         dev->wait_idle();
 
@@ -2328,7 +2328,7 @@ namespace tempest::render_system::tests
             []([[maybe_unused]] const gather_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
                [[maybe_unused]] rhi::command_list&) -> void {});
 
-        auto exec_res = graph.execute(*dev);
+        auto exec_res = graph.execute_sync(*dev);
         EXPECT_TRUE(exec_res.has_value());
         dev->wait_idle();
 
@@ -2571,7 +2571,7 @@ namespace tempest::render_system::tests
             []([[maybe_unused]] const gather_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
                [[maybe_unused]] rhi::command_list&) -> void {});
 
-        auto exec_res = graph.execute(*dev);
+        auto exec_res = graph.execute_sync(*dev);
         EXPECT_TRUE(exec_res.has_value());
         dev->wait_idle();
 
@@ -2785,7 +2785,7 @@ namespace tempest::render_system::tests
             []([[maybe_unused]] const resolve_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
                [[maybe_unused]] rhi::command_list&) -> void {});
 
-        auto exec_res = graph.execute(*dev);
+        auto exec_res = graph.execute_sync(*dev);
         EXPECT_TRUE(exec_res.has_value());
         dev->wait_idle();
 
@@ -2986,7 +2986,7 @@ namespace tempest::render_system::tests
             []([[maybe_unused]] const resolve_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
                [[maybe_unused]] rhi::command_list&) -> void {});
 
-        auto exec_res = graph.execute(*dev);
+        auto exec_res = graph.execute_sync(*dev);
         EXPECT_TRUE(exec_res.has_value());
         dev->wait_idle();
 
@@ -3205,7 +3205,7 @@ namespace tempest::render_system::tests
             []([[maybe_unused]] const resolve_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
                [[maybe_unused]] rhi::command_list&) -> void {});
 
-        auto exec_res = graph.execute(*dev);
+        auto exec_res = graph.execute_sync(*dev);
         EXPECT_TRUE(exec_res.has_value());
         dev->wait_idle();
 
@@ -3325,7 +3325,7 @@ namespace tempest::render_system::tests
         const auto& blend_data = add_transparency_blend_pass(graph, pool, shaders, skybox_data.hdr_color, accum_tex,
                                                              clear_data.zeroth_moment_texture);
 
-        auto exec_res = graph.execute(*dev);
+        auto exec_res = graph.execute_sync(*dev);
         EXPECT_TRUE(exec_res.has_value());
         dev->wait_idle();
 
@@ -3532,7 +3532,7 @@ namespace tempest::render_system::tests
             []([[maybe_unused]] const blend_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
                [[maybe_unused]] rhi::command_list&) -> void {});
 
-        auto exec_res = graph.execute(*dev);
+        auto exec_res = graph.execute_sync(*dev);
         EXPECT_TRUE(exec_res.has_value());
         dev->wait_idle();
 

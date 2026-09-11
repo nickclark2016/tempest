@@ -1,12 +1,30 @@
 #include <gtest/gtest.h>
 
+#include <tempest/job/job_system.hpp>
+#include <tempest/logger.hpp>
+#include <tempest/profiler/session.hpp>
 #include <tempest/render_graph/render_graph.hpp>
 
 namespace tempest::render_graph
 {
+    namespace
+    {
+        struct test_context
+        {
+            logger log{};
+            profiler::profiler_session prof{false};
+            job::job_system jobs{log, prof,
+                                 job::job_system_config{
+                                     .performance_worker_count = 0,
+                                     .efficiency_worker_count = 0,
+                                 }};
+        };
+    } // namespace
+
     TEST(render_graph_test, basic_graphics_and_compute_pipeline)
     {
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
 
         struct gbuffer_data
         {
@@ -106,7 +124,8 @@ namespace tempest::render_graph
 
     TEST(render_graph_test, passthrough_and_fallback_builder)
     {
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
 
         struct source_data
         {
@@ -168,7 +187,8 @@ namespace tempest::render_graph
 
     TEST(render_graph_test, buffer_pipeline_and_transfer)
     {
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
 
         struct compute_buf_data
         {
@@ -214,7 +234,8 @@ namespace tempest::render_graph
 
     TEST(render_graph_test, surface_resize_evaluation)
     {
-        auto rg = render_graph{1280, 720};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1280, 720};
 
         const auto full_res = rg.create_texture(rg_texture_desc{
             .size = rg_texture_size::surface_relative(1.0F, 1.0F),

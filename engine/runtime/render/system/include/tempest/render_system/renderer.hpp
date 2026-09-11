@@ -23,15 +23,21 @@
 
 #include <tempest/profiler/profiler.hpp>
 
+namespace tempest::job
+{
+    class job_system;
+}
+
 namespace tempest::render_system
 {
-    inline constexpr auto all_pipeline_statistics = rhi::pipeline_statistic_flags::input_assembly_vertices |
+    static constexpr auto full_pipeline_statistics = rhi::pipeline_statistic_flags::input_assembly_vertices |
                                                     rhi::pipeline_statistic_flags::input_assembly_primitives |
                                                     rhi::pipeline_statistic_flags::vertex_shader_invocations |
                                                     rhi::pipeline_statistic_flags::clipping_input_primitives |
                                                     rhi::pipeline_statistic_flags::clipping_output_primitives |
                                                     rhi::pipeline_statistic_flags::fragment_shader_invocations |
                                                     rhi::pipeline_statistic_flags::compute_shader_invocations;
+    static constexpr auto all_pipeline_statistics = full_pipeline_statistics;
 
     struct TEMPEST_API renderer_config
     {
@@ -56,6 +62,7 @@ namespace tempest::render_system
         const core::material_registry* materials{nullptr};
         non_null<assets::asset_database> asset_db;
         profiler::profiler_session* profiler{nullptr};
+        job::job_system* jobs{nullptr};
     };
 
     class TEMPEST_API renderer
@@ -78,15 +85,23 @@ namespace tempest::render_system
                 return *this;
             }
 
+            builder& set_job_system(job::job_system& jobs)
+            {
+                _jobs = &jobs;
+                return *this;
+            }
+
             [[nodiscard]] auto build(rhi::device& dev, logger& log) -> unique_ptr<renderer>;
+            [[nodiscard]] auto build(rhi::device& dev, logger& log, job::job_system& jobs) -> unique_ptr<renderer>;
 
           private:
             renderer_config _cfg{};
             optional<renderer_inputs> _inputs{};
+            job::job_system* _jobs{nullptr};
         };
 
-        explicit renderer(rhi::device& dev, logger& log, renderer_config cfg, renderer_inputs inputs,
-                          unique_ptr<camera_system> camera_sys = nullptr);
+        renderer(rhi::device& dev, logger& log, renderer_config cfg, renderer_inputs inputs,
+                 unique_ptr<camera_system> camera_sys = nullptr, job::job_system* jobs = nullptr);
         ~renderer();
 
         renderer(const renderer&) = delete;
@@ -134,6 +149,10 @@ namespace tempest::render_system
 
         /// @brief Executes the compiled Render Graph DAG on the GPU.
         auto render(const render_graph::frame_sync_options& sync = {}) -> expected<void, render_graph::execution_error>;
+
+        /// @brief Asynchronously executes the compiled Render Graph DAG on the GPU as a coroutine.
+        auto render_async(const render_graph::frame_sync_options& sync = {})
+            -> job::task<expected<void, render_graph::execution_error>>;
 
         /// @brief Presents the acquired swapchain image for the specified window surface.
         auto present(window_handle win = null_window_handle) -> expected<void, rhi::swapchain_error>;
@@ -356,6 +375,9 @@ namespace tempest::render_system
 
         resource_pool _pool;
         shader_manager _shaders;
+        profiler::profiler_session _fallback_profiler{false};
+        unique_ptr<job::job_system> _owned_jobs{};
+        non_null<job::job_system> _jobs;
         render_graph::render_graph _graph;
 
         // Render Targets (Transient in Render Graph)

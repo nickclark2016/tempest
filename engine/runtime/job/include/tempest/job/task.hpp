@@ -477,9 +477,11 @@ namespace tempest::job
                 result = move(value);
             }
 
-            auto return_value(result_type res) noexcept -> void
+            template <typename U>
+                requires is_same_v<remove_cvref_t<U>, result_type> && (!is_same_v<remove_cvref_t<U>, T>)
+            auto return_value(U&& res) noexcept -> void
             {
-                result = move(res);
+                result = forward<U>(res);
             }
 
             auto return_value(unexpected<E> err) noexcept -> void

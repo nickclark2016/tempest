@@ -1,3 +1,6 @@
+#include <tempest/job/job_system.hpp>
+#include <tempest/logger.hpp>
+#include <tempest/profiler/session.hpp>
 #include <tempest/render_graph/context.hpp>
 #include <tempest/render_graph/pass_builder.hpp>
 #include <tempest/render_graph/render_graph.hpp>
@@ -363,6 +366,32 @@ namespace tempest::render_graph
     // render_graph
     // =========================================================================
 
+    namespace
+    {
+        auto& get_default_render_graph_jobs()
+        {
+            static logger default_log{};
+            static profiler::profiler_session default_prof{false};
+            static job::job_system default_jobs{
+                default_log, default_prof,
+                job::job_system_config{
+                    .performance_worker_count = 0,
+                    .efficiency_worker_count = 0,
+                }};
+            return default_jobs;
+        }
+    } // namespace
+
+    render_graph::render_graph(job::job_system& jobs, uint32_t surface_width, uint32_t surface_height) noexcept
+        : _jobs{&jobs}, _executor{jobs}, _surface_width{surface_width}, _surface_height{surface_height}
+    {
+    }
+
+    render_graph::render_graph(uint32_t surface_width, uint32_t surface_height) noexcept
+        : render_graph(get_default_render_graph_jobs(), surface_width, surface_height)
+    {
+    }
+
     void render_graph::set_surface_size(uint32_t width, uint32_t height) noexcept
     {
         _surface_width = width;
@@ -502,9 +531,15 @@ namespace tempest::render_graph
     }
 
     auto render_graph::execute(rhi::device& dev, const frame_sync_options& frame_sync)
-        -> expected<void, execution_error>
+        -> job::task<expected<void, execution_error>>
     {
         return _executor.execute(dev, *this, frame_sync);
+    }
+
+    auto render_graph::execute_sync(rhi::device& dev, const frame_sync_options& frame_sync)
+        -> expected<void, execution_error>
+    {
+        return _executor.execute_sync(dev, *this, frame_sync);
     }
 
     void render_graph::reset()

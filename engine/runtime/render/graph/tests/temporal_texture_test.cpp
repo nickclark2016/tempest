@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <tempest/job/job_system.hpp>
+#include <tempest/logger.hpp>
+#include <tempest/profiler/session.hpp>
 #include <tempest/render_graph/barrier_solver.hpp>
 #include <tempest/render_graph/render_graph.hpp>
 #include <tempest/render_graph/temporal_texture.hpp>
@@ -8,6 +11,16 @@ namespace tempest::render_graph
 {
     namespace
     {
+        struct test_context
+        {
+            logger log{};
+            profiler::profiler_session prof{false};
+            job::job_system jobs{log, prof,
+                                 job::job_system_config{
+                                     .performance_worker_count = 0,
+                                     .efficiency_worker_count = 0,
+                                 }};
+        };
         class mock_cmd_list final : public rhi::command_list
         {
           public:
@@ -486,7 +499,8 @@ namespace tempest::render_graph
         };
         tex.init(dev, desc, 1920, 1080);
 
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
 
         struct test_pass_data
         {
@@ -508,7 +522,7 @@ namespace tempest::render_graph
         EXPECT_TRUE(p0.binding.target_write.is_valid());
 
         // Execute Frame 0 -> triggers automatic tex.swap()
-        auto exec_res = rg.execute(dev);
+        auto exec_res = rg.execute_sync(dev);
         EXPECT_TRUE(exec_res.has_value());
         EXPECT_EQ(tex.get_valid_history_count(), 1U);
 
@@ -528,7 +542,7 @@ namespace tempest::render_graph
         EXPECT_TRUE(p1.binding.get_history(1).is_valid());
         EXPECT_TRUE(p1.binding.target_write.is_valid());
 
-        exec_res = rg.execute(dev);
+        exec_res = rg.execute_sync(dev);
         EXPECT_TRUE(exec_res.has_value());
         EXPECT_EQ(tex.get_valid_history_count(), 2U);
 
@@ -554,7 +568,8 @@ namespace tempest::render_graph
     TEST(temporal_texture_test, barrier_solver_cross_frame_persistence)
     {
         auto dev = mock_temporal_device{};
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
         const auto mock_tex_handle = rhi::texture_handle{.handle = 100};
         const auto mock_view_handle = rhi::texture_view_handle{.handle = 200};
 
@@ -638,7 +653,8 @@ namespace tempest::render_graph
         tex.swap();
         EXPECT_EQ(tex.get_valid_history_count(), 2U);
 
-        auto rg = render_graph{1920, 1080};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
         rg.add_clear_temporal_pass(tex, rhi::clear_color_value{0.0F, 0.0F, 0.0F, 0.0F});
 
         EXPECT_EQ(tex.get_valid_history_count(), 0U);
