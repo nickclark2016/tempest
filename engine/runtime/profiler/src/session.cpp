@@ -271,7 +271,11 @@ namespace tempest::profiler
     }
 
     auto thread_profiler_context::begin_coroutine_slice(uint64_t coroutine_id, uint32_t slice_index,
-                                                        string_view name, source_location loc) -> void
+                                                        string_view name, source_location loc,
+                                                        uint64_t spawned_by_thread_id,
+                                                        uint64_t spawned_by_coroutine_id,
+                                                        uint64_t awaited_by_thread_id,
+                                                        uint64_t awaited_by_coroutine_id) -> void
     {
         auto now_ns = get_timestamp_ns();
         lock_guard guard(_mutex);
@@ -286,6 +290,10 @@ namespace tempest::profiler
             .coroutine_id = coroutine_id,
             .slice_index = slice_index,
             .reason = suspend_reason::none,
+            .spawned_by_thread_id = spawned_by_thread_id,
+            .spawned_by_coroutine_id = spawned_by_coroutine_id,
+            .awaited_by_thread_id = awaited_by_thread_id,
+            .awaited_by_coroutine_id = awaited_by_coroutine_id,
             .metrics = {},
         });
     }
@@ -314,6 +322,10 @@ namespace tempest::profiler
             .coroutine_id = state.coroutine_id,
             .slice_index = state.slice_index,
             .reason = effective_reason,
+            .spawned_by_thread_id = state.spawned_by_thread_id,
+            .spawned_by_coroutine_id = state.spawned_by_coroutine_id,
+            .awaited_by_thread_id = state.awaited_by_thread_id,
+            .awaited_by_coroutine_id = state.awaited_by_coroutine_id,
             .metrics = tempest::move(state.metrics),
         };
 
@@ -334,6 +346,17 @@ namespace tempest::profiler
         if (!_open_zones.empty())
         {
             _open_zones.back().reason = reason;
+        }
+    }
+
+    auto thread_profiler_context::tag_current_slice_await_info(uint64_t awaited_by_thread_id,
+                                                               uint64_t awaited_by_coroutine_id) -> void
+    {
+        lock_guard guard(_mutex);
+        if (!_open_zones.empty())
+        {
+            _open_zones.back().awaited_by_thread_id = awaited_by_thread_id;
+            _open_zones.back().awaited_by_coroutine_id = awaited_by_coroutine_id;
         }
     }
 

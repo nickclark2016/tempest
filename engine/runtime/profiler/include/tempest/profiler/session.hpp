@@ -28,6 +28,10 @@ namespace tempest::profiler
         uint64_t coroutine_id{0};
         uint32_t slice_index{0};
         suspend_reason reason{suspend_reason::none};
+        uint64_t spawned_by_thread_id{0};
+        uint64_t spawned_by_coroutine_id{0};
+        uint64_t awaited_by_thread_id{0};
+        uint64_t awaited_by_coroutine_id{0};
         inplace_vector<metric_record, 16> metrics{};
     };
 
@@ -45,9 +49,14 @@ namespace tempest::profiler
         auto begin_zone(string_view name, source_location loc = source_location::current()) -> void;
         auto end_zone() -> void;
         auto begin_coroutine_slice(uint64_t coroutine_id, uint32_t slice_index, string_view name,
-                                   source_location loc = source_location::current()) -> void;
+                                   source_location loc = source_location::current(),
+                                   uint64_t spawned_by_thread_id = 0,
+                                   uint64_t spawned_by_coroutine_id = 0,
+                                   uint64_t awaited_by_thread_id = 0,
+                                   uint64_t awaited_by_coroutine_id = 0) -> void;
         auto end_coroutine_slice(suspend_reason reason = suspend_reason::none) -> void;
         auto tag_current_slice_suspend_reason(suspend_reason reason) -> void;
+        auto tag_current_slice_await_info(uint64_t awaited_by_thread_id, uint64_t awaited_by_coroutine_id) -> void;
         auto add_marker(string_view name, source_location loc = source_location::current()) -> void;
         auto add_metric(string_view name, double val, metric_unit unit = metric_unit::raw) -> void;
         auto set_current_zone_task_id(uint64_t task_id) -> void;

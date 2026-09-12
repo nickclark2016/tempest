@@ -124,8 +124,12 @@ namespace tempest::profiler
                             json += ", ";
                         }
                         tempest::format_to(tempest::back_inserter(json),
-                                           "\"coroutine_id\": {}, \"slice_index\": {}, \"suspend_reason\": \"{}\"",
-                                           z.coroutine_id, z.slice_index, to_string(z.reason).data());
+                                           "\"coroutine_id\": {}, \"slice_index\": {}, \"suspend_reason\": \"{}\", "
+                                           "\"spawned_by_thread_id\": {}, \"spawned_by_coroutine_id\": {}, "
+                                           "\"awaited_by_thread_id\": {}, \"awaited_by_coroutine_id\": {}",
+                                           z.coroutine_id, z.slice_index, to_string(z.reason).data(),
+                                           z.spawned_by_thread_id, z.spawned_by_coroutine_id,
+                                           z.awaited_by_thread_id, z.awaited_by_coroutine_id);
                         first_arg = false;
                     }
 

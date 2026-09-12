@@ -344,7 +344,10 @@ namespace tempest::job
                     if (ctx != nullptr && ctx->get_session().is_enabled())
                     {
                         promise.current_slice_index++;
-                        ctx->begin_coroutine_slice(promise.coroutine_id, promise.current_slice_index, promise.name);
+                        ctx->begin_coroutine_slice(promise.coroutine_id, promise.current_slice_index, promise.name,
+                                                   source_location::current(),
+                                                   promise.spawned_by_thread_id, promise.spawned_by_coroutine_id,
+                                                   promise.awaited_by_thread_id, promise.awaited_by_coroutine_id);
                         auto h = coroutine_handle<Promise>::from_promise(promise);
                         auto* header = reinterpret_cast<const coroutine_frame_header*>(
                             static_cast<const byte*>(h.address()) - sizeof(coroutine_frame_header));
@@ -375,7 +378,10 @@ namespace tempest::job
                 auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
                 if (ctx != nullptr && ctx->get_session().is_enabled())
                 {
-                    ctx->begin_coroutine_slice(promise.coroutine_id, promise.current_slice_index, promise.name);
+                    ctx->begin_coroutine_slice(promise.coroutine_id, promise.current_slice_index, promise.name,
+                                               source_location::current(),
+                                               promise.spawned_by_thread_id, promise.spawned_by_coroutine_id,
+                                               promise.awaited_by_thread_id, promise.awaited_by_coroutine_id);
                     auto h = coroutine_handle<Promise>::from_promise(promise);
                     auto* header = reinterpret_cast<const coroutine_frame_header*>(
                         static_cast<const byte*>(h.address()) - sizeof(coroutine_frame_header));
@@ -448,6 +454,19 @@ namespace tempest::job
             {
                 awaited_task.handle().promise().parent_propagator = &h.promise();
             }
+            auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
+            if (ctx != nullptr)
+            {
+                awaited_task.handle().promise().awaited_by_thread_id = ctx->get_thread_id();
+            }
+            if constexpr (requires { h.promise().coroutine_id; })
+            {
+                awaited_task.handle().promise().awaited_by_coroutine_id = h.promise().coroutine_id;
+            }
+            else if (ctx != nullptr)
+            {
+                awaited_task.handle().promise().awaited_by_coroutine_id = ctx->get_current_coroutine_id();
+            }
             return awaited_task.handle();
         }
 
@@ -480,6 +499,16 @@ namespace tempest::job
             uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
             uint32_t current_slice_index{0};
             string_view name{"task"};
+            uint64_t spawned_by_thread_id{
+                profiler::thread_profiler_context::get_current_thread_context()
+                    ? profiler::thread_profiler_context::get_current_thread_context()->get_thread_id()
+                    : 0};
+            uint64_t spawned_by_coroutine_id{
+                profiler::thread_profiler_context::get_current_thread_context()
+                    ? profiler::thread_profiler_context::get_current_thread_context()->get_current_coroutine_id()
+                    : 0};
+            uint64_t awaited_by_thread_id{0};
+            uint64_t awaited_by_coroutine_id{0};
 
             auto get_return_object() noexcept -> task
             {
@@ -584,6 +613,12 @@ namespace tempest::job
                         }
                         child_task.handle().promise().continuation = h;
                         child_task.handle().promise().parent_propagator = &h.promise();
+                        auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
+                        if (ctx != nullptr)
+                        {
+                            child_task.handle().promise().awaited_by_thread_id = ctx->get_thread_id();
+                        }
+                        child_task.handle().promise().awaited_by_coroutine_id = h.promise().coroutine_id;
                         return child_task.handle();
                     }
 
@@ -899,6 +934,16 @@ namespace tempest::job
             uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
             uint32_t current_slice_index{0};
             string_view name{"task"};
+            uint64_t spawned_by_thread_id{
+                profiler::thread_profiler_context::get_current_thread_context()
+                    ? profiler::thread_profiler_context::get_current_thread_context()->get_thread_id()
+                    : 0};
+            uint64_t spawned_by_coroutine_id{
+                profiler::thread_profiler_context::get_current_thread_context()
+                    ? profiler::thread_profiler_context::get_current_thread_context()->get_current_coroutine_id()
+                    : 0};
+            uint64_t awaited_by_thread_id{0};
+            uint64_t awaited_by_coroutine_id{0};
 
             auto get_return_object() noexcept -> task
             {
@@ -991,6 +1036,12 @@ namespace tempest::job
                         }
                         child_task.handle().promise().continuation = h;
                         child_task.handle().promise().parent_propagator = &h.promise();
+                        auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
+                        if (ctx != nullptr)
+                        {
+                            child_task.handle().promise().awaited_by_thread_id = ctx->get_thread_id();
+                        }
+                        child_task.handle().promise().awaited_by_coroutine_id = h.promise().coroutine_id;
                         return child_task.handle();
                     }
 
@@ -1297,6 +1348,16 @@ namespace tempest::job
             uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
             uint32_t current_slice_index{0};
             string_view name{"task"};
+            uint64_t spawned_by_thread_id{
+                profiler::thread_profiler_context::get_current_thread_context()
+                    ? profiler::thread_profiler_context::get_current_thread_context()->get_thread_id()
+                    : 0};
+            uint64_t spawned_by_coroutine_id{
+                profiler::thread_profiler_context::get_current_thread_context()
+                    ? profiler::thread_profiler_context::get_current_thread_context()->get_current_coroutine_id()
+                    : 0};
+            uint64_t awaited_by_thread_id{0};
+            uint64_t awaited_by_coroutine_id{0};
 
             auto get_return_object() noexcept -> task
             {
@@ -1493,6 +1554,16 @@ namespace tempest::job
             uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
             uint32_t current_slice_index{0};
             string_view name{"task"};
+            uint64_t spawned_by_thread_id{
+                profiler::thread_profiler_context::get_current_thread_context()
+                    ? profiler::thread_profiler_context::get_current_thread_context()->get_thread_id()
+                    : 0};
+            uint64_t spawned_by_coroutine_id{
+                profiler::thread_profiler_context::get_current_thread_context()
+                    ? profiler::thread_profiler_context::get_current_thread_context()->get_current_coroutine_id()
+                    : 0};
+            uint64_t awaited_by_thread_id{0};
+            uint64_t awaited_by_coroutine_id{0};
 
             auto get_return_object() noexcept -> task
             {

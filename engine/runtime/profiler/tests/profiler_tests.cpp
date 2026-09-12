@@ -2501,5 +2501,130 @@ TEST(profiler_tests, json_serialization_coroutine_args)
     EXPECT_TRUE(tempest::contains(json_str, "\"coroutine_id\": 505"));
     EXPECT_TRUE(tempest::contains(json_str, "\"slice_index\": 2"));
     EXPECT_TRUE(tempest::contains(json_str, "\"suspend_reason\": \"event_wait\""));
+    EXPECT_TRUE(tempest::contains(json_str, "\"spawned_by_thread_id\": 0"));
+    EXPECT_TRUE(tempest::contains(json_str, "\"awaited_by_coroutine_id\": 0"));
+}
+
+/// @brief Verify that binary trace format v1.2 preserves coroutine provenance (spawn and await IDs) across serialization roundtrips.
+TEST(profiler_tests, binary_serialization_roundtrip_v1_2_coroutine_provenance)
+{
+    // 1. Setup: Construct capture session data with coroutine spawn & await provenance
+    auto capture = tempest::profiler::capture_session_data{
+        .start_time_ns = 100,
+        .end_time_ns = 5000,
+        .tracks = {},
+        .metrics = {},
+    };
+
+    auto track = tempest::profiler::track_data{
+        .track_id = 12,
+        .name = "WorkerThread_12",
+        .type = tempest::profiler::track_type::cpu_thread,
+        .zones = {},
+        .markers = {},
+    };
+
+    track.zones.push_back(tempest::profiler::zone_record{
+        .start_ns = 200,
+        .end_ns = 800,
+        .depth = 0,
+        .name = "ChildCoroSlice0",
+        .location = {},
+        .task_id = 0,
+        .coroutine_id = 88,
+        .slice_index = 0,
+        .reason = tempest::profiler::suspend_reason::yield,
+        .spawned_by_thread_id = 1,
+        .spawned_by_coroutine_id = 42,
+        .awaited_by_thread_id = 12,
+        .awaited_by_coroutine_id = 42,
+        .metrics = {},
+    });
+
+    capture.tracks.push_back(tempest::move(track));
+
+    // 2. Act: Export binary capture and deserialize back
+    const auto buffer = tempest::profiler::serialize_binary_to_buffer(capture);
+    ASSERT_FALSE(buffer.empty());
+
+    const auto roundtrip = tempest::profiler::deserialize_binary_from_buffer(
+        tempest::span<const tempest::byte>{buffer.data(), buffer.size()});
+
+    // 3. Assert: Verify coroutine provenance fields are accurately preserved
+    ASSERT_TRUE(roundtrip.has_value());
+    ASSERT_EQ(roundtrip->tracks.size(), 1U);
+    ASSERT_EQ(roundtrip->tracks[0].zones.size(), 1U);
+
+    const auto& z = roundtrip->tracks[0].zones[0];
+    EXPECT_EQ(z.name, "ChildCoroSlice0");
+    EXPECT_EQ(z.coroutine_id, 88U);
+    EXPECT_EQ(z.slice_index, 0U);
+    EXPECT_EQ(z.spawned_by_thread_id, 1U);
+    EXPECT_EQ(z.spawned_by_coroutine_id, 42U);
+    EXPECT_EQ(z.awaited_by_thread_id, 12U);
+    EXPECT_EQ(z.awaited_by_coroutine_id, 42U);
+}
+
+/// @brief Verify that telemetry frames and telemetry JSON contain coroutine provenance (spawn and await tracking).
+TEST(profiler_tests, telemetry_frame_coroutine_provenance_json_serialization)
+{
+    // 1. Setup: Populate capture with coroutine provenance metadata
+    auto capture = tempest::profiler::capture_session_data{
+        .start_time_ns = 1000,
+        .end_time_ns = 4000,
+        .tracks = {},
+        .metrics = {},
+    };
+
+    auto track = tempest::profiler::track_data{
+        .track_id = 5,
+        .name = "Worker 5",
+        .type = tempest::profiler::track_type::cpu_thread,
+        .zones = {},
+        .markers = {},
+    };
+
+    track.zones.push_back(tempest::profiler::zone_record{
+        .start_ns = 1100,
+        .end_ns = 2500,
+        .depth = 1,
+        .name = "SubTaskCoro",
+        .location = {},
+        .task_id = 99,
+        .coroutine_id = 303,
+        .slice_index = 1,
+        .reason = tempest::profiler::suspend_reason::completed,
+        .spawned_by_thread_id = 2,
+        .spawned_by_coroutine_id = 101,
+        .awaited_by_thread_id = 5,
+        .awaited_by_coroutine_id = 101,
+        .metrics = {},
+    });
+
+    capture.tracks.push_back(tempest::move(track));
+
+    // 2. Act: Convert to telemetry frame and serialize to JSON
+    const auto telemetry = tempest::profiler::create_telemetry_frame_from_capture(1, capture);
+    ASSERT_EQ(telemetry.cpu_tracks.size(), 1U);
+    ASSERT_EQ(telemetry.cpu_tracks[0].zones.size(), 1U);
+
+    const auto& tz = telemetry.cpu_tracks[0].zones[0];
+    EXPECT_EQ(tz.coroutine_id, 303U);
+    EXPECT_EQ(tz.slice_index, 1U);
+    EXPECT_EQ(tz.spawned_by_thread_id, 2U);
+    EXPECT_EQ(tz.spawned_by_coroutine_id, 101U);
+    EXPECT_EQ(tz.awaited_by_thread_id, 5U);
+    EXPECT_EQ(tz.awaited_by_coroutine_id, 101U);
+
+    const auto json_str = tempest::profiler::serialize_telemetry_frame_json(telemetry);
+
+    // 3. Assert: JSON contains all coroutine provenance fields
+    EXPECT_TRUE(tempest::contains(json_str, "\"coroutine_id\":303"));
+    EXPECT_TRUE(tempest::contains(json_str, "\"slice_index\":1"));
+    EXPECT_TRUE(tempest::contains(json_str, "\"suspend_reason\":\"completed\""));
+    EXPECT_TRUE(tempest::contains(json_str, "\"spawned_by_thread_id\":2"));
+    EXPECT_TRUE(tempest::contains(json_str, "\"spawned_by_coroutine_id\":101"));
+    EXPECT_TRUE(tempest::contains(json_str, "\"awaited_by_thread_id\":5"));
+    EXPECT_TRUE(tempest::contains(json_str, "\"awaited_by_coroutine_id\":101"));
 }
 

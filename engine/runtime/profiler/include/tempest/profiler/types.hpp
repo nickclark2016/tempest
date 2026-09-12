@@ -90,6 +90,10 @@ namespace tempest::profiler
         uint64_t coroutine_id{0};
         uint32_t slice_index{0};
         suspend_reason reason{suspend_reason::none};
+        uint64_t spawned_by_thread_id{0};
+        uint64_t spawned_by_coroutine_id{0};
+        uint64_t awaited_by_thread_id{0};
+        uint64_t awaited_by_coroutine_id{0};
         inplace_vector<metric_record, 16> metrics{};
     };
 } // namespace tempest::profiler

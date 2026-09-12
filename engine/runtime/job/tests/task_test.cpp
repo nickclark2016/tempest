@@ -577,4 +577,67 @@ namespace tempest::job::tests
 
         profiler::thread_profiler_context::set_current_thread_context(nullptr);
     }
+
+    /// @brief Verify that child coroutines track both their spawning origin and awaiter consumer in profiler slices
+    TEST(task_test, coroutine_spawn_and_await_provenance_tracking)
+    {
+        // 1. Setup profiler session
+        auto prof = profiler::profiler_session{true};
+        auto& ctx = prof.get_or_register_thread();
+        const auto tid = ctx.get_thread_id();
+        profiler::thread_profiler_context::set_current_thread_context(&ctx);
+
+        auto child_task = []() -> task<int> {
+            co_return 42;
+        };
+
+        uint64_t child_coro_id = 0;
+        auto parent_task = [&]() -> task<int> {
+            auto c = child_task();
+            child_coro_id = c.coroutine_id();
+            auto val = co_await move(c);
+            co_return val * 2;
+        };
+
+        // 2. Act: Spawn parent and execute to completion
+        auto p = parent_task();
+        const auto parent_coro_id = p.coroutine_id();
+        const auto completed = p.resume();
+        EXPECT_TRUE(completed);
+        EXPECT_EQ(p.value(), 84);
+        ASSERT_NE(child_coro_id, 0U);
+
+        // 3. Assert: Verify profiler slice zones for child and parent contain correct provenance
+        auto chunks = prof.drain_completed_chunks();
+        ASSERT_FALSE(chunks.empty());
+
+        auto found_child = false;
+        auto found_parent = false;
+
+        for (const auto& chunk : chunks)
+        {
+            for (const auto& z : chunk->zones())
+            {
+                if (z.coroutine_id == parent_coro_id)
+                {
+                    found_parent = true;
+                    EXPECT_EQ(z.spawned_by_thread_id, tid);
+                    EXPECT_EQ(z.spawned_by_coroutine_id, 0U);
+                }
+                else if (z.coroutine_id == child_coro_id)
+                {
+                    found_child = true;
+                    EXPECT_EQ(z.spawned_by_thread_id, tid);
+                    EXPECT_EQ(z.spawned_by_coroutine_id, parent_coro_id);
+                    EXPECT_EQ(z.awaited_by_thread_id, tid);
+                    EXPECT_EQ(z.awaited_by_coroutine_id, parent_coro_id);
+                }
+            }
+        }
+
+        EXPECT_TRUE(found_parent);
+        EXPECT_TRUE(found_child);
+
+        profiler::thread_profiler_context::set_current_thread_context(nullptr);
+    }
 } // namespace tempest::job::tests

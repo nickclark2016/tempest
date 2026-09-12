@@ -167,6 +167,10 @@ namespace tempest::profiler
                 payload.write(z.coroutine_id);
                 payload.write(z.slice_index);
                 payload.write(static_cast<uint8_t>(z.reason));
+                payload.write(z.spawned_by_thread_id);
+                payload.write(z.spawned_by_coroutine_id);
+                payload.write(z.awaited_by_thread_id);
+                payload.write(z.awaited_by_coroutine_id);
 
                 const auto met_count = static_cast<uint8_t>(z.metrics.size());
                 payload.write(met_count);
@@ -228,7 +232,7 @@ namespace tempest::profiler
         auto header = tprof_header{
             .magic = {magic_bytes[0], magic_bytes[1], magic_bytes[2], magic_bytes[3]},
             .version_major = 1,
-            .version_minor = 1,
+            .version_minor = 2,
             .uncompressed_size = static_cast<uint64_t>(uncompressed_size),
             .compressed_size = static_cast<uint64_t>(actual_compressed_len),
             .flags = 0,
@@ -383,6 +387,10 @@ namespace tempest::profiler
                 auto coroutine_id = uint64_t{0};
                 auto slice_index = uint32_t{0};
                 auto reason_raw = uint8_t{0};
+                auto spawned_by_thread_id = uint64_t{0};
+                auto spawned_by_coroutine_id = uint64_t{0};
+                auto awaited_by_thread_id = uint64_t{0};
+                auto awaited_by_coroutine_id = uint64_t{0};
                 auto met_count = uint8_t{0};
 
                 if (!reader.read(start_ns) || !reader.read(end_ns) || !reader.read(depth) || !reader.read(z_name_id) ||
@@ -394,6 +402,15 @@ namespace tempest::profiler
                 if (header.version_minor >= 1)
                 {
                     if (!reader.read(coroutine_id) || !reader.read(slice_index) || !reader.read(reason_raw))
+                    {
+                        return unexpected(capture_error::corrupted_data);
+                    }
+                }
+
+                if (header.version_minor >= 2)
+                {
+                    if (!reader.read(spawned_by_thread_id) || !reader.read(spawned_by_coroutine_id) ||
+                        !reader.read(awaited_by_thread_id) || !reader.read(awaited_by_coroutine_id))
                     {
                         return unexpected(capture_error::corrupted_data);
                     }
@@ -420,6 +437,10 @@ namespace tempest::profiler
                     .coroutine_id = coroutine_id,
                     .slice_index = slice_index,
                     .reason = static_cast<suspend_reason>(reason_raw),
+                    .spawned_by_thread_id = spawned_by_thread_id,
+                    .spawned_by_coroutine_id = spawned_by_coroutine_id,
+                    .awaited_by_thread_id = awaited_by_thread_id,
+                    .awaited_by_coroutine_id = awaited_by_coroutine_id,
                     .metrics = {},
                 };
 

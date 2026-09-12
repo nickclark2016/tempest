@@ -33,6 +33,12 @@ namespace tempest::job
                 auto await_suspend(coroutine_handle<> h) noexcept -> coroutine_handle<>
                 {
                     child.handle().promise().continuation = h;
+                    auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
+                    if (ctx != nullptr)
+                    {
+                        child.handle().promise().awaited_by_thread_id = ctx->get_thread_id();
+                        child.handle().promise().awaited_by_coroutine_id = ctx->get_current_coroutine_id();
+                    }
                     return child.handle();
                 }
                 auto await_resume() noexcept -> void

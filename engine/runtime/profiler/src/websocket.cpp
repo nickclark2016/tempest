@@ -466,8 +466,13 @@ namespace tempest::profiler
                 escape_json_string_to(string_view{z.name.data(), z.name.size()}, escaped_zname);
 
                 format_to(tempest::back_inserter(json),
-                          R"({{"name":"{}","start_ns":{},"end_ns":{},"depth":{},"frame_index":{},"metrics":[)",
-                          escaped_zname.c_str(), z.start_ns, z.end_ns, z.depth, z.frame_index);
+                          R"({{"name":"{}","start_ns":{},"end_ns":{},"depth":{},"frame_index":{},"task_id":{},"coroutine_id":{},"slice_index":{},"suspend_reason":"{}",)",
+                          escaped_zname.c_str(), z.start_ns, z.end_ns, z.depth, z.frame_index,
+                          z.task_id, z.coroutine_id, z.slice_index, to_string(z.reason).data());
+                format_to(tempest::back_inserter(json),
+                          R"("spawned_by_thread_id":{},"spawned_by_coroutine_id":{},"awaited_by_thread_id":{},"awaited_by_coroutine_id":{},"metrics":[)",
+                          z.spawned_by_thread_id, z.spawned_by_coroutine_id,
+                          z.awaited_by_thread_id, z.awaited_by_coroutine_id);
 
                 for (auto k = size_t{0}; k < z.metrics.size(); ++k)
                 {
@@ -513,8 +518,13 @@ namespace tempest::profiler
                 escape_json_string_to(string_view{z.name.data(), z.name.size()}, escaped_zname);
 
                 format_to(tempest::back_inserter(json),
-                          R"({{"name":"{}","start_ns":{},"end_ns":{},"depth":{},"frame_index":{},"metrics":[)",
-                          escaped_zname.c_str(), z.start_ns, z.end_ns, z.depth, z.frame_index);
+                          R"({{"name":"{}","start_ns":{},"end_ns":{},"depth":{},"frame_index":{},"task_id":{},"coroutine_id":{},"slice_index":{},"suspend_reason":"{}",)",
+                          escaped_zname.c_str(), z.start_ns, z.end_ns, z.depth, z.frame_index,
+                          z.task_id, z.coroutine_id, z.slice_index, to_string(z.reason).data());
+                format_to(tempest::back_inserter(json),
+                          R"("spawned_by_thread_id":{},"spawned_by_coroutine_id":{},"awaited_by_thread_id":{},"awaited_by_coroutine_id":{},"metrics":[)",
+                          z.spawned_by_thread_id, z.spawned_by_coroutine_id,
+                          z.awaited_by_thread_id, z.awaited_by_coroutine_id);
 
                 for (auto k = size_t{0}; k < z.metrics.size(); ++k)
                 {
@@ -589,6 +599,14 @@ namespace tempest::profiler
                 tz.end_ns = zr.end_ns;
                 tz.depth = zr.depth;
                 tz.frame_index = zr.task_id > 0 ? zr.task_id : frame_index;
+                tz.task_id = zr.task_id;
+                tz.coroutine_id = zr.coroutine_id;
+                tz.slice_index = zr.slice_index;
+                tz.reason = zr.reason;
+                tz.spawned_by_thread_id = zr.spawned_by_thread_id;
+                tz.spawned_by_coroutine_id = zr.spawned_by_coroutine_id;
+                tz.awaited_by_thread_id = zr.awaited_by_thread_id;
+                tz.awaited_by_coroutine_id = zr.awaited_by_coroutine_id;
                 tz.metrics = zr.metrics;
                 t.zones.push_back(move(tz));
             }
