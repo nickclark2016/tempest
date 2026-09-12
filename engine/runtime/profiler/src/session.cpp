@@ -233,6 +233,11 @@ namespace tempest::profiler
             .coroutine_id = _active_coroutine_id,
             .slice_index = 0,
             .reason = suspend_reason::none,
+            .spawned_by_thread_id = 0,
+            .spawned_by_coroutine_id = 0,
+            .awaited_by_thread_id = 0,
+            .awaited_by_coroutine_id = 0,
+            .is_coroutine_slice = false,
             .metrics = {},
         });
     }
@@ -241,7 +246,7 @@ namespace tempest::profiler
     {
         auto end_ns = get_timestamp_ns();
         lock_guard guard(_mutex);
-        if (_open_zones.empty())
+        if (_open_zones.empty() || _open_zones.back().is_coroutine_slice)
         {
             return;
         }
@@ -258,6 +263,10 @@ namespace tempest::profiler
             .coroutine_id = state.coroutine_id,
             .slice_index = state.slice_index,
             .reason = state.reason,
+            .spawned_by_thread_id = state.spawned_by_thread_id,
+            .spawned_by_coroutine_id = state.spawned_by_coroutine_id,
+            .awaited_by_thread_id = state.awaited_by_thread_id,
+            .awaited_by_coroutine_id = state.awaited_by_coroutine_id,
             .metrics = tempest::move(state.metrics),
         };
 
@@ -268,6 +277,8 @@ namespace tempest::profiler
             _ensure_active_chunk_locked();
             _current_chunk->add_zone(record);
         }
+
+        _active_coroutine_id = _open_zones.empty() ? 0 : _open_zones.back().coroutine_id;
     }
 
     auto thread_profiler_context::begin_coroutine_slice(uint64_t coroutine_id, uint32_t slice_index,
@@ -294,6 +305,7 @@ namespace tempest::profiler
             .spawned_by_coroutine_id = spawned_by_coroutine_id,
             .awaited_by_thread_id = awaited_by_thread_id,
             .awaited_by_coroutine_id = awaited_by_coroutine_id,
+            .is_coroutine_slice = true,
             .metrics = {},
         });
     }
@@ -307,6 +319,39 @@ namespace tempest::profiler
             _active_coroutine_id = 0;
             return;
         }
+
+        // Pop and close any nested inner zones opened within this slice before closing the slice
+        while (_open_zones.size() > 1 && !_open_zones.back().is_coroutine_slice)
+        {
+            auto inner = tempest::move(_open_zones.back());
+            _open_zones.pop_back();
+
+            auto record = zone_record{
+                .start_ns = inner.start_ns,
+                .end_ns = end_ns,
+                .depth = inner.depth,
+                .name = inner.name,
+                .location = inner.location,
+                .task_id = inner.task_id,
+                .coroutine_id = inner.coroutine_id,
+                .slice_index = inner.slice_index,
+                .reason = inner.reason,
+                .spawned_by_thread_id = inner.spawned_by_thread_id,
+                .spawned_by_coroutine_id = inner.spawned_by_coroutine_id,
+                .awaited_by_thread_id = inner.awaited_by_thread_id,
+                .awaited_by_coroutine_id = inner.awaited_by_coroutine_id,
+                .metrics = tempest::move(inner.metrics),
+            };
+
+            _ensure_active_chunk_locked();
+            if (!_current_chunk->add_zone(record))
+            {
+                _flush_chunk_locked();
+                _ensure_active_chunk_locked();
+                _current_chunk->add_zone(record);
+            }
+        }
+
         auto state = tempest::move(_open_zones.back());
         _open_zones.pop_back();
 

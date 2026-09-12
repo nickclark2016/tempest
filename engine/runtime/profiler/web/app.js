@@ -57,6 +57,8 @@
     viewMode: 'physical',   // 'physical' | 'logical'
     showFlowArrows: true,
     coroutineIndex: new Map(), // coroutine_id -> Array<zone>
+    coroutineNames: new Map(), // coroutine_id -> coroutine name
+    threadNames: new Map(),    // thread_id -> thread name
 
     // Drag & Pan state
     isDragging: false,
@@ -139,6 +141,10 @@
     inspDepth: document.getElementById('insp-depth'),
     inspMetricsList: document.getElementById('insp-metrics-list'),
     inspHierarchyTree: document.getElementById('insp-hierarchy-tree'),
+    inspCardSpawned: document.getElementById('insp-card-spawned'),
+    inspSpawnedBy: document.getElementById('insp-spawned-by'),
+    inspCardAwaited: document.getElementById('insp-card-awaited'),
+    inspAwaitedBy: document.getElementById('insp-awaited-by'),
 
     // Stats Table & Histogram
     statsFilter: document.getElementById('stats-filter'),
@@ -227,6 +233,10 @@
     frame_bytes: 'Frame Size',
     is_heap: 'Storage',
     task_id: 'Task ID',
+    spawned_by_thread_id: 'Spawned By (Thread)',
+    spawned_by_coroutine_id: 'Spawned By (Coroutine)',
+    awaited_by_thread_id: 'Awaited By (Thread)',
+    awaited_by_coroutine_id: 'Awaited By (Coroutine)',
     pipeline_stat_vertices: 'Input Vertices',
     pipeline_stat_primitives: 'Input Primitives',
     pipeline_stat_vs_invocations: 'Vertex Shader Invocations',
@@ -624,6 +634,7 @@
           if (t.name && (!tr.name || tr.name.startsWith('Thread '))) {
             tr.name = t.name;
           }
+          state.threadNames.set(t.track_id, tr.name);
           if (t.zones) {
             for (const z of t.zones) {
               const zoneObj = {
@@ -634,6 +645,10 @@
                 coroutine_id: z.coroutine_id || 0,
                 slice_index: z.slice_index !== undefined ? z.slice_index : 0,
                 suspend_reason: z.suspend_reason || 'none',
+                spawned_by_thread_id: z.spawned_by_thread_id || 0,
+                spawned_by_coroutine_id: z.spawned_by_coroutine_id || 0,
+                awaited_by_thread_id: z.awaited_by_thread_id || 0,
+                awaited_by_coroutine_id: z.awaited_by_coroutine_id || 0,
                 frame_index: (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== 0) ? z.frame_index : f.frame_index,
                 duration_ns: z.end_ns >= z.start_ns ? (z.end_ns - z.start_ns) : 0,
               };
@@ -668,6 +683,7 @@
           if (cleanName && (!tr.name || tr.name.startsWith('Queue '))) {
             tr.name = cleanName;
           }
+          state.threadNames.set(t.track_id, tr.name);
           if (t.zones) {
             for (const z of t.zones) {
               const zoneObj = {
@@ -678,6 +694,10 @@
                 coroutine_id: z.coroutine_id || 0,
                 slice_index: z.slice_index !== undefined ? z.slice_index : 0,
                 suspend_reason: z.suspend_reason || 'none',
+                spawned_by_thread_id: z.spawned_by_thread_id || 0,
+                spawned_by_coroutine_id: z.spawned_by_coroutine_id || 0,
+                awaited_by_thread_id: z.awaited_by_thread_id || 0,
+                awaited_by_coroutine_id: z.awaited_by_coroutine_id || 0,
                 frame_index: (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== 0) ? z.frame_index : f.frame_index,
                 duration_ns: z.end_ns >= z.start_ns ? (z.end_ns - z.start_ns) : 0,
               };
@@ -715,6 +735,9 @@
     for (const tr of trackMap.values()) {
       for (const z of tr.zones) {
         if (z.coroutine_id && z.coroutine_id > 0) {
+          if (z.name && z.name !== 'task') {
+            state.coroutineNames.set(z.coroutine_id, z.name);
+          }
           let list = state.coroutineIndex.get(z.coroutine_id);
           if (!list) {
             list = [];
@@ -724,8 +747,53 @@
         }
       }
     }
-    for (const list of state.coroutineIndex.values()) {
-      list.sort((a, b) => (a.slice_index !== b.slice_index ? a.slice_index - b.slice_index : a.start_ns - b.start_ns));
+    for (const [coroId, list] of state.coroutineIndex.entries()) {
+      // Filter out nested inner zones that are completely enclosed within a slice
+      const topSlices = list.filter(candidate => {
+        return !list.some(other => other !== candidate &&
+          other.start_ns <= candidate.start_ns &&
+          other.end_ns >= candidate.end_ns &&
+          (other.end_ns - other.start_ns) > (candidate.end_ns - candidate.start_ns));
+      });
+      topSlices.sort((a, b) => (a.slice_index !== b.slice_index ? a.slice_index - b.slice_index : a.start_ns - b.start_ns));
+      state.coroutineIndex.set(coroId, topSlices);
+
+      topSlices.coroutine_id = coroId;
+
+      let spawnedByThreadId = 0;
+      let spawnedByCoroutineId = 0;
+      let awaitedByThreadId = 0;
+      let awaitedByCoroutineId = 0;
+      let taskName = state.coroutineNames.get(coroId) || '';
+
+      for (const z of topSlices) {
+        if (!spawnedByThreadId && z.spawned_by_thread_id) spawnedByThreadId = z.spawned_by_thread_id;
+        if (!spawnedByCoroutineId && z.spawned_by_coroutine_id) spawnedByCoroutineId = z.spawned_by_coroutine_id;
+        if (!awaitedByThreadId && z.awaited_by_thread_id) awaitedByThreadId = z.awaited_by_thread_id;
+        if (!awaitedByCoroutineId && z.awaited_by_coroutine_id) awaitedByCoroutineId = z.awaited_by_coroutine_id;
+        if ((!taskName || taskName === 'task') && z.name && z.name !== 'task' && !z.isWait) taskName = z.name;
+      }
+      if (!taskName || taskName === 'task') {
+        for (const z of list) {
+          if (z.name && z.name !== 'task' && !z.isWait) {
+            taskName = z.name;
+            break;
+          }
+        }
+      }
+      if (!taskName && topSlices.length > 0 && topSlices[0].name) {
+        taskName = topSlices[0].name;
+      }
+
+      topSlices.spawned_by_thread_id = spawnedByThreadId;
+      topSlices.spawned_by_coroutine_id = spawnedByCoroutineId;
+      topSlices.awaited_by_thread_id = awaitedByThreadId;
+      topSlices.awaited_by_coroutine_id = awaitedByCoroutineId;
+      topSlices.task_name = taskName;
+
+      if (taskName) {
+        state.coroutineNames.set(coroId, taskName);
+      }
     }
 
     // Check View Mode: Logical Coroutines View vs Physical Tracks View
@@ -757,16 +825,43 @@
                 suspend_reason: reasonText,
                 coroutine_id: coroId,
                 slice_index: s.slice_index,
+                spawned_by_thread_id: slices.spawned_by_thread_id,
+                spawned_by_coroutine_id: slices.spawned_by_coroutine_id,
+                awaited_by_thread_id: slices.awaited_by_thread_id,
+                awaited_by_coroutine_id: slices.awaited_by_coroutine_id,
                 trackName: `Coroutine #${coroId}`,
               });
             }
           }
         }
 
+        let spawnSummary = '';
+        if (slices.spawned_by_coroutine_id) {
+          spawnSummary = `from ${getCoroutineName(slices.spawned_by_coroutine_id)}`;
+        } else if (slices.spawned_by_thread_id) {
+          spawnSummary = `from ${getThreadName(slices.spawned_by_thread_id)}`;
+        }
+        let awaitSummary = '';
+        if (slices.awaited_by_coroutine_id) {
+          awaitSummary = `awaited by ${getCoroutineName(slices.awaited_by_coroutine_id)}`;
+        } else if (slices.awaited_by_thread_id) {
+          awaitSummary = `awaited by ${getThreadName(slices.awaited_by_thread_id)}`;
+        }
+
+        let summaryBadge = '';
+        if (spawnSummary && awaitSummary) {
+          summaryBadge = ` (${spawnSummary} ➔ ${awaitSummary})`;
+        } else if (spawnSummary) {
+          summaryBadge = ` (${spawnSummary})`;
+        } else if (awaitSummary) {
+          summaryBadge = ` (${awaitSummary})`;
+        }
+
+        const coroName = getCoroutineName(coroId);
         logicalTracks.push({
           id: `coro_${coroId}`,
           track_id: coroId,
-          name: `Coroutine #${coroId}`,
+          name: `${coroName}${summaryBadge}`,
           type: 'coroutine',
           zones: coroZones,
           maxDepth: maxD,
@@ -1126,6 +1221,47 @@
     }
   }
 
+  function getZoneGeometry(zone, nsToX, trackMapById) {
+    if (!zone) return null;
+
+    const x = nsToX(zone.start_ns);
+    const w = Math.max(1, nsToX(zone.end_ns) - x);
+
+    let track = null;
+    if (state.viewMode === 'logical') {
+      if (zone.coroutine_id) {
+        track = trackMapById.get(`coro_${zone.coroutine_id}`);
+      }
+    } else {
+      if (zone.trackId) {
+        track = trackMapById.get(zone.trackId);
+      }
+      if (!track && zone.thread_id) {
+        track = trackMapById.get(`cpu_${zone.thread_id}`) || trackMapById.get(`gpu_${zone.thread_id}`);
+      }
+    }
+
+    if (!track) {
+      track = state.tracks.find(t => t.zones && t.zones.includes(zone));
+    }
+
+    if (!track || track.renderY === undefined) {
+      if (zone.renderY !== undefined) {
+        return { x, w, y: zone.renderY, midY: zone.renderY + state.zoneHeight / 2, collapsed: false, track: null };
+      }
+      return null;
+    }
+
+    const isCollapsed = state.collapsedTracks.has(track.id);
+    const depth = zone.depth || 0;
+    const y = isCollapsed
+      ? (track.renderY + state.trackHeaderHeight / 2 - state.zoneHeight / 2)
+      : (track.renderY + state.trackHeaderHeight + state.frameHeaderHeight + 4 + depth * (state.zoneHeight + state.zoneSpacing));
+    const midY = y + state.zoneHeight / 2;
+
+    return { x, w, y, midY, collapsed: isCollapsed, track };
+  }
+
   function renderFlowOverlay(width, height, nsToX) {
     if (!dom.timelineSvgOverlay) return;
     dom.timelineSvgOverlay.setAttribute('width', width);
@@ -1139,53 +1275,303 @@
     if (!activeCoroId) return;
 
     const slices = state.coroutineIndex.get(activeCoroId);
-    if (!slices || slices.length < 2) return;
+    if (!slices || slices.length === 0) return;
+
+    const trackMapById = new Map();
+    for (const track of state.tracks) {
+      trackMapById.set(track.id, track);
+    }
 
     let svgContent = `
       <defs>
+        <clipPath id="timeline-flow-clip">
+          <rect x="0" y="${state.rulerHeight}" width="${width}" height="${Math.max(0, height - state.rulerHeight)}" />
+        </clipPath>
         <marker id="coro-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="#39c5bb" />
         </marker>
+        <marker id="coro-spawn-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#a371f7" />
+        </marker>
+        <marker id="coro-await-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#d29922" />
+        </marker>
       </defs>
+      <g clip-path="url(#timeline-flow-clip)">
     `;
 
-    for (let i = 0; i < slices.length - 1; i++) {
-      const s1 = slices[i];
-      const s2 = slices[i + 1];
+    // 1. Slice-to-slice flow curves (teal)
+    if (slices.length >= 2) {
+      for (let i = 0; i < slices.length - 1; i++) {
+        const s1 = slices[i];
+        const s2 = slices[i + 1];
 
-      if (s1.renderX === undefined || s2.renderX === undefined) continue;
+        const g1 = getZoneGeometry(s1, nsToX, trackMapById);
+        const g2 = getZoneGeometry(s2, nsToX, trackMapById);
+        if (!g1 || !g2) continue;
 
-      const x1 = s1.renderX + s1.renderW;
-      const y1 = s1.renderY + state.zoneHeight / 2;
-      const x2 = s2.renderX;
-      const y2 = s2.renderY + state.zoneHeight / 2;
+        const x1 = g1.x + g1.w;
+        const y1 = g1.midY;
+        const x2 = g2.x;
+        const y2 = g2.midY;
 
-      // Culling if both completely out of screen on the same side
-      if ((x1 < -60 && x2 < -60) || (x1 > width + 60 && x2 > width + 60)) continue;
+        // Frustum culling: skip if both endpoints are well offscreen
+        if ((x1 < -200 && x2 < -200) || (x1 > width + 200 && x2 > width + 200)) continue;
+        if ((y1 < -100 && y2 < -100) || (y1 > height + 100 && y2 > height + 100)) continue;
 
-      const dx = Math.max(24, Math.min(140, Math.abs(x2 - x1) * 0.45));
-      const pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+        const hDist = Math.max(0, x2 - x1);
+        const isSameY = Math.abs(y1 - y2) < 1;
 
-      const waitDurNs = s2.start_ns > s1.end_ns ? (s2.start_ns - s1.end_ns) : 0;
-      const reasonText = s1.suspend_reason && s1.suspend_reason !== 'none' ? s1.suspend_reason : 'yield';
-      const label = `${formatTime(waitDurNs)} [${reasonText}]`;
+        let pathD;
+        if (isSameY) {
+          pathD = `M ${x1} ${y1} L ${x2} ${y2}`;
+        } else {
+          const dx = Math.min(80, hDist * 0.45);
+          pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+        }
 
-      const midX = (x1 + x2) / 2;
-      const midY = (y1 + y2) / 2;
-      const badgeW = label.length * 6.5 + 14;
-      const badgeH = 18;
+        const waitDurNs = s2.start_ns > s1.end_ns ? (s2.start_ns - s1.end_ns) : 0;
+        const reasonText = s1.suspend_reason && s1.suspend_reason !== 'none' ? s1.suspend_reason : 'yield';
+        const label = `${formatTime(waitDurNs)} [${reasonText}]`;
 
-      svgContent += `
-        <g class="coroutine-flow-group">
-          <path d="${pathD}" class="coroutine-flow-path" marker-end="url(#coro-arrowhead)" />
-          <rect x="${midX - badgeW / 2}" y="${midY - badgeH / 2}" width="${badgeW}" height="${badgeH}" class="coroutine-badge-rect" />
-          <text x="${midX}" y="${midY + 4}" class="coroutine-flow-badge">${label}</text>
-        </g>
-      `;
+        const midX = (x1 + x2) / 2;
+        const badgeW = label.length * 6.5 + 14;
+        const badgeH = 18;
+        let badgeY = (y1 + y2) / 2 - badgeH / 2;
+
+        if (isSameY && hDist < badgeW + 8) {
+          badgeY = y1 - badgeH - 2;
+        }
+
+        svgContent += `
+          <g class="coroutine-flow-group">
+            <path d="${pathD}" class="coroutine-flow-path" marker-end="url(#coro-arrowhead)" />
+            <rect x="${midX - badgeW / 2}" y="${badgeY}" width="${badgeW}" height="${badgeH}" class="coroutine-badge-rect" />
+            <text x="${midX}" y="${badgeY + 13}" class="coroutine-flow-badge">${label}</text>
+          </g>
+        `;
+      }
     }
 
+    // 2. Spawn provenance curve (dashed purple #a371f7)
+    const prov = getCoroutineProvenance(activeCoroId);
+    if (prov) {
+      const childSlice0 = slices[0];
+      const childGeom = childSlice0 ? getZoneGeometry(childSlice0, nsToX, trackMapById) : null;
+
+      if (childGeom) {
+        let parentGeom = null;
+        let spawnNs = childSlice0.start_ns;
+        let spawnLabel = '';
+
+        if (prov.parentCoroutineId > 0 && state.coroutineIndex.has(prov.parentCoroutineId)) {
+          const parentSlices = state.coroutineIndex.get(prov.parentCoroutineId);
+          if (parentSlices && parentSlices.length > 0) {
+            const childStart = childSlice0.start_ns;
+            let parentSlice = parentSlices.find(s => s.start_ns <= childStart && s.end_ns >= childStart);
+            if (!parentSlice) {
+              const beforeSlices = parentSlices.filter(s => s.start_ns <= childStart);
+              if (beforeSlices.length > 0) {
+                const candidate = beforeSlices[beforeSlices.length - 1];
+                if (candidate.frame_index === childSlice0.frame_index || (childStart - candidate.end_ns) <= 5000000) {
+                  parentSlice = candidate;
+                }
+              }
+            }
+            if (parentSlice) {
+              parentGeom = getZoneGeometry(parentSlice, nsToX, trackMapById);
+              if (parentGeom) {
+                spawnNs = Math.min(childStart, parentSlice.end_ns);
+                spawnLabel = `Spawned by ${getCoroutineName(prov.parentCoroutineId)}`;
+              }
+            }
+          }
+        } else if (prov.spawningThreadId > 0) {
+          const threadTrack = state.tracks.find(t => t.track_id === prov.spawningThreadId || t.id === `cpu_${prov.spawningThreadId}`);
+          if (threadTrack) {
+            const childStart = childSlice0.start_ns;
+            let foundZone = threadTrack.zones.find(z => z.start_ns <= childStart && z.end_ns >= childStart);
+            if (!foundZone) {
+              const recentZone = threadTrack.zones.find(z =>
+                z.end_ns <= childStart &&
+                (childStart - z.end_ns) <= 100000 &&
+                (z.frame_index === childSlice0.frame_index)
+              );
+              if (recentZone) {
+                foundZone = recentZone;
+              }
+            }
+            if (foundZone) {
+              parentGeom = getZoneGeometry(foundZone, nsToX, trackMapById);
+              spawnNs = Math.min(childStart, foundZone.end_ns);
+            } else {
+              parentGeom = {
+                x: nsToX(childStart),
+                w: 1,
+                y: threadTrack.renderY + state.trackHeaderHeight / 2 - state.zoneHeight / 2,
+                midY: threadTrack.renderY + state.trackHeaderHeight / 2,
+                collapsed: false,
+                track: threadTrack
+              };
+              spawnNs = childStart;
+            }
+            spawnLabel = `Spawned by ${getThreadName(prov.spawningThreadId)}`;
+          }
+        }
+
+        if (parentGeom) {
+          const x1 = Math.min(childGeom.x, nsToX(spawnNs));
+          const y1 = parentGeom.midY;
+          const x2 = childGeom.x;
+          const y2 = childGeom.midY;
+
+          // Frustum culling
+          if (!((x1 < -200 && x2 < -200) || (x1 > width + 200 && x2 > width + 200) ||
+                (y1 < -100 && y2 < -100) || (y1 > height + 100 && y2 > height + 100))) {
+
+            const hDist = Math.max(0, x2 - x1);
+            const isSameY = Math.abs(y1 - y2) < 1;
+
+            let pathD;
+            if (isSameY) {
+              pathD = `M ${x1} ${y1} L ${x2} ${y2}`;
+            } else if (hDist >= 14) {
+              const dx = Math.min(80, hDist * 0.45);
+              pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+            } else {
+              // Simultaneous or near-simultaneous spawn across different tracks:
+              // Bow slightly to the left so the curve enters the left edge of child moving right
+              const bow = 14;
+              const cp1x = x1 - bow;
+              const cp2x = x2 - bow;
+              pathD = `M ${x1} ${y1} C ${cp1x} ${y1}, ${cp2x} ${y2}, ${x2} ${y2}`;
+            }
+
+            const midX = (x1 + x2) / 2;
+            const badgeW = spawnLabel.length * 6.5 + 16;
+            const badgeH = 18;
+            let badgeY = (y1 + y2) / 2 - badgeH / 2;
+            if (isSameY && hDist < badgeW + 8) {
+              badgeY = y1 - badgeH - 2;
+            }
+
+            svgContent += `
+              <g class="coroutine-flow-group coroutine-spawn-group">
+                <path d="${pathD}" class="coroutine-flow-path coroutine-flow-spawn" marker-end="url(#coro-spawn-arrowhead)" />
+                <rect x="${midX - badgeW / 2}" y="${badgeY}" width="${badgeW}" height="${badgeH}" class="coroutine-badge-rect coroutine-spawn-badge-rect" />
+                <text x="${midX}" y="${badgeY + 13}" class="coroutine-flow-badge coroutine-spawn-flow-badge">${spawnLabel}</text>
+              </g>
+            `;
+          }
+        }
+      }
+    }
+
+    // 3. Await provenance curve (dashed amber #d29922)
+    if (prov) {
+      const childFinalSlice = slices[slices.length - 1];
+      const childGeom = childFinalSlice ? getZoneGeometry(childFinalSlice, nsToX, trackMapById) : null;
+
+      if (childGeom) {
+        let awaitingGeom = null;
+        let resumeNs = childFinalSlice.end_ns;
+        let awaitLabel = '';
+
+        if (prov.awaitingCoroutineId > 0 && state.coroutineIndex.has(prov.awaitingCoroutineId)) {
+          const awaitingSlices = state.coroutineIndex.get(prov.awaitingCoroutineId);
+          if (awaitingSlices && awaitingSlices.length > 0) {
+            const childEnd = childFinalSlice.end_ns;
+            let awaitingSlice = awaitingSlices.find(s => s.start_ns >= childEnd);
+            if (awaitingSlice) {
+              if (awaitingSlice.frame_index !== childFinalSlice.frame_index && (awaitingSlice.start_ns - childEnd) > 5000000) {
+                awaitingSlice = null;
+              }
+            }
+            if (awaitingSlice) {
+              awaitingGeom = getZoneGeometry(awaitingSlice, nsToX, trackMapById);
+              if (awaitingGeom) {
+                resumeNs = Math.max(childEnd, awaitingSlice.start_ns);
+                awaitLabel = `Awaited by ${getCoroutineName(prov.awaitingCoroutineId)}`;
+              }
+            }
+          }
+        } else if (prov.awaitingThreadId > 0) {
+          const threadTrack = state.tracks.find(t => t.track_id === prov.awaitingThreadId || t.id === `cpu_${prov.awaitingThreadId}`);
+          if (threadTrack) {
+            const childEnd = childFinalSlice.end_ns;
+            let foundZone = threadTrack.zones.find(z =>
+              z.start_ns >= childEnd &&
+              (z.start_ns - childEnd) <= 100000 &&
+              (z.frame_index === childFinalSlice.frame_index)
+            );
+            if (foundZone) {
+              awaitingGeom = getZoneGeometry(foundZone, nsToX, trackMapById);
+              resumeNs = Math.max(childEnd, foundZone.start_ns);
+            } else {
+              awaitingGeom = {
+                x: nsToX(childEnd),
+                w: 1,
+                y: threadTrack.renderY + state.trackHeaderHeight / 2 - state.zoneHeight / 2,
+                midY: threadTrack.renderY + state.trackHeaderHeight / 2,
+                collapsed: false,
+                track: threadTrack
+              };
+              resumeNs = childEnd;
+            }
+            awaitLabel = `Awaited by ${getThreadName(prov.awaitingThreadId)}`;
+          }
+        }
+
+        if (awaitingGeom) {
+          const x1 = childGeom.x + childGeom.w;
+          const y1 = childGeom.midY;
+          const x2 = Math.max(x1, nsToX(resumeNs));
+          const y2 = awaitingGeom.midY;
+
+          // Frustum culling
+          if (!((x1 < -200 && x2 < -200) || (x1 > width + 200 && x2 > width + 200) ||
+                (y1 < -100 && y2 < -100) || (y1 > height + 100 && y2 > height + 100))) {
+
+            const hDist = Math.max(0, x2 - x1);
+            const isSameY = Math.abs(y1 - y2) < 1;
+
+            let pathD;
+            if (isSameY) {
+              pathD = `M ${x1} ${y1} L ${x2} ${y2}`;
+            } else if (hDist >= 14) {
+              const dx = Math.min(80, hDist * 0.45);
+              pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+            } else {
+              // Direct vertical handoff with horizontal lead-in into awaiting slice
+              const leadIn = 5;
+              pathD = `M ${x1} ${y1} C ${x1} ${y1}, ${x1} ${y2}, ${x1} ${y2} L ${x1 + leadIn} ${y2}`;
+            }
+
+            const midX = (x1 + x2) / 2;
+            const badgeW = awaitLabel.length * 6.5 + 16;
+            const badgeH = 18;
+            let badgeY = (y1 + y2) / 2 - badgeH / 2;
+            if (isSameY && hDist < badgeW + 8) {
+              badgeY = y1 - badgeH - 2;
+            }
+
+            svgContent += `
+              <g class="coroutine-flow-group coroutine-await-group">
+                <path d="${pathD}" class="coroutine-flow-path coroutine-flow-await" marker-end="url(#coro-await-arrowhead)" />
+                <rect x="${midX - badgeW / 2}" y="${badgeY}" width="${badgeW}" height="${badgeH}" class="coroutine-badge-rect coroutine-await-badge-rect" />
+                <text x="${midX}" y="${badgeY + 13}" class="coroutine-flow-badge coroutine-await-flow-badge">${awaitLabel}</text>
+              </g>
+            `;
+          }
+        }
+      }
+    }
+
+    svgContent += `</g>`;
     dom.timelineSvgOverlay.innerHTML = svgContent;
   }
+
+  const drawCoroutineFlowArrows = renderFlowOverlay;
 
   function renderFrameBoundaries(ctx, width, height, nsToX, visibleDuration) {
     if (!state.showFrameBoundaries || state.frames.length === 0) return;
@@ -1502,9 +1888,104 @@
     return 0;
   }
 
+  function getThreadName(threadId) {
+    if (!threadId) return '';
+    if (state.threadNames && state.threadNames.has(threadId)) {
+      return state.threadNames.get(threadId);
+    }
+    if (state.tracks) {
+      const tr = state.tracks.find(t => t.track_id === threadId);
+      if (tr && tr.name) return tr.name;
+    }
+    return `Thread ${threadId}`;
+  }
+
+  function getCoroutineName(coroutineId) {
+    if (!coroutineId) return '';
+    let name = '';
+    if (state.coroutineNames && state.coroutineNames.has(coroutineId)) {
+      name = state.coroutineNames.get(coroutineId);
+    }
+    if (!name || name === 'task') {
+      const coro = state.coroutineIndex.get(coroutineId);
+      if (coro) {
+        if (coro.task_name && coro.task_name !== 'task') {
+          name = coro.task_name;
+        } else {
+          for (const z of coro) {
+            if (z.name && z.name !== 'task' && !z.isWait) {
+              name = z.name;
+              break;
+            }
+          }
+          if (!name && coro.task_name) name = coro.task_name;
+          if (!name && coro.length > 0 && coro[0].name) name = coro[0].name;
+        }
+      }
+    }
+    if (name && name !== 'task') {
+      return name;
+    }
+    return `Coroutine #${coroutineId}`;
+  }
+
+  function getCoroutineProvenance(coroutineId) {
+    if (!coroutineId) return null;
+    const coro = state.coroutineIndex.get(coroutineId);
+    if (!coro) return null;
+
+    const parentCoro = coro.spawned_by_coroutine_id ? state.coroutineIndex.get(coro.spawned_by_coroutine_id) || null : null;
+    const spawningThreadName = coro.spawned_by_thread_id ? getThreadName(coro.spawned_by_thread_id) : '';
+
+    const awaitingCoro = coro.awaited_by_coroutine_id ? state.coroutineIndex.get(coro.awaited_by_coroutine_id) || null : null;
+    const awaitingThreadName = coro.awaited_by_thread_id ? getThreadName(coro.awaited_by_thread_id) : '';
+
+    return {
+      coroutine: coro,
+      coroutineId,
+      coroutineName: getCoroutineName(coroutineId),
+      parentCoroutine: parentCoro,
+      parentCoroutineId: coro.spawned_by_coroutine_id || 0,
+      parentCoroutineName: coro.spawned_by_coroutine_id ? getCoroutineName(coro.spawned_by_coroutine_id) : '',
+      spawningThreadId: coro.spawned_by_thread_id || 0,
+      spawningThreadName,
+      awaitingCoroutine: awaitingCoro,
+      awaitingCoroutineId: coro.awaited_by_coroutine_id || 0,
+      awaitingCoroutineName: coro.awaited_by_coroutine_id ? getCoroutineName(coro.awaited_by_coroutine_id) : '',
+      awaitingThreadId: coro.awaited_by_thread_id || 0,
+      awaitingThreadName,
+    };
+  }
+
+  function centerTimelineOnZone(zone) {
+    if (!zone) return;
+    const dur = Math.max(100, zone.end_ns - zone.start_ns);
+    const margin = Math.max(dur * 0.25, 200000);
+    state.viewStartNs = zone.start_ns - margin;
+    state.viewEndNs = zone.end_ns + margin;
+    selectZone(zone);
+    if (state.isLive) {
+      toggleLiveStreaming(false);
+    }
+    render();
+  }
+
+  function centerTimelineOnTrack(trackId) {
+    if (!trackId) return;
+    const tr = state.tracks.find(t => t.track_id === trackId);
+    if (tr && tr.renderY !== undefined && dom.timelineContainer) {
+      dom.timelineContainer.scrollTop = Math.max(0, tr.renderY - 60);
+    }
+    render();
+  }
+
   function selectZone(zone) {
     state.selectedZone = zone;
     if (!zone) {
+      if (dom.inspCardSpawned && dom.inspCardAwaited) {
+        dom.inspCardSpawned.style.display = 'none';
+        dom.inspCardAwaited.style.display = 'none';
+      }
       state.selectedStatsRow = null;
       dom.inspectorPlaceholder.style.display = 'flex';
       dom.inspectorDetails.style.display = 'none';
@@ -1554,6 +2035,79 @@
     dom.inspFramePct.textContent = `${framePct}%`;
 
     dom.inspDepth.textContent = `Level ${zone.depth}`;
+
+    // Provenance Cards in Inspector Grid
+    if (dom.inspCardSpawned && dom.inspCardAwaited) {
+      if (zone.coroutine_id && zone.coroutine_id > 0) {
+        dom.inspCardSpawned.style.display = 'block';
+        dom.inspCardAwaited.style.display = 'block';
+
+        const prov = getCoroutineProvenance(zone.coroutine_id);
+
+        // Spawned By
+        dom.inspSpawnedBy.innerHTML = '';
+        const spawnBtn = document.createElement('button');
+        if (prov && prov.parentCoroutineId > 0) {
+          const spawnName = getCoroutineName(prov.parentCoroutineId);
+          spawnBtn.className = 'coroutine-pill-btn coroutine-spawn-badge';
+          spawnBtn.innerHTML = `⟳ ${spawnName}`;
+          spawnBtn.title = `Jump to parent coroutine: ${spawnName} (ID #${prov.parentCoroutineId})`;
+          spawnBtn.onclick = (e) => {
+            e.stopPropagation();
+            const parentSlices = state.coroutineIndex.get(prov.parentCoroutineId);
+            if (parentSlices && parentSlices.length > 0) {
+              centerTimelineOnZone(parentSlices[0]);
+            }
+          };
+        } else if (prov && prov.spawningThreadId > 0) {
+          spawnBtn.className = 'coroutine-pill-btn thread-btn';
+          spawnBtn.textContent = prov.spawningThreadName ? `${prov.spawningThreadName} (TID ${prov.spawningThreadId})` : `Thread ${prov.spawningThreadId}`;
+          spawnBtn.title = 'Center on spawning thread';
+          spawnBtn.onclick = (e) => {
+            e.stopPropagation();
+            centerTimelineOnTrack(prov.spawningThreadId);
+          };
+        } else {
+          spawnBtn.className = 'coroutine-pill-btn none-btn';
+          spawnBtn.textContent = 'Root / Engine Init';
+        }
+        dom.inspSpawnedBy.appendChild(spawnBtn);
+
+        // Awaited By
+        dom.inspAwaitedBy.innerHTML = '';
+        const awaitBtn = document.createElement('button');
+        if (prov && prov.awaitingCoroutineId > 0) {
+          const awaitingName = getCoroutineName(prov.awaitingCoroutineId);
+          awaitBtn.className = 'coroutine-pill-btn await-btn coroutine-await-badge';
+          awaitBtn.innerHTML = `⟳ ${awaitingName}`;
+          awaitBtn.title = `Jump to awaiting coroutine: ${awaitingName} (ID #${prov.awaitingCoroutineId})`;
+          awaitBtn.onclick = (e) => {
+            e.stopPropagation();
+            const awaitingSlices = state.coroutineIndex.get(prov.awaitingCoroutineId);
+            if (awaitingSlices && awaitingSlices.length > 0) {
+              const childEnd = prov.coroutine[prov.coroutine.length - 1].end_ns;
+              const targetSlice = awaitingSlices.find(s => s.start_ns >= childEnd) || awaitingSlices[0];
+              centerTimelineOnZone(targetSlice);
+            }
+          };
+        } else if (prov && prov.awaitingThreadId > 0) {
+          awaitBtn.className = 'coroutine-pill-btn thread-btn';
+          awaitBtn.textContent = prov.awaitingThreadName ? `${prov.awaitingThreadName} (TID ${prov.awaitingThreadId})` : `Thread ${prov.awaitingThreadId}`;
+          awaitBtn.title = 'Center on awaiting thread';
+          awaitBtn.onclick = (e) => {
+            e.stopPropagation();
+            centerTimelineOnTrack(prov.awaitingThreadId);
+          };
+        } else {
+          awaitBtn.className = 'coroutine-pill-btn none-btn';
+          awaitBtn.textContent = 'None (Detached)';
+        }
+        dom.inspAwaitedBy.appendChild(awaitBtn);
+      } else {
+        dom.inspCardSpawned.style.display = 'none';
+        dom.inspCardAwaited.style.display = 'none';
+      }
+    }
 
     // Attached Metrics & GPU Stats
     dom.inspMetricsList.innerHTML = '';
@@ -1626,7 +2180,90 @@
 
   function buildHierarchyTree(zone) {
     dom.inspHierarchyTree.innerHTML = '';
-    const track = state.tracks.find(t => t.id === zone.trackId);
+
+    // Render Coroutine Causality Chain if coroutine
+    if (zone.coroutine_id && zone.coroutine_id > 0) {
+      const prov = getCoroutineProvenance(zone.coroutine_id);
+      const chainDiv = document.createElement('div');
+      chainDiv.className = 'coroutine-causality-chain';
+
+      // 1. Spawned By Step
+      const spawnStep = document.createElement('div');
+      spawnStep.className = 'causality-step';
+      let spawnContent = '';
+      if (prov && prov.parentCoroutineId > 0) {
+        const spawnName = getCoroutineName(prov.parentCoroutineId);
+        spawnContent = `<button class="coroutine-pill-btn coroutine-spawn-badge" title="Jump to parent coroutine: ${spawnName} (ID #${prov.parentCoroutineId})">⟳ ${spawnName}</button>`;
+      } else if (prov && prov.spawningThreadId > 0) {
+        spawnContent = `<button class="coroutine-pill-btn thread-btn">${prov.spawningThreadName || `Thread ${prov.spawningThreadId}`}</button>`;
+      } else {
+        spawnContent = `<span class="coroutine-pill-btn none-btn">Root / Main</span>`;
+      }
+      spawnStep.innerHTML = `<span class="causality-label">[Spawned by]</span>${spawnContent}<span class="causality-arrow">➔</span>`;
+      if (prov && prov.parentCoroutineId > 0) {
+        spawnStep.querySelector('button').onclick = () => {
+          const parentSlices = state.coroutineIndex.get(prov.parentCoroutineId);
+          if (parentSlices && parentSlices.length > 0) centerTimelineOnZone(parentSlices[0]);
+        };
+      } else if (prov && prov.spawningThreadId > 0) {
+        const btn = spawnStep.querySelector('button');
+        if (btn) btn.onclick = () => centerTimelineOnTrack(prov.spawningThreadId);
+      }
+      chainDiv.appendChild(spawnStep);
+
+      // 2. Coroutine Slices Step
+      const curStep = document.createElement('div');
+      curStep.className = 'causality-step';
+      const slices = state.coroutineIndex.get(zone.coroutine_id) || [zone];
+      const slicesHtml = slices.map((s) => {
+        const isActive = s.slice_index === zone.slice_index;
+        return `<span class="coro-slice-pill ${isActive ? 'active' : ''}">Slice ${s.slice_index}</span>`;
+      }).join('');
+      const currentCoroName = getCoroutineName(zone.coroutine_id);
+      curStep.innerHTML = `<span class="causality-label" title="${currentCoroName} (ID #${zone.coroutine_id})">${currentCoroName}</span><div class="causality-slices">${slicesHtml}</div><span class="causality-arrow">➔</span>`;
+      curStep.querySelectorAll('.coro-slice-pill').forEach((pill, i) => {
+        pill.onclick = (e) => {
+          e.stopPropagation();
+          centerTimelineOnZone(slices[i]);
+        };
+      });
+      chainDiv.appendChild(curStep);
+
+      // 3. Awaited By Step
+      const awaitStep = document.createElement('div');
+      awaitStep.className = 'causality-step';
+      let awaitContent = '';
+      if (prov && prov.awaitingCoroutineId > 0) {
+        const awaitingName = getCoroutineName(prov.awaitingCoroutineId);
+        awaitContent = `<button class="coroutine-pill-btn await-btn coroutine-await-badge" title="Jump to awaiting coroutine: ${awaitingName} (ID #${prov.awaitingCoroutineId})">⟳ ${awaitingName}</button>`;
+      } else if (prov && prov.awaitingThreadId > 0) {
+        awaitContent = `<button class="coroutine-pill-btn thread-btn">${prov.awaitingThreadName || `Thread ${prov.awaitingThreadId}`}</button>`;
+      } else {
+        awaitContent = `<span class="coroutine-pill-btn none-btn">None (Detached)</span>`;
+      }
+      awaitStep.innerHTML = `<span class="causality-label">[Awaited by]</span>${awaitContent}`;
+      if (prov && prov.awaitingCoroutineId > 0) {
+        awaitStep.querySelector('button').onclick = () => {
+          const awaitingSlices = state.coroutineIndex.get(prov.awaitingCoroutineId);
+          if (awaitingSlices && awaitingSlices.length > 0) {
+            const childEnd = prov.coroutine[prov.coroutine.length - 1].end_ns;
+            const targetSlice = awaitingSlices.find(s => s.start_ns >= childEnd) || awaitingSlices[0];
+            centerTimelineOnZone(targetSlice);
+          }
+        };
+      } else if (prov && prov.awaitingThreadId > 0) {
+        const btn = awaitStep.querySelector('button');
+        if (btn) btn.onclick = () => centerTimelineOnTrack(prov.awaitingThreadId);
+      }
+      chainDiv.appendChild(awaitStep);
+
+      dom.inspHierarchyTree.appendChild(chainDiv);
+    }
+
+    let track = state.tracks.find(t => t.id === zone.trackId);
+    if (!track) {
+      track = state.tracks.find(t => t.zones && t.zones.some(z => z === zone));
+    }
     if (!track) return;
 
     // Find parent zone
@@ -2112,8 +2749,33 @@
         <div class="tt-row"><span>Depth:</span><span>${z.depth}</span></div>
         ${parentFrame ? `<div class="tt-row"><span>Frame:</span><span class="tt-val">#${parentFrame.frame_index}</span></div>` : ''}
         ${(z.coroutine_id && z.coroutine_id > 0) ? `
-          <div class="tt-row"><span>Coroutine:</span><span class="tt-val">#${z.coroutine_id} (Slice ${z.slice_index || 0})</span></div>
+          <div class="tt-row"><span>Coroutine:</span><span class="tt-val">${getCoroutineName(z.coroutine_id)} (Slice ${z.slice_index || 0})</span></div>
           <div class="tt-row"><span>${formatLabel('suspend_reason')}:</span><span class="tt-val">${z.suspend_reason || 'none'}</span></div>
+          ${(() => {
+            const prov = getCoroutineProvenance(z.coroutine_id);
+            let spawnedByStr = 'None';
+            if (prov && prov.parentCoroutineId > 0) {
+              spawnedByStr = getCoroutineName(prov.parentCoroutineId);
+            } else if (prov && prov.spawningThreadName) {
+              spawnedByStr = prov.spawningThreadName;
+            } else if (prov && prov.spawningThreadId > 0) {
+              spawnedByStr = `Thread ${prov.spawningThreadId}`;
+            }
+
+            let awaitedByStr = 'None (Detached)';
+            if (prov && prov.awaitingCoroutineId > 0) {
+              awaitedByStr = getCoroutineName(prov.awaitingCoroutineId);
+            } else if (prov && prov.awaitingThreadName) {
+              awaitedByStr = prov.awaitingThreadName;
+            } else if (prov && prov.awaitingThreadId > 0) {
+              awaitedByStr = `Thread ${prov.awaitingThreadId}`;
+            }
+
+            return `
+              <div class="tt-row"><span>Spawned By:</span><span class="tt-val">${spawnedByStr}</span></div>
+              <div class="tt-row"><span>Awaited By:</span><span class="tt-val">${awaitedByStr}</span></div>
+            `;
+          })()}
           ${(() => {
             const fb = z.metrics?.find(m => m.name === 'frame_bytes');
             const ih = z.metrics?.find(m => m.name === 'is_heap');
@@ -2277,6 +2939,9 @@
     state.maxTimeNs = 0;
     state.viewStartNs = 0;
     state.viewEndNs = 100000000;
+    state.coroutineIndex.clear();
+    state.coroutineNames.clear();
+    state.threadNames.clear();
     selectZone(null);
     renderStatsTable();
     updateMetricCards();
@@ -2308,6 +2973,16 @@
       });
 
       for (const z of track.zones) {
+        const args = z.metrics ? Object.fromEntries(z.metrics.map(m => [m.name, m.value])) : {};
+        if (z.coroutine_id && z.coroutine_id > 0) {
+          args.coroutine_id = z.coroutine_id;
+          args.slice_index = z.slice_index || 0;
+          args.suspend_reason = z.suspend_reason || 'none';
+          if (z.spawned_by_thread_id) args.spawned_by_thread_id = z.spawned_by_thread_id;
+          if (z.spawned_by_coroutine_id) args.spawned_by_coroutine_id = z.spawned_by_coroutine_id;
+          if (z.awaited_by_thread_id) args.awaited_by_thread_id = z.awaited_by_thread_id;
+          if (z.awaited_by_coroutine_id) args.awaited_by_coroutine_id = z.awaited_by_coroutine_id;
+        }
         captureData.traceEvents.push({
           name: z.name,
           cat: z.category || track.type,
@@ -2316,7 +2991,7 @@
           dur: z.duration_ns / 1000,
           pid: 1,
           tid: track.track_id,
-          args: z.metrics ? Object.fromEntries(z.metrics.map(m => [m.name, m.value])) : {},
+          args,
         });
       }
     }
@@ -2460,6 +3135,7 @@
         name: getString(trackNameId),
         zones: [],
       };
+      state.threadNames.set(trackId, trackObj.name);
 
       for (let j = 0; j < zoneCount; j++) {
         const zStart = Number(dv.getBigUint64(cursor, true)); cursor += 8;
@@ -2470,12 +3146,23 @@
         let coroutineId = 0;
         let sliceIndex = 0;
         let suspendReason = 'none';
+        let spawnedByThreadId = 0;
+        let spawnedByCoroutineId = 0;
+        let awaitedByThreadId = 0;
+        let awaitedByCoroutineId = 0;
 
         if (versionMinor >= 1) {
           coroutineId = Number(dv.getBigUint64(cursor, true)); cursor += 8;
           sliceIndex = dv.getUint32(cursor, true); cursor += 4;
           const reasonCode = dv.getUint8(cursor); cursor += 1;
           suspendReason = SUSPEND_REASONS[reasonCode] || 'none';
+        }
+
+        if (versionMinor >= 2) {
+          spawnedByThreadId = Number(dv.getBigUint64(cursor, true)); cursor += 8;
+          spawnedByCoroutineId = Number(dv.getBigUint64(cursor, true)); cursor += 8;
+          awaitedByThreadId = Number(dv.getBigUint64(cursor, true)); cursor += 8;
+          awaitedByCoroutineId = Number(dv.getBigUint64(cursor, true)); cursor += 8;
         }
 
         const metCount = dv.getUint8(cursor); cursor += 1;
@@ -2489,14 +3176,23 @@
           metrics.push({ name: getString(metNameId), value: metVal, unit: metUnit });
         }
 
+        const zName = getString(zNameId);
+        if (coroutineId > 0 && zName && zName !== 'task') {
+          state.coroutineNames.set(coroutineId, zName);
+        }
+
         trackObj.zones.push({
-          name: getString(zNameId),
+          name: zName,
           start_ns: zStart,
           end_ns: zEnd,
           depth: zDepth,
           coroutine_id: coroutineId,
           slice_index: sliceIndex,
           suspend_reason: suspendReason,
+          spawned_by_thread_id: spawnedByThreadId,
+          spawned_by_coroutine_id: spawnedByCoroutineId,
+          awaited_by_thread_id: awaitedByThreadId,
+          awaited_by_coroutine_id: awaitedByCoroutineId,
           metrics,
         });
       }
@@ -2528,7 +3224,9 @@
     // Pass 1: Thread names
     for (const ev of events) {
       if (ev.ph === 'M' && ev.name === 'thread_name') {
-        threadMap.set(ev.tid, ev.args?.name || `Thread ${ev.tid}`);
+        const tName = ev.args?.name || `Thread ${ev.tid}`;
+        threadMap.set(ev.tid, tName);
+        state.threadNames.set(ev.tid, tName);
       }
     }
 
@@ -2539,11 +3237,13 @@
       if (ev.ph === 'X') {
         const tid = ev.tid || 1;
         if (!tracksById.has(tid)) {
+          const tName = threadMap.get(tid) || `Thread ${tid}`;
           tracksById.set(tid, {
             track_id: tid,
-            name: threadMap.get(tid) || `Thread ${tid}`,
+            name: tName,
             zones: [],
           });
+          state.threadNames.set(tid, tName);
         }
         const tr = tracksById.get(tid);
         const startNs = Math.floor((ev.ts || 0) * 1000);
@@ -2551,6 +3251,14 @@
         const coroutineId = ev.args?.coroutine_id ? Number(ev.args.coroutine_id) : 0;
         const sliceIndex = ev.args?.slice_index ? Number(ev.args.slice_index) : 0;
         const suspendReason = ev.args?.suspend_reason ? String(ev.args.suspend_reason) : 'none';
+        const spawnedByThreadId = ev.args?.spawned_by_thread_id ? Number(ev.args.spawned_by_thread_id) : 0;
+        const spawnedByCoroutineId = ev.args?.spawned_by_coroutine_id ? Number(ev.args.spawned_by_coroutine_id) : 0;
+        const awaitedByThreadId = ev.args?.awaited_by_thread_id ? Number(ev.args.awaited_by_thread_id) : 0;
+        const awaitedByCoroutineId = ev.args?.awaited_by_coroutine_id ? Number(ev.args.awaited_by_coroutine_id) : 0;
+
+        if (coroutineId > 0 && ev.name && ev.name !== 'task') {
+          state.coroutineNames.set(coroutineId, ev.name);
+        }
 
         tr.zones.push({
           name: ev.name,
@@ -2561,7 +3269,11 @@
           coroutine_id: coroutineId,
           slice_index: sliceIndex,
           suspend_reason: suspendReason,
-          metrics: ev.args ? Object.entries(ev.args).filter(([k]) => k !== 'coroutine_id' && k !== 'slice_index' && k !== 'suspend_reason' && k !== 'task_id').map(([k, v]) => ({ name: k, value: Number(v) })) : [],
+          spawned_by_thread_id: spawnedByThreadId,
+          spawned_by_coroutine_id: spawnedByCoroutineId,
+          awaited_by_thread_id: awaitedByThreadId,
+          awaited_by_coroutine_id: awaitedByCoroutineId,
+          metrics: ev.args ? Object.entries(ev.args).filter(([k]) => !['coroutine_id', 'slice_index', 'suspend_reason', 'task_id', 'spawned_by_thread_id', 'spawned_by_coroutine_id', 'awaited_by_thread_id', 'awaited_by_coroutine_id'].includes(k)).map(([k, v]) => ({ name: k, value: Number(v) })) : [],
         });
       } else if (ev.ph === 'i') {
         frameObj.markers.push({

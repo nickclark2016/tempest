@@ -420,6 +420,44 @@ html, body {
   rx: 4;
 }
 
+.coroutine-flow-path.coroutine-flow-spawn {
+  stroke: #a371f7;
+}
+
+.coroutine-flow-path.coroutine-flow-await {
+  stroke: #d29922;
+}
+
+.coroutine-spawn-badge-rect {
+  fill: rgba(26, 17, 43, 0.95);
+  stroke: #a371f7;
+  stroke-width: 1;
+  rx: 4;
+}
+
+.coroutine-await-badge-rect {
+  fill: rgba(43, 33, 17, 0.95);
+  stroke: #d29922;
+  stroke-width: 1;
+  rx: 4;
+}
+
+.coroutine-spawn-flow-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: #d2a8ff;
+  text-anchor: middle;
+  font-weight: 600;
+}
+
+.coroutine-await-flow-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: #e3b341;
+  text-anchor: middle;
+  font-weight: 600;
+}
+
 /* Selection Badge */
 .selection-badge {
   position: absolute;
@@ -764,6 +802,130 @@ html, body {
 .tree-item .tree-dur {
   margin-left: auto;
   color: var(--accent-cyan);
+}
+
+/* Coroutine Provenance & Causality Chain */
+.coroutine-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(163, 113, 247, 0.15);
+  border: 1px solid rgba(163, 113, 247, 0.4);
+  color: #bc8cff;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.coroutine-pill-btn:hover {
+  background: rgba(163, 113, 247, 0.3);
+  border-color: #bc8cff;
+  color: #fff;
+  transform: translateY(-1px);
+}
+.coroutine-pill-btn.await-btn,
+.coroutine-await-badge {
+  background: rgba(210, 153, 34, 0.15);
+  border-color: rgba(210, 153, 34, 0.4);
+  color: #e3b341;
+}
+.coroutine-pill-btn.await-btn:hover,
+.coroutine-await-badge:hover {
+  background: rgba(210, 153, 34, 0.3);
+  border-color: #e3b341;
+  color: #fff;
+}
+.coroutine-spawn-badge {
+  background: rgba(163, 113, 247, 0.15);
+  border-color: rgba(163, 113, 247, 0.4);
+  color: #bc8cff;
+}
+.coroutine-spawn-badge:hover {
+  background: rgba(163, 113, 247, 0.3);
+  border-color: #bc8cff;
+  color: #fff;
+}
+.coroutine-pill-btn.thread-btn {
+  background: rgba(88, 166, 255, 0.15);
+  border-color: rgba(88, 166, 255, 0.4);
+  color: #79c0ff;
+}
+.coroutine-pill-btn.thread-btn:hover {
+  background: rgba(88, 166, 255, 0.3);
+  border-color: #79c0ff;
+  color: #fff;
+}
+.coroutine-pill-btn.none-btn {
+  background: rgba(110, 118, 129, 0.1);
+  border-color: rgba(110, 118, 129, 0.3);
+  color: var(--text-muted);
+  cursor: default;
+}
+.coroutine-pill-btn.none-btn:hover {
+  transform: none;
+  background: rgba(110, 118, 129, 0.1);
+  border-color: rgba(110, 118, 129, 0.3);
+  color: var(--text-muted);
+}
+
+.coroutine-causality-chain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(22, 27, 34, 0.6);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.causality-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.causality-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  min-width: 90px;
+}
+.causality-arrow {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.causality-slices {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.coro-slice-pill {
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: rgba(57, 197, 187, 0.15);
+  border: 1px solid rgba(57, 197, 187, 0.4);
+  color: var(--accent-cyan);
+  cursor: pointer;
+}
+.coro-slice-pill:hover {
+  background: rgba(57, 197, 187, 0.3);
+  color: #fff;
+}
+.coro-slice-pill.active {
+  background: var(--accent-cyan);
+  color: #0d1117;
+  font-weight: bold;
 }
 
 /* ==========================================================================

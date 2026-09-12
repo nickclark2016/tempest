@@ -32,6 +32,7 @@ namespace tempest::profiler
         uint64_t spawned_by_coroutine_id{0};
         uint64_t awaited_by_thread_id{0};
         uint64_t awaited_by_coroutine_id{0};
+        bool is_coroutine_slice{false};
         inplace_vector<metric_record, 16> metrics{};
     };
 

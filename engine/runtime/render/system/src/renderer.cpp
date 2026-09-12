@@ -1304,7 +1304,6 @@ namespace tempest::render_system
         -> job::task<expected<void, render_graph::execution_error>>
     {
         co_await job::set_task_name{"renderer::render_async"};
-        auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::render_async"};
         if (_device == nullptr)
         {
             co_return unexpected(render_graph::execution_error::compile_failed);
