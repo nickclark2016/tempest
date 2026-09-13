@@ -67,13 +67,48 @@ namespace tempest::job
         constexpr auto get_allocator_from_arg([[maybe_unused]] T&& arg) noexcept -> job_allocator*
         {
             using CleanT = remove_cvref_t<T>;
-            if constexpr (is_same_v<CleanT, job_allocator>)
+            if constexpr (is_pointer_v<CleanT>)
+            {
+                using Pointee = remove_cvref_t<remove_pointer_t<CleanT>>;
+                if constexpr (is_same_v<Pointee, job_allocator>)
+                {
+                    return const_cast<job_allocator*>(arg);
+                }
+                else if constexpr (complete_type<Pointee>)
+                {
+                    if constexpr (requires {
+                                      { arg->get_dispatch_allocator() } -> same_as<job_allocator&>;
+                                  })
+                    {
+                        return arg != nullptr ? &arg->get_dispatch_allocator() : nullptr;
+                    }
+                    else if constexpr (requires {
+                                           { arg->get_job_allocator() } -> same_as<job_allocator&>;
+                                       })
+                    {
+                        return arg != nullptr ? &arg->get_job_allocator() : nullptr;
+                    }
+                    else
+                    {
+                        return nullptr;
+                    }
+                }
+                else
+                {
+                    return nullptr;
+                }
+            }
+            else if constexpr (is_same_v<CleanT, job_allocator>)
             {
                 return const_cast<job_allocator*>(&arg);
             }
             else if constexpr (is_same_v<CleanT, job_context>)
             {
                 return arg.allocator.get();
+            }
+            else if constexpr (requires { { arg.get() }; })
+            {
+                return get_allocator_from_arg(arg.get());
             }
             else if constexpr (complete_type<CleanT>)
             {

@@ -271,4 +271,50 @@ namespace tempest::job::tests
         main_task.resume();
         EXPECT_TRUE(main_task.is_ready());
     }
+
+    /// @brief Verifies that when_all with job_system routes leaf runner and awaiter
+    ///        allocations through the job allocator without triggering reference parameter diagnostics.
+    TEST(when_all_test, when_all_routes_allocator_to_dispatch_allocator)
+    {
+        // 1. Setup
+        auto log = logger{};
+        auto prof = profiler::profiler_session{false};
+        auto config = job_system_config{
+            .performance_worker_count = 2,
+            .efficiency_worker_count = 0,
+        };
+        auto sys = job_system{log, prof, config};
+        auto& alloc = sys.get_dispatch_allocator();
+
+        auto t1 = []() -> task<int> { co_return 10; };
+        auto t2 = []() -> task<int> { co_return 20; };
+
+        // 2. Act
+        const auto telem_before = alloc.get_telemetry();
+        auto run = [&]() -> task<void> {
+            auto [r1, r2] = co_await when_all(sys, t1(), t2());
+            EXPECT_TRUE(r1.has_value());
+            EXPECT_EQ(r1.value(), 10);
+            EXPECT_TRUE(r2.has_value());
+            EXPECT_EQ(r2.value(), 20);
+        };
+
+        auto main_task = run();
+        main_task.resume();
+        sys.wait_idle();
+
+        // 3. Assert: Slabs were utilized by when_all runner and awaiter frames
+        const auto telem_after = alloc.get_telemetry();
+        auto slab_allocated = false;
+        for (size_t i = 0; i < slab_class_count; ++i)
+        {
+            if (telem_after.allocations_per_class[i] > telem_before.allocations_per_class[i])
+            {
+                slab_allocated = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(slab_allocated);
+        EXPECT_TRUE(main_task.is_ready());
+    }
 } // namespace tempest::job::tests

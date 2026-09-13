@@ -20,10 +20,8 @@ namespace tempest::job
     namespace detail
     {
         template <typename TaskType, typename ResultType>
-        auto when_all_leaf_runner(
-            job_system& /*unused*/, // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
-                                    // -- Never used, needed for signature matching.
-            TaskType type, ResultType* out, atomic<size_t>* remaining, async_event* done_event) -> detached_task
+        auto when_all_leaf_runner(job_allocator* /*alloc*/, TaskType type, ResultType* out, atomic<size_t>* remaining,
+                                  async_event* done_event) -> detached_task
         {
             struct raw_task_awaiter
             {
@@ -63,38 +61,31 @@ namespace tempest::job
         auto when_all_leaf_runner(TaskType type, ResultType* out, atomic<size_t>* remaining, async_event* done_event)
             -> detached_task
         {
-            struct raw_task_awaiter
+            return when_all_leaf_runner(nullptr, tempest::move(type), out, remaining, done_event);
+        }
+
+        template <typename T, typename E>
+        auto await_when_all_vector(job_allocator* /*alloc*/, vector<expected<T, E>> results,
+                                   unique_ptr<atomic<size_t>> /*remaining*/,
+                                   unique_ptr<async_event> done_event) -> task<vector<expected<T, E>>>
+        {
+            if (done_event != nullptr)
             {
-                non_null<TaskType> child;
-
-                [[nodiscard]] auto await_ready() const noexcept -> bool
-                {
-                    return child->is_ready();
-                }
-
-                auto await_suspend(coroutine_handle<detached_task::promise_type> hnd) noexcept -> coroutine_handle<>
-                {
-                    child->handle().promise().continuation = hnd;
-                    if (child->handle().promise().session == nullptr)
-                    {
-                        child->handle().promise().session = hnd.promise().session;
-                    }
-                    child->handle().promise().awaited_by_thread_id = tempest::this_thread::get_id().to_uint64();
-                    return child->handle();
-                }
-
-                auto await_resume() noexcept -> void
-                {
-                }
-            };
-
-            co_await raw_task_awaiter{type};
-            *out = tempest::move(type.result());
-            if (remaining->fetch_sub(1, memory_order::acq_rel) == 1)
-            {
-                done_event->set();
+                co_await done_event->wait();
             }
-            co_return;
+            co_return tempest::move(results);
+        }
+
+        template <typename ResultTuple>
+        auto await_when_all_tuple(job_allocator* /*alloc*/, unique_ptr<ResultTuple> results,
+                                  unique_ptr<atomic<size_t>> /*remaining*/,
+                                  unique_ptr<async_event> done_event) -> task<ResultTuple>
+        {
+            if (done_event != nullptr)
+            {
+                co_await done_event->wait();
+            }
+            co_return tempest::move(*results);
         }
     } // namespace detail
 
@@ -102,10 +93,11 @@ namespace tempest::job
     auto when_all(job_system& sys, vector<task<T, E>> tasks, task_priority priority = task_priority::normal,
                   core_class affinity = core_class::any) -> task<vector<expected<T, E>>>
     {
-        auto count = tasks.size();
+        const auto count = tasks.size();
         if (count == 0)
         {
-            co_return vector<expected<T, E>>{};
+            return detail::await_when_all_vector<T, E>(&sys.get_dispatch_allocator(), vector<expected<T, E>>{},
+                                                       nullptr, nullptr);
         }
 
         auto results = vector<expected<T, E>>{};
@@ -120,22 +112,22 @@ namespace tempest::job
             {
                 tasks[i].set_profiler(&sys.get_profiler());
             }
-            auto runner = detail::when_all_leaf_runner(sys, tempest::move(tasks[i]), &results[i], remaining.get(),
-                                                       done_event.get());
+            auto runner = detail::when_all_leaf_runner(&sys.get_dispatch_allocator(), tempest::move(tasks[i]),
+                                                       &results[i], remaining.get(), done_event.get());
             sys.schedule(runner.handle, priority, affinity);
         }
 
-        co_await done_event->wait();
-        co_return tempest::move(results);
+        return detail::await_when_all_vector<T, E>(&sys.get_dispatch_allocator(), tempest::move(results),
+                                                   tempest::move(remaining), tempest::move(done_event));
     }
 
     template <typename T, typename E = job_error>
     auto when_all(vector<task<T, E>> tasks) -> task<vector<expected<T, E>>>
     {
-        auto count = tasks.size();
+        const auto count = tasks.size();
         if (count == 0)
         {
-            co_return vector<expected<T, E>>{};
+            return detail::await_when_all_vector<T, E>(nullptr, vector<expected<T, E>>{}, nullptr, nullptr);
         }
 
         auto results = vector<expected<T, E>>{};
@@ -151,8 +143,8 @@ namespace tempest::job
             runner.handle.resume();
         }
 
-        co_await done_event->wait();
-        co_return tempest::move(results);
+        return detail::await_when_all_vector<T, E>(nullptr, tempest::move(results), tempest::move(remaining),
+                                                   tempest::move(done_event));
     }
 
     template <typename... Tasks>
@@ -173,7 +165,8 @@ namespace tempest::job
             {
                 tsk.set_profiler(&sys.get_profiler());
             }
-            auto runner = detail::when_all_leaf_runner(sys, tempest::forward<Tsk>(tsk), out, rem, async_ev);
+            auto runner = detail::when_all_leaf_runner(&sys.get_dispatch_allocator(), tempest::forward<Tsk>(tsk), out,
+                                                       rem, async_ev);
             sys.schedule(runner.handle);
         };
 
@@ -181,8 +174,8 @@ namespace tempest::job
             (launch_leaf(tempest::forward<Tasks>(tasks), &get<Is>(*results)), ...);
         }(make_index_sequence<count>{});
 
-        co_await done_event->wait();
-        co_return tempest::move(*results);
+        return detail::await_when_all_tuple(&sys.get_dispatch_allocator(), tempest::move(results),
+                                            tempest::move(remaining), tempest::move(done_event));
     }
 
     template <typename FirstTask, typename... Tasks>
@@ -206,12 +199,12 @@ namespace tempest::job
         };
 
         launch_leaf(tempest::forward<FirstTask>(first), &get<0>(*results));
-        [&]<size_t... Is>(index_sequence<Is...>) -> auto {
+        [&]<size_t... Is>(index_sequence<Is...>) {
             (launch_leaf(tempest::forward<Tasks>(rest), &get<Is + 1>(*results)), ...);
         }(make_index_sequence<sizeof...(Tasks)>{});
 
-        co_await done_event->wait();
-        co_return tempest::move(*results);
+        return detail::await_when_all_tuple(nullptr, tempest::move(results), tempest::move(remaining),
+                                            tempest::move(done_event));
     }
 
     template <typename T, typename E>
