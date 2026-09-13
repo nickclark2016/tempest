@@ -598,7 +598,7 @@ namespace tempest::profiler
                 tz.start_ns = zr.start_ns;
                 tz.end_ns = zr.end_ns;
                 tz.depth = zr.depth;
-                tz.frame_index = zr.task_id > 0 ? zr.task_id : frame_index;
+                tz.frame_index = zr.frame_index.has_value() ? *zr.frame_index : frame_index;
                 tz.task_id = zr.task_id;
                 tz.coroutine_id = zr.coroutine_id;
                 tz.slice_index = zr.slice_index;

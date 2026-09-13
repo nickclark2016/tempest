@@ -80,6 +80,28 @@
     trackPaddingBottom: 8,
   };
 
+  // Popout State Management (Milestone 2 & 3)
+  const popoutState = {
+    isOpen: false,
+    frameIndex: null,
+    filterActiveOnly: true,
+    viewStartNs: 0,
+    viewEndNs: 0,
+    minTimeNs: 0,
+    maxTimeNs: 0,
+    selectedZone: null,
+    hoveredZone: null,
+    scrollY: 0,
+    totalContentHeight: 0,
+    isDragging: false,
+    dragStartX: 0,
+    dragStartY: 0,
+    dragStartViewStart: 0,
+    dragStartViewEnd: 0,
+    dragStartScrollY: 0,
+    tracks: [],
+  };
+
   // DOM Elements Cache
   const dom = {
     statusBadge: document.getElementById('status-badge'),
@@ -177,6 +199,50 @@
 
     // Drop Overlay
     dropOverlay: document.getElementById('drop-overlay'),
+
+    // Frame Popout Modal Elements (Milestone 2 & 3)
+    framePopoutModal: document.getElementById('frame-popout-modal'),
+    popoutFrameTitle: document.getElementById('popout-frame-title'),
+    popoutCpuPill: document.getElementById('popout-cpu-pill'),
+    popoutGpuPill: document.getElementById('popout-gpu-pill'),
+    popoutFlightPill: document.getElementById('popout-flight-pill'),
+    popoutFpsPill: document.getElementById('popout-fps-pill'),
+    popoutCpuVal: document.getElementById('popout-cpu-val'),
+    popoutGpuVal: document.getElementById('popout-gpu-val'),
+    popoutFlightVal: document.getElementById('popout-flight-val'),
+    popoutFpsVal: document.getElementById('popout-fps-val'),
+    btnPopoutPrev: document.getElementById('btn-popout-prev'),
+    btnPopoutNext: document.getElementById('btn-popout-next'),
+    btnPopoutFilterTracks: document.getElementById('btn-popout-filter-tracks'),
+    popoutActiveTracksCount: document.getElementById('popout-active-tracks-count'),
+    popoutTotalTracksCount: document.getElementById('popout-total-tracks-count'),
+    btnPopoutFit: document.getElementById('btn-popout-fit'),
+    btnPopoutClose: document.getElementById('btn-popout-close'),
+    btnInspPopoutFrame: document.getElementById('btn-insp-popout-frame'),
+    inspPopoutFrameIdx: document.getElementById('insp-popout-frame-idx'),
+    framePopoutCanvas: document.getElementById('frame-popout-canvas'),
+    framePopoutSvg: document.getElementById('frame-popout-svg'),
+    framePopoutTooltip: document.getElementById('frame-popout-tooltip'),
+
+    // Popout Footer Summary Stats
+    popoutStatCpu: document.getElementById('popout-stat-cpu'),
+    popoutStatGpu: document.getElementById('popout-stat-gpu'),
+    popoutStatFlight: document.getElementById('popout-stat-flight'),
+    popoutStatThreads: document.getElementById('popout-stat-threads'),
+    popoutStatQueues: document.getElementById('popout-stat-queues'),
+    popoutStatZones: document.getElementById('popout-stat-zones'),
+
+    // Popout Footer Mini Inspector
+    popoutInspectorPlaceholder: document.getElementById('popout-inspector-placeholder'),
+    popoutInspectorContent: document.getElementById('popout-inspector-content'),
+    popoutInspCategory: document.getElementById('popout-insp-category'),
+    popoutInspCoroutine: document.getElementById('popout-insp-coroutine'),
+    popoutInspName: document.getElementById('popout-insp-name'),
+    popoutInspTrack: document.getElementById('popout-insp-track'),
+    popoutInspDuration: document.getElementById('popout-insp-duration'),
+    popoutInspSelfTime: document.getElementById('popout-insp-self-time'),
+    popoutInspPct: document.getElementById('popout-insp-pct'),
+    popoutInspLocation: document.getElementById('popout-insp-location'),
   };
 
   // Contexts
@@ -187,6 +253,7 @@
   const frametimeCtx = dom.chartFrametime.getContext('2d');
   const memoryCtx = dom.chartMemory.getContext('2d');
   const gpuCtx = dom.chartGpu.getContext('2d');
+  const popoutCtx = dom.framePopoutCanvas ? dom.framePopoutCanvas.getContext('2d') : null;
 
   // =========================================================================
   // Formatting & Color Helpers
@@ -470,7 +537,7 @@
       for (const t of frame.gpu_tracks) {
         if (!t.zones || t.zones.length === 0) continue;
         for (const z of t.zones) {
-          const targetIdx = (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== 0)
+          const targetIdx = (z.frame_index !== undefined && z.frame_index !== null)
             ? z.frame_index
             : frame.frame_index;
 
@@ -649,7 +716,7 @@
                 spawned_by_coroutine_id: z.spawned_by_coroutine_id || 0,
                 awaited_by_thread_id: z.awaited_by_thread_id || 0,
                 awaited_by_coroutine_id: z.awaited_by_coroutine_id || 0,
-                frame_index: (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== 0) ? z.frame_index : f.frame_index,
+                frame_index: (z.frame_index !== undefined && z.frame_index !== null) ? z.frame_index : f.frame_index,
                 duration_ns: z.end_ns >= z.start_ns ? (z.end_ns - z.start_ns) : 0,
               };
               tr.zones.push(zoneObj);
@@ -698,7 +765,7 @@
                 spawned_by_coroutine_id: z.spawned_by_coroutine_id || 0,
                 awaited_by_thread_id: z.awaited_by_thread_id || 0,
                 awaited_by_coroutine_id: z.awaited_by_coroutine_id || 0,
-                frame_index: (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== 0) ? z.frame_index : f.frame_index,
+                frame_index: (z.frame_index !== undefined && z.frame_index !== null) ? z.frame_index : f.frame_index,
                 duration_ns: z.end_ns >= z.start_ns ? (z.end_ns - z.start_ns) : 0,
               };
               tr.zones.push(zoneObj);
@@ -1641,8 +1708,16 @@
 
             ctx.fillStyle = isHovered ? '#a371f7' : 'rgba(88, 166, 255, 0.95)';
             ctx.fillText(tag, x0 + 5, tagY);
+
+            frame.cpuBadgeRect = { x: x0 + 2, y: tagY - 10, w: tagW + 6, h: 14 };
+          } else {
+            frame.cpuBadgeRect = null;
           }
+        } else {
+          frame.cpuBadgeRect = null;
         }
+      } else {
+        frame.cpuBadgeRect = null;
       }
 
       // 2. GPU Frame Boundary
@@ -1675,8 +1750,16 @@
 
             ctx.fillStyle = isHovered ? '#39c5bb' : 'rgba(57, 197, 187, 0.95)';
             ctx.fillText(tag, gx0 + 5, gtagY);
+
+            frame.gpuBadgeRect = { x: gx0 + 2, y: gtagY - 10, w: tagW + 6, h: 14 };
+          } else {
+            frame.gpuBadgeRect = null;
           }
+        } else {
+          frame.gpuBadgeRect = null;
         }
+      } else {
+        frame.gpuBadgeRect = null;
       }
 
       // 3. Correlation Indicator for Hovered Frame
@@ -1840,7 +1923,7 @@
 
   function findParentFrame(zone) {
     if (!zone) return null;
-    if (zone.frame_index !== undefined && zone.frame_index !== null && zone.frame_index !== 0) {
+    if (zone.frame_index !== undefined && zone.frame_index !== null) {
       const found = state.frames.find(f => f.frame_index === zone.frame_index);
       if (found) return found;
     }
@@ -1989,6 +2072,9 @@
       state.selectedStatsRow = null;
       dom.inspectorPlaceholder.style.display = 'flex';
       dom.inspectorDetails.style.display = 'none';
+      if (dom.btnInspPopoutFrame) {
+        dom.btnInspPopoutFrame.style.display = 'none';
+      }
       renderHistogram(null);
       render();
       return;
@@ -2033,6 +2119,20 @@
     const frameDur = getFrameDurationForZone(zone, parentFrame);
     const framePct = frameDur > 0 ? ((totalDur / frameDur) * 100).toFixed(2) : '0.00';
     dom.inspFramePct.textContent = `${framePct}%`;
+
+    // Pop Out Frame Button in Inspector Header
+    if (dom.btnInspPopoutFrame && dom.inspPopoutFrameIdx) {
+      if (parentFrame) {
+        dom.btnInspPopoutFrame.style.display = 'inline-flex';
+        dom.inspPopoutFrameIdx.textContent = parentFrame.frame_index;
+        dom.btnInspPopoutFrame.onclick = (e) => {
+          e.stopPropagation();
+          openFramePopout(parentFrame.frame_index);
+        };
+      } else {
+        dom.btnInspPopoutFrame.style.display = 'none';
+      }
+    }
 
     dom.inspDepth.textContent = `Level ${zone.depth}`;
 
@@ -2164,8 +2264,10 @@
 
   function calculateSelfTime(zone) {
     if (!zone) return 0;
-    const track = state.tracks.find(t => t.id === zone.trackId);
-    if (!track) return zone.duration_ns;
+    const track = state.tracks.find(t => t.id === zone.trackId) ||
+      (popoutState && popoutState.tracks ? popoutState.tracks.find(t => t.id === zone.trackId || (t.zones && t.zones.includes(zone))) : null) ||
+      state.tracks.find(t => t.zones && t.zones.includes(zone));
+    if (!track || !track.zones) return zone.duration_ns;
 
     let childrenDurSum = 0;
     for (const other of track.zones) {
@@ -2520,6 +2622,654 @@
   }
 
   // =========================================================================
+  // Frame Popout Overlay Module (Milestone 2 & 3)
+  // =========================================================================
+
+  function openFramePopout(frameIndex) {
+    const frame = state.frames.find(f => f.frame_index === frameIndex);
+    if (!frame) return;
+
+    popoutState.isOpen = true;
+    popoutState.frameIndex = frame.frame_index;
+    popoutState.selectedZone = null;
+    popoutState.hoveredZone = null;
+    popoutState.scrollY = 0;
+
+    // Calculate unified time bounds strictly for this frame
+    let frameStartNs = Infinity;
+    let frameEndNs = -Infinity;
+
+    if (frame.cpuStartNs !== null && frame.cpuStartNs !== undefined) frameStartNs = Math.min(frameStartNs, frame.cpuStartNs);
+    if (frame.gpuStartNs !== null && frame.gpuStartNs !== undefined) frameStartNs = Math.min(frameStartNs, frame.gpuStartNs);
+    if (frame.cpuEndNs !== null && frame.cpuEndNs !== undefined) frameEndNs = Math.max(frameEndNs, frame.cpuEndNs);
+    if (frame.gpuEndNs !== null && frame.gpuEndNs !== undefined) frameEndNs = Math.max(frameEndNs, frame.gpuEndNs);
+
+    // Scan all zones assigned to this frame to guarantee exact bounds
+    for (const track of state.tracks) {
+      for (const z of (track.zones || [])) {
+        if (z.frame_index === frame.frame_index) {
+          if (z.start_ns < frameStartNs) frameStartNs = z.start_ns;
+          if (z.end_ns > frameEndNs) frameEndNs = z.end_ns;
+        }
+      }
+    }
+
+    if (frameStartNs === Infinity || frameEndNs === -Infinity) {
+      frameStartNs = state.minTimeNs;
+      frameEndNs = state.maxTimeNs;
+    }
+
+    popoutState.minTimeNs = frameStartNs;
+    popoutState.maxTimeNs = frameEndNs;
+
+    const duration = Math.max(1000, frameEndNs - frameStartNs);
+    const margin = duration * 0.05;
+    popoutState.viewStartNs = frameStartNs - margin;
+    popoutState.viewEndNs = frameEndNs + margin;
+
+    // Populate header elements
+    dom.popoutFrameTitle.textContent = `FRAME #${frame.frame_index}`;
+    dom.popoutCpuVal.textContent = formatTime(frame.cpuDurationNs || 0);
+    dom.popoutGpuVal.textContent = formatTime(frame.gpuDurationNs || 0);
+
+    const flightNs = (frame.gpuStartNs !== null && frame.cpuEndNs !== null && frame.gpuStartNs >= frame.cpuEndNs)
+      ? (frame.gpuStartNs - frame.cpuEndNs)
+      : ((frame.gpuStartNs !== null && frame.cpuStartNs !== null) ? Math.max(0, frame.gpuStartNs - frame.cpuStartNs) : 0);
+    dom.popoutFlightVal.textContent = (frame.gpuStartNs !== null && (frame.cpuEndNs !== null || frame.cpuStartNs !== null)) ? formatTime(flightNs) : 'N/A';
+
+    const ftMs = (frame.cpuDurationNs && frame.cpuDurationNs > 0)
+      ? (frame.cpuDurationNs / 1000000)
+      : ((frame.gpuDurationNs && frame.gpuDurationNs > 0) ? (frame.gpuDurationNs / 1000000) : 16.6);
+    const fps = ftMs > 0 ? (1000 / ftMs) : 0;
+    dom.popoutFpsVal.textContent = `${ftMs.toFixed(2)} ms (${fps.toFixed(1)} FPS)`;
+
+    // Prev / Next button states
+    const curIdx = state.frames.findIndex(f => f.frame_index === frame.frame_index);
+    dom.btnPopoutPrev.disabled = (curIdx <= 0);
+    dom.btnPopoutNext.disabled = (curIdx === -1 || curIdx >= state.frames.length - 1);
+
+    // Reset mini-inspector
+    dom.popoutInspectorPlaceholder.style.display = 'flex';
+    dom.popoutInspectorContent.style.display = 'none';
+
+    // Populate tracks and stats
+    refreshPopoutTracks();
+
+    // Show modal
+    dom.framePopoutModal.style.display = 'flex';
+
+    requestAnimationFrame(() => renderPopoutTimeline());
+  }
+
+  function closeFramePopout() {
+    popoutState.isOpen = false;
+    dom.framePopoutModal.style.display = 'none';
+    dom.framePopoutTooltip.style.display = 'none';
+    popoutState.hoveredZone = null;
+    popoutState.selectedZone = null;
+  }
+
+  function navigatePopoutFrame(direction) {
+    if (state.frames.length === 0) return;
+    const curIdx = state.frames.findIndex(f => f.frame_index === popoutState.frameIndex);
+    const targetIdx = curIdx + direction;
+    if (targetIdx >= 0 && targetIdx < state.frames.length) {
+      openFramePopout(state.frames[targetIdx].frame_index);
+    }
+  }
+
+  function fitPopoutTimeline() {
+    if (popoutState.maxTimeNs > popoutState.minTimeNs) {
+      const duration = popoutState.maxTimeNs - popoutState.minTimeNs;
+      const margin = duration * 0.05;
+      popoutState.viewStartNs = popoutState.minTimeNs - margin;
+      popoutState.viewEndNs = popoutState.maxTimeNs + margin;
+      popoutState.scrollY = 0;
+      renderPopoutTimeline();
+    }
+  }
+
+  function refreshPopoutTracks() {
+    const frame = state.frames.find(f => f.frame_index === popoutState.frameIndex);
+    if (!frame) return;
+
+    const allTracks = [];
+    let activeTracksCount = 0;
+    let activeThreadsCount = 0;
+    let activeQueuesCount = 0;
+    let totalZonesCount = 0;
+
+    for (const track of state.tracks) {
+      const frameZones = (track.zones || []).filter(z => {
+        // Strictly filter to zones belonging to this frame only, completely excluding overlapping frames
+        if (z.frame_index !== undefined && z.frame_index !== null) {
+          return z.frame_index === frame.frame_index;
+        }
+        const pf = findParentFrame(z);
+        return pf && pf.frame_index === frame.frame_index;
+      });
+
+      const isActive = frameZones.length > 0;
+      if (isActive) {
+        activeTracksCount++;
+        if (track.type === 'cpu') activeThreadsCount++;
+        else if (track.type === 'gpu') activeQueuesCount++;
+        totalZonesCount += frameZones.length;
+      }
+
+      let maxDepth = 0;
+      for (const z of frameZones) {
+        if (z.depth !== undefined && z.depth > maxDepth) maxDepth = z.depth;
+      }
+
+      allTracks.push({
+        id: track.id,
+        track_id: track.track_id,
+        name: track.name,
+        type: track.type,
+        zones: frameZones,
+        maxDepth,
+        isActive,
+      });
+    }
+
+    // Sort tracks: CPU first (Main Thread at top), GPU second (Graphics Queue first)
+    allTracks.sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === 'cpu' ? -1 : 1;
+      }
+      const aName = (a.name || '').toLowerCase();
+      const bName = (b.name || '').toLowerCase();
+      if (a.type === 'cpu') {
+        const aIsMain = aName.includes('main');
+        const bIsMain = bName.includes('main');
+        if (aIsMain !== bIsMain) return aIsMain ? -1 : 1;
+        return aName.localeCompare(bName);
+      } else {
+        const aIsGfx = aName.includes('graphics');
+        const bIsGfx = bName.includes('graphics');
+        if (aIsGfx !== bIsGfx) return aIsGfx ? -1 : 1;
+        return aName.localeCompare(bName);
+      }
+    });
+
+    const totalTracksCount = allTracks.length;
+    if (popoutState.filterActiveOnly) {
+      popoutState.tracks = allTracks.filter(t => t.isActive);
+    } else {
+      popoutState.tracks = allTracks;
+    }
+
+    if (popoutState.filterActiveOnly) {
+      dom.btnPopoutFilterTracks.classList.add('active');
+    } else {
+      dom.btnPopoutFilterTracks.classList.remove('active');
+    }
+    dom.btnPopoutFilterTracks.innerHTML = `Showing <span id="popout-active-tracks-count">${activeTracksCount}</span> / <span id="popout-total-tracks-count">${totalTracksCount}</span> Tracks (${popoutState.filterActiveOnly ? 'Active' : 'All'})`;
+    dom.popoutActiveTracksCount = document.getElementById('popout-active-tracks-count');
+    dom.popoutTotalTracksCount = document.getElementById('popout-total-tracks-count');
+
+    // Populate footer performance summary
+    dom.popoutStatCpu.textContent = formatTime(frame.cpuDurationNs || 0);
+    dom.popoutStatGpu.textContent = formatTime(frame.gpuDurationNs || 0);
+    const flightNs = (frame.gpuStartNs !== null && frame.cpuEndNs !== null && frame.gpuStartNs >= frame.cpuEndNs)
+      ? (frame.gpuStartNs - frame.cpuEndNs)
+      : ((frame.gpuStartNs !== null && frame.cpuStartNs !== null) ? Math.max(0, frame.gpuStartNs - frame.cpuStartNs) : 0);
+    dom.popoutStatFlight.textContent = (frame.gpuStartNs !== null && (frame.cpuEndNs !== null || frame.cpuStartNs !== null)) ? formatTime(flightNs) : 'N/A';
+    dom.popoutStatThreads.textContent = activeThreadsCount.toString();
+    dom.popoutStatQueues.textContent = activeQueuesCount.toString();
+    dom.popoutStatZones.textContent = totalZonesCount.toString();
+  }
+
+  function renderPopoutTimeline() {
+    if (!popoutState.isOpen || !popoutCtx) return;
+
+    const { width, height } = resizeCanvas(dom.framePopoutCanvas, popoutCtx);
+    popoutCtx.clearRect(0, 0, width, height);
+    if (width <= 0 || height <= 0) return;
+
+    const visibleDuration = popoutState.viewEndNs - popoutState.viewStartNs;
+    if (visibleDuration <= 0) return;
+    const nsToX = (ns) => ((ns - popoutState.viewStartNs) / visibleDuration) * width;
+
+    // 1. Grid
+    renderPopoutGrid(popoutCtx, width, height, nsToX, visibleDuration);
+
+    // 2. Tracks rendering with AGENTS.md Rule 25 layout
+    popoutCtx.save();
+    popoutCtx.beginPath();
+    popoutCtx.rect(0, state.rulerHeight, width, height - state.rulerHeight);
+    popoutCtx.clip();
+
+    let currentY = state.rulerHeight - popoutState.scrollY;
+    const frameObj = state.frames.find(f => f.frame_index === popoutState.frameIndex);
+
+    for (const track of popoutState.tracks) {
+      const isCollapsed = state.collapsedTracks.has(track.id);
+      const depthCount = isCollapsed ? 1 : (track.maxDepth + 1);
+      const zonesAreaHeight = isCollapsed ? 0 : (depthCount * (state.zoneHeight + state.zoneSpacing) + 6);
+      const trackHeight = state.trackHeaderHeight + state.frameHeaderHeight + zonesAreaHeight + state.trackPaddingBottom;
+
+      track.popoutRenderY = currentY;
+      track.popoutRenderHeight = trackHeight;
+
+      if (currentY + trackHeight >= state.rulerHeight && currentY <= height) {
+        const isGpu = track.type === 'gpu';
+
+        // 1. Horizontal separator
+        popoutCtx.fillStyle = '#30363d';
+        popoutCtx.fillRect(0, currentY, width, 1);
+
+        // 2. Lane 1: Track Header Strip (22px)
+        popoutCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.12)' : '#161b22';
+        popoutCtx.fillRect(0, currentY + 1, width, state.trackHeaderHeight - 1);
+
+        popoutCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.25)' : '#21262d';
+        popoutCtx.fillRect(0, currentY + state.trackHeaderHeight, width, 1);
+
+        popoutCtx.fillStyle = isGpu ? '#39c5bb' : '#8b949e';
+        popoutCtx.font = '11px sans-serif';
+        popoutCtx.fillText(isCollapsed ? '▶' : '▼', 8, currentY + 15);
+
+        popoutCtx.fillStyle = isGpu ? '#39c5bb' : '#58a6ff';
+        popoutCtx.font = 'bold 11px monospace';
+        let displayName = track.name;
+        if (isGpu) {
+          if (displayName.startsWith('GPU: ')) displayName = displayName.substring(5);
+          else if (displayName.startsWith('GPU:')) displayName = displayName.substring(4);
+        }
+        const trackTitle = isGpu ? `[GPU] ${displayName}` : displayName.toUpperCase();
+        popoutCtx.fillText(trackTitle, 24, currentY + 15);
+
+        popoutCtx.fillStyle = isGpu ? '#7ee787' : '#6e7681';
+        popoutCtx.font = '10px monospace';
+        popoutCtx.fillText(`(${track.zones.length} zones)`, 24 + popoutCtx.measureText(trackTitle).width + 8, currentY + 15);
+
+        // 3. Lane 2: Frame Header Lane (18px)
+        popoutCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.02)' : 'rgba(88, 166, 255, 0.02)';
+        popoutCtx.fillRect(0, currentY + state.trackHeaderHeight + 1, width, state.frameHeaderHeight - 1);
+
+        if (frameObj) {
+          const fStart = isGpu ? frameObj.gpuStartNs : frameObj.cpuStartNs;
+          const fEnd = isGpu ? frameObj.gpuEndNs : frameObj.cpuEndNs;
+          const fDur = isGpu ? frameObj.gpuDurationNs : frameObj.cpuDurationNs;
+          if (fStart !== null && fEnd !== null) {
+            const bx0 = nsToX(fStart);
+            const bx1 = nsToX(fEnd);
+            const bw = Math.max(1, bx1 - bx0);
+            const pillText = `${isGpu ? 'GPU' : 'CPU'} #${popoutState.frameIndex} (${formatTime(fDur || 0)})`;
+            popoutCtx.font = 'bold 9px monospace';
+            const pw = popoutCtx.measureText(pillText).width;
+            const py = currentY + state.trackHeaderHeight + 13;
+
+            popoutCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.16)' : 'rgba(88, 166, 255, 0.12)';
+            popoutCtx.fillRect(bx0, currentY + state.trackHeaderHeight + 1, bw, state.frameHeaderHeight - 1);
+
+            popoutCtx.fillStyle = 'rgba(22, 27, 34, 0.9)';
+            popoutCtx.fillRect(bx0 + 4, py - 10, pw + 6, 14);
+            popoutCtx.strokeStyle = isGpu ? '#39c5bb' : '#58a6ff';
+            popoutCtx.lineWidth = 1;
+            popoutCtx.strokeRect(bx0 + 4, py - 10, pw + 6, 14);
+
+            popoutCtx.fillStyle = isGpu ? '#39c5bb' : '#58a6ff';
+            popoutCtx.fillText(pillText, bx0 + 7, py);
+          }
+        }
+
+        // 4. Lane 3: Call Stack Zone Area (Rule 25 offset)
+        if (!isCollapsed) {
+          let lastDrawnPixel = -1;
+          for (const zone of track.zones) {
+            const zStartX = nsToX(zone.start_ns);
+            const zEndX = nsToX(zone.end_ns);
+            const zWidth = Math.max(0.5, zEndX - zStartX);
+
+            if (zEndX < 0 || zStartX > width) continue;
+
+            const rowY = currentY + state.trackHeaderHeight + state.frameHeaderHeight + 4 + zone.depth * (state.zoneHeight + state.zoneSpacing);
+
+            zone.popoutRenderX = zStartX;
+            zone.popoutRenderY = rowY;
+            zone.popoutRenderW = Math.max(1, zWidth);
+
+            const pixelBucket = Math.floor(zStartX);
+            if (zWidth < 0.8 && pixelBucket === lastDrawnPixel) continue;
+            lastDrawnPixel = pixelBucket;
+
+            const isSelected = (popoutState.selectedZone === zone);
+            const isHovered = (popoutState.hoveredZone === zone);
+
+            if (zone.isWait) {
+              popoutCtx.save();
+              popoutCtx.beginPath();
+              popoutCtx.rect(zStartX, rowY, Math.max(1, zWidth), state.zoneHeight);
+              popoutCtx.clip();
+              popoutCtx.fillStyle = 'rgba(110, 118, 129, 0.18)';
+              popoutCtx.fillRect(zStartX, rowY, Math.max(1, zWidth), state.zoneHeight);
+              popoutCtx.strokeStyle = 'rgba(139, 148, 158, 0.45)';
+              popoutCtx.lineWidth = 1;
+              const step = 8;
+              for (let hx = zStartX - state.zoneHeight; hx < zStartX + zWidth; hx += step) {
+                popoutCtx.beginPath();
+                popoutCtx.moveTo(hx, rowY + state.zoneHeight);
+                popoutCtx.lineTo(hx + state.zoneHeight, rowY);
+                popoutCtx.stroke();
+              }
+              popoutCtx.restore();
+            } else {
+              popoutCtx.fillStyle = getZoneColor(zone.name, zone.category || track.type);
+              popoutCtx.fillRect(zStartX, rowY, Math.max(1, zWidth), state.zoneHeight);
+            }
+
+            if (isSelected) {
+              popoutCtx.strokeStyle = '#58a6ff';
+              popoutCtx.lineWidth = 2;
+              popoutCtx.strokeRect(zStartX, rowY, Math.max(1, zWidth), state.zoneHeight);
+            } else if (isHovered) {
+              popoutCtx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+              popoutCtx.fillRect(zStartX, rowY, Math.max(1, zWidth), state.zoneHeight);
+            }
+
+            if (zWidth > 28) {
+              popoutCtx.save();
+              popoutCtx.beginPath();
+              popoutCtx.rect(zStartX, rowY, zWidth, state.zoneHeight);
+              popoutCtx.clip();
+
+              popoutCtx.fillStyle = zone.isWait ? '#8b949e' : '#ffffff';
+              popoutCtx.font = '10px monospace';
+              const coroPrefix = (zone.coroutine_id && zone.coroutine_id > 0) ? '⟳ ' : '';
+              const label = `${coroPrefix}${zone.name} (${formatTime(zone.duration_ns)})`;
+              popoutCtx.fillText(label, zStartX + 4, rowY + 12);
+              popoutCtx.restore();
+            }
+          }
+        }
+      }
+
+      currentY += trackHeight;
+    }
+
+    popoutState.totalContentHeight = currentY + popoutState.scrollY;
+
+    // 3. Visual flight latency connector line/arrow from CPU frame end to GPU frame start
+    if (frameObj && frameObj.cpuEndNs !== null && frameObj.gpuStartNs !== null) {
+      let cpuBottomY = -1;
+      let gpuTopY = Infinity;
+
+      for (const t of popoutState.tracks) {
+        if (t.popoutRenderY === undefined || t.popoutRenderHeight === undefined) continue;
+        if (t.type === 'cpu') {
+          const b = t.popoutRenderY + t.popoutRenderHeight;
+          if (b > cpuBottomY) cpuBottomY = b;
+        } else if (t.type === 'gpu') {
+          if (t.popoutRenderY < gpuTopY) gpuTopY = t.popoutRenderY;
+        }
+      }
+
+      const cpuEndX = nsToX(frameObj.cpuEndNs);
+      const gpuStartX = nsToX(frameObj.gpuStartNs);
+
+      const midY = (cpuBottomY > 0 && gpuTopY < Infinity && gpuTopY >= cpuBottomY)
+        ? (cpuBottomY + gpuTopY) / 2
+        : Math.max(state.rulerHeight + 20, Math.min(height - 20, height / 2));
+      const startY = (cpuBottomY > 0 && cpuBottomY < height) ? cpuBottomY : state.rulerHeight;
+      const endY = (gpuTopY < Infinity && gpuTopY > 0) ? gpuTopY : height;
+
+      popoutCtx.strokeStyle = '#f0883e';
+      popoutCtx.lineWidth = 1.5;
+      popoutCtx.setLineDash([3, 3]);
+      popoutCtx.beginPath();
+      popoutCtx.moveTo(cpuEndX, startY);
+      popoutCtx.lineTo(cpuEndX, midY);
+      popoutCtx.lineTo(gpuStartX, midY);
+      popoutCtx.lineTo(gpuStartX, endY);
+      popoutCtx.stroke();
+      popoutCtx.setLineDash([]);
+
+      // Arrowhead at (gpuStartX, endY) pointing down
+      popoutCtx.fillStyle = '#f0883e';
+      popoutCtx.beginPath();
+      popoutCtx.moveTo(gpuStartX, endY);
+      popoutCtx.lineTo(gpuStartX - 4, endY - 7);
+      popoutCtx.lineTo(gpuStartX + 4, endY - 7);
+      popoutCtx.closePath();
+      popoutCtx.fill();
+
+      // Flight badge
+      const flightNs = (frameObj.cpuEndNs !== null && frameObj.gpuStartNs >= frameObj.cpuEndNs)
+        ? (frameObj.gpuStartNs - frameObj.cpuEndNs)
+        : Math.max(0, frameObj.gpuStartNs - frameObj.cpuStartNs);
+      const latencyLabel = `Flight: ${formatTime(flightNs)}`;
+      popoutCtx.font = 'bold 9px monospace';
+      const textW = popoutCtx.measureText(latencyLabel).width;
+      const textX = Math.min(cpuEndX, gpuStartX) + Math.abs(gpuStartX - cpuEndX) / 2 - textW / 2;
+
+      popoutCtx.fillStyle = 'rgba(22, 27, 34, 0.95)';
+      popoutCtx.fillRect(textX - 3, midY - 7, textW + 6, 14);
+      popoutCtx.strokeStyle = '#f0883e';
+      popoutCtx.lineWidth = 1;
+      popoutCtx.strokeRect(textX - 3, midY - 7, textW + 6, 14);
+
+      popoutCtx.fillStyle = '#f0883e';
+      popoutCtx.fillText(latencyLabel, textX, midY + 4);
+    }
+
+    popoutCtx.restore();
+
+    // 4. Sticky Top Ruler
+    renderPopoutRuler(popoutCtx, width, nsToX, visibleDuration);
+  }
+
+  function renderPopoutGrid(ctx, width, height, nsToX, visibleDuration) {
+    const stepNs = calculateNiceTimeStep(visibleDuration, width);
+    const startStep = Math.floor(popoutState.viewStartNs / stepNs) * stepNs;
+
+    ctx.strokeStyle = 'rgba(48, 54, 61, 0.4)';
+    ctx.lineWidth = 1;
+
+    for (let ns = startStep; ns <= popoutState.viewEndNs; ns += stepNs) {
+      const x = nsToX(ns);
+      if (x < 0 || x > width) continue;
+
+      ctx.beginPath();
+      ctx.moveTo(x, state.rulerHeight);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+  }
+
+  function renderPopoutRuler(ctx, width, nsToX, visibleDuration) {
+    ctx.fillStyle = '#161b22';
+    ctx.fillRect(0, 0, width, state.rulerHeight);
+
+    ctx.strokeStyle = '#30363d';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, state.rulerHeight);
+    ctx.lineTo(width, state.rulerHeight);
+    ctx.stroke();
+
+    const stepNs = calculateNiceTimeStep(visibleDuration, width);
+    const startStep = Math.floor(popoutState.viewStartNs / stepNs) * stepNs;
+
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '10px monospace';
+    ctx.textBaseline = 'middle';
+
+    for (let ns = startStep; ns <= popoutState.viewEndNs; ns += stepNs) {
+      const x = nsToX(ns);
+      if (x < 0 || x > width) continue;
+
+      ctx.strokeStyle = '#6e7681';
+      ctx.beginPath();
+      ctx.moveTo(x, state.rulerHeight - 6);
+      ctx.lineTo(x, state.rulerHeight);
+      ctx.stroke();
+
+      const relNs = ns - popoutState.minTimeNs;
+      let label = formatTime(relNs);
+      if (relNs > 0) label = '+' + label;
+      else if (relNs === 0) label = '0.00 ms (t=0)';
+      ctx.fillText(label, x + 4, state.rulerHeight / 2);
+    }
+  }
+
+  function hitTestPopout(mouseX, mouseY) {
+    if (mouseY < state.rulerHeight) return null;
+    const width = dom.framePopoutCanvas.width / (window.devicePixelRatio || 1);
+    const visibleDuration = popoutState.viewEndNs - popoutState.viewStartNs;
+    if (visibleDuration <= 0) return null;
+    const nsToX = (ns) => ((ns - popoutState.viewStartNs) / visibleDuration) * width;
+
+    let currentY = state.rulerHeight - popoutState.scrollY;
+
+    for (const track of popoutState.tracks) {
+      const isCollapsed = state.collapsedTracks.has(track.id);
+      const depthCount = isCollapsed ? 1 : (track.maxDepth + 1);
+      const zonesAreaHeight = isCollapsed ? 0 : (depthCount * (state.zoneHeight + state.zoneSpacing) + 6);
+      const trackHeight = state.trackHeaderHeight + state.frameHeaderHeight + zonesAreaHeight + state.trackPaddingBottom;
+
+      if (mouseY >= currentY && mouseY < currentY + state.trackHeaderHeight) {
+        return { type: 'header', track };
+      }
+
+      if (!isCollapsed && mouseY >= currentY + state.trackHeaderHeight + state.frameHeaderHeight && mouseY < currentY + trackHeight) {
+        for (const zone of track.zones) {
+          const rowY = currentY + state.trackHeaderHeight + state.frameHeaderHeight + 4 + zone.depth * (state.zoneHeight + state.zoneSpacing);
+          if (mouseY >= rowY && mouseY <= rowY + state.zoneHeight) {
+            const zStartX = nsToX(zone.start_ns);
+            const zEndX = nsToX(zone.end_ns);
+            const zWidth = Math.max(1, zEndX - zStartX);
+
+            if (mouseX >= zStartX && mouseX <= zStartX + zWidth) {
+              return { type: 'zone', zone, track };
+            }
+          }
+        }
+      }
+
+      currentY += trackHeight;
+    }
+
+    return null;
+  }
+
+  function handlePopoutHover(mouseX, mouseY) {
+    if (mouseY < state.rulerHeight) {
+      dom.framePopoutTooltip.style.display = 'none';
+      popoutState.hoveredZone = null;
+      dom.framePopoutCanvas.style.cursor = 'default';
+      renderPopoutTimeline();
+      return;
+    }
+
+    const hit = hitTestPopout(mouseX, mouseY);
+    if (hit && hit.type === 'header') {
+      dom.framePopoutCanvas.style.cursor = 'pointer';
+      dom.framePopoutTooltip.style.display = 'none';
+      popoutState.hoveredZone = null;
+      renderPopoutTimeline();
+      return;
+    }
+
+    if (hit && hit.type === 'zone') {
+      popoutState.hoveredZone = hit.zone;
+      dom.framePopoutCanvas.style.cursor = 'pointer';
+      const z = hit.zone;
+
+      const bodyRect = dom.framePopoutCanvas.getBoundingClientRect();
+      dom.framePopoutTooltip.style.display = 'block';
+      dom.framePopoutTooltip.style.left = `${Math.min(bodyRect.width - 260, mouseX + 16)}px`;
+      dom.framePopoutTooltip.style.top = `${Math.min(bodyRect.height - 120, mouseY + 16)}px`;
+
+      const selfTime = calculateSelfTime(z);
+      const totalDur = z.duration_ns;
+      const selfPct = totalDur > 0 ? ((selfTime / totalDur) * 100).toFixed(1) : '100.0';
+
+      dom.framePopoutTooltip.innerHTML = `
+        <div class="tt-title">${z.name}</div>
+        <div class="tt-row"><span>Duration:</span><span class="tt-val">${formatTime(z.duration_ns)}</span></div>
+        <div class="tt-row"><span>Self-Time:</span><span class="tt-val">${formatTime(selfTime)} (${selfPct}%)</span></div>
+        <div class="tt-row"><span>Start Time:</span><span class="tt-val">${formatTime(z.start_ns - popoutState.minTimeNs)} (rel)</span></div>
+        <div class="tt-row"><span>Track:</span><span>${z.trackName || (hit.track ? hit.track.name : 'Track')}</span></div>
+        <div class="tt-row"><span>Depth:</span><span>${z.depth || 0}</span></div>
+        ${(z.coroutine_id && z.coroutine_id > 0) ? `<div class="tt-row"><span>Coroutine:</span><span class="tt-val">#${z.coroutine_id}</span></div>` : ''}
+      `;
+    } else {
+      dom.framePopoutTooltip.style.display = 'none';
+      popoutState.hoveredZone = null;
+      dom.framePopoutCanvas.style.cursor = 'default';
+    }
+    renderPopoutTimeline();
+  }
+
+  function handlePopoutClick(mouseX, mouseY) {
+    const hit = hitTestPopout(mouseX, mouseY);
+    if (!hit) {
+      selectPopoutZone(null);
+      return;
+    }
+
+    if (hit.type === 'header') {
+      if (state.collapsedTracks.has(hit.track.id)) {
+        state.collapsedTracks.delete(hit.track.id);
+      } else {
+        state.collapsedTracks.add(hit.track.id);
+      }
+      renderPopoutTimeline();
+    } else if (hit.type === 'zone') {
+      selectPopoutZone(hit.zone);
+    }
+  }
+
+  function selectPopoutZone(zone) {
+    popoutState.selectedZone = zone;
+    if (!zone) {
+      dom.popoutInspectorPlaceholder.style.display = 'flex';
+      dom.popoutInspectorContent.style.display = 'none';
+      renderPopoutTimeline();
+      return;
+    }
+
+    dom.popoutInspectorPlaceholder.style.display = 'none';
+    dom.popoutInspectorContent.style.display = 'block';
+
+    const frame = state.frames.find(f => f.frame_index === popoutState.frameIndex);
+    const category = (zone.category || zone.trackType || 'cpu').toUpperCase();
+    dom.popoutInspCategory.textContent = category;
+    dom.popoutInspCategory.className = `category-pill ${category.toLowerCase()}`;
+
+    if (zone.coroutine_id && zone.coroutine_id > 0) {
+      dom.popoutInspCoroutine.style.display = 'inline-block';
+      dom.popoutInspCoroutine.textContent = `COROUTINE #${zone.coroutine_id}`;
+    } else {
+      dom.popoutInspCoroutine.style.display = 'none';
+    }
+
+    dom.popoutInspName.textContent = zone.name;
+    dom.popoutInspTrack.textContent = `${zone.trackName || 'Track'} (Depth ${zone.depth || 0})`;
+
+    const totalDur = zone.duration_ns;
+    dom.popoutInspDuration.textContent = formatTime(totalDur);
+
+    const selfTime = calculateSelfTime(zone);
+    const selfPct = totalDur > 0 ? ((selfTime / totalDur) * 100).toFixed(1) : '100.0';
+    dom.popoutInspSelfTime.textContent = `${formatTime(selfTime)} (${selfPct}%)`;
+
+    const frameDur = getFrameDurationForZone(zone, frame);
+    const framePct = frameDur > 0 ? ((totalDur / frameDur) * 100).toFixed(2) : '0.00';
+    dom.popoutInspPct.textContent = `${framePct}%`;
+
+    dom.popoutInspLocation.textContent = (zone.location && (zone.location.file || zone.location.line))
+      ? `${zone.location.file || 'source.cpp'}:${zone.location.line || 0}`
+      : (zone.coroutine_id ? `Coroutine #${zone.coroutine_id}` : 'native');
+    dom.popoutInspLocation.title = dom.popoutInspLocation.textContent;
+
+    renderPopoutTimeline();
+  }
+
+  // =========================================================================
   // User Input & Canvas Interaction Handlers
   // =========================================================================
 
@@ -2577,6 +3327,23 @@
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
+      if (popoutState.isDragging && dom.framePopoutCanvas) {
+        const rect = dom.framePopoutCanvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const deltaX = mouseX - popoutState.dragStartX;
+        const deltaY = mouseY - popoutState.dragStartY;
+
+        const visibleDuration = popoutState.dragStartViewEnd - popoutState.dragStartViewStart;
+        const nsPerPixel = visibleDuration / rect.width;
+        popoutState.viewStartNs = popoutState.dragStartViewStart - deltaX * nsPerPixel;
+        popoutState.viewEndNs = popoutState.dragStartViewEnd - deltaX * nsPerPixel;
+
+        popoutState.scrollY = Math.max(0, popoutState.dragStartScrollY - deltaY);
+        renderPopoutTimeline();
+        return;
+      }
+
       if (state.isDragging) {
         const deltaX = mouseX - state.dragStartX;
         const deltaY = mouseY - state.dragStartY;
@@ -2608,6 +3375,21 @@
 
     // Mouse Up
     window.addEventListener('mouseup', (e) => {
+      if (popoutState.isDragging && dom.framePopoutCanvas) {
+        const rect = dom.framePopoutCanvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const moveDist = Math.hypot(mouseX - popoutState.dragStartX, mouseY - popoutState.dragStartY);
+
+        if (moveDist < 4) {
+          handlePopoutClick(mouseX, mouseY);
+        }
+
+        popoutState.isDragging = false;
+        renderPopoutTimeline();
+        return;
+      }
+
       if (state.isDragging) {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
@@ -2624,6 +3406,56 @@
       }
     });
 
+    // Frame Popout Canvas Events (Milestone 2 & 3)
+    if (dom.framePopoutCanvas) {
+      const pCanvas = dom.framePopoutCanvas;
+
+      pCanvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = pCanvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const visibleDuration = popoutState.viewEndNs - popoutState.viewStartNs;
+        const mouseTimeNs = popoutState.viewStartNs + (mouseX / rect.width) * visibleDuration;
+
+        const zoomFactor = e.deltaY < 0 ? 0.75 : 1.33;
+        const newDuration = Math.max(100, Math.min(1e12, visibleDuration * zoomFactor));
+
+        const mouseRatio = mouseX / rect.width;
+        popoutState.viewStartNs = mouseTimeNs - mouseRatio * newDuration;
+        popoutState.viewEndNs = popoutState.viewStartNs + newDuration;
+
+        renderPopoutTimeline();
+      }, { passive: false });
+
+      pCanvas.addEventListener('mousedown', (e) => {
+        const rect = pCanvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        popoutState.isDragging = true;
+        popoutState.dragStartX = mouseX;
+        popoutState.dragStartY = mouseY;
+        popoutState.dragStartViewStart = popoutState.viewStartNs;
+        popoutState.dragStartViewEnd = popoutState.viewEndNs;
+        popoutState.dragStartScrollY = popoutState.scrollY;
+      });
+
+      pCanvas.addEventListener('mousemove', (e) => {
+        if (!popoutState.isDragging) {
+          const rect = pCanvas.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          handlePopoutHover(mouseX, mouseY);
+        }
+      });
+
+      pCanvas.addEventListener('mouseleave', () => {
+        dom.framePopoutTooltip.style.display = 'none';
+        popoutState.hoveredZone = null;
+        renderPopoutTimeline();
+      });
+    }
+
     // Double-Click Zoom on Zone / Range
     canvas.addEventListener('dblclick', (e) => {
       const rect = canvas.getBoundingClientRect();
@@ -2631,6 +3463,10 @@
       const mouseY = e.clientY - rect.top;
 
       const hit = hitTest(mouseX, mouseY);
+      if (hit && hit.type === 'frame-badge') {
+        openFramePopout(hit.frameIndex);
+        return;
+      }
       if (hit && hit.type === 'zone') {
         const z = hit.zone;
         const dur = Math.max(100, z.end_ns - z.start_ns);
@@ -2792,6 +3628,17 @@
         `).join('') : ''}
       `;
     } else {
+      const hit = hitTest(mouseX, mouseY);
+      if (hit && hit.type === 'frame-badge') {
+        dom.timelineCanvas.style.cursor = 'pointer';
+        state.hoveredFrameIndex = hit.frameIndex;
+        dom.tooltip.style.display = 'none';
+        state.hoveredZone = null;
+        render();
+        return;
+      }
+      dom.timelineCanvas.style.cursor = 'default';
+
       // Check if mouseX is inside any frame boundary box in empty track space
       const width = dom.timelineCanvas.width / (window.devicePixelRatio || 1);
       const visibleDuration = state.viewEndNs - state.viewStartNs;
@@ -2817,6 +3664,11 @@
       return;
     }
 
+    if (hit.type === 'frame-badge') {
+      openFramePopout(hit.frameIndex);
+      return;
+    }
+
     if (hit.type === 'header') {
       // Toggle track collapse
       if (state.collapsedTracks.has(hit.track.id)) {
@@ -2836,6 +3688,22 @@
     const width = dom.timelineCanvas.width / (window.devicePixelRatio || 1);
     const visibleDuration = state.viewEndNs - state.viewStartNs;
     const nsToX = (ns) => ((ns - state.viewStartNs) / visibleDuration) * width;
+
+    // Check frame boundary badges
+    for (const frame of state.frames) {
+      if (frame.cpuBadgeRect) {
+        const b = frame.cpuBadgeRect;
+        if (mouseX >= b.x - 3 && mouseX <= b.x + b.w + 3 && mouseY >= b.y - 3 && mouseY <= b.y + b.h + 3) {
+          return { type: 'frame-badge', frameIndex: frame.frame_index, frame };
+        }
+      }
+      if (frame.gpuBadgeRect) {
+        const b = frame.gpuBadgeRect;
+        if (mouseX >= b.x - 3 && mouseX <= b.x + b.w + 3 && mouseY >= b.y - 3 && mouseY <= b.y + b.h + 3) {
+          return { type: 'frame-badge', frameIndex: frame.frame_index, frame };
+        }
+      }
+    }
 
     let currentY = state.rulerHeight - state.scrollY;
 
@@ -2943,6 +3811,7 @@
     state.coroutineNames.clear();
     state.threadNames.clear();
     selectZone(null);
+    closeFramePopout();
     renderStatsTable();
     updateMetricCards();
     updateInfoMetadata();
@@ -3441,6 +4310,42 @@
       if (e.target === dom.shortcutsModal) dom.shortcutsModal.style.display = 'none';
     });
 
+    // Frame Popout Modal Controls (Milestone 2 & 3)
+    if (dom.btnPopoutClose) {
+      dom.btnPopoutClose.addEventListener('click', () => closeFramePopout());
+    }
+    if (dom.framePopoutModal) {
+      dom.framePopoutModal.addEventListener('click', (e) => {
+        if (e.target === dom.framePopoutModal) {
+          closeFramePopout();
+        }
+      });
+    }
+    if (dom.btnPopoutPrev) {
+      dom.btnPopoutPrev.addEventListener('click', () => navigatePopoutFrame(-1));
+    }
+    if (dom.btnPopoutNext) {
+      dom.btnPopoutNext.addEventListener('click', () => navigatePopoutFrame(1));
+    }
+    if (dom.btnPopoutFilterTracks) {
+      dom.btnPopoutFilterTracks.addEventListener('click', () => {
+        popoutState.filterActiveOnly = !popoutState.filterActiveOnly;
+        refreshPopoutTracks();
+        renderPopoutTimeline();
+      });
+    }
+    if (dom.btnPopoutFit) {
+      dom.btnPopoutFit.addEventListener('click', () => fitPopoutTimeline());
+    }
+    if (dom.btnInspPopoutFrame) {
+      dom.btnInspPopoutFrame.addEventListener('click', () => {
+        const idx = parseInt(dom.inspPopoutFrameIdx.textContent, 10);
+        if (!isNaN(idx)) {
+          openFramePopout(idx);
+        }
+      });
+    }
+
     // Search Input
     dom.searchInput.addEventListener('input', (e) => {
       state.searchQuery = e.target.value;
@@ -3514,6 +4419,26 @@
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT') return;
 
+      if (popoutState.isOpen) {
+        if (e.key === '[' || e.code === 'BracketLeft') {
+          e.preventDefault();
+          navigatePopoutFrame(-1);
+          return;
+        } else if (e.key === ']' || e.code === 'BracketRight') {
+          e.preventDefault();
+          navigatePopoutFrame(1);
+          return;
+        } else if (e.key === 'f' || e.key === 'F' || e.code === 'KeyF') {
+          e.preventDefault();
+          fitPopoutTimeline();
+          return;
+        } else if (e.key === 'Escape' || e.code === 'Escape') {
+          e.preventDefault();
+          closeFramePopout();
+          return;
+        }
+      }
+
       if (e.code === 'Space') {
         e.preventDefault();
         toggleLiveStreaming();
@@ -3538,7 +4463,12 @@
     });
 
     // Window Resize
-    window.addEventListener('resize', () => render());
+    window.addEventListener('resize', () => {
+      render();
+      if (popoutState.isOpen) {
+        renderPopoutTimeline();
+      }
+    });
   }
 
   // =========================================================================

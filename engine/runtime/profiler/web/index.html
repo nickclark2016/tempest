@@ -137,6 +137,9 @@
                 <span class="category-pill" id="insp-category">CPU</span>
                 <span class="badge-coroutine" id="insp-coroutine-badge" style="display: none;">COROUTINE</span>
                 <h2 class="zone-name" id="insp-name">ZoneName</h2>
+                <button class="btn btn-secondary btn-sm" id="btn-insp-popout-frame" style="display: none; margin-left: auto;" title="Pop Out Frame Details">
+                  <span class="btn-icon">⤢</span> Pop Out Frame #<span id="insp-popout-frame-idx">0</span>
+                </button>
               </div>
               <div class="inspector-sub">
                 <span id="insp-track">Main Thread (TID 1)</span>
@@ -318,7 +321,107 @@
           <tr><td><kbd>F</kbd></td><td>Fit timeline view to entire capture extent</td></tr>
           <tr><td><kbd>Esc</kbd></td><td>Clear selection and search filter</td></tr>
           <tr><td><kbd>Home</kbd> / <kbd>End</kbd></td><td>Jump to capture start / end</td></tr>
+          <tr><td><kbd>Double Click Frame</kbd></td><td>Pop out and isolate frame in dedicated modal view</td></tr>
+          <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Previous / Next frame in Frame Popout</td></tr>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Frame Popout Overlay Modal -->
+  <div class="modal-backdrop frame-popout-backdrop" id="frame-popout-modal" style="display: none;">
+    <div class="frame-popout-card">
+      <div class="frame-popout-header">
+        <div class="popout-header-left">
+          <span class="badge-frame-idx" id="popout-frame-title">FRAME #0</span>
+          <div class="popout-pills">
+            <span class="popout-pill popout-cpu-pill" id="popout-cpu-pill">CPU: <b id="popout-cpu-val">0.00 ms</b></span>
+            <span class="popout-pill popout-gpu-pill" id="popout-gpu-pill">GPU: <b id="popout-gpu-val">0.00 ms</b></span>
+            <span class="popout-pill popout-flight-pill" id="popout-flight-pill">Flight Latency: <b id="popout-flight-val">0.00 ms</b></span>
+            <span class="popout-pill popout-fps-pill" id="popout-fps-pill">Frametime: <b id="popout-fps-val">0.00 ms (0.0 FPS)</b></span>
+          </div>
+        </div>
+        <div class="popout-header-right">
+          <div class="button-group">
+            <button class="btn btn-dark btn-sm" id="btn-popout-prev" title="Previous Frame ([)">◀ Prev ([)</button>
+            <button class="btn btn-dark btn-sm" id="btn-popout-next" title="Next Frame (])">Next (]) ▶</button>
+          </div>
+          <button class="btn btn-dark btn-sm active" id="btn-popout-filter-tracks" title="Toggle between showing only active tracks or all tracks">
+            Showing <span id="popout-active-tracks-count">0</span> / <span id="popout-total-tracks-count">0</span> Tracks
+          </button>
+          <button class="icon-button" id="btn-popout-fit" title="Fit Timeline to Frame (F)">⤢</button>
+          <button class="icon-button modal-close" id="btn-popout-close" title="Close Popout (Esc)">&times;</button>
+        </div>
+      </div>
+      <div class="frame-popout-body" id="frame-popout-body">
+        <canvas id="frame-popout-canvas"></canvas>
+        <svg id="frame-popout-svg" class="timeline-svg-overlay"></svg>
+        <div class="timeline-tooltip" id="frame-popout-tooltip" style="display: none;"></div>
+      </div>
+      <div class="frame-popout-footer">
+        <!-- Left: Frame Performance Summary -->
+        <div class="popout-footer-col popout-footer-summary">
+          <div class="popout-panel-title">Frame Performance Summary</div>
+          <div class="popout-summary-grid">
+            <div class="popout-stat-item">
+              <span class="popout-stat-label">CPU Duration</span>
+              <span class="popout-stat-val highlight-blue" id="popout-stat-cpu">0.00 ms</span>
+            </div>
+            <div class="popout-stat-item">
+              <span class="popout-stat-label">GPU Duration</span>
+              <span class="popout-stat-val highlight-purple" id="popout-stat-gpu">0.00 ms</span>
+            </div>
+            <div class="popout-stat-item">
+              <span class="popout-stat-label">Flight Latency</span>
+              <span class="popout-stat-val" id="popout-stat-flight">0.00 ms</span>
+            </div>
+            <div class="popout-stat-item">
+              <span class="popout-stat-label">Active Threads</span>
+              <span class="popout-stat-val" id="popout-stat-threads">0</span>
+            </div>
+            <div class="popout-stat-item">
+              <span class="popout-stat-label">Active GPU Queues</span>
+              <span class="popout-stat-val" id="popout-stat-queues">0</span>
+            </div>
+            <div class="popout-stat-item">
+              <span class="popout-stat-label">Total Zones</span>
+              <span class="popout-stat-val" id="popout-stat-zones">0</span>
+            </div>
+          </div>
+        </div>
+        <!-- Right: Selected Zone Mini Inspector -->
+        <div class="popout-footer-col popout-footer-inspector">
+          <div class="popout-panel-title">Selected Zone Details</div>
+          <div class="popout-inspector-placeholder" id="popout-inspector-placeholder">
+            <span>Click any zone in the frame timeline to inspect details and self-time.</span>
+          </div>
+          <div class="popout-inspector-content" id="popout-inspector-content" style="display: none;">
+            <div class="popout-insp-header">
+              <span class="category-pill" id="popout-insp-category">CPU</span>
+              <span class="badge-coroutine" id="popout-insp-coroutine" style="display: none;">COROUTINE</span>
+              <h4 class="popout-insp-name" id="popout-insp-name">ZoneName</h4>
+              <span class="popout-insp-track" id="popout-insp-track">Main Thread</span>
+            </div>
+            <div class="popout-insp-grid">
+              <div class="popout-stat-item">
+                <span class="popout-stat-label">Duration</span>
+                <span class="popout-stat-val" id="popout-insp-duration">0.00 ms</span>
+              </div>
+              <div class="popout-stat-item">
+                <span class="popout-stat-label">Self-Time</span>
+                <span class="popout-stat-val" id="popout-insp-self-time">0.00 ms</span>
+              </div>
+              <div class="popout-stat-item">
+                <span class="popout-stat-label">% of Frame</span>
+                <span class="popout-stat-val" id="popout-insp-pct">0.0%</span>
+              </div>
+              <div class="popout-stat-item">
+                <span class="popout-stat-label">Location</span>
+                <span class="popout-stat-val truncate" id="popout-insp-location">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

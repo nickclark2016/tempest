@@ -263,8 +263,9 @@ namespace tempest::editor
     {
         _profiler_session.get_or_register_thread().flush_active_chunk();
 
+        const auto current_frame_index = ++_frame_index;
         auto capture = profiler::create_capture_from_session(_profiler_session);
-        auto telemetry = profiler::create_telemetry_frame_from_capture(++_frame_index, capture);
+        auto telemetry = profiler::create_telemetry_frame_from_capture(current_frame_index, capture);
 
         auto gpu_time_ns = uint64_t{0};
         for (const auto& gtrack : telemetry.gpu_tracks)
@@ -413,6 +414,7 @@ namespace tempest::editor
     auto editor_engine_context::_render_editor_frame() -> void
     {
         const auto frame_start = tempest::chrono::steady_clock::now();
+        const auto active_frame_index = _frame_index + 1;
         {
             [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "editor::render_frame"};
             if (!_renderer || _windows.empty())
@@ -442,7 +444,8 @@ namespace tempest::editor
                     {
                         _ui_ctx->render_ui_commands(cmd, w, h);
                     }
-                });
+                },
+                active_frame_index);
 
             const auto frame_end = tempest::chrono::steady_clock::now();
             const auto frame_dur = tempest::chrono::duration_cast<tempest::chrono::duration<float, tempest::milli>>(

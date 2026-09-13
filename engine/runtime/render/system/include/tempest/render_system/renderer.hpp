@@ -159,7 +159,8 @@ namespace tempest::render_system
 
         /// @brief Complete frame execution: begins frame, prepares DAG, renders, and presents to window surface.
         auto render_frame(window_handle win = null_window_handle, optional<render_camera> camera_override = nullopt,
-                          ui_render_callback ui_callback = nullptr) -> expected<void, render_graph::execution_error>;
+                          ui_render_callback ui_callback = nullptr,
+                          optional<uint64_t> frame_index = nullopt) -> expected<void, render_graph::execution_error>;
 
         /// @brief Resizes default render target configuration.
         void resize(uint32_t width, uint32_t height);

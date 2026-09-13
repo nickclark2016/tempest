@@ -109,8 +109,16 @@ namespace tempest::render_graph
                         .depth = pass_rec.depth,
                         .name = pass_rec.pass_name,
                         .location = {},
-                        .task_id = flight_state.recorded_frame_index,
+                        .task_id = 0,
+                        .coroutine_id = 0,
+                        .slice_index = 0,
+                        .reason = profiler::suspend_reason::none,
+                        .spawned_by_thread_id = 0,
+                        .spawned_by_coroutine_id = 0,
+                        .awaited_by_thread_id = 0,
+                        .awaited_by_coroutine_id = 0,
                         .metrics = {},
+                        .frame_index = flight_state.recorded_frame_index,
                     };
 
                     if (pass_rec.pipeline_stats_idx.has_value() && read_ps_ok_by_queue[pass_rec.queue] &&

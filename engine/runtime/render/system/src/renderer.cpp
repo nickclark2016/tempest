@@ -1255,7 +1255,10 @@ namespace tempest::render_system
         auto effective_sync = sync;
         effective_sync.flight_slot_index = slot_idx;
         effective_sync.frames_in_flight = _frames_in_flight;
-        effective_sync.frame_index = _frame_index;
+        if (!effective_sync.frame_index.has_value())
+        {
+            effective_sync.frame_index = _frame_index;
+        }
         if (effective_sync.profiler == nullptr)
         {
             effective_sync.profiler = _inputs.profiler;
@@ -1313,7 +1316,10 @@ namespace tempest::render_system
         auto effective_sync = sync;
         effective_sync.flight_slot_index = slot_idx;
         effective_sync.frames_in_flight = _frames_in_flight;
-        effective_sync.frame_index = _frame_index;
+        if (!effective_sync.frame_index.has_value())
+        {
+            effective_sync.frame_index = _frame_index;
+        }
         if (effective_sync.profiler == nullptr)
         {
             effective_sync.profiler = _inputs.profiler;
@@ -1400,7 +1406,8 @@ namespace tempest::render_system
     }
 
     auto renderer::render_frame(window_handle win, optional<render_camera> camera_override,
-                                ui_render_callback ui_callback) -> expected<void, render_graph::execution_error>
+                                ui_render_callback ui_callback,
+                                optional<uint64_t> frame_index) -> expected<void, render_graph::execution_error>
     {
         [[maybe_unused]] const auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::render_frame"};
         auto target_win = win.is_valid() ? win : _active_surface_window;
@@ -1423,7 +1430,12 @@ namespace tempest::render_system
 
         prepare_frame(w, h, nullopt, nullopt, tempest::move(camera_override), tempest::move(ui_callback));
 
-        const auto render_res = render();
+        auto sync_opts = render_graph::frame_sync_options{};
+        if (frame_index.has_value())
+        {
+            sync_opts.frame_index = *frame_index;
+        }
+        const auto render_res = render(sync_opts);
         if (!render_res.has_value())
         {
             return render_res;

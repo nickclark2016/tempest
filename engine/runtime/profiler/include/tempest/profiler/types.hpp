@@ -4,6 +4,7 @@
 #include <tempest/api.hpp>
 #include <tempest/inplace_vector.hpp>
 #include <tempest/int.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/source_location.hpp>
 #include <tempest/string_view.hpp>
 
@@ -95,6 +96,7 @@ namespace tempest::profiler
         uint64_t awaited_by_thread_id{0};
         uint64_t awaited_by_coroutine_id{0};
         inplace_vector<metric_record, 16> metrics{};
+        optional<uint64_t> frame_index{nullopt};
     };
 } // namespace tempest::profiler
 

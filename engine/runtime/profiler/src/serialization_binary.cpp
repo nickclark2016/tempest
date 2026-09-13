@@ -172,6 +172,13 @@ namespace tempest::profiler
                 payload.write(z.awaited_by_thread_id);
                 payload.write(z.awaited_by_coroutine_id);
 
+                const auto has_fi = z.frame_index.has_value();
+                payload.write(static_cast<uint8_t>(has_fi ? 1 : 0));
+                if (has_fi)
+                {
+                    payload.write(*z.frame_index);
+                }
+
                 const auto met_count = static_cast<uint8_t>(z.metrics.size());
                 payload.write(met_count);
                 for (const auto& met : z.metrics)
@@ -232,7 +239,7 @@ namespace tempest::profiler
         auto header = tprof_header{
             .magic = {magic_bytes[0], magic_bytes[1], magic_bytes[2], magic_bytes[3]},
             .version_major = 1,
-            .version_minor = 2,
+            .version_minor = 3,
             .uncompressed_size = static_cast<uint64_t>(uncompressed_size),
             .compressed_size = static_cast<uint64_t>(actual_compressed_len),
             .flags = 0,
@@ -416,6 +423,25 @@ namespace tempest::profiler
                     }
                 }
 
+                auto frame_index = optional<uint64_t>{nullopt};
+                if (header.version_minor >= 3)
+                {
+                    auto has_fi = uint8_t{0};
+                    if (!reader.read(has_fi))
+                    {
+                        return unexpected(capture_error::corrupted_data);
+                    }
+                    if (has_fi != 0)
+                    {
+                        auto fi_val = uint64_t{0};
+                        if (!reader.read(fi_val))
+                        {
+                            return unexpected(capture_error::corrupted_data);
+                        }
+                        frame_index = fi_val;
+                    }
+                }
+
                 if (!reader.read(met_count))
                 {
                     return unexpected(capture_error::corrupted_data);
@@ -442,6 +468,7 @@ namespace tempest::profiler
                     .awaited_by_thread_id = awaited_by_thread_id,
                     .awaited_by_coroutine_id = awaited_by_coroutine_id,
                     .metrics = {},
+                    .frame_index = frame_index,
                 };
 
                 for (auto m = uint8_t{0}; m < met_count; ++m)

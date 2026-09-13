@@ -42,7 +42,7 @@ namespace tempest::render_graph
         optional<rhi::texture_handle> presented_texture{nullopt};
         uint32_t flight_slot_index{0};
         uint32_t frames_in_flight{2};
-        uint64_t frame_index{0};
+        optional<uint64_t> frame_index{nullopt};
         profiler::profiler_session* profiler{nullptr};
     };
 
@@ -63,7 +63,7 @@ namespace tempest::render_graph
         uint32_t recorded_timestamp_count{0};
 
         array<queue_stats_state, 3> queue_stats{};
-        uint64_t recorded_frame_index{0};
+        optional<uint64_t> recorded_frame_index{nullopt};
 
         struct pass_query_binding
         {
