@@ -45,7 +45,3 @@ captures/
 # Generated asset files
 /assets/
 **.tassetdb
-
-# Agents
-.agents/*
-!.agents/AGENTS.md

@@ -1,176 +1,107 @@
 # Project Guidelines and Rules
 
-## Code Style & Architecture
+## Subsystem Reference Guides
+Deep-dive specifications, post-mortem rationales, and extended code recipes are maintained in dedicated reference documents. Consult these before modifying the corresponding subsystems:
+- **RHI, Vulkan & Render Graph**: [rendering_vulkan.md](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md) — Swapchain semaphores, frame timeline encapsulation, barrier solver tracking, Slang BDA vertex offsets, and timestamp queries.
+- **Profiler & Telemetry**: [profiler_telemetry.md](file:///home/ntc0531/repos/tempest/.agents/references/profiler_telemetry.md) — `scoped_zone` RAII scopes, chunk recycling, JS safe integer limits, non-blocking socket framing, and UI timeline multi-lane layout.
+- **Concurrency & Runtime**: [concurrency_runtime.md](file:///home/ntc0531/repos/tempest/.agents/references/concurrency_runtime.md) — Thread-confinement, worker state, dynamic library unload order, and TSan verification.
+- **Architecture, ECS & Assets**: [architecture_assets.md](file:///home/ntc0531/repos/tempest/.agents/references/architecture_assets.md) — ECS hierarchy traversal, ownership models, and binary chunk arena isolation.
 
-### 1. Prefer Engine Standard Library Types (`tempest::`) over `std::`
-Avoid using standard library types from namespace `std::` or headers like `<cstdint>` when engine-native equivalents exist in namespace `tempest::` and `<tempest/int.hpp>`.
-- Prefer `tempest::optional` and `tempest::nullopt` over `std::optional` and `std::nullopt`.
-- Prefer `tempest::vector`, `tempest::string_view`, `tempest::unique_ptr`, `tempest::make_unique` over `std::` counterparts.
-- Prefer `<tempest/int.hpp>` (`tempest::uint32_t`, `tempest::int32_t`, etc.) over `<cstdint>`.
-- Prefer `tempest::inplace_vector<T, N>` over `tempest::vector` for small fixed-capacity collections with dynamic runtime counts (e.g., history buffers, inline batches).
-- Use `tempest::min`, `tempest::max`, and `tempest::clamp` directly from namespace `tempest::` (from `<tempest/algorithm.hpp>` and `<tempest/math_utils.hpp>`).
+---
 
-### 2. Adhere to AAA (Almost Always Auto) Rules
-Use `auto` for local variable declarations with explicit initializations.
-- Example: `auto found_active = tempest::optional<ecs::entity>();`
-- Example: `auto to_remove = tempest::vector<ecs::entity>();`
-- Avoid uninitialized or explicitly typed declarations like `tempest::optional<ecs::entity> found_active;`.
+## Core C++ Language & Dialect
 
-### 3. Prefer Template Argument Deduction
-Use template argument deduction for function calls rather than specifying explicit template arguments whenever the compiler can infer the type.
-- Example: `registry->assign(target, graphics::active_camera_component{});`
-- Avoid: `registry->assign<graphics::active_camera_component>(target, {});`.
+### 1. Engine Standard Library Types (`tempest::`)
+Prefer engine-native types over `std::` and `<cstdint>`:
+| Use `tempest::` | Instead of `std::` / C | Header / Notes |
+| :--- | :--- | :--- |
+| `optional`, `nullopt` | `std::optional`, `std::nullopt` | `<tempest/optional.hpp>` |
+| `vector`, `string_view` | `std::vector`, `std::string_view` | `<tempest/vector.hpp>`, `<tempest/string_view.hpp>` |
+| `unique_ptr`, `make_unique` | `std::unique_ptr`, `std::make_unique` | `<tempest/memory.hpp>` |
+| `<tempest/int.hpp>` | `<cstdint>` | `uint32_t`, `int32_t`, `uint64_t`, etc. |
+| `inplace_vector<T, N>` | `std::vector` | Small fixed-capacity collections with dynamic runtime counts |
+| `non_null<T>` | Raw non-null pointer / reference members | `<tempest/checked.hpp>` |
+| `min`, `max`, `clamp` | `std::min`, `std::max`, `std::clamp` | `<tempest/algorithm.hpp>`, `<tempest/math_utils.hpp>` |
 
-### 4. Assume Valid Invariants Over Defensive Null Checks
-Core engine components and required subsystems (e.g., `camera_system` on a `renderer`) should be represented as non-null references. Avoid defensive null pointer checks or fallback branches for ill-formed states; assume input invariants are valid.
-- Example: `get_camera_system()` returns `camera_system&` instead of `camera_system*`.
-- Omit redundant null checks like `if (pbr_inputs.camera_sys == nullptr)` when building required engine dependencies.
+### 2. Variable Declarations & Naming
+- **AAA (Almost Always Auto)**: Use `auto` for local variable declarations with explicit initialization (e.g. `auto found = tempest::optional<ecs::entity>();`). Avoid uninitialized or explicitly typed declarations.
+- **Prefer `const` Locals**: Prefer `const auto` for local variables whenever they are not mutated.
+- **Descriptive Variable Names**: Use descriptive variable names; never use single-letter variable names (e.g. use `frame_index` or `entity` rather than `f` or `e`).
+- **Template Argument Deduction**: Use template argument deduction for function calls rather than specifying explicit template arguments when types are inferable (e.g. `registry->assign(target, active_camera_component{});`).
+- **Unused Entities**: Use standard `[[maybe_unused]]` on unused parameters or variables; never use `(void)` casts.
 
-### 5. Deferred Deletion over Mutable In-Place Recreation
-For RHI GPU resources that may be in-flight across frames (such as `render_surface` swapchains), avoid mutable in-place `recreate()` methods. Prefer explicit creation taking an `old_*` handover hint and deferred deletion of the old resource via higher-level engine frame retirement queues.
+### 3. Struct & Class Member Guidelines
+- **No References as Members**: Never use C++ references (`T&`) as class or struct members. References make types non-assignable/non-movable and obscure lifetime.
+- **Non-Nullable Struct Pointers**: Structs and classes containing pointers that must not be null must use `tempest::non_null<T>` (from `<tempest/checked.hpp>`) rather than raw pointers or references.
+- **`explicit` Constructors**: Only mark constructors `explicit` when exactly one argument is required and it is not a copy/move constructor. Never mark multi-parameter constructors requiring two or more arguments `explicit`.
 
-### 6. Slang & Vulkan Bindless Conventions
-- In Slang shaders, decorate unbounded arrays with explicit `[[vk::binding(binding, set)]]` attributes to avoid compiler warnings when targeting Vulkan SPIR-V.
-- When using `VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT`, omit `VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT` from binding flags (descriptor buffers are inherently update-after-bind).
-- Only record `vkCmdSetDescriptorBufferOffsetsEXT` for `VK_PIPELINE_BIND_POINT_GRAPHICS` on command lists associated with graphics queue families.
+### 4. Global Architectural Invariants
+- **Assume Valid Invariants Over Defensive Null Checks**: Core engine components and required subsystems (e.g. `camera_system` on a `renderer`) must be represented as non-null references. Avoid defensive null pointer checks or fallback branches for ill-formed states; assume input invariants are valid.
+- **Explicit Ownership Semantics (Strict Prohibition of `shared_ptr`)**: Never use `std::shared_ptr` or `tempest::shared_ptr` anywhere in the codebase. Shared ownership obscures object lifetime boundaries, introduces atomic ref-counting overhead, and complicates deterministic destruction. Use explicit unique ownership (`tempest::unique_ptr` / `tempest::make_unique`), RAII scope management, non-owning raw pointers/references with well-defined parent-child lifetimes, or generational indices (`ecs::entity`). Never suggest or introduce `shared_ptr` as a solution when analyzing memory issues, proposing fixes, or refactoring.
+- **Strict Prohibition of `thread_local` and Global Variables**: Never introduce `thread_local`, global variables, or static mutable state anywhere in engine runtime libraries. Confine worker state via worker-indexed state structures (e.g. `worker_state` via `find_current_worker()` or `job_context`). Sockets, pools, and singletons must maintain clear RAII lifecycles tied to engine or system instances.
 
-### 7. Prefer `[[maybe_unused]]` over `(void)` Casts
-Use the standard `[[maybe_unused]]` attribute on unused parameters or variables rather than `(void)` casts in function bodies.
-- Example: `virtual auto on_resize([[maybe_unused]] rhi::device& dev) -> void {}`
-- Avoid: `(void)dev;` inside function bodies.
+---
 
-### 8. Vulkan Swapchain Binary Semaphore Reuse
-When presenting swapchain images with binary semaphores, index render/presentation semaphores per swapchain image (or allocate per acquired image index) rather than per frame-in-flight slot to guarantee the semaphore is idle before re-signaling on submission.
+## Subsystem Invariant Anchors
 
-### 9. Render Graph Cross-Frame Synchronization & Layout Tracking
-- When resources undergo external or post-batch transitions (such as swapchain images transitioned to `image_layout::present` during presentation), explicitly record the new layout into the barrier solver's persistent state table (`set_texture_state`) to prevent layout mismatch validation errors on subsequent frames.
-- For cross-frame and temporal resources, evaluate both `was_written` (prior frame write access) and `is_written` when solving barriers to ensure GPU write caches are properly flushed before downstream reads.
- 
-### 10. `explicit` Constructor Guidelines
-Only mark constructors `explicit` when exactly one argument is required and it is not a special copy/move constructor.
-- Use `explicit` for single-parameter non-defaulted constructors (e.g., `explicit resource_pool(rhi::device& dev);`).
-- Use `explicit` for constructors where only the first parameter is required and trailing parameters have default values (e.g., `explicit camera_system(ecs::archetype_registry& registry, event::event_registry& events = default_events);`).
-- Do NOT use `explicit` on multi-parameter constructors requiring two or more arguments (e.g., `shelf_allocator(uint32_t atlas_width, uint32_t atlas_height, uint32_t padding = 4);`).
+### RHI, Vulkan & Render Graph
+- **Swapchain Semaphores**: Index render/presentation binary semaphores per swapchain image (or acquired image index), never per frame-in-flight slot. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#2-swapchain--semaphore-reuse))
+- **Deferred Deletion**: Avoid mutable in-place `recreate()` for in-flight GPU resources; use explicit creation with `old_*` handover hints and deferred deletion via frame retirement queues. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#2-swapchain--semaphore-reuse))
+- **Bindless Conventions**: In Slang, decorate unbounded arrays with `[[vk::binding(binding, set)]]`. Omit `UPDATE_AFTER_BIND` on descriptor buffers. Record descriptor offsets for `GRAPHICS` only on graphics queue command lists. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#5-slang-shaders--vulkan-bindless-conventions))
+- **Slang BDA Vertex Pulling**: Slang maps `SV_VertexID` to 0-based index. Do NOT use `cmd.draw_indexed` vertex offsets or packed struct pointer arithmetic; pass exact byte GPU device addresses directly (`buffer_gpu_address + vertex_offset * sizeof(Vertex)`) with 0 offset. Use scalar stride (`vertex_id * 5`) for packed vertices like `ImDrawVert`. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#6-programmable-vertex-pulling-with-bda))
+- **Timestamp Queries**: Record pass start timestamps using `bottom_of_pipe` (or `all_commands`) *after* pre-pass barriers (never `top_of_pipe`). Read back only the exact `recorded_timestamp_count`, never full query pool capacity. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#7-vulkan-timestamp-queries--pass-profiling))
+- **Frame Flight Synchronization**: `renderer` is the single source of truth for timeline semaphores; `renderer::prepare_frame()` executes host wait sync (`wait_for_sync`). Higher-level engine contexts must NOT manually track timeline values. UI overlay rendering (ImGui) must be integrated via `prepare_frame(..., ui_callback)` in the Render Graph DAG. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#1-frame-flight-timeline-synchronization--encapsulation))
+- **Barrier Solver Layout Tracking**: External and post-batch transitions (e.g. `image_layout::present`) must be explicitly recorded in the barrier solver's persistent state table (`set_texture_state`). Evaluate both `was_written` and `is_written` for cross-frame resources. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#3-render-graph-barrier-solver--layout-tracking))
+- **Transient Resource Eviction**: Declare surface-dependent transient targets with `rg_texture_size::surface_relative(...)`. Evict mismatched targets on their next idle flight cycle during resize; never clear active descriptor tables during resize callbacks while UI painting is in progress. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#3-render-graph-barrier-solver--layout-tracking))
+- **UI Offscreen Sampling Barrier**: Offscreen render targets sampled by UI passes must transition from color write to fragment read before recording the UI pass. Update UI logic (`on_paint()`) before 3D scene rendering. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#4-pipeline-barriers--ui-sampling-synchronization))
+- **Mipmap Pre-Blit Barrier**: Transition uploaded mip levels from `pipeline_stage::copy` write to `pipeline_stage::blit` read before issuing `blit_texture`. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#4-pipeline-barriers--ui-sampling-synchronization))
 
-### 11. Dynamic Shared Library Lifetime & Destruction Order
-When dynamically loading shared libraries (`shared_library::load`) that register callbacks, event listeners, polymorphic objects, or ECS components into engine subsystems, always ensure the engine context, UI context, and registries are destructed **before** the shared library handles unload.
-- Encapsulate the engine context and its subsystems in an explicit nested scope (`{ ... }`) within the entrypoint before the shared library handles fall out of scope.
-- Never unload a dynamic library while function pointers, lambdas, or vtables originating from that library remain active or registered in engine collections.
+### Profiler, Telemetry & Network
+- **`scoped_zone` Scope**: Encapsulate top-level CPU profiling zones (`profiler::scoped_zone`) in an explicit nested scope `{ ... }` that terminates *before* invoking `collect_and_broadcast_telemetry()` so frame durations commit to frame $N$, not $N+1$. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/profiler_telemetry.md#1-frame-level-scoped_zone-raii-scope-before-telemetry-capture))
+- **Chunk Recycling**: Recycle drained profiler session and arena chunks via `session.recycle_chunks()` rather than destroying them. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/profiler_telemetry.md#2-profiler--chunk-arena-recycling))
+- **JS Safe Integer Limits**: Serialize 64-bit IDs for Web/JS within JavaScript's safe integer range ($< 2^{53}-1$, e.g. 32-bit prefix `0x8000'0000ULL`) or as quoted strings. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/profiler_telemetry.md#3-web--json-serialization-number-precision-javascript-max_safe_integer))
+- **Socket Send Framing**: Broadcast over non-blocking TCP/WebSocket sockets must loop on partial sends with write readiness polling (`select`/`WSAPoll`); never discard unsent bytes. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/profiler_telemetry.md#4-non-blocking-socket-framing--websocket-transport))
+- **Profiler UI Timeline Lanes**: Profiler UI timeline tracks must maintain 3 distinct vertical lanes (Track Header Strip, Frame Header Lane, Call Stack Zone Area below). ([Details](file:///home/ntc0531/repos/tempest/.agents/references/profiler_telemetry.md#5-profiler-ui-timeline-multi-lane-track-hierarchy))
 
-### 12. Slang Vertex Pulling & Multi-Batch Draw Offsets
-When implementing programmable vertex pulling shaders with Slang and Vulkan Buffer Device Address (BDA):
-- Recognize that Slang maps `SV_VertexID` to `gl_VertexIndex - BaseVertex` (0-based per draw). When drawing concatenated draw lists or batches with distinct vertex offsets, do NOT rely on `cmd.draw_indexed`'s `vertex_offset` parameter.
-- Instead, pass the exact byte-offset GPU device address directly via push constants or uniforms (`buffer_gpu_address + vertex_offset * sizeof(Vertex)`) and pass `0` for `vertex_offset` in `cmd.draw_indexed`.
-- For packed C++ vertex structures (such as `ImDrawVert` 20-byte stride), avoid high-level struct pointer arithmetic in Slang (which aligns structs to 8 or 16 bytes); use explicit byte/scalar arithmetic (`vertex_id * 5` for 5 uints) to prevent stride mismatch.
+### Runtime, Assets & ECS
+- **Dynamic Shared Libraries**: Engine context and registries must be scoped and destructed *before* dynamic library handles unload. Never unload dynamic libraries while callbacks/vtables remain active. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/concurrency_runtime.md#2-dynamic-shared-library-lifetime--destruction-order))
+- **ECS Hierarchy Traversal**: Recursively traverse `ecs::relationship_component<ecs::entity>` (`first_child`, `next_sibling`) to discover all child entities and submeshes; do not assume components reside on root entities. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/architecture_assets.md#1-ecs-hierarchy-traversal-for-scene--prefab-loading))
+- **Binary Chunk Arena Isolation**: Never share packing cursor state across dedicated large-asset allocations and small-asset packing buffers; isolate small-asset packing into dedicated arena buffers. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/architecture_assets.md#2-binary-chunk-arena--asset-packing-isolation))
 
-### 13. ECS Hierarchy Traversal for Scene & Prefab Loading
-When ingesting, instantiating, or uploading entity hierarchies (such as glTF models or composite prefabs) to GPU memory:
-- Do not assume renderable components (`mesh_component`, `material_component`, `renderable_component`) reside on root entities.
-- Always recursively traverse `ecs::relationship_component<ecs::entity>` (`first_child`, `next_sibling`) to discover and upload all child entities, submeshes, and material references.
+---
 
-### 14. Avoid `shared_ptr` / Prefer Explicit Ownership Semantics
-Do not use `std::shared_ptr` or `tempest::shared_ptr` for resource management, subsystem lifecycles, or architectural problem-solving across the engine codebase.
-- Shared ownership semantics obscure object lifetime boundaries, introduce atomic reference-counting overhead, and complicate deterministic destruction order.
-- Prefer explicit unique ownership (`tempest::unique_ptr` / `tempest::make_unique`), RAII scope management, explicit registration/unregistration cleanup methods, non-owning raw pointers/references with well-defined parent-child lifetimes, or generational indices (`ecs::entity` with `is_valid` validation).
-- When analyzing memory management issues, proposing fixes, or refactoring code, never suggest or introduce `shared_ptr` as a solution.
+## Workflow & Development Rules
 
-### 15. Render Graph Transient Resource Eviction & Surface-Relative Targets
-- Viewport- and surface-dependent transient render targets in render passes must be declared using `rg_texture_size::surface_relative(...)` rather than fixed absolute pixel dimensions.
-- Transient resource allocators must track inactivity across frame-in-flight cycles (`unused_cycles`) and immediately evict mismatched surface-relative textures on their next idle flight cycle during resolution changes to prevent unbounded VRAM growth.
-- In-flight active texture descriptor tables must not be cleared during resize callbacks while UI frame drawing is in progress.
+### 1. Implementation Planning & Test Plan Requirement
+When creating implementation plans:
+- A comprehensive verification/test plan (automated test targets, manual test cases, and invariant validations) must be explicitly determined as part of the implementation plan itself before starting execution.
 
-### 16. Binary Chunk Arena & Asset Packing Isolation
-- In binary asset databases, serialization chunk arenas, or pooled memory streams, never share packing cursor state (`current_chunk_used`, `current_chunk_capacity`) across dedicated large-asset allocations and small-asset packing buffers.
-- Always isolate small-asset packing into dedicated arena buffers so appending large standalone chunks cannot corrupt packing offsets or cause small object payloads to overwrite large asset buffers in memory.
-
-### 17. Offscreen Render Target UI Sampling & Pipeline Synchronization
-- When offscreen 3D render targets (such as `TonemappedColorTarget`) are sampled by UI passes (such as ImGui bindless textures), explicitly record pipeline barriers transitioning the texture from color attachment output write to fragment shader read before recording the UI pass.
-- In editor and tool harnesses, always evaluate UI window logic and viewport dimension updates (`on_paint()`) before executing 3D scene rendering so camera matrices and render target sizes update synchronously without 1-frame latency.
-
-### 18. Renderer Encapsulated Frame Flight Synchronization & UI Pass Integration
-- The `renderer` is the single source of truth for frame flight timeline synchronization. It internally manages per-flight-slot timeline semaphores matching `pool_config.frames_in_flight`.
-- `renderer::prepare_frame()` automatically performs host synchronization (`wait_for_sync`) on the active flight slot before mutating `resource_pool` or transient allocator state. Higher-level engine contexts (`standalone_engine_context`, `editor_engine_context`) must NOT manually track timeline values or execute timeline host waits.
-- UI overlay rendering (e.g. ImGui) must be integrated directly into the `renderer` Render Graph DAG via `prepare_frame(..., ui_callback)` rather than executed in a secondary ad-hoc queue submission. This allows the Render Graph `barrier_solver` to solve all image layout transitions and pipeline barriers seamlessly in a single unified execution.
-
-### 19. Texture Mipmap Generation Pre-Blit Synchronization
-- When generating mipmap chains via blit fallback after buffer-to-image texture upload (`copy_buffer_to_texture`), always record a pipeline barrier transitioning uploaded source mip levels from `pipeline_stage::copy` write access to `pipeline_stage::blit` read access before issuing `blit_texture` commands to prevent read-after-write hazards.
-
-### 20. Vulkan Timestamp Queries & Pipeline Stages for Pass Profiling
-- Do NOT use `pipeline_stage::top_of_pipe` for start timestamps in multi-pass command buffers; `TOP_OF_PIPE` triggers as soon as the GPU command processor parses the command packet, causing all subsequent passes in a queue batch to share identical start timestamps and accumulate prior passes' execution durations.
-- Record start timestamps using `pipeline_stage::bottom_of_pipe` (or `pipeline_stage::all_commands`) **after** pre-pass pipeline barriers so start timestamps reflect when preceding GPU execution and barrier flushes finish.
-- When reading back query results via `get_query_pool_results`, only query the exact count of queries written (`recorded_timestamp_count`), never the full query pool capacity (`timestamp_count`). Requesting unwritten queries in the pool range causes `vkGetQueryPoolResults` without `VK_QUERY_RESULT_WAIT_BIT` to return `VK_NOT_READY` and silently drop query readbacks.
-
-### 21. Cross-Platform & Web Serialization Number Precision (JS `MAX_SAFE_INTEGER`)
-- When generating 64-bit integer identifiers (such as track IDs, resource handles, or entity IDs) that are serialized to JSON for consumption by web/browser JavaScript UIs, ensure numeric values fit within JavaScript's safe integer range (< $2^{53} - 1$, e.g. using a 32-bit prefix `0x8000'0000ULL` rather than bit 63 `0x8000'0000'0000'0000ULL`), or serialize them as quoted JSON strings.
-- Bit 63 integers exceed $2^{53}$ and will be truncated/rounded to identical floating-point values by JavaScript's `JSON.parse()`.
-
-### 22. Non-Blocking Socket Framing & WebSocket Transport
-- When broadcasting large payloads (such as telemetry JSON frames) over non-blocking TCP sockets (`ioctlsocket(FIONBIO)` / `O_NONBLOCK`), partial sends (`0 < res < size`) must never discard the remaining unsent bytes on `res > 0`.
-- Senders must loop with non-blocking write readiness polling (`select` / `WSAPoll`) or buffered queues to complete frame transmission, preventing torn frames from corrupting the active WebSocket stream framing. Sockets should also be configured with adequate send/receive buffers (e.g. 1 MB).
-
-### 23. Profiler & Arena Pool Chunk Recycling
-- Chunks drained from profiler sessions or chunk arenas (`event_chunk`, binary chunk streams) must be recycled via `session.recycle_chunks()` or arena reset methods rather than destroyed (`operator delete`), eliminating redundant 64KB heap allocations and mutex contention on per-frame loops.
-
-### 24. Frame-Level `scoped_zone` RAII Scope Before Telemetry Capture
-- In frame runner loops or per-frame execution functions (such as `editor_engine_context::_render_editor_frame`), any top-level CPU profiling zones (`profiler::scoped_zone` at depth 0) must be encapsulated in an explicit nested scope (`{ ... }`) that terminates **before** invoking telemetry collection and broadcast (`collect_and_broadcast_telemetry()`).
-- Because `scoped_zone` records its completed duration in its destructor, failing to close its scope prior to telemetry capture causes the top-level zone to be flushed into the *subsequent* frame's payload ($N+1$), desynchronizing top-level CPU durations and frame hover correlations from child call stack zones ($N$).
-
-### 25. Profiler UI Timeline Multi-Lane Track Hierarchy
-- Timeline tracks in web/desktop profiler UIs must maintain 3 distinct vertical lanes to prevent visual text and badge collisions:
-  1. **Track Header Strip** (`trackHeaderHeight`): Houses the collapse chevron, thread/queue name (`MAIN THREAD`, `[GPU] Graphics Queue`), and zone count.
-  2. **Frame Header Lane** (`frameHeaderHeight`): Houses frame boundary badge pills (`CPU #N`, `GPU #N`) and correlation latency markers (`Flight: ...`).
-  3. **Call Stack Zone Area**: Call stack capture zones must start strictly beneath the frame header lane ($\text{rowY} = \text{currentY} + \text{trackHeaderHeight} + \text{frameHeaderHeight} + 4 + \text{depth} \times (\text{zoneHeight} + \text{zoneSpacing})$), with hit-testing synchronized to the exact same vertical offset.
-
-### 26. Strict Prohibition of `thread_local` and Global Variables
-Never introduce `thread_local`, global variables, or static mutable state anywhere in engine runtime libraries.
-- Engine subsystems, allocators, profilers, and contexts must be explicitly instantiated and passed via references, non-owning pointers with well-defined lifetimes, or deduced through coroutine arguments and execution contexts.
-- Thread-confinement must be achieved through worker-indexed state structures (e.g. `worker_state` looked up via `find_current_worker()` or passed down through `job_context`) rather than TLS.
-- Sockets, memory pools, allocators, and singletons must maintain clear RAII lifecycles tied to engine or system instances.
-
-## Workflow & Build Guidelines
-
-### Embedded Web Assets Build Integration
-- Web assets (`index.html`, `app.js`, `styles.css`) are embedded into `web_assets.cpp` via Premake custom actions (`embed-web-assets`) driven incrementally by build tool dependency graphs (Ninja custom build rules on `web/index.html` with inputs `styles.css`, `app.js`), rather than executed manually.
-- `premake5.lua` must only invoke `embed_web_assets()` during project generation if `web_assets.cpp` is missing (e.g. on clean clones), leaving all subsequent updates to the build system.
-
-### Iterative Milestone Execution & Sync Gates
+### 2. Iterative Milestone Execution & Sync Gates
 When executing multi-milestone plans or tasks with sync gates:
 - Execute strictly **one milestone per turn**.
 - After completing a milestone's code changes and verifying its automated tests, **immediately stop calling tools** to yield the turn and report test results.
 - **Never proceed to subsequent milestones** until the user explicitly reviews the current milestone and gives approval to proceed.
 
-### Test Case & Section Documentation
+### 3. Test Case & Section Documentation
 Whenever adding or updating test cases:
-- Add descriptive documentation comments (e.g., `/// @brief ...`) above every test function detailing the exact behavior, invariant, or edge case under test.
+- Add descriptive documentation comments (e.g. `/// @brief ...`) above every test function detailing the exact behavior, invariant, or edge case under test.
 - Use clear inline comments and numbered steps (`// 1. Setup ...`, `// 2. Act ...`, `// 3. Assert ...`) to demarcate test sections and expectations.
 - Group related test cases within files using structured section banners.
 
-### ThreadSanitizer (TSan) for Jobs & Concurrency
-Whenever modifying the job system, thread pool, work-stealing queues, coroutine tasks/awaiters, synchronization primitives (`async_mutex`, `async_event`), or any multi-threaded runtime subsystem:
-- **Mandatory TSan Verification**: You must compile and run the relevant test suites with ThreadSanitizer enabled.
-- **Premake Flag Requirement**: TSan flags are not enabled by default in Ninja build files. Premake must be explicitly invoked with `--use-tsan`:
-  `premake5 ninja --cc=clang --shared-engine --shell=posix --rhi-vulkan --use-tsan`
-- **Non-GPU Test Targets**: Only non-GPU test targets (tagged `non-gpu-test` in Premake, including `job-tests`, `profiler-tests`, `render-graph-tests`, `core-tests`, `ecs-tests`, `event-tests`, `serialization-tests`, `assets-tests`) support TSan. Do not run GPU-bound hardware driver tests (e.g., `rhi-vk-tests`) under TSan, as Vulkan ICD memory conflicts with TSan shadow memory.
+### 4. ThreadSanitizer (TSan) for Concurrency Changes
+Whenever modifying the job system, thread pool, work queues, coroutines, or sync primitives:
+- **Mandatory TSan Verification**: Compile and run test suites with ThreadSanitizer enabled via `premake5 ... --use-tsan`.
+- **Target Restriction**: Only run on non-GPU test targets (`job-tests`, `profiler-tests`, `render-graph-tests`, `core-tests`, `ecs-tests`, `event-tests`, `serialization-tests`, `assets-tests`). Do not run GPU hardware driver tests (`rhi-vk-tests`) under TSan.
 
-### Build & Test Commands (Windows Clang)
-- **Premake Generation**:
-  `premake5 ninja --cc=clang --shared-engine --shell=posix --rhi-vulkan`
-- **Build Tests Target**:
-  `$env:PATH += ';C:\Program Files\Git\bin'; ninja -C build/ninja rhi-vk-tests render-graph-tests`
-- **Build Examples Target**:
-  `$env:PATH += ';C:\Program Files\Git\bin'; ninja -C build/ninja rhi-examples`
-- **Run Test Binary**:
-  `.\bin\Debug\windows-clang\rhi-vk-tests.exe`
-  `.\bin\Debug\windows-clang\render-graph-tests.exe`
-- **Run Examples Binary**:
-  `.\bin\Debug\windows-clang\rhi-examples.exe --list`
-  `.\bin\Debug\windows-clang\rhi-examples.exe --example triangle`
+### 5. Embedded Web Assets Build Integration
+- Web assets (`index.html`, `app.js`, `styles.css`) are embedded into `web_assets.cpp` via Premake custom actions driven by Ninja build rules. `premake5.lua` must only invoke `embed_web_assets()` during generation if `web_assets.cpp` is missing.
 
-### Architecture Proposals & Backlog Tracking
-- When identifying new ideas, optimizations, or architectural improvements that are deferred for future work, document them as formal proposals in `docs/design/proposals/<proposal_name>.md` and index them in `docs/design/README.md`.
-- When the user asks for suggestions on what to work on next, inspect `docs/design/proposals/` and present choices prioritized by relevance to recent work and current subsystem focus.
+### 6. Architecture Proposals & Backlog Tracking
+- Document deferred ideas and architectural improvements in `docs/design/proposals/<name>.md` and index them in `docs/design/README.md`.
+- When asked for next tasks, inspect `docs/design/proposals/` and prioritize by subsystem relevance.
 
-### Commit Messages
-- Commit message suggestions must always be a single line under 80 characters.
-
-
+### 7. Build & Test Commands Reference
+- **Premake**: `premake5 ninja --cc=clang --shared-engine --shell=posix --rhi-vulkan`
+- **Build Tests**: `ninja -C build/ninja rhi-vk-tests render-graph-tests`
+- **Run Tests**: `bin/Debug/windows-clang/rhi-vk-tests.exe` (or Linux binary path)
+- **Commit Messages**: Single line under 80 characters.
