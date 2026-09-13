@@ -4,6 +4,7 @@
 #include <tempest/algorithm.hpp>
 #include <tempest/int.hpp>
 #include <tempest/optional.hpp>
+#include <tempest/utility.hpp>
 #include <tempest/vector.hpp>
 
 #if defined(__linux__)
@@ -26,10 +27,14 @@ namespace tempest::job
 #if defined(__linux__)
         auto read_core_capacity(uint32_t cpu_id) -> optional<uint32_t>
         {
-            auto path = array<char, 64>{};
+            constexpr auto path_len = 64U;
+            constexpr auto num_buf_len = 16U;
+            constexpr auto decimal_base = 10U;
+
+            auto path = array<char, path_len>{};
             auto len = 0;
             auto temp = cpu_id;
-            auto num_buf = array<char, 16>{};
+            auto num_buf = array<char, num_buf_len>{};
             auto num_digits = 0;
             if (temp == 0)
             {
@@ -39,8 +44,8 @@ namespace tempest::job
             {
                 while (temp > 0)
                 {
-                    num_buf[num_digits++] = static_cast<char>('0' + (temp % 10));
-                    temp /= 10;
+                    num_buf[num_digits++] = static_cast<char>('0' + (temp % decimal_base));
+                    temp /= decimal_base;
                 }
             }
 
@@ -66,8 +71,9 @@ namespace tempest::job
                 return nullopt;
             }
 
-            auto buf = array<char, 32>{};
-            auto bytes_read = read(file_desc, buf.data(), sizeof(buf) - 1);
+            const auto buf_len = 32U;
+            auto buf = array<char, buf_len>{};
+            auto bytes_read = read(file_desc, buf.data(), buf_len - 1);
             close(file_desc);
 
             if (bytes_read <= 0)
@@ -80,7 +86,7 @@ namespace tempest::job
             {
                 if (buf[i] >= '0' && buf[i] <= '9')
                 {
-                    val = val * 10 + static_cast<uint32_t>(buf[i] - '0');
+                    val = (val * decimal_base) + static_cast<uint32_t>(buf[i] - '0');
                 }
                 else if (buf[i] == '\n' || buf[i] == '\0')
                 {
@@ -146,7 +152,8 @@ namespace tempest::job
                 .logical_core_index = i,
                 .type = core_class::performance,
                 .efficiency_class = 0,
-                .affinity_mask = (i < 64) ? (1ULL << i) : 0,
+                .processor_group = 0,
+                .affinity_mask = (1ULL << (i % (sizeof(uint64_t) * char_bit))),
             };
 
             if (has_heterogeneous)
@@ -210,30 +217,46 @@ namespace tempest::job
                     if (info->Relationship == RelationProcessorCore)
                     {
                         auto eff = static_cast<uint32_t>(info->Processor.EfficiencyClass);
-                        auto affinity = uint64_t{0};
-                        if (info->Processor.GroupCount > 0)
-                        {
-                            affinity = static_cast<uint64_t>(info->Processor.GroupMask[0].Mask);
-                        }
-                        else
-                        {
-                            affinity = (core_index < 64) ? (1ULL << core_index) : 0;
-                        }
-
                         auto c_type = core_class::performance;
                         if (is_hetero && eff == min_efficiency_class)
                         {
                             c_type = core_class::efficiency;
                         }
 
-                        topo.cores.push_back(core_info{
-                            .core_id = core_index,
-                            .logical_core_index = core_index,
-                            .type = c_type,
-                            .efficiency_class = eff,
-                            .affinity_mask = affinity,
-                        });
-                        ++core_index;
+                        if (info->Processor.GroupCount > 0)
+                        {
+                            for (auto g = 0U; g < static_cast<uint32_t>(info->Processor.GroupCount); ++g)
+                            {
+                                const auto& gm = info->Processor.GroupMask[g];
+                                for (auto bit = 0U; bit < 64U; ++bit)
+                                {
+                                    if ((gm.Mask & (1ULL << bit)) != 0)
+                                    {
+                                        auto global_idx = static_cast<uint32_t>(gm.Group) * 64U + bit;
+                                        topo.cores.push_back(core_info{
+                                            .core_id = core_index++,
+                                            .logical_core_index = global_idx,
+                                            .type = c_type,
+                                            .efficiency_class = eff,
+                                            .processor_group = gm.Group,
+                                            .affinity_mask = 1ULL << bit,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            topo.cores.push_back(core_info{
+                                .core_id = core_index,
+                                .logical_core_index = core_index,
+                                .type = c_type,
+                                .efficiency_class = eff,
+                                .processor_group = static_cast<uint16_t>(core_index / 64),
+                                .affinity_mask = 1ULL << (core_index % 64),
+                            });
+                            ++core_index;
+                        }
                     }
                     offset += info->Size;
                 }
@@ -258,7 +281,8 @@ namespace tempest::job
                 .logical_core_index = i,
                 .type = core_class::performance,
                 .efficiency_class = 0,
-                .affinity_mask = (i < 64) ? (1ULL << i) : 0,
+                .processor_group = static_cast<uint16_t>(i / 64),
+                .affinity_mask = 1ULL << (i % 64),
             });
         }
         return topo;
@@ -277,52 +301,104 @@ namespace tempest::job
                 .logical_core_index = i,
                 .type = core_class::performance,
                 .efficiency_class = 0,
-                .affinity_mask = (i < 64) ? (1ULL << i) : 0,
+                .processor_group = static_cast<uint16_t>(i / 64),
+                .affinity_mask = 1ULL << (i % 64),
             });
         }
         return topo;
 #endif
     }
 
-    auto set_thread_affinity(tempest::thread& t, uint64_t mask) -> bool
+    auto set_thread_affinity(tempest::thread& thr, const core_info& core) -> bool
     {
 #if defined(__linux__)
         auto cpuset = cpu_set_t{};
         CPU_ZERO(&cpuset);
-        for (auto i = 0U; i < 64U; ++i)
+        if (core.logical_core_index < CPU_SETSIZE)
         {
-            if ((mask & (1ULL << i)) != 0)
-            {
-                CPU_SET(i, &cpuset);
-            }
+            CPU_SET(core.logical_core_index, &cpuset);
         }
-        return pthread_setaffinity_np(static_cast<pthread_t>(t.native_handle()), sizeof(cpu_set_t), &cpuset) == 0;
+        return pthread_setaffinity_np(static_cast<pthread_t>(thr.native_handle()), sizeof(cpu_set_t), &cpuset) == 0;
 #elif defined(_WIN32)
-        return SetThreadAffinityMask(static_cast<HANDLE>(t.native_handle()), static_cast<DWORD_PTR>(mask)) != 0;
+        auto group_affinity = GROUP_AFFINITY{};
+        group_affinity.Group = core.processor_group;
+        group_affinity.Mask = static_cast<KAFFINITY>(core.affinity_mask);
+        return SetThreadGroupAffinity(static_cast<HANDLE>(thr.native_handle()), &group_affinity, nullptr) != 0;
 #else
-        (void)t;
-        (void)mask;
+        [[maybe_unused]] auto unused_t = &thr;
+        [[maybe_unused]] auto unused_core = &core;
         return false;
 #endif
     }
 
-    auto set_current_thread_affinity(uint64_t mask) -> bool
+    auto set_thread_affinity(tempest::thread& thr, const cpu_mask& mask) -> bool
     {
 #if defined(__linux__)
-        cpu_set_t cpuset;
+        auto cpuset = cpu_set_t{};
         CPU_ZERO(&cpuset);
-        for (auto i = 0U; i < 64U; ++i)
+        constexpr auto copy_bytes = tempest::min(sizeof(mask), sizeof(cpu_set_t));
+        tempest::memcpy(&cpuset, mask.data(), copy_bytes);
+        return pthread_setaffinity_np(static_cast<pthread_t>(thr.native_handle()), sizeof(cpu_set_t), &cpuset) == 0;
+#elif defined(_WIN32)
+        auto first_bit = mask.find_first();
+        if (!first_bit.has_value())
         {
-            if ((mask & (1ULL << i)) != 0)
-            {
-                CPU_SET(i, &cpuset);
-            }
+            return false;
+        }
+        auto group_idx = static_cast<uint16_t>(*first_bit / 64);
+        auto group_affinity = GROUP_AFFINITY{};
+        group_affinity.Group = group_idx;
+        group_affinity.Mask = static_cast<KAFFINITY>(mask.word(group_idx));
+        return SetThreadGroupAffinity(static_cast<HANDLE>(thr.native_handle()), &group_affinity, nullptr) != 0;
+#else
+        [[maybe_unused]] auto unused_t = &thr;
+        [[maybe_unused]] auto unused_mask = &mask;
+        return false;
+#endif
+    }
+
+    auto set_current_thread_affinity(const core_info& core) -> bool
+    {
+#if defined(__linux__)
+        auto cpuset = cpu_set_t{};
+        CPU_ZERO(&cpuset);
+        if (core.logical_core_index < CPU_SETSIZE)
+        {
+            CPU_SET(core.logical_core_index, &cpuset);
         }
         return pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) == 0;
 #elif defined(_WIN32)
-        return SetThreadAffinityMask(GetCurrentThread(), static_cast<DWORD_PTR>(mask)) != 0;
+        auto group_affinity = GROUP_AFFINITY{};
+        group_affinity.Group = core.processor_group;
+        group_affinity.Mask = static_cast<KAFFINITY>(core.affinity_mask);
+        return SetThreadGroupAffinity(GetCurrentThread(), &group_affinity, nullptr) != 0;
 #else
-        (void)mask;
+        [[maybe_unused]] auto unused_core = &core;
+        return false;
+#endif
+    }
+
+    auto set_current_thread_affinity(const cpu_mask& mask) -> bool
+    {
+#if defined(__linux__)
+        auto cpuset = cpu_set_t{};
+        CPU_ZERO(&cpuset);
+        constexpr auto copy_bytes = tempest::min(sizeof(mask), sizeof(cpu_set_t));
+        tempest::memcpy(&cpuset, mask.data(), copy_bytes);
+        return pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) == 0;
+#elif defined(_WIN32)
+        auto first_bit = mask.find_first();
+        if (!first_bit.has_value())
+        {
+            return false;
+        }
+        auto group_idx = static_cast<uint16_t>(*first_bit / 64);
+        auto group_affinity = GROUP_AFFINITY{};
+        group_affinity.Group = group_idx;
+        group_affinity.Mask = static_cast<KAFFINITY>(mask.word(group_idx));
+        return SetThreadGroupAffinity(GetCurrentThread(), &group_affinity, nullptr) != 0;
+#else
+        [[maybe_unused]] auto unused_mask = &mask;
         return false;
 #endif
     }

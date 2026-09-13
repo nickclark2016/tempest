@@ -11,17 +11,18 @@ Deep-dive specifications, post-mortem rationales, and extended code recipes are 
 
 ## Core C++ Language & Dialect
 
-### 1. Engine Standard Library Types (`tempest::`)
-Prefer engine-native types over `std::` and `<cstdint>`:
+### 1. Engine Standard Library (`tempest::`) & Strict Prohibition of `std::`
+**Strict Prohibition of `std::` and Standard Library Headers**: Never use `std::` types, functions, or algorithms anywhere in the engine. Never `#include` standard C++ headers (e.g. `<cstring>`, `<algorithm>`, `<utility>`, `<memory>`, `<vector>`, `<string>`, `<cstdint>`). Always use the corresponding `tempest::` equivalents and `<tempest/...>` headers:
 | Use `tempest::` | Instead of `std::` / C | Header / Notes |
 | :--- | :--- | :--- |
 | `optional`, `nullopt` | `std::optional`, `std::nullopt` | `<tempest/optional.hpp>` |
 | `vector`, `string_view` | `std::vector`, `std::string_view` | `<tempest/vector.hpp>`, `<tempest/string_view.hpp>` |
 | `unique_ptr`, `make_unique` | `std::unique_ptr`, `std::make_unique` | `<tempest/memory.hpp>` |
-| `<tempest/int.hpp>` | `<cstdint>` | `uint32_t`, `int32_t`, `uint64_t`, etc. |
+| `<tempest/int.hpp>` | `<cstdint>` | `uint32_t`, `int32_t`, `uint64_t`, `char_bit`, etc. |
 | `inplace_vector<T, N>` | `std::vector` | Small fixed-capacity collections with dynamic runtime counts |
 | `non_null<T>` | Raw non-null pointer / reference members | `<tempest/checked.hpp>` |
-| `min`, `max`, `clamp` | `std::min`, `std::max`, `std::clamp` | `<tempest/algorithm.hpp>`, `<tempest/math_utils.hpp>` |
+| `memcpy`, `memset`, `move`, `forward`, `swap` | `std::memcpy`, `std::move`, `std::forward`, `std::swap` | `<tempest/utility.hpp>` (no `<cstring>` or `<utility>`) |
+| `min`, `max`, `clamp`, `find`, `sort` | `std::min`, `std::max`, `std::clamp`, `std::find`, `std::sort` | `<tempest/algorithm.hpp>`, `<tempest/math_utils.hpp>` |
 
 ### 2. Variable Declarations & Naming
 - **AAA (Almost Always Auto)**: Use `auto` for local variable declarations with explicit initialization (e.g. `auto found = tempest::optional<ecs::entity>();`). Avoid uninitialized or explicitly typed declarations.
@@ -36,6 +37,7 @@ Prefer engine-native types over `std::` and `<cstdint>`:
 - **`explicit` Constructors**: Only mark constructors `explicit` when exactly one argument is required and it is not a copy/move constructor. Never mark multi-parameter constructors requiring two or more arguments `explicit`.
 
 ### 4. Global Architectural Invariants
+- **Strict Prohibition of `std::` Symbols & C++ Standard Headers**: The engine implements its own core vocabulary in namespace `tempest`. All code must use `tempest::` primitives exclusively—both for types and for utility/memory/algorithm functions (`tempest::memcpy`, `tempest::move`, `tempest::forward`, etc.). Direct use of `std::` or inclusion of standard C/C++ library headers like `<cstring>` or `<algorithm>` is forbidden.
 - **Assume Valid Invariants Over Defensive Null Checks**: Core engine components and required subsystems (e.g. `camera_system` on a `renderer`) must be represented as non-null references. Avoid defensive null pointer checks or fallback branches for ill-formed states; assume input invariants are valid.
 - **Explicit Ownership Semantics (Strict Prohibition of `shared_ptr`)**: Never use `std::shared_ptr` or `tempest::shared_ptr` anywhere in the codebase. Shared ownership obscures object lifetime boundaries, introduces atomic ref-counting overhead, and complicates deterministic destruction. Use explicit unique ownership (`tempest::unique_ptr` / `tempest::make_unique`), RAII scope management, non-owning raw pointers/references with well-defined parent-child lifetimes, or generational indices (`ecs::entity`). Never suggest or introduce `shared_ptr` as a solution when analyzing memory issues, proposing fixes, or refactoring.
 - **Strict Prohibition of `thread_local` and Global Variables**: Never introduce `thread_local`, global variables, or static mutable state anywhere in engine runtime libraries. Confine worker state via worker-indexed state structures (e.g. `worker_state` via `find_current_worker()` or `job_context`). Sockets, pools, and singletons must maintain clear RAII lifecycles tied to engine or system instances.

@@ -325,4 +325,77 @@ namespace tempest::job::tests
         EXPECT_TRUE(found_worker_track);
         EXPECT_TRUE(found_coroutine_slices);
     }
+
+    // =========================================================================
+    // SECTION: High-Core-Count Server Topology (128 Cores / Multi-Group)
+    // =========================================================================
+
+    /// @brief Verifies that job_system correctly initializes worker pools on a 128-core
+    ///        multi-group server topology, properly routing tasks across P-cores and E-cores.
+    TEST(worker_pool_test, high_core_count_worker_routing_and_execution)
+    {
+        // 1. Setup: Synthesize 128-core topology (64 P-cores in Group 0 + 64 E-cores in Group 1)
+        auto sim_topo = cpu_topology{};
+        for (auto i = 0u; i < 64u; ++i)
+        {
+            sim_topo.cores.push_back(core_info{
+                .core_id = i,
+                .logical_core_index = i,
+                .type = core_class::performance,
+                .efficiency_class = 1,
+                .processor_group = 0,
+                .affinity_mask = 1ULL << i,
+            });
+        }
+        for (auto i = 64u; i < 128u; ++i)
+        {
+            sim_topo.cores.push_back(core_info{
+                .core_id = i,
+                .logical_core_index = i,
+                .type = core_class::efficiency,
+                .efficiency_class = 0,
+                .processor_group = 1,
+                .affinity_mask = 1ULL << (i - 64u),
+            });
+        }
+
+        auto log = logger{};
+        auto prof = profiler::profiler_session{false};
+        auto config = job_system_config{
+            .performance_worker_count = 4,
+            .efficiency_worker_count = 4,
+            .enable_core_pinning = false, // Unit test host might have < 128 cores
+            .topology = sim_topo,
+        };
+
+        auto sys = job_system{log, prof, config};
+        EXPECT_EQ(sys.performance_worker_count(), 4u);
+        EXPECT_EQ(sys.efficiency_worker_count(), 4u);
+
+        // 2. Act: Dispatch mixed tasks across P-cores and E-cores
+        auto p_executed_count = atomic<int>{0};
+        auto e_executed_count = atomic<int>{0};
+        constexpr auto task_batch = 50;
+        auto tasks = vector<task<void>>{};
+        tasks.reserve(task_batch * 2);
+
+        for (auto i = 0; i < task_batch; ++i)
+        {
+            tasks.push_back(sys.async(task_priority::normal, core_class::performance,
+                                      [&p_executed_count] {
+                                          p_executed_count.fetch_add(1, memory_order::relaxed);
+                                      }));
+
+            tasks.push_back(sys.async(task_priority::normal, core_class::efficiency,
+                                      [&e_executed_count] {
+                                          e_executed_count.fetch_add(1, memory_order::relaxed);
+                                      }));
+        }
+
+        sys.wait_idle();
+
+        // 3. Assert: All 100 tasks on the 128-core simulated topology completed
+        EXPECT_EQ(p_executed_count.load(memory_order::relaxed), task_batch);
+        EXPECT_EQ(e_executed_count.load(memory_order::relaxed), task_batch);
+    }
 } // namespace tempest::job::tests

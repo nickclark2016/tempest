@@ -72,7 +72,7 @@ namespace tempest::job
         job_system* owner = nullptr;
         size_t worker_index = 0U;
         core_class type{core_class::performance};
-        uint64_t affinity_mask = 0ULL;
+        optional<core_info> target_core{nullopt};
         array<work_stealing_deque<job_system::queue_item, max_deque_size>, static_cast<size_t>(task_priority::count)>
             deques{};
         concurrent_queue<job_system::queue_item> injection_queue;
@@ -242,7 +242,7 @@ namespace tempest::job
             {
                 if (_impl->topology.cores[core_idx].type == core_class::performance)
                 {
-                    state->affinity_mask = _impl->topology.cores[core_idx].affinity_mask;
+                    state->target_core = _impl->topology.cores[core_idx];
                     ++core_idx;
                     break;
                 }
@@ -270,7 +270,7 @@ namespace tempest::job
             {
                 if (_impl->topology.cores[core_idx].type == core_class::efficiency)
                 {
-                    state->affinity_mask = _impl->topology.cores[core_idx].affinity_mask;
+                    state->target_core = _impl->topology.cores[core_idx];
                     ++core_idx;
                     break;
                 }
@@ -291,9 +291,9 @@ namespace tempest::job
                 auto& prof_ctx = _profiler.get_or_register_thread();
                 prof_ctx.set_thread_name(worker->type == core_class::performance ? "JobWorker-P" : "JobWorker-E");
 
-                if (_config.enable_core_pinning && worker->affinity_mask != 0)
+                if (_config.enable_core_pinning && worker->target_core.has_value())
                 {
-                    set_current_thread_affinity(worker->affinity_mask);
+                    set_current_thread_affinity(*worker->target_core);
                 }
 
                 auto pop_or_steal = [this](worker_state& work_state) -> optional<queue_item> {
