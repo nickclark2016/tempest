@@ -63,13 +63,8 @@ namespace tempest::job
         } while (!_waiters_in.compare_exchange_weak(old_head, waiter, memory_order::release));
 
         // If the lock was released in the meantime, try to acquire
-        if (_locked.load(memory_order::acquire) == 0 && try_lock())
-        {
-            // Acquired lock immediately without yielding!
-            return false;
-        }
-
-        return true; // Suspend caller
+        const auto acquired = _locked.load(memory_order::acquire) == 0 && try_lock();
+        return !acquired; // return true if we need to suspend, false if we acquired the lock
     }
 
     auto async_mutex::lock_awaiter::await_suspend(coroutine_handle<> hnd) noexcept -> bool

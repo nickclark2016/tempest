@@ -2,8 +2,8 @@
 
 namespace tempest::job
 {
-    task_node::task_node(string_view name, size_t id, task_graph* graph) noexcept
-        : _name{name}, _id{id}, _graph{graph}
+    task_node::task_node(string_view name, size_t tid, task_graph* graph) noexcept
+        : _name{name}, _id{tid}, _graph{graph}
     {
     }
 
@@ -33,9 +33,9 @@ namespace tempest::job
         {
             return;
         }
-        for (auto* s : _successors)
+        for (auto* const successor : _successors)
         {
-            if (s == succ)
+            if (successor == succ)
             {
                 return;
             }
@@ -47,36 +47,36 @@ namespace tempest::job
 
     auto task_node::precede(span<const non_null<task_node>> nodes) -> task_node&
     {
-        for (const auto& n : nodes)
+        for (const auto& node : nodes)
         {
-            _add_successor(n.get());
+            _add_successor(node.get());
         }
         return *this;
     }
 
     auto task_node::precede(span<task_node*> nodes) -> task_node&
     {
-        for (auto* n : nodes)
+        for (auto* const node : nodes)
         {
-            _add_successor(n);
+            _add_successor(node);
         }
         return *this;
     }
 
     auto task_node::succeed(span<const non_null<task_node>> nodes) -> task_node&
     {
-        for (const auto& n : nodes)
+        for (const auto& node : nodes)
         {
-            n.get()->_add_successor(this);
+            node->_add_successor(this);
         }
         return *this;
     }
 
     auto task_node::succeed(span<task_node*> nodes) -> task_node&
     {
-        for (auto* n : nodes)
+        for (auto* const node : nodes)
         {
-            n->_add_successor(this);
+            node->_add_successor(this);
         }
         return *this;
     }

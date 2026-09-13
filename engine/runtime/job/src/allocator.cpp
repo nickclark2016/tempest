@@ -1,3 +1,4 @@
+#include "tempest/job/task.hpp"
 #include <tempest/job/allocator.hpp>
 #include <tempest/memory.hpp>
 
@@ -32,11 +33,11 @@ job_allocator::job_allocator() = default;
         const auto cls = get_size_class(size);
         if (cls < 0)
         {
-            auto* raw = static_cast<byte*>(aligned_alloc(size + 16, 16));
+            auto* raw = static_cast<byte*>(aligned_alloc(size + detail::coroutine_frame_header_size, detail::coroutine_frame_header_alignment));
             *reinterpret_cast<job_allocator**>(raw) = this;
             _heap_fallback_count.fetch_add(1, memory_order::relaxed);
             _active_live_frames.fetch_add(1, memory_order::acq_rel);
-            return raw + 16;
+            return raw + detail::coroutine_frame_header_size; // first HEADER_SIZE bytes are reserved for the header
         }
 
         const auto class_idx = static_cast<size_t>(cls);
@@ -53,17 +54,17 @@ job_allocator::job_allocator() = default;
         return node;
     }
 
-    auto job_allocator::_allocate_slab_chunk(size_t cls) -> void
+    auto job_allocator::_allocate_slab_chunk(size_t size_class) -> void
     {
-        const auto slot_sz = slab_class_sizes[cls];
+        const auto slot_sz = slab_class_sizes[size_class];
         auto* raw = static_cast<byte*>(aligned_alloc(slab_chunk_size, slab_chunk_size));
 
         auto* chunk = reinterpret_cast<slab_chunk*>(raw);
         chunk->owner = this;
-        chunk->size_class = static_cast<uint32_t>(cls);
+        chunk->size_class = static_cast<uint32_t>(size_class);
         chunk->slot_size = static_cast<uint32_t>(slot_sz);
-        chunk->next_chunk = _chunks[cls];
-        _chunks[cls] = chunk;
+        chunk->next_chunk = _chunks[size_class];
+        _chunks[size_class] = chunk;
 
         _committed_slab_chunks.fetch_add(1, memory_order::relaxed);
 
@@ -75,12 +76,13 @@ job_allocator::job_allocator() = default;
         free_slot_node* head = nullptr;
         for (size_t i = 0; i < total_slots; ++i)
         {
-            auto* slot = reinterpret_cast<free_slot_node*>(raw + first_slot_offset + i * slot_sz);
+            const auto offset = (slot_sz * i) + first_slot_offset;
+            auto* slot = reinterpret_cast<free_slot_node*>(raw + offset);
             slot->next = head;
             head = slot;
         }
 
-        _local_free_list[cls] = head;
+        _local_free_list[size_class] = head;
     }
 
     auto job_allocator::push_remote_free(void* ptr) noexcept -> void
@@ -123,9 +125,9 @@ job_allocator::job_allocator() = default;
             return;
         }
 
-        if (size > 2048)
+        if (size > size_class_2kb)
         {
-            auto* raw = static_cast<byte*>(ptr) - 16;
+            auto* raw = static_cast<byte*>(ptr) - detail::coroutine_frame_header_size;
             auto* owner = *reinterpret_cast<job_allocator**>(raw);
             if (owner != nullptr)
             {
@@ -148,14 +150,14 @@ job_allocator::job_allocator() = default;
 
     auto job_allocator::get_telemetry() const noexcept -> allocator_telemetry
     {
-        auto t = allocator_telemetry{};
+        auto telemetry = allocator_telemetry{};
         for (size_t i = 0; i < slab_class_count; ++i)
         {
-            t.allocations_per_class[i] = _allocations_per_class[i].load(memory_order::relaxed);
+            telemetry.allocations_per_class[i] = _allocations_per_class[i].load(memory_order::relaxed);
         }
-        t.heap_fallback_count = _heap_fallback_count.load(memory_order::relaxed);
-        t.active_live_frames = _active_live_frames.load(memory_order::relaxed);
-        t.committed_slab_chunks = _committed_slab_chunks.load(memory_order::relaxed);
-        return t;
+        telemetry.heap_fallback_count = _heap_fallback_count.load(memory_order::relaxed);
+        telemetry.active_live_frames = _active_live_frames.load(memory_order::relaxed);
+        telemetry.committed_slab_chunks = _committed_slab_chunks.load(memory_order::relaxed);
+        return telemetry;
     }
 } // namespace tempest::job

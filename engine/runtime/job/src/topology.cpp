@@ -1,5 +1,6 @@
 #include <tempest/job/topology.hpp>
 
+#include <tempest/array.hpp>
 #include <tempest/algorithm.hpp>
 #include <tempest/int.hpp>
 #include <tempest/optional.hpp>
@@ -25,10 +26,10 @@ namespace tempest::job
 #if defined(__linux__)
         auto read_core_capacity(uint32_t cpu_id) -> optional<uint32_t>
         {
-            char path[64];
+            auto path = array<char, 64>{};
             auto len = 0;
             auto temp = cpu_id;
-            char num_buf[16];
+            auto num_buf = array<char, 16>{};
             auto num_digits = 0;
             if (temp == 0)
             {
@@ -43,7 +44,7 @@ namespace tempest::job
                 }
             }
 
-            const char prefix[] = "/sys/devices/system/cpu/cpu";
+            const auto* const prefix = "/sys/devices/system/cpu/cpu";
             for (auto i = 0; prefix[i] != '\0'; ++i)
             {
                 path[len++] = prefix[i];
@@ -52,29 +53,29 @@ namespace tempest::job
             {
                 path[len++] = num_buf[i - 1];
             }
-            const char suffix[] = "/cpu_capacity";
+            const auto* const suffix = "/cpu_capacity";
             for (auto i = 0; suffix[i] != '\0'; ++i)
             {
                 path[len++] = suffix[i];
             }
             path[len] = '\0';
 
-            auto fd = open(path, O_RDONLY);
-            if (fd < 0)
+            auto file_desc = open(path.data(), O_RDONLY);
+            if (file_desc < 0)
             {
                 return nullopt;
             }
 
-            char buf[32];
-            auto bytes_read = read(fd, buf, sizeof(buf) - 1);
-            close(fd);
+            auto buf = array<char, 32>{};
+            auto bytes_read = read(file_desc, buf.data(), sizeof(buf) - 1);
+            close(file_desc);
 
             if (bytes_read <= 0)
             {
                 return nullopt;
             }
 
-            auto val = 0u;
+            auto val = 0U;
             for (auto i = 0; i < bytes_read; ++i)
             {
                 if (buf[i] >= '0' && buf[i] <= '9')
@@ -103,14 +104,15 @@ namespace tempest::job
             count = 1;
         }
 
+        constexpr auto default_capability = 1024U;
         auto capacities = vector<uint32_t>{};
-        capacities.resize(count, 1024);
+        capacities.resize(count, default_capability);
         auto has_heterogeneous = false;
-        auto min_cap = 1024u;
-        auto max_cap = 1024u;
+        auto min_cap = default_capability;
+        auto max_cap = default_capability;
         auto read_any = false;
 
-        for (auto i = 0u; i < count; ++i)
+        for (auto i = 0U; i < count; ++i)
         {
             auto cap = read_core_capacity(i);
             if (cap.has_value())
@@ -137,7 +139,7 @@ namespace tempest::job
 
         auto threshold = (min_cap + max_cap) / 2;
 
-        for (auto i = 0u; i < count; ++i)
+        for (auto i = 0U; i < count; ++i)
         {
             auto info = core_info{
                 .core_id = i,
@@ -167,7 +169,7 @@ namespace tempest::job
         return topo;
 
 #elif defined(_WIN32)
-        DWORD length = 0;
+        auto length = DWORD(0);
         GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &length);
         if (GetLastError() == ERROR_INSUFFICIENT_BUFFER && length > 0)
         {
@@ -178,10 +180,10 @@ namespace tempest::job
                                                  reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data()),
                                                  &length))
             {
-                auto offset = 0u;
-                auto max_efficiency_class = 0u;
-                auto min_efficiency_class = ~0u;
-                auto core_count = 0u;
+                auto offset = 0U;
+                auto max_efficiency_class = 0U;
+                auto min_efficiency_class = ~0U;
+                auto core_count = 0U;
 
                 // First pass: inspect efficiency classes
                 while (offset < length)
@@ -200,8 +202,8 @@ namespace tempest::job
                 auto is_hetero = (min_efficiency_class < max_efficiency_class);
 
                 // Second pass: construct core_info
-                offset = 0u;
-                auto core_index = 0u;
+                offset = 0U;
+                auto core_index = 0U;
                 while (offset < length)
                 {
                     auto* info = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data() + offset);
@@ -249,7 +251,7 @@ namespace tempest::job
         {
             hw = 1;
         }
-        for (auto i = 0u; i < hw; ++i)
+        for (auto i = 0U; i < hw; ++i)
         {
             topo.cores.push_back(core_info{
                 .core_id = i,
@@ -268,7 +270,7 @@ namespace tempest::job
         {
             hw = 1;
         }
-        for (auto i = 0u; i < hw; ++i)
+        for (auto i = 0U; i < hw; ++i)
         {
             topo.cores.push_back(core_info{
                 .core_id = i,
@@ -285,11 +287,11 @@ namespace tempest::job
     auto set_thread_affinity(tempest::thread& t, uint64_t mask) -> bool
     {
 #if defined(__linux__)
-        cpu_set_t cpuset;
+        auto cpuset = cpu_set_t{};
         CPU_ZERO(&cpuset);
-        for (auto i = 0u; i < 64u; ++i)
+        for (auto i = 0U; i < 64U; ++i)
         {
-            if (mask & (1ULL << i))
+            if ((mask & (1ULL << i)) != 0)
             {
                 CPU_SET(i, &cpuset);
             }
@@ -309,9 +311,9 @@ namespace tempest::job
 #if defined(__linux__)
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
-        for (auto i = 0u; i < 64u; ++i)
+        for (auto i = 0U; i < 64U; ++i)
         {
-            if (mask & (1ULL << i))
+            if ((mask & (1ULL << i)) != 0)
             {
                 CPU_SET(i, &cpuset);
             }
