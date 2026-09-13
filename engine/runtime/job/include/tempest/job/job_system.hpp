@@ -27,12 +27,14 @@ namespace tempest::job
 {
     struct job_system_config
     {
-        optional<uint32_t> performance_worker_count{nullopt};
-        optional<uint32_t> efficiency_worker_count{nullopt};
-        bool enable_work_stealing{true};
-        bool enable_core_pinning{true};
-        uint32_t starvation_quantum{16};
-        optional<cpu_topology> topology{nullopt};
+        static constexpr uint32_t default_starvation_quantum = 16;
+
+        optional<uint32_t> performance_worker_count = nullopt;
+        optional<uint32_t> efficiency_worker_count = nullopt;
+        bool enable_work_stealing = true;
+        bool enable_core_pinning = true;
+        uint32_t starvation_quantum = default_starvation_quantum;
+        optional<cpu_topology> topology = nullopt;
     };
 
     class TEMPEST_API job_system
@@ -40,18 +42,18 @@ namespace tempest::job
       public:
         struct queue_item
         {
-            coroutine_handle<> handle{nullptr};
-            task_priority priority{task_priority::normal};
-            core_class affinity{core_class::any};
+            coroutine_handle<> handle = nullptr;
+            task_priority priority = task_priority::normal;
+            core_class affinity = core_class::any;
         };
 
-        job_system(logger& log, profiler::profiler_session& profiler, const job_system_config& config = {});
+        job_system(logger& log, profiler::profiler_session& profiler, job_system_config config = {});
+        job_system(const job_system&) = delete;
+        job_system(job_system&&) noexcept = delete;
         ~job_system();
 
-        job_system(const job_system&) = delete;
-        job_system& operator=(const job_system&) = delete;
-        job_system(job_system&&) = delete;
-        job_system& operator=(job_system&&) = delete;
+        auto operator=(const job_system&) -> job_system& = delete;
+        auto operator=(job_system&&) noexcept -> job_system& = delete;
 
         [[nodiscard]] auto get_logger() noexcept -> logger&
         {
@@ -79,31 +81,30 @@ namespace tempest::job
 
         auto schedule(coroutine_handle<> handle, task_priority priority = task_priority::normal,
                       core_class affinity = core_class::any) -> void;
-        auto schedule(const job_context& ctx, coroutine_handle<> handle,
-                      task_priority priority = task_priority::normal,
+        auto schedule(const job_context& ctx, coroutine_handle<> handle, task_priority priority = task_priority::normal,
                       core_class affinity = core_class::any) -> void;
 
         template <typename T, typename E>
-        auto schedule(task<T, E>& t, task_priority priority = task_priority::normal,
+        auto schedule(task<T, E>& job, task_priority priority = task_priority::normal,
                       core_class affinity = core_class::any) -> void
         {
-            if (t.get_profiler() == nullptr)
+            if (job.get_profiler() == nullptr)
             {
-                t.set_profiler(&_profiler);
+                job.set_profiler(&_profiler);
             }
-            schedule(t.handle(), priority, affinity);
+
+            schedule(job.handle(), priority, affinity);
         }
 
         template <typename T, typename E>
-        auto schedule(const job_context& ctx, task<T, E>& t,
-                      task_priority priority = task_priority::normal,
+        auto schedule(const job_context& ctx, task<T, E>& job, task_priority priority = task_priority::normal,
                       core_class affinity = core_class::any) -> void
         {
-            if (t.get_profiler() == nullptr)
+            if (job.get_profiler() == nullptr)
             {
-                t.set_profiler(&_profiler);
+                job.set_profiler(&_profiler);
             }
-            schedule(ctx, t.handle(), priority, affinity);
+            schedule(ctx, job.handle(), priority, affinity);
         }
 
         template <typename F>
@@ -119,59 +120,72 @@ namespace tempest::job
 
             if constexpr (detail::is_task_v<ReturnType>)
             {
-                auto runner = [](job_allocator&, job_system&, F fn) -> ReturnType {
+                // These references are safe, as they are stable across the lifetime of the coroutine, and the coroutine
+                // is guaranteed to be alive until it is completed. These references aren't used in the body of the
+                // lambda.
+                //
+                // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
+                auto runner = [](job_allocator&, job_system&, F func) -> ReturnType {
                     if constexpr (is_void_v<typename ReturnType::value_type>)
                     {
-                        co_await fn();
+                        co_await func();
                         co_return;
                     }
                     else
                     {
-                        co_return co_await fn();
+                        co_return co_await func();
                     }
                 };
 
-                auto t = runner(get_dispatch_allocator(), *this, forward<F>(callable));
-                t.set_profiler(&_profiler);
-                schedule(t.handle(), priority, affinity);
-                return t;
+                auto job = runner(get_dispatch_allocator(), *this, forward<F>(callable));
+                job.set_profiler(&_profiler);
+                schedule(job.handle(), priority, affinity);
+                return job;
             }
             else if constexpr (is_void_v<ReturnType>)
             {
-                auto runner = [](job_allocator&, job_system&, F fn) -> task<void> {
-                    fn();
+                // These references are safe, as they are stable across the lifetime of the coroutine, and the coroutine
+                // is guaranteed to be alive until it is completed. These references aren't used in the body of the
+                // lambda.
+                //
+                // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
+                auto runner = [](job_allocator&, job_system&, F func) -> task<void> {
+                    func();
                     co_return;
                 };
 
-                auto t = runner(get_dispatch_allocator(), *this, forward<F>(callable));
-                t.set_profiler(&_profiler);
-                schedule(t.handle(), priority, affinity);
-                return t;
+                auto job = runner(get_dispatch_allocator(), *this, forward<F>(callable));
+                job.set_profiler(&_profiler);
+                schedule(job.handle(), priority, affinity);
+                return job;
             }
             else
             {
-                auto runner = [](job_allocator&, job_system&, F fn) -> task<ReturnType> {
-                    co_return fn();
-                };
+                // These references are safe, as they are stable across the lifetime of the coroutine, and the coroutine
+                // is guaranteed to be alive until it is completed. These references aren't used in the body of the
+                // lambda.
+                //
+                // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
+                auto runner = [](job_allocator&, job_system&, F func) -> task<ReturnType> { co_return func(); };
 
-                auto t = runner(get_dispatch_allocator(), *this, forward<F>(callable));
-                t.set_profiler(&_profiler);
-                schedule(t.handle(), priority, affinity);
-                return t;
+                auto job = runner(get_dispatch_allocator(), *this, forward<F>(callable));
+                job.set_profiler(&_profiler);
+                schedule(job.handle(), priority, affinity);
+                return job;
             }
         }
 
         template <typename Partitioner = partitioner::guided, typename F>
-        auto parallel_for(range<size_t> r, task_priority priority, F body) -> task<void>
+        auto parallel_for(range<size_t> rng, task_priority priority, F body) -> task<void>
         {
-            if (r.empty())
+            if (rng.empty())
             {
                 co_return;
             }
 
             auto part = Partitioner{};
-            auto count = r.size();
-            auto workers = tempest::max(1u, worker_count());
+            auto count = rng.size();
+            auto workers = tempest::max(1U, worker_count());
 
             if constexpr (is_same_v<Partitioner, partitioner::static_chunk>)
             {
@@ -184,30 +198,35 @@ namespace tempest::job
                 auto remaining = make_unique<atomic<size_t>>(num_chunks);
                 auto done_event = make_unique<async_event>(*this);
 
-                auto launch_chunk = [&body, rem = remaining.get(), ev = done_event.get()](
-                                        job_allocator&, job_system&, size_t chunk_start, size_t chunk_end) -> detail::detached_task {
+                auto launch_chunk =
+                    [&body, // NOLINT(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+                     rem = remaining.get(),
+                     async_ev = done_event.get()](
+                        job_allocator&, // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
+                        job_system&,    // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
+                        size_t chunk_start, size_t chunk_end) -> detail::detached_task {
                     if constexpr (requires { body(range<size_t>{chunk_start, chunk_end}); })
                     {
                         body(range<size_t>{chunk_start, chunk_end});
                     }
                     else
                     {
-                        for (auto i = chunk_start; i < chunk_end; ++i)
+                        for (auto idx = chunk_start; idx < chunk_end; ++idx)
                         {
-                            body(i);
+                            body(idx);
                         }
                     }
                     if (rem->fetch_sub(1, memory_order::acq_rel) == 1)
                     {
-                        ev->set();
+                        async_ev->set();
                     }
                     co_return;
                 };
 
-                for (auto c = 0u; c < num_chunks; ++c)
+                for (auto chunk_idx = 0U; chunk_idx < num_chunks; ++chunk_idx)
                 {
-                    auto chunk_start = r.first + c * chunk_sz;
-                    auto chunk_end = tempest::min(r.last, chunk_start + chunk_sz);
+                    auto chunk_start = rng.first + chunk_idx * chunk_sz;
+                    auto chunk_end = tempest::min(rng.last, chunk_start + chunk_sz);
                     auto task = launch_chunk(get_dispatch_allocator(), *this, chunk_start, chunk_end);
                     schedule(task.handle, priority, core_class::any);
                 }
@@ -217,21 +236,26 @@ namespace tempest::job
             else
             {
                 auto num_tasks = tempest::min(static_cast<size_t>(workers * 2), count);
-                auto next_idx = make_unique<atomic<size_t>>(r.first);
+                auto next_idx = make_unique<atomic<size_t>>(rng.first);
                 auto remaining = make_unique<atomic<size_t>>(num_tasks);
                 auto done_event = make_unique<async_event>(*this);
 
-                auto launch_guided = [&body, next = next_idx.get(), r, part, workers,
-                                      rem = remaining.get(), ev = done_event.get()](job_allocator&, job_system&) -> detail::detached_task {
+                auto launch_guided =
+                    [&body, // NOLINT(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+                     next = next_idx.get(), rng, part, workers, rem = remaining.get(),
+                     async_ev = done_event.get()](
+                        job_allocator&, // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
+                        job_system&     // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
+                        ) -> detail::detached_task {
                     while (true)
                     {
                         auto curr = next->load(memory_order::relaxed);
-                        if (curr >= r.last)
+                        if (curr >= rng.last)
                         {
                             break;
                         }
-                        auto remaining_items = r.last - curr;
-                        auto chunk = tempest::max(part.min_chunk_size, remaining_items / (2 * workers));
+                        auto remaining_items = rng.last - curr;
+                        auto chunk = tempest::max(part.min_chunk_size, remaining_items / (2ULL * workers));
                         chunk = tempest::min(remaining_items, chunk);
                         if (next->compare_exchange_weak(curr, curr + chunk, memory_order::relaxed))
                         {
@@ -243,21 +267,21 @@ namespace tempest::job
                             }
                             else
                             {
-                                for (auto i = chunk_start; i < chunk_end; ++i)
+                                for (auto idx = chunk_start; idx < chunk_end; ++idx)
                                 {
-                                    body(i);
+                                    body(idx);
                                 }
                             }
                         }
                     }
                     if (rem->fetch_sub(1, memory_order::acq_rel) == 1)
                     {
-                        ev->set();
+                        async_ev->set();
                     }
                     co_return;
                 };
 
-                for (auto t = 0u; t < num_tasks; ++t)
+                for (auto task_idx = 0U; task_idx < num_tasks; ++task_idx)
                 {
                     auto task = launch_guided(get_dispatch_allocator(), *this);
                     schedule(task.handle, priority, core_class::any);
@@ -268,9 +292,9 @@ namespace tempest::job
         }
 
         template <typename Partitioner = partitioner::guided, typename F>
-        auto parallel_for(range<size_t> r, F body) -> task<void>
+        auto parallel_for(range<size_t> rng, F body) -> task<void>
         {
-            return parallel_for<Partitioner>(r, task_priority::normal, tempest::move(body));
+            return parallel_for<Partitioner>(rng, task_priority::normal, tempest::move(body));
         }
 
         template <typename Partitioner = partitioner::guided, typename F>
@@ -312,9 +336,9 @@ namespace tempest::job
     };
 
     template <typename T, typename E>
-    inline auto job_context::schedule(task<T, E>& t, task_priority priority, core_class affinity) const -> void
+    inline auto job_context::schedule(task<T, E>& job, task_priority priority, core_class affinity) const -> void
     {
-        system->schedule(t, priority, affinity);
+        system->schedule(job, priority, affinity);
     }
 } // namespace tempest::job
 

@@ -3,19 +3,19 @@
 
 namespace tempest::job
 {
-    auto async_mutex::_resume(coroutine_handle<> h) noexcept -> void
+    auto async_mutex::_resume(coroutine_handle<> hnd) noexcept -> void
     {
         if (_sys != nullptr)
         {
-            _sys->schedule(h);
+            _sys->schedule(hnd);
         }
         else
         {
-            h.resume();
+            hnd.resume();
         }
     }
 
-    scoped_lock_guard::scoped_lock_guard(async_mutex& m) noexcept : _mutex{&m}
+    scoped_lock_guard::scoped_lock_guard(async_mutex& mtx) noexcept : _mutex{&mtx}
     {
     }
 
@@ -52,9 +52,9 @@ namespace tempest::job
         return _locked.compare_exchange_strong(expected, 1, memory_order::acquire);
     }
 
-    auto async_mutex::_enqueue_waiter(async_mutex_waiter* waiter, coroutine_handle<> h) noexcept -> bool
+    auto async_mutex::_enqueue_waiter(async_mutex_waiter* waiter, coroutine_handle<> hnd) noexcept -> bool
     {
-        waiter->handle = h;
+        waiter->handle = hnd;
 
         auto* old_head = _waiters_in.load(memory_order::relaxed);
         do
@@ -62,25 +62,19 @@ namespace tempest::job
             waiter->next = old_head;
         } while (!_waiters_in.compare_exchange_weak(old_head, waiter, memory_order::release));
 
-        // If the lock was released in the meantime, try to acquire
-        if (_locked.load(memory_order::acquire) == 0 && try_lock())
-        {
-            // Acquired lock immediately without yielding!
-            // Note: Waiter node will remain in _waiters_in but will be popped on unlock without harm
-            return false;
-        }
-
-        return true; // Suspend caller
+        // If we successfully enqueued the waiter, we need to check if the mutex is still locked.
+        // If the mutex is unlocked, we can try to acquire it and resume the waiter immediately
+        return _locked.load(memory_order::acquire) == 0 && try_lock();
     }
 
-    auto async_mutex::lock_awaiter::await_suspend(coroutine_handle<> h) noexcept -> bool
+    auto async_mutex::lock_awaiter::await_suspend(coroutine_handle<> hnd) noexcept -> bool
     {
-        return mutex._enqueue_waiter(&waiter, h);
+        return mutex-> _enqueue_waiter(&waiter, hnd);
     }
 
-    auto async_mutex::scoped_lock_awaiter::await_suspend(coroutine_handle<> h) noexcept -> bool
+    auto async_mutex::scoped_lock_awaiter::await_suspend(coroutine_handle<> hnd) noexcept -> bool
     {
-        return mutex._enqueue_waiter(&waiter, h);
+        return mutex-> _enqueue_waiter(&waiter, hnd);
     }
 
     auto async_mutex::unlock() noexcept -> void
@@ -88,10 +82,10 @@ namespace tempest::job
         // 1. If we have waiters in _waiters_out, pop the first one (FIFO order)
         if (_waiters_out != nullptr)
         {
-            auto* w = _waiters_out;
+            auto* const waiter = _waiters_out;
             _waiters_out = _waiters_out->next;
             // Hand off lock ownership directly to waiter
-            _resume(w->handle);
+            _resume(waiter->handle);
             return;
         }
 

@@ -3,6 +3,7 @@
 
 #include <tempest/algorithm.hpp>
 #include <tempest/api.hpp>
+#include <tempest/array.hpp>
 #include <tempest/atomic.hpp>
 #include <tempest/coroutine.hpp>
 #include <tempest/expected.hpp>
@@ -60,9 +61,9 @@ namespace tempest::job
         }
 
         channel(const channel&) = delete;
-        channel& operator=(const channel&) = delete;
-        channel(channel&&) = delete;
-        channel& operator=(channel&&) = delete;
+        channel(channel&&) noexcept = delete;
+        auto operator=(const channel&) -> channel& = delete;
+        auto operator=(channel&&) noexcept -> channel& = delete;
 
         auto close() noexcept -> void
         {
@@ -71,20 +72,20 @@ namespace tempest::job
                 return;
             }
 
-            auto* p = _producer_waiters.exchange(nullptr, memory_order::acq_rel);
-            while (p != nullptr)
+            auto* ptr = _producer_waiters.exchange(nullptr, memory_order::acq_rel);
+            while (ptr != nullptr)
             {
-                auto* next = p->next;
-                _resume(p);
-                p = next;
+                auto* const next = ptr->next;
+                _resume(ptr);
+                ptr = next;
             }
 
-            auto* c = _consumer_waiters.exchange(nullptr, memory_order::acq_rel);
-            while (c != nullptr)
+            auto* chan = _consumer_waiters.exchange(nullptr, memory_order::acq_rel);
+            while (chan != nullptr)
             {
-                auto* next = c->next;
-                _resume(c);
-                c = next;
+                auto* const next = chan->next;
+                _resume(chan);
+                chan = next;
             }
         }
 
@@ -101,19 +102,19 @@ namespace tempest::job
                 return unexpected(job_error::channel_closed);
             }
 
-            size_t pos = _enqueue_pos.load(memory_order::relaxed);
+            auto pos = _enqueue_pos.load(memory_order::relaxed);
             for (;;)
             {
-                auto& c = _cells[pos & (Capacity - 1)];
-                const auto seq = c.sequence.load(memory_order::acquire);
+                auto& cell = _cells[pos & (Capacity - 1)];
+                const auto seq = cell.sequence.load(memory_order::acquire);
                 const auto diff = static_cast<intptr_t>(seq) - static_cast<intptr_t>(pos);
 
                 if (diff == 0)
                 {
                     if (_enqueue_pos.compare_exchange_weak(pos, pos + 1, memory_order::relaxed))
                     {
-                        new (c.storage) T(forward<U>(value));
-                        c.sequence.store(pos + 1, memory_order::release);
+                        new (cell.storage) T(forward<U>(value));
+                        cell.sequence.store(pos + 1, memory_order::release);
                         _notify_consumer();
                         return {};
                     }
@@ -139,18 +140,18 @@ namespace tempest::job
             size_t pos = _dequeue_pos.load(memory_order::relaxed);
             for (;;)
             {
-                auto& c = _cells[pos & (Capacity - 1)];
-                const auto seq = c.sequence.load(memory_order::acquire);
+                auto& cell = _cells[pos & (Capacity - 1)];
+                const auto seq = cell.sequence.load(memory_order::acquire);
                 const auto diff = static_cast<intptr_t>(seq) - static_cast<intptr_t>(pos + 1);
 
                 if (diff == 0)
                 {
                     if (_dequeue_pos.compare_exchange_weak(pos, pos + 1, memory_order::relaxed))
                     {
-                        auto* ptr = reinterpret_cast<T*>(c.storage);
+                        auto* ptr = reinterpret_cast<T*>(cell.storage);
                         auto val = move(*ptr);
                         ptr->~T();
-                        c.sequence.store(pos + Capacity, memory_order::release);
+                        cell.sequence.store(pos + Capacity, memory_order::release);
                         _notify_producer();
                         return val;
                     }
@@ -212,12 +213,12 @@ namespace tempest::job
         struct cell
         {
             atomic<size_t> sequence{0};
-            alignas(alignof(T)) unsigned char storage[sizeof(T)];
+            alignas(alignof(T)) array<byte, sizeof(T)> storage{};
         };
 
         struct producer_waiter
         {
-            channel& chan;
+            non_null<channel> chan;
             channel_wait_node node{};
 
             auto await_ready() const noexcept -> bool
@@ -225,9 +226,9 @@ namespace tempest::job
                 return false;
             }
 
-            auto await_suspend(coroutine_handle<> h) noexcept -> bool
+            auto await_suspend(coroutine_handle<> hnd) noexcept -> bool
             {
-                node.handle = h;
+                node.handle = hnd;
                 node.scheduler = chan._sys;
                 auto* old_head = chan._producer_waiters.load(memory_order::relaxed);
                 do
@@ -236,11 +237,7 @@ namespace tempest::job
                 } while (!chan._producer_waiters.compare_exchange_weak(old_head, &node, memory_order::release));
 
                 // If space freed or closed, avoid missing wakeups
-                if (chan.is_closed())
-                {
-                    return false;
-                }
-                return true;
+                return chan->is_closed();
             }
 
             auto await_resume() const noexcept -> void
@@ -255,7 +252,7 @@ namespace tempest::job
 
         struct consumer_waiter
         {
-            channel& chan;
+            non_null<channel> chan;
             channel_wait_node node{};
 
             auto await_ready() const noexcept -> bool
@@ -263,9 +260,9 @@ namespace tempest::job
                 return false;
             }
 
-            auto await_suspend(coroutine_handle<> h) noexcept -> bool
+            auto await_suspend(coroutine_handle<> hnd) noexcept -> bool
             {
-                node.handle = h;
+                node.handle = hnd;
                 node.scheduler = chan._sys;
                 auto* old_head = chan._consumer_waiters.load(memory_order::relaxed);
                 do
@@ -273,11 +270,7 @@ namespace tempest::job
                     node.next = old_head;
                 } while (!chan._consumer_waiters.compare_exchange_weak(old_head, &node, memory_order::release));
 
-                if (chan.is_closed())
-                {
-                    return false;
-                }
-                return true;
+                return chan.is_closed();
             }
 
             auto await_resume() const noexcept -> void
@@ -338,7 +331,7 @@ namespace tempest::job
             }
         }
 
-        cell _cells[Capacity]{};
+        array<cell, Capacity> _cells{};
         atomic<size_t> _enqueue_pos{0};
         atomic<size_t> _dequeue_pos{0};
         atomic<bool> _closed{false};

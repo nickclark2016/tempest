@@ -255,6 +255,12 @@ namespace tempest
             return hash<uint64_t>()(id.to_uint64());
         }
     };
+
+    /// @brief Minimum offset between two distinct addresses that guarantees no false sharing.
+    inline constexpr size_t hardware_destructive_interference_size = 64;
+
+    /// @brief Maximum length of contiguous memory to promote true sharing.
+    inline constexpr size_t hardware_constructive_interference_size = 64;
 } // namespace tempest
 
 #endif // tempest_core_thread_hpp

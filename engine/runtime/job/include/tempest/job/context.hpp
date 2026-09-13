@@ -18,14 +18,14 @@ namespace tempest::job
     {
         non_null<job_system> system;
         non_null<job_allocator> allocator;
-        uint32_t worker_index{0};
-        core_class core_type{core_class::performance};
+        uint32_t worker_index = 0;
+        core_class core_type = core_class::performance;
 
         auto schedule(coroutine_handle<> handle, task_priority priority = task_priority::normal,
                       core_class affinity = core_class::any) const -> void;
 
         template <typename T, typename E>
-        auto schedule(task<T, E>& t, task_priority priority = task_priority::normal,
+        auto schedule(task<T, E>& job, task_priority priority = task_priority::normal,
                       core_class affinity = core_class::any) const -> void;
     };
 } // namespace tempest::job

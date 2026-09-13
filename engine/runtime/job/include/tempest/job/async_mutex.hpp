@@ -3,6 +3,7 @@
 
 #include <tempest/api.hpp>
 #include <tempest/atomic.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/coroutine.hpp>
 #include <tempest/int.hpp>
 #include <tempest/profiler/types.hpp>
@@ -21,14 +22,13 @@ namespace tempest::job
     {
       public:
         scoped_lock_guard() noexcept = default;
-        explicit scoped_lock_guard(async_mutex& m) noexcept;
+        explicit scoped_lock_guard(async_mutex& mtx) noexcept;
+        scoped_lock_guard(const scoped_lock_guard&) = delete;
+        scoped_lock_guard(scoped_lock_guard&& other) noexcept;
         ~scoped_lock_guard();
 
-        scoped_lock_guard(const scoped_lock_guard&) = delete;
-        scoped_lock_guard& operator=(const scoped_lock_guard&) = delete;
-
-        scoped_lock_guard(scoped_lock_guard&& other) noexcept;
-        scoped_lock_guard& operator=(scoped_lock_guard&& other) noexcept;
+        auto operator=(const scoped_lock_guard&) -> scoped_lock_guard& = delete;
+        auto operator=(scoped_lock_guard&& other) noexcept -> scoped_lock_guard&;
 
       private:
         async_mutex* _mutex{nullptr};
@@ -46,24 +46,24 @@ namespace tempest::job
         ~async_mutex() = default;
 
         async_mutex(const async_mutex&) = delete;
-        async_mutex& operator=(const async_mutex&) = delete;
         async_mutex(async_mutex&&) = delete;
-        async_mutex& operator=(async_mutex&&) = delete;
+        auto operator=(const async_mutex&) -> async_mutex& = delete;
+        auto operator=(async_mutex&&) -> async_mutex& = delete;
 
         [[nodiscard]] auto try_lock() noexcept -> bool;
         auto unlock() noexcept -> void;
 
         struct lock_awaiter
         {
-            async_mutex& mutex;
+            non_null<async_mutex> mutex;
             async_mutex_waiter waiter{};
 
             [[nodiscard]] auto await_ready() const noexcept -> bool
             {
-                return mutex.try_lock();
+                return mutex->try_lock();
             }
 
-            auto await_suspend(coroutine_handle<> h) noexcept -> bool;
+            auto await_suspend(coroutine_handle<> hnd) noexcept -> bool;
 
             constexpr auto await_resume() const noexcept -> void
             {
@@ -77,19 +77,19 @@ namespace tempest::job
 
         struct scoped_lock_awaiter
         {
-            async_mutex& mutex;
+            non_null<async_mutex> mutex;
             async_mutex_waiter waiter{};
 
             [[nodiscard]] auto await_ready() const noexcept -> bool
             {
-                return mutex.try_lock();
+                return mutex->try_lock();
             }
 
-            auto await_suspend(coroutine_handle<> h) noexcept -> bool;
+            auto await_suspend(coroutine_handle<> hnd) noexcept -> bool;
 
             [[nodiscard]] auto await_resume() noexcept -> scoped_lock_guard
             {
-                return scoped_lock_guard{mutex};
+                return scoped_lock_guard{*mutex};
             }
 
             [[nodiscard]] constexpr auto suspend_reason_tag() const noexcept -> profiler::suspend_reason
@@ -112,14 +112,14 @@ namespace tempest::job
         friend struct lock_awaiter;
         friend struct scoped_lock_awaiter;
 
-        auto _enqueue_waiter(async_mutex_waiter* waiter, coroutine_handle<> h) noexcept -> bool;
+        auto _enqueue_waiter(async_mutex_waiter* waiter, coroutine_handle<> hnd) noexcept -> bool;
 
         atomic<uint32_t> _locked{0};
         atomic<async_mutex_waiter*> _waiters_in{nullptr};
         async_mutex_waiter* _waiters_out{nullptr};
         job_system* _sys{nullptr};
 
-        auto _resume(coroutine_handle<> h) noexcept -> void;
+        auto _resume(coroutine_handle<> hnd) noexcept -> void;
     };
 } // namespace tempest::job
 

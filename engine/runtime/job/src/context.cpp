@@ -6,6 +6,6 @@ namespace tempest::job
 {
     auto job_context::schedule(coroutine_handle<> handle, task_priority priority, core_class affinity) const -> void
     {
-        system.get()->schedule(*this, handle, priority, affinity);
+        system->schedule(*this, handle, priority, affinity);
     }
 } // namespace tempest::job

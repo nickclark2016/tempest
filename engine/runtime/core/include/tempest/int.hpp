@@ -78,6 +78,9 @@ namespace tempest
     /// @brief Unsigned integer type capable of holding a pointer.
     using uintptr_t = decltype(sizeof(static_cast<void*>(nullptr)));
 
+    /// @brief Signed integer type capable of holding a pointer.
+    using intptr_t = decltype(static_cast<char*>(nullptr) - static_cast<char*>(nullptr));
+
     /// @brief Maximum value of an unsigned integer capable of holding a pointer.
     inline constexpr uintptr_t uintptr_max = (~static_cast<uintptr_t>(0));
 

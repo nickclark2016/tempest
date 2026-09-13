@@ -102,10 +102,9 @@ namespace tempest::job
         ~job_allocator();
 
         job_allocator(const job_allocator&) = delete;
-        job_allocator& operator=(const job_allocator&) = delete;
+        auto operator=(const job_allocator&) -> job_allocator& = delete;
         job_allocator(job_allocator&&) noexcept = delete;
-        job_allocator& operator=(job_allocator&&) noexcept = delete;
-
+        auto operator=(job_allocator&&) noexcept -> job_allocator& = delete;
 
         [[nodiscard]] auto allocate(size_t size) -> void*;
         static auto deallocate(void* ptr, size_t size) noexcept -> void;
@@ -121,7 +120,7 @@ namespace tempest::job
         auto _allocate_slab_chunk(size_t size_class) -> void;
         auto _drain_remote_frees_locked() noexcept -> void;
 
-        mutable mutex _alloc_mutex{};
+        mutable mutex _alloc_mutex;
         array<free_slot_node*, slab_class_count> _local_free_list{};
         array<slab_chunk*, slab_class_count> _chunks{};
         atomic<remote_free_node*> _remote_free_head{nullptr};
