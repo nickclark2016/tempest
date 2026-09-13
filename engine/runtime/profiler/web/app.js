@@ -1288,14 +1288,23 @@
     }
   }
 
-  function getZoneGeometry(zone, nsToX, trackMapById) {
+  function getZoneGeometry(zone, nsToX, trackMapById, isPopout = false, tracksList = state.tracks) {
     if (!zone) return null;
+
+    if (isPopout) {
+      if (zone.frame_index !== undefined && zone.frame_index !== null) {
+        if (zone.frame_index !== popoutState.frameIndex) return null;
+      } else {
+        const pf = findParentFrame(zone);
+        if (!pf || pf.frame_index !== popoutState.frameIndex) return null;
+      }
+    }
 
     const x = nsToX(zone.start_ns);
     const w = Math.max(1, nsToX(zone.end_ns) - x);
 
     let track = null;
-    if (state.viewMode === 'logical') {
+    if (!isPopout && state.viewMode === 'logical') {
       if (zone.coroutine_id) {
         track = trackMapById.get(`coro_${zone.coroutine_id}`);
       }
@@ -1309,11 +1318,13 @@
     }
 
     if (!track) {
-      track = state.tracks.find(t => t.zones && t.zones.includes(zone));
+      track = tracksList.find(t => t.zones && t.zones.includes(zone));
     }
 
-    if (!track || track.renderY === undefined) {
-      if (zone.renderY !== undefined) {
+    const renderY = isPopout ? track?.popoutRenderY : track?.renderY;
+
+    if (!track || renderY === undefined) {
+      if (!isPopout && zone.renderY !== undefined) {
         return { x, w, y: zone.renderY, midY: zone.renderY + state.zoneHeight / 2, collapsed: false, track: null };
       }
       return null;
@@ -1322,49 +1333,79 @@
     const isCollapsed = state.collapsedTracks.has(track.id);
     const depth = zone.depth || 0;
     const y = isCollapsed
-      ? (track.renderY + state.trackHeaderHeight / 2 - state.zoneHeight / 2)
-      : (track.renderY + state.trackHeaderHeight + state.frameHeaderHeight + 4 + depth * (state.zoneHeight + state.zoneSpacing));
+      ? (renderY + state.trackHeaderHeight / 2 - state.zoneHeight / 2)
+      : (renderY + state.trackHeaderHeight + state.frameHeaderHeight + 4 + depth * (state.zoneHeight + state.zoneSpacing));
     const midY = y + state.zoneHeight / 2;
 
     return { x, w, y, midY, collapsed: isCollapsed, track };
   }
 
-  function renderFlowOverlay(width, height, nsToX) {
-    if (!dom.timelineSvgOverlay) return;
-    dom.timelineSvgOverlay.setAttribute('width', width);
-    dom.timelineSvgOverlay.setAttribute('height', height);
-    dom.timelineSvgOverlay.innerHTML = '';
+  function renderFlowOverlay(arg1, arg2, arg3) {
+    let opts = {};
+    if (typeof arg1 === 'object' && arg1 !== null) {
+      opts = arg1;
+    } else {
+      opts = {
+        width: arg1,
+        height: arg2,
+        nsToX: arg3,
+        svgElement: dom.timelineSvgOverlay,
+        activeZone: state.hoveredZone || state.selectedZone,
+        tracks: state.tracks,
+        isPopout: false,
+      };
+    }
+
+    const {
+      width,
+      height,
+      nsToX,
+      svgElement = dom.timelineSvgOverlay,
+      activeZone = (state.hoveredZone || state.selectedZone),
+      tracks = state.tracks,
+      isPopout = false,
+    } = opts;
+
+    if (!svgElement) return;
+    svgElement.setAttribute('width', width);
+    svgElement.setAttribute('height', height);
+    svgElement.innerHTML = '';
 
     if (!state.showFlowArrows) return;
 
     // Active coroutine ID from hovered or selected zone
-    const activeCoroId = (state.hoveredZone?.coroutine_id) || (state.selectedZone?.coroutine_id) || 0;
+    const activeCoroId = activeZone?.coroutine_id || 0;
     if (!activeCoroId) return;
 
     const slices = state.coroutineIndex.get(activeCoroId);
     if (!slices || slices.length === 0) return;
 
     const trackMapById = new Map();
-    for (const track of state.tracks) {
+    for (const track of tracks) {
       trackMapById.set(track.id, track);
+      if (track.track_id !== undefined) {
+        trackMapById.set(track.track_id, track);
+      }
     }
+
+    const idPrefix = isPopout ? 'popout-coro' : 'coro';
 
     let svgContent = `
       <defs>
-        <clipPath id="timeline-flow-clip">
+        <clipPath id="${idPrefix}-flow-clip">
           <rect x="0" y="${state.rulerHeight}" width="${width}" height="${Math.max(0, height - state.rulerHeight)}" />
         </clipPath>
-        <marker id="coro-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <marker id="${idPrefix}-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="#39c5bb" />
         </marker>
-        <marker id="coro-spawn-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <marker id="${idPrefix}-spawn-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="#a371f7" />
         </marker>
-        <marker id="coro-await-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <marker id="${idPrefix}-await-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="#d29922" />
         </marker>
       </defs>
-      <g clip-path="url(#timeline-flow-clip)">
+      <g clip-path="url(#${idPrefix}-flow-clip)">
     `;
 
     // 1. Slice-to-slice flow curves (teal)
@@ -1373,8 +1414,8 @@
         const s1 = slices[i];
         const s2 = slices[i + 1];
 
-        const g1 = getZoneGeometry(s1, nsToX, trackMapById);
-        const g2 = getZoneGeometry(s2, nsToX, trackMapById);
+        const g1 = getZoneGeometry(s1, nsToX, trackMapById, isPopout, tracks);
+        const g2 = getZoneGeometry(s2, nsToX, trackMapById, isPopout, tracks);
         if (!g1 || !g2) continue;
 
         const x1 = g1.x + g1.w;
@@ -1412,7 +1453,7 @@
 
         svgContent += `
           <g class="coroutine-flow-group">
-            <path d="${pathD}" class="coroutine-flow-path" marker-end="url(#coro-arrowhead)" />
+            <path d="${pathD}" class="coroutine-flow-path" marker-end="url(#${idPrefix}-arrowhead)" />
             <rect x="${midX - badgeW / 2}" y="${badgeY}" width="${badgeW}" height="${badgeH}" class="coroutine-badge-rect" />
             <text x="${midX}" y="${badgeY + 13}" class="coroutine-flow-badge">${label}</text>
           </g>
@@ -1424,7 +1465,7 @@
     const prov = getCoroutineProvenance(activeCoroId);
     if (prov) {
       const childSlice0 = slices[0];
-      const childGeom = childSlice0 ? getZoneGeometry(childSlice0, nsToX, trackMapById) : null;
+      const childGeom = childSlice0 ? getZoneGeometry(childSlice0, nsToX, trackMapById, isPopout, tracks) : null;
 
       if (childGeom) {
         let parentGeom = null;
@@ -1446,7 +1487,7 @@
               }
             }
             if (parentSlice) {
-              parentGeom = getZoneGeometry(parentSlice, nsToX, trackMapById);
+              parentGeom = getZoneGeometry(parentSlice, nsToX, trackMapById, isPopout, tracks);
               if (parentGeom) {
                 spawnNs = Math.min(childStart, parentSlice.end_ns);
                 spawnLabel = `Spawned by ${getCoroutineName(prov.parentCoroutineId)}`;
@@ -1454,7 +1495,7 @@
             }
           }
         } else if (prov.spawningThreadId > 0) {
-          const threadTrack = state.tracks.find(t => t.track_id === prov.spawningThreadId || t.id === `cpu_${prov.spawningThreadId}`);
+          const threadTrack = tracks.find(t => t.track_id === prov.spawningThreadId || t.id === `cpu_${prov.spawningThreadId}`);
           if (threadTrack) {
             const childStart = childSlice0.start_ns;
             let foundZone = threadTrack.zones.find(z => z.start_ns <= childStart && z.end_ns >= childStart);
@@ -1469,18 +1510,21 @@
               }
             }
             if (foundZone) {
-              parentGeom = getZoneGeometry(foundZone, nsToX, trackMapById);
+              parentGeom = getZoneGeometry(foundZone, nsToX, trackMapById, isPopout, tracks);
               spawnNs = Math.min(childStart, foundZone.end_ns);
             } else {
-              parentGeom = {
-                x: nsToX(childStart),
-                w: 1,
-                y: threadTrack.renderY + state.trackHeaderHeight / 2 - state.zoneHeight / 2,
-                midY: threadTrack.renderY + state.trackHeaderHeight / 2,
-                collapsed: false,
-                track: threadTrack
-              };
-              spawnNs = childStart;
+              const baseRenderY = isPopout ? threadTrack.popoutRenderY : threadTrack.renderY;
+              if (baseRenderY !== undefined) {
+                parentGeom = {
+                  x: nsToX(childStart),
+                  w: 1,
+                  y: baseRenderY + state.trackHeaderHeight / 2 - state.zoneHeight / 2,
+                  midY: baseRenderY + state.trackHeaderHeight / 2,
+                  collapsed: false,
+                  track: threadTrack
+                };
+                spawnNs = childStart;
+              }
             }
             spawnLabel = `Spawned by ${getThreadName(prov.spawningThreadId)}`;
           }
@@ -1524,7 +1568,7 @@
 
             svgContent += `
               <g class="coroutine-flow-group coroutine-spawn-group">
-                <path d="${pathD}" class="coroutine-flow-path coroutine-flow-spawn" marker-end="url(#coro-spawn-arrowhead)" />
+                <path d="${pathD}" class="coroutine-flow-path coroutine-flow-spawn" marker-end="url(#${idPrefix}-spawn-arrowhead)" />
                 <rect x="${midX - badgeW / 2}" y="${badgeY}" width="${badgeW}" height="${badgeH}" class="coroutine-badge-rect coroutine-spawn-badge-rect" />
                 <text x="${midX}" y="${badgeY + 13}" class="coroutine-flow-badge coroutine-spawn-flow-badge">${spawnLabel}</text>
               </g>
@@ -1537,7 +1581,7 @@
     // 3. Await provenance curve (dashed amber #d29922)
     if (prov) {
       const childFinalSlice = slices[slices.length - 1];
-      const childGeom = childFinalSlice ? getZoneGeometry(childFinalSlice, nsToX, trackMapById) : null;
+      const childGeom = childFinalSlice ? getZoneGeometry(childFinalSlice, nsToX, trackMapById, isPopout, tracks) : null;
 
       if (childGeom) {
         let awaitingGeom = null;
@@ -1555,7 +1599,7 @@
               }
             }
             if (awaitingSlice) {
-              awaitingGeom = getZoneGeometry(awaitingSlice, nsToX, trackMapById);
+              awaitingGeom = getZoneGeometry(awaitingSlice, nsToX, trackMapById, isPopout, tracks);
               if (awaitingGeom) {
                 resumeNs = Math.max(childEnd, awaitingSlice.start_ns);
                 awaitLabel = `Awaited by ${getCoroutineName(prov.awaitingCoroutineId)}`;
@@ -1563,7 +1607,7 @@
             }
           }
         } else if (prov.awaitingThreadId > 0) {
-          const threadTrack = state.tracks.find(t => t.track_id === prov.awaitingThreadId || t.id === `cpu_${prov.awaitingThreadId}`);
+          const threadTrack = tracks.find(t => t.track_id === prov.awaitingThreadId || t.id === `cpu_${prov.awaitingThreadId}`);
           if (threadTrack) {
             const childEnd = childFinalSlice.end_ns;
             let foundZone = threadTrack.zones.find(z =>
@@ -1572,18 +1616,21 @@
               (z.frame_index === childFinalSlice.frame_index)
             );
             if (foundZone) {
-              awaitingGeom = getZoneGeometry(foundZone, nsToX, trackMapById);
+              awaitingGeom = getZoneGeometry(foundZone, nsToX, trackMapById, isPopout, tracks);
               resumeNs = Math.max(childEnd, foundZone.start_ns);
             } else {
-              awaitingGeom = {
-                x: nsToX(childEnd),
-                w: 1,
-                y: threadTrack.renderY + state.trackHeaderHeight / 2 - state.zoneHeight / 2,
-                midY: threadTrack.renderY + state.trackHeaderHeight / 2,
-                collapsed: false,
-                track: threadTrack
-              };
-              resumeNs = childEnd;
+              const baseRenderY = isPopout ? threadTrack.popoutRenderY : threadTrack.renderY;
+              if (baseRenderY !== undefined) {
+                awaitingGeom = {
+                  x: nsToX(childEnd),
+                  w: 1,
+                  y: baseRenderY + state.trackHeaderHeight / 2 - state.zoneHeight / 2,
+                  midY: baseRenderY + state.trackHeaderHeight / 2,
+                  collapsed: false,
+                  track: threadTrack
+                };
+                resumeNs = childEnd;
+              }
             }
             awaitLabel = `Awaited by ${getThreadName(prov.awaitingThreadId)}`;
           }
@@ -1624,7 +1671,7 @@
 
             svgContent += `
               <g class="coroutine-flow-group coroutine-await-group">
-                <path d="${pathD}" class="coroutine-flow-path coroutine-flow-await" marker-end="url(#coro-await-arrowhead)" />
+                <path d="${pathD}" class="coroutine-flow-path coroutine-flow-await" marker-end="url(#${idPrefix}-await-arrowhead)" />
                 <rect x="${midX - badgeW / 2}" y="${badgeY}" width="${badgeW}" height="${badgeH}" class="coroutine-badge-rect coroutine-await-badge-rect" />
                 <text x="${midX}" y="${badgeY + 13}" class="coroutine-flow-badge coroutine-await-flow-badge">${awaitLabel}</text>
               </g>
@@ -1635,7 +1682,7 @@
     }
 
     svgContent += `</g>`;
-    dom.timelineSvgOverlay.innerHTML = svgContent;
+    svgElement.innerHTML = svgContent;
   }
 
   const drawCoroutineFlowArrows = renderFlowOverlay;
@@ -2688,9 +2735,15 @@
     dom.btnPopoutPrev.disabled = (curIdx <= 0);
     dom.btnPopoutNext.disabled = (curIdx === -1 || curIdx >= state.frames.length - 1);
 
-    // Reset mini-inspector
-    dom.popoutInspectorPlaceholder.style.display = 'flex';
-    dom.popoutInspectorContent.style.display = 'none';
+    // Sync selected zone from main view if it belongs to this frame
+    if (state.selectedZone && (state.selectedZone.frame_index === frame.frame_index || findParentFrame(state.selectedZone)?.frame_index === frame.frame_index)) {
+      popoutState.selectedZone = state.selectedZone;
+      updatePopoutInspector(popoutState.selectedZone);
+    } else {
+      popoutState.selectedZone = null;
+      dom.popoutInspectorPlaceholder.style.display = 'flex';
+      dom.popoutInspectorContent.style.display = 'none';
+    }
 
     // Populate tracks and stats
     refreshPopoutTracks();
@@ -2705,6 +2758,9 @@
     popoutState.isOpen = false;
     dom.framePopoutModal.style.display = 'none';
     dom.framePopoutTooltip.style.display = 'none';
+    if (dom.framePopoutSvg) {
+      dom.framePopoutSvg.innerHTML = '';
+    }
     popoutState.hoveredZone = null;
     popoutState.selectedZone = null;
   }
@@ -3059,6 +3115,17 @@
 
     // 4. Sticky Top Ruler
     renderPopoutRuler(popoutCtx, width, nsToX, visibleDuration);
+
+    // 5. Draw Cross-Thread Coroutine Flow Curves in Popout (SVG Overlay)
+    renderFlowOverlay({
+      width,
+      height,
+      nsToX,
+      svgElement: dom.framePopoutSvg,
+      activeZone: popoutState.hoveredZone || popoutState.selectedZone,
+      tracks: popoutState.tracks,
+      isPopout: true,
+    });
   }
 
   function renderPopoutGrid(ctx, width, height, nsToX, visibleDuration) {
@@ -4276,6 +4343,9 @@
           dom.btnFlowArrows.textContent = 'Flow: OFF';
         }
         render();
+        if (popoutState.isOpen) {
+          renderPopoutTimeline();
+        }
       });
     }
 
