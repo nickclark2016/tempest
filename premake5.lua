@@ -295,7 +295,6 @@ scoped.workspace('Tempest', function()
 
     scoped.filter({
         'options:use-tsan',
-        'tags:non-gpu-test',
     }, function()
         sanitize { 'Thread' }
 

@@ -709,6 +709,11 @@ namespace tempest::profiler
         _enabled.store(enabled, memory_order::relaxed);
     }
 
+    auto profiler_session::allocate_coroutine_id() noexcept -> uint64_t
+    {
+        return _next_coroutine_id.fetch_add(1, memory_order::relaxed);
+    }
+
     auto profiler_session::drain_completed_chunks() -> vector<unique_ptr<event_chunk>>
     {
         {

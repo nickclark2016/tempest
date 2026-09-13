@@ -579,7 +579,7 @@ namespace tempest::job::tests
 
         uint64_t child_coro_id = 0;
         auto parent_task = [&]() -> task<int> {
-            auto c = child_task();
+            auto c = child_task().with_profiler(prof);
             child_coro_id = c.coroutine_id();
             auto val = co_await move(c);
             co_return val * 2;
@@ -623,5 +623,71 @@ namespace tempest::job::tests
 
         EXPECT_TRUE(found_parent);
         EXPECT_TRUE(found_child);
+    }
+
+    /// @brief Verify that unprofiled tasks initialize coroutine_id to 0 and execute without atomic allocation overhead
+    TEST(task_test, task_unprofiled_has_zero_coroutine_id)
+    {
+        // 1. Setup unprofiled task
+        auto simple_task = []() -> task<int> {
+            co_return 123;
+        };
+
+        // 2. Act: Construct and inspect coroutine_id before and after execution
+        auto t = simple_task();
+        EXPECT_EQ(t.coroutine_id(), 0U);
+
+        const auto completed = t.resume();
+        EXPECT_TRUE(completed);
+        EXPECT_EQ(t.value(), 123);
+
+        // 3. Assert: coroutine_id remains 0 across unprofiled lifecycle
+        EXPECT_EQ(t.coroutine_id(), 0U);
+    }
+
+    /// @brief Verify that attaching a disabled profiler session does not allocate a coroutine ID
+    TEST(task_test, task_profiler_disabled_has_zero_coroutine_id)
+    {
+        // 1. Setup disabled profiler session
+        auto prof = profiler::profiler_session{false};
+
+        auto simple_task = []() -> task<int> {
+            co_return 456;
+        };
+
+        // 2. Act: Construct task with disabled profiler
+        auto t = simple_task().with_profiler(prof);
+
+        // 3. Assert: coroutine_id remains 0 when session is disabled
+        EXPECT_EQ(t.coroutine_id(), 0U);
+
+        const auto completed = t.resume();
+        EXPECT_TRUE(completed);
+        EXPECT_EQ(t.value(), 456);
+        EXPECT_EQ(t.coroutine_id(), 0U);
+    }
+
+    /// @brief Verify that independent profiler sessions manage distinct, isolated 1-based coroutine ID sequences
+    TEST(task_test, task_session_isolation_coroutine_id)
+    {
+        // 1. Setup two independent enabled profiler sessions
+        auto prof_a = profiler::profiler_session{true};
+        auto prof_b = profiler::profiler_session{true};
+
+        auto make_task = []() -> task<void> {
+            co_return;
+        };
+
+        // 2. Act: Allocate tasks across sessions
+        auto t_a1 = make_task().with_profiler(prof_a);
+        auto t_a2 = make_task().with_profiler(prof_a);
+        auto t_b1 = make_task().with_profiler(prof_b);
+        auto t_b2 = make_task().with_profiler(prof_b);
+
+        // 3. Assert: Both sessions start from 1 and increment independently
+        EXPECT_EQ(t_a1.coroutine_id(), 1U);
+        EXPECT_EQ(t_a2.coroutine_id(), 2U);
+        EXPECT_EQ(t_b1.coroutine_id(), 1U);
+        EXPECT_EQ(t_b2.coroutine_id(), 2U);
     }
 } // namespace tempest::job::tests

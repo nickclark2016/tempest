@@ -120,34 +120,41 @@ namespace tempest::job
             using Ret = invoke_result_t<F&>;
             if constexpr (detail::is_task_v<Ret>)
             {
-                auto t = callable();
+                auto coro_task = callable();
                 struct raw_task_awaiter
                 {
                     non_null<Ret> child;
 
                     [[nodiscard]] auto await_ready() const noexcept -> bool
                     {
-                        return child.is_ready();
+                        return child->is_ready();
                     }
 
                     [[nodiscard]] auto await_suspend(coroutine_handle<task<expected<void, job_error>, void>::promise_type> hnd) noexcept -> coroutine_handle<>
                     {
-                        child.handle().promise().continuation = hnd;
-                        if (child.handle().promise().session == nullptr)
+                        child->handle().promise().continuation = hnd;
+                        if (child->handle().promise().session == nullptr)
                         {
-                            child.handle().promise().session = hnd.promise().session;
+                            child->handle().promise().session = hnd.promise().session;
                         }
-                        child.handle().promise().awaited_by_thread_id = tempest::this_thread::get_id().to_uint64();
-                        return child.handle();
+                        if (child->handle().promise().session != nullptr &&
+                            child->handle().promise().session->is_enabled() &&
+                            child->handle().promise().coroutine_id == 0)
+                        {
+                            child->handle().promise().coroutine_id =
+                                child->handle().promise().session->allocate_coroutine_id();
+                        }
+                        child->handle().promise().awaited_by_thread_id = tempest::this_thread::get_id().to_uint64();
+                        return child->handle();
                     }
                     auto await_resume() noexcept -> void
                     {
                     }
                 };
-                co_await raw_task_awaiter{t};
-                if (!t.has_value())
+                co_await raw_task_awaiter{coro_task};
+                if (!coro_task.has_value())
                 {
-                    co_return unexpected{static_cast<job_error>(t.error())};
+                    co_return unexpected{static_cast<job_error>(coro_task.error())};
                 }
                 co_return expected<void, job_error>{};
             }

@@ -115,6 +115,7 @@ namespace tempest::profiler
 
         [[nodiscard]] auto is_enabled() const noexcept -> bool;
         auto set_enabled(bool enabled) noexcept -> void;
+        [[nodiscard]] auto allocate_coroutine_id() noexcept -> uint64_t;
 
         auto drain_completed_chunks() -> vector<unique_ptr<event_chunk>>;
         auto recycle_chunks(vector<unique_ptr<event_chunk>> chunks) -> void;
@@ -134,6 +135,7 @@ namespace tempest::profiler
         static auto _query_native_thread_name(uint64_t tid) -> string;
 
         atomic<bool> _enabled{true};
+        atomic<uint64_t> _next_coroutine_id{1};
         array<thread_slot, max_thread_slots> _slots{};
         vector<unique_ptr<thread_profiler_context>> _overflow_contexts;
         mutable mutex _registration_mutex;

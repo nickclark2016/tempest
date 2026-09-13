@@ -20,8 +20,6 @@ namespace tempest::job
 {
     class job_system;
 
-    inline atomic<uint64_t> g_next_coroutine_id{1};
-
     template <typename T = void, typename E = job_error>
     class [[nodiscard]] task;
 
@@ -35,26 +33,32 @@ namespace tempest::job
     {
         struct set_task_name_awaiter
         {
-            constexpr auto await_ready() const noexcept -> bool
+            [[nodiscard]] constexpr auto await_ready() const noexcept -> bool
             {
                 return true;
             }
-            constexpr auto await_suspend(coroutine_handle<>) const noexcept -> void
+
+            constexpr auto await_suspend(coroutine_handle<> /*unused*/) const noexcept -> void
             {
             }
+
             constexpr auto await_resume() const noexcept -> void
             {
             }
         };
 
-        struct alignas(16) coroutine_frame_header
+        inline constexpr auto coroutine_frame_header_size = 16U;
+        inline constexpr auto coroutine_frame_header_alignment = 16U;
+
+        struct alignas(coroutine_frame_header_alignment) coroutine_frame_header
         {
             job_allocator* owner{nullptr};
             uint32_t frame_size{0};
             uint16_t size_class{0};
             uint16_t is_heap{0};
         };
-        static_assert(sizeof(coroutine_frame_header) == 16);
+        static_assert(sizeof(coroutine_frame_header) == coroutine_frame_header_size,
+                      "coroutine_frame_header must be 16 bytes in size");
 
         template <typename T>
         concept complete_type = requires { sizeof(T); };
@@ -73,11 +77,15 @@ namespace tempest::job
             }
             else if constexpr (complete_type<CleanT>)
             {
-                if constexpr (requires { { arg.get_dispatch_allocator() } -> same_as<job_allocator&>; })
+                if constexpr (requires {
+                                  { arg.get_dispatch_allocator() } -> same_as<job_allocator&>;
+                              })
                 {
                     return &arg.get_dispatch_allocator();
                 }
-                else if constexpr (requires { { arg.get_job_allocator() } -> same_as<job_allocator&>; })
+                else if constexpr (requires {
+                                       { arg.get_job_allocator() } -> same_as<job_allocator&>;
+                                   })
                 {
                     return &arg.get_job_allocator();
                 }
@@ -95,7 +103,7 @@ namespace tempest::job
         template <typename... Args>
         constexpr auto find_allocator(Args&&... args) noexcept -> job_allocator*
         {
-            job_allocator* result = nullptr;
+            auto* result = static_cast<job_allocator*>(nullptr);
             auto check = [&result](job_allocator* alloc) {
                 if (result == nullptr && alloc != nullptr)
                 {
@@ -128,7 +136,9 @@ namespace tempest::job
             }
             else if constexpr (is_same_v<CleanT, job_context>)
             {
-                if constexpr (requires { { arg.system->get_profiler() } -> same_as<profiler::profiler_session&>; })
+                if constexpr (requires {
+                                  { arg.system->get_profiler() } -> same_as<profiler::profiler_session&>;
+                              })
                 {
                     return arg.system != nullptr ? &arg.system->get_profiler() : nullptr;
                 }
@@ -139,15 +149,21 @@ namespace tempest::job
             }
             else if constexpr (complete_type<CleanT>)
             {
-                if constexpr (requires { { arg.profiler } -> same_as<profiler::profiler_session*>; })
+                if constexpr (requires {
+                                  { arg.profiler } -> same_as<profiler::profiler_session*>;
+                              })
                 {
                     return arg.profiler;
                 }
-                else if constexpr (requires { { arg.get_profiler() } -> same_as<profiler::profiler_session&>; })
+                else if constexpr (requires {
+                                       { arg.get_profiler() } -> same_as<profiler::profiler_session&>;
+                                   })
                 {
                     return &arg.get_profiler();
                 }
-                else if constexpr (requires { { arg.get_session() } -> same_as<profiler::profiler_session&>; })
+                else if constexpr (requires {
+                                       { arg.get_session() } -> same_as<profiler::profiler_session&>;
+                                   })
                 {
                     return &arg.get_session();
                 }
@@ -165,7 +181,7 @@ namespace tempest::job
         template <typename... Args>
         constexpr auto find_profiler_session(Args&&... args) noexcept -> profiler::profiler_session*
         {
-            profiler::profiler_session* result = nullptr;
+            auto* result = static_cast<profiler::profiler_session*>(nullptr);
             auto check = [&result](profiler::profiler_session* sess) {
                 if (result == nullptr && sess != nullptr)
                 {
@@ -179,17 +195,17 @@ namespace tempest::job
         template <typename Promise>
         auto get_coroutine_header(Promise& promise) noexcept -> coroutine_frame_header*
         {
-            auto h = coroutine_handle<Promise>::from_promise(promise);
-            return reinterpret_cast<coroutine_frame_header*>(
-                static_cast<byte*>(h.address()) - sizeof(coroutine_frame_header));
+            auto hnd = coroutine_handle<Promise>::from_promise(promise);
+            return reinterpret_cast<coroutine_frame_header*>(static_cast<byte*>(hnd.address()) -
+                                                             sizeof(coroutine_frame_header));
         }
 
         template <typename Promise>
         auto get_coroutine_header(const Promise& promise) noexcept -> const coroutine_frame_header*
         {
-            auto h = coroutine_handle<Promise>::from_promise(const_cast<Promise&>(promise));
-            return reinterpret_cast<const coroutine_frame_header*>(
-                static_cast<const byte*>(h.address()) - sizeof(coroutine_frame_header));
+            auto hnd = coroutine_handle<Promise>::from_promise(const_cast<Promise&>(promise));
+            return reinterpret_cast<const coroutine_frame_header*>(static_cast<const byte*>(hnd.address()) -
+                                                                   sizeof(coroutine_frame_header));
         }
 
         struct promise_allocator_base
@@ -197,6 +213,7 @@ namespace tempest::job
             template <typename... Args>
             static auto operator new(size_t size, Args&&... args) -> void*
             {
+                constexpr auto size_class_mask = 0xFFFF;
                 constexpr auto header_size = sizeof(coroutine_frame_header);
                 const auto total_size = size + header_size;
                 auto* alloc = find_allocator(forward<Args>(args)...);
@@ -207,17 +224,17 @@ namespace tempest::job
                     auto* header = reinterpret_cast<coroutine_frame_header*>(raw);
                     header->owner = alloc;
                     header->frame_size = static_cast<uint32_t>(size);
-                    const auto sc = get_size_class(total_size);
-                    header->size_class = (sc >= 0) ? static_cast<uint16_t>(sc) : 0xFFFF;
-                    header->is_heap = (sc < 0) ? 1 : 0;
+                    const auto size_class = get_size_class(total_size);
+                    header->size_class = (size_class >= 0) ? static_cast<uint16_t>(size_class) : size_class_mask;
+                    header->is_heap = (size_class < 0) ? 1 : 0;
                     return raw + header_size;
                 }
 
-                auto* raw = static_cast<byte*>(tempest::aligned_alloc(total_size, 16));
+                auto* raw = static_cast<byte*>(tempest::aligned_alloc(total_size, coroutine_frame_header_alignment));
                 auto* header = reinterpret_cast<coroutine_frame_header*>(raw);
                 header->owner = nullptr;
                 header->frame_size = static_cast<uint32_t>(size);
-                header->size_class = 0xFFFF;
+                header->size_class = size_class_mask;
                 header->is_heap = 1;
                 return raw + header_size;
             }
@@ -239,7 +256,7 @@ namespace tempest::job
 
                 if (header->owner != nullptr)
                 {
-                    header->owner->deallocate(header, total_size);
+                    job_allocator::deallocate(header, total_size);
                 }
                 else
                 {
@@ -252,15 +269,18 @@ namespace tempest::job
         {
             struct promise_type : promise_allocator_base
             {
-                profiler::profiler_session* session{nullptr};
-                uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
+                profiler::profiler_session* session = nullptr;
+                uint64_t coroutine_id = 0;
                 string_view name{"detached_task"};
 
                 template <typename... Args>
                     requires(sizeof...(Args) > 0)
-                explicit promise_type(Args&&... args)
-                    : session{find_profiler_session(forward<Args>(args)...)}
+                explicit promise_type(Args&&... args) : session{find_profiler_session(forward<Args>(args)...)}
                 {
+                    if (session != nullptr && session->is_enabled())
+                    {
+                        coroutine_id = session->allocate_coroutine_id();
+                    }
                 }
                 promise_type() = default;
 
@@ -272,20 +292,27 @@ namespace tempest::job
                 {
                     struct awaiter
                     {
-                        promise_type& p;
-                        auto await_ready() const noexcept -> bool
+                        non_null<promise_type> prom;
+
+                        [[nodiscard]] auto await_ready() const noexcept -> bool
                         {
                             return false;
                         }
-                        auto await_suspend(coroutine_handle<>) noexcept -> void
+
+                        auto await_suspend(coroutine_handle<> /*unused*/) noexcept -> void
                         {
                         }
+
                         auto await_resume() const noexcept -> void
                         {
-                            if (p.session != nullptr && p.session->is_enabled())
+                            if (prom->session != nullptr && prom->session->is_enabled())
                             {
-                                auto& ctx = p.session->get_or_register_thread();
-                                ctx.begin_coroutine_slice(p.coroutine_id, 0, p.name, source_location::current(),
+                                if (prom->coroutine_id == 0)
+                                {
+                                    prom->coroutine_id = prom->session->allocate_coroutine_id();
+                                }
+                                auto& ctx = prom->session->get_or_register_thread();
+                                ctx.begin_coroutine_slice(prom->coroutine_id, 0, prom->name, source_location::current(),
                                                           tempest::this_thread::get_id().to_uint64(), 0, 0, 0);
                             }
                         }
@@ -359,20 +386,13 @@ namespace tempest::job
 
             using raw_invoke_t = typename continuation_invoke_result<prev_val_t, F>::type;
 
-            using result_val_t = conditional_t<
-                is_task_v<raw_invoke_t>,
-                typename task_traits<raw_invoke_t>::value_type,
-                raw_invoke_t>;
+            using result_val_t =
+                conditional_t<is_task_v<raw_invoke_t>, typename task_traits<raw_invoke_t>::value_type, raw_invoke_t>;
 
-            using child_err_t = conditional_t<
-                is_task_v<raw_invoke_t>,
-                typename task_traits<raw_invoke_t>::error_type,
-                void>;
+            using child_err_t =
+                conditional_t<is_task_v<raw_invoke_t>, typename task_traits<raw_invoke_t>::error_type, void>;
 
-            using result_err_t = conditional_t<
-                !is_void_v<prev_err_t>,
-                prev_err_t,
-                child_err_t>;
+            using result_err_t = conditional_t<!is_void_v<prev_err_t>, prev_err_t, child_err_t>;
 
             using type = task<result_val_t, result_err_t>;
         };
@@ -381,16 +401,16 @@ namespace tempest::job
         using continuation_result_t = typename continuation_result<PrevTask, F>::type;
 
         template <typename Awaiter>
-        concept has_suspend_reason = requires(const Awaiter& a) {
-            { a.suspend_reason_tag() } -> same_as<profiler::suspend_reason>;
+        concept has_suspend_reason = requires(const Awaiter& awaiter) {
+            { awaiter.suspend_reason_tag() } -> same_as<profiler::suspend_reason>;
         };
 
         template <typename Awaiter>
-        constexpr auto get_suspend_reason(const Awaiter& a) noexcept -> profiler::suspend_reason
+        constexpr auto get_suspend_reason(const Awaiter& awaiter) noexcept -> profiler::suspend_reason
         {
             if constexpr (has_suspend_reason<Awaiter>)
             {
-                return a.suspend_reason_tag();
+                return awaiter.suspend_reason_tag();
             }
             else
             {
@@ -399,7 +419,7 @@ namespace tempest::job
         }
 
         template <typename T>
-        decltype(auto) get_underlying_awaiter(T&& expr)
+        auto get_underlying_awaiter(T&& expr) -> decltype(auto)
         {
             if constexpr (requires { tempest::forward<T>(expr).operator co_await(); })
             {
@@ -434,7 +454,7 @@ namespace tempest::job
         template <typename Promise, typename Awaiter>
         struct profiled_awaiter
         {
-            Promise& promise;
+            non_null<Promise> prom;
             Awaiter awaiter;
             profiler::suspend_reason reason{profiler::suspend_reason::yield};
             bool did_suspend{false};
@@ -445,31 +465,32 @@ namespace tempest::job
             }
 
             template <typename Handle>
-            auto await_suspend(Handle h) -> decltype(auto)
+            auto await_suspend(Handle hnd) -> decltype(auto)
             {
                 did_suspend = true;
-                if (promise.session != nullptr && promise.session->is_enabled())
+                if (prom->session != nullptr && prom->session->is_enabled())
                 {
-                    auto& ctx = promise.session->get_or_register_thread();
+                    auto& ctx = prom->session->get_or_register_thread();
                     ctx.end_coroutine_slice(reason);
                 }
-                return awaiter.await_suspend(h);
+                return awaiter.await_suspend(hnd);
             }
 
             auto await_resume() -> decltype(auto)
             {
                 if (did_suspend)
                 {
-                    if (promise.session != nullptr && promise.session->is_enabled())
+                    if (prom->session != nullptr && prom->session->is_enabled())
                     {
-                        auto& ctx = promise.session->get_or_register_thread();
-                        promise.current_slice_index++;
-                        ctx.begin_coroutine_slice(promise.coroutine_id, promise.current_slice_index, promise.name,
-                                                   source_location::current(),
-                                                   promise.spawned_by_thread_id, promise.spawned_by_coroutine_id,
-                                                   promise.awaited_by_thread_id, promise.awaited_by_coroutine_id);
-                        auto* header = get_coroutine_header(promise);
-                        ctx.add_metric("frame_bytes", static_cast<double>(header->frame_size), profiler::metric_unit::bytes);
+                        auto& ctx = prom->session->get_or_register_thread();
+                        prom->current_slice_index++;
+                        ctx.begin_coroutine_slice(prom->coroutine_id, prom->current_slice_index, prom->name,
+                                                  source_location::current(), prom->spawned_by_thread_id,
+                                                  prom->spawned_by_coroutine_id, prom->awaited_by_thread_id,
+                                                  prom->awaited_by_coroutine_id);
+                        auto* header = get_coroutine_header(*prom);
+                        ctx.add_metric("frame_bytes", static_cast<double>(header->frame_size),
+                                       profiler::metric_unit::bytes);
                         ctx.add_metric("is_heap", header->is_heap ? 1.0 : 0.0, profiler::metric_unit::raw);
                     }
                 }
@@ -480,32 +501,37 @@ namespace tempest::job
         template <typename Promise>
         struct task_initial_awaiter
         {
-            Promise& promise;
+            non_null<Promise> prom;
 
             [[nodiscard]] constexpr auto await_ready() const noexcept -> bool
             {
                 return false;
             }
 
-            auto await_suspend(coroutine_handle<Promise>) noexcept -> void
+            auto await_suspend(coroutine_handle<Promise> /*unused*/) noexcept -> void
             {
             }
 
             auto await_resume() const noexcept -> void
             {
-                if (promise.session != nullptr && promise.session->is_enabled())
+                if (prom->session != nullptr && prom->session->is_enabled())
                 {
-                    auto& ctx = promise.session->get_or_register_thread();
-                    if (promise.spawned_by_coroutine_id == 0)
+                    if (prom->coroutine_id == 0)
                     {
-                        promise.spawned_by_coroutine_id = ctx.get_current_coroutine_id();
+                        prom->coroutine_id = prom->session->allocate_coroutine_id();
                     }
-                    ctx.begin_coroutine_slice(promise.coroutine_id, promise.current_slice_index, promise.name,
-                                               source_location::current(),
-                                               promise.spawned_by_thread_id, promise.spawned_by_coroutine_id,
-                                               promise.awaited_by_thread_id, promise.awaited_by_coroutine_id);
-                    auto* header = get_coroutine_header(promise);
-                    ctx.add_metric("frame_bytes", static_cast<double>(header->frame_size), profiler::metric_unit::bytes);
+                    auto& ctx = prom->session->get_or_register_thread();
+                    if (prom->spawned_by_coroutine_id == 0)
+                    {
+                        prom->spawned_by_coroutine_id = ctx.get_current_coroutine_id();
+                    }
+                    ctx.begin_coroutine_slice(prom->coroutine_id, prom->current_slice_index, prom->name,
+                                              source_location::current(), prom->spawned_by_thread_id,
+                                              prom->spawned_by_coroutine_id, prom->awaited_by_thread_id,
+                                              prom->awaited_by_coroutine_id);
+                    auto* header = get_coroutine_header(*prom);
+                    ctx.add_metric("frame_bytes", static_cast<double>(header->frame_size),
+                                   profiler::metric_unit::bytes);
                     ctx.add_metric("is_heap", header->is_heap ? 1.0 : 0.0, profiler::metric_unit::raw);
                 }
             }
@@ -519,26 +545,29 @@ namespace tempest::job
                 return false;
             }
 
-            auto await_suspend(coroutine_handle<Promise> h) noexcept -> coroutine_handle<>
+            auto await_suspend(coroutine_handle<Promise> hnd) noexcept -> coroutine_handle<>
             {
-                if (h.promise().session != nullptr && h.promise().session->is_enabled())
+                if (hnd.promise().session != nullptr && hnd.promise().session->is_enabled())
                 {
-                    auto& ctx = h.promise().session->get_or_register_thread();
+                    auto& ctx = hnd.promise().session->get_or_register_thread();
                     ctx.end_coroutine_slice(profiler::suspend_reason::completed);
                 }
 
-                if constexpr (requires { h.promise().result.has_value(); h.promise().parent_propagator; })
+                if constexpr (requires {
+                                  hnd.promise().result.has_value();
+                                  hnd.promise().parent_propagator;
+                              })
                 {
-                    if (!h.promise().result.has_value() && h.promise().parent_propagator != nullptr)
+                    if (!hnd.promise().result.has_value() && hnd.promise().parent_propagator != nullptr)
                     {
-                        auto* parent = h.promise().parent_propagator;
-                        parent->propagate_error(static_cast<job_error>(h.promise().result.error()));
+                        auto* parent = hnd.promise().parent_propagator;
+                        parent->propagate_error(static_cast<job_error>(hnd.promise().result.error()));
                         auto cont = parent->get_continuation();
                         parent->destroy_frame();
                         return cont ? cont : noop_coroutine();
                     }
                 }
-                auto cont = h.promise().continuation;
+                auto cont = hnd.promise().continuation;
                 return cont ? cont : noop_coroutine();
             }
 
@@ -549,7 +578,14 @@ namespace tempest::job
 
         struct error_propagator
         {
+            error_propagator() = default;
+            error_propagator(const error_propagator&) = delete;
+            error_propagator(error_propagator&&) noexcept = delete;
             virtual ~error_propagator() = default;
+
+            auto operator=(const error_propagator&) -> error_propagator& = delete;
+            auto operator=(error_propagator&&) noexcept -> error_propagator& = delete;
+
             virtual auto propagate_error(job_error err) -> void = 0;
             virtual auto get_continuation() -> coroutine_handle<> = 0;
             virtual auto destroy_frame() -> void = 0;
@@ -567,31 +603,38 @@ namespace tempest::job
         }
 
         template <typename CallerPromise>
-        auto await_suspend(coroutine_handle<CallerPromise> h) noexcept -> coroutine_handle<>
+        auto await_suspend(coroutine_handle<CallerPromise> hnd) noexcept -> coroutine_handle<>
         {
-            awaited_task.handle().promise().continuation = h;
-            if constexpr (requires { awaited_task.handle().promise().parent_propagator = &h.promise(); })
+            awaited_task.handle().promise().continuation = hnd;
+            if constexpr (requires { awaited_task.handle().promise().parent_propagator = &hnd.promise(); })
             {
-                awaited_task.handle().promise().parent_propagator = &h.promise();
+                awaited_task.handle().promise().parent_propagator = &hnd.promise();
             }
             if (awaited_task.handle().promise().session == nullptr)
             {
-                if constexpr (requires { h.promise().session; })
+                if constexpr (requires { hnd.promise().session; })
                 {
-                    awaited_task.handle().promise().session = h.promise().session;
+                    awaited_task.handle().promise().session = hnd.promise().session;
                 }
+            }
+            if (awaited_task.handle().promise().session != nullptr &&
+                awaited_task.handle().promise().session->is_enabled() &&
+                awaited_task.handle().promise().coroutine_id == 0)
+            {
+                awaited_task.handle().promise().coroutine_id =
+                    awaited_task.handle().promise().session->allocate_coroutine_id();
             }
             if (awaited_task.handle().promise().spawned_by_coroutine_id == 0)
             {
-                if constexpr (requires { h.promise().coroutine_id; })
+                if constexpr (requires { hnd.promise().coroutine_id; })
                 {
-                    awaited_task.handle().promise().spawned_by_coroutine_id = h.promise().coroutine_id;
+                    awaited_task.handle().promise().spawned_by_coroutine_id = hnd.promise().coroutine_id;
                 }
             }
             awaited_task.handle().promise().awaited_by_thread_id = tempest::this_thread::get_id().to_uint64();
-            if constexpr (requires { h.promise().coroutine_id; })
+            if constexpr (requires { hnd.promise().coroutine_id; })
             {
-                awaited_task.handle().promise().awaited_by_coroutine_id = h.promise().coroutine_id;
+                awaited_task.handle().promise().awaited_by_coroutine_id = hnd.promise().coroutine_id;
             }
             return awaited_task.handle();
         }
@@ -618,24 +661,27 @@ namespace tempest::job
 
         struct promise_type : detail::promise_allocator_base, detail::error_propagator
         {
-            task* owner{nullptr};
-            result_type result{unexpected<E>{E::none}};
-            coroutine_handle<> continuation{nullptr};
-            detail::error_propagator* parent_propagator{nullptr};
-            uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
-            uint32_t current_slice_index{0};
-            string_view name{"task"};
-            uint64_t spawned_by_thread_id{tempest::this_thread::get_id().to_uint64()};
-            uint64_t spawned_by_coroutine_id{0};
-            uint64_t awaited_by_thread_id{0};
-            uint64_t awaited_by_coroutine_id{0};
-            profiler::profiler_session* session{nullptr};
+            task* owner = nullptr;
+            result_type result = unexpected<E>{E::none};
+            coroutine_handle<> continuation = nullptr;
+            detail::error_propagator* parent_propagator = nullptr;
+            uint64_t coroutine_id = 0;
+            uint32_t current_slice_index = 0;
+            string_view name = "task";
+            uint64_t spawned_by_thread_id = tempest::this_thread::get_id().to_uint64();
+            uint64_t spawned_by_coroutine_id = 0;
+            uint64_t awaited_by_thread_id = 0;
+            uint64_t awaited_by_coroutine_id = 0;
+            profiler::profiler_session* session = nullptr;
 
             template <typename... Args>
                 requires(sizeof...(Args) > 0)
-            explicit promise_type(Args&&... args)
-                : session{detail::find_profiler_session(forward<Args>(args)...)}
+            explicit promise_type(Args&&... args) : session{detail::find_profiler_session(forward<Args>(args)...)}
             {
+                if (session != nullptr && session->is_enabled())
+                {
+                    coroutine_id = session->allocate_coroutine_id();
+                }
             }
             promise_type() = default;
 
@@ -703,8 +749,8 @@ namespace tempest::job
             auto destroy_frame() -> void override
             {
                 auto* parent = parent_propagator;
-                auto h = coroutine_handle<promise_type>::from_promise(*this);
-                h.destroy();
+                auto hnd = coroutine_handle<promise_type>::from_promise(*this);
+                hnd.destroy();
                 if (parent != nullptr)
                 {
                     parent->destroy_frame();
@@ -713,45 +759,52 @@ namespace tempest::job
 
             // Await transform for child fallible task
             template <typename ChildT, typename ChildE>
-                requires (!is_void_v<ChildE>)
+                requires(!is_void_v<ChildE>)
             auto await_transform(task<ChildT, ChildE>&& child)
             {
                 struct child_task_awaiter
                 {
                     task<ChildT, ChildE> child_task;
 
-                    auto await_ready() const noexcept -> bool
+                    [[nodiscard]] auto await_ready() const noexcept -> bool
                     {
                         return child_task.is_ready() && child_task.has_value();
                     }
 
-                    auto await_suspend(coroutine_handle<promise_type> h) noexcept -> coroutine_handle<>
+                    auto await_suspend(coroutine_handle<promise_type> hnd) noexcept -> coroutine_handle<>
                     {
                         if (child_task.is_ready())
                         {
                             auto err = child_task.error();
-                            auto* parent = h.promise().parent_propagator;
-                            h.promise().propagate_error(static_cast<job_error>(err));
-                            auto next = h.promise().get_continuation();
-                            h.destroy();
+                            auto* parent = hnd.promise().parent_propagator;
+                            hnd.promise().propagate_error(static_cast<job_error>(err));
+                            auto next = hnd.promise().get_continuation();
+                            hnd.destroy();
                             if (parent != nullptr)
                             {
                                 parent->destroy_frame();
                             }
                             return next ? next : noop_coroutine();
                         }
-                        child_task.handle().promise().continuation = h;
-                        child_task.handle().promise().parent_propagator = &h.promise();
+                        child_task.handle().promise().continuation = hnd;
+                        child_task.handle().promise().parent_propagator = &hnd.promise();
                         if (child_task.handle().promise().session == nullptr)
                         {
-                            child_task.handle().promise().session = h.promise().session;
+                            child_task.handle().promise().session = hnd.promise().session;
+                        }
+                        if (child_task.handle().promise().session != nullptr &&
+                            child_task.handle().promise().session->is_enabled() &&
+                            child_task.handle().promise().coroutine_id == 0)
+                        {
+                            child_task.handle().promise().coroutine_id =
+                                child_task.handle().promise().session->allocate_coroutine_id();
                         }
                         if (child_task.handle().promise().spawned_by_coroutine_id == 0)
                         {
-                            child_task.handle().promise().spawned_by_coroutine_id = h.promise().coroutine_id;
+                            child_task.handle().promise().spawned_by_coroutine_id = hnd.promise().coroutine_id;
                         }
                         child_task.handle().promise().awaited_by_thread_id = tempest::this_thread::get_id().to_uint64();
-                        child_task.handle().promise().awaited_by_coroutine_id = h.promise().coroutine_id;
+                        child_task.handle().promise().awaited_by_coroutine_id = hnd.promise().coroutine_id;
                         return child_task.handle();
                     }
 
@@ -777,17 +830,17 @@ namespace tempest::job
                 {
                     unexpected<Err> error;
 
-                    constexpr auto await_ready() const noexcept -> bool
+                    [[nodiscard]] constexpr auto await_ready() const noexcept -> bool
                     {
                         return false;
                     }
 
-                    auto await_suspend(coroutine_handle<promise_type> h) noexcept -> coroutine_handle<>
+                    auto await_suspend(coroutine_handle<promise_type> hnd) noexcept -> coroutine_handle<>
                     {
-                        auto* parent = h.promise().parent_propagator;
-                        h.promise().propagate_error(static_cast<job_error>(error.value));
-                        auto next = h.promise().get_continuation();
-                        h.destroy();
+                        auto* parent = hnd.promise().parent_propagator;
+                        hnd.promise().propagate_error(static_cast<job_error>(error.value));
+                        auto next = hnd.promise().get_continuation();
+                        hnd.destroy();
                         if (parent != nullptr)
                         {
                             parent->destroy_frame();
@@ -800,8 +853,8 @@ namespace tempest::job
                     }
                 };
 
-                return detail::profiled_awaiter<promise_type, unexp_awaiter>{
-                    *this, unexp_awaiter{unexp}, profiler::suspend_reason::yield};
+                return detail::profiled_awaiter<promise_type, unexp_awaiter>{*this, unexp_awaiter{unexp},
+                                                                             profiler::suspend_reason::yield};
             }
 
             // Await transform for expected<Val, Err>
@@ -812,17 +865,17 @@ namespace tempest::job
                 {
                     expected<Val, Err> value;
 
-                    auto await_ready() const noexcept -> bool
+                    [[nodiscard]] auto await_ready() const noexcept -> bool
                     {
                         return value.has_value();
                     }
 
-                    auto await_suspend(coroutine_handle<promise_type> h) noexcept -> coroutine_handle<>
+                    auto await_suspend(coroutine_handle<promise_type> hnd) noexcept -> coroutine_handle<>
                     {
-                        auto* parent = h.promise().parent_propagator;
-                        h.promise().propagate_error(static_cast<job_error>(value.error()));
-                        auto next = h.promise().get_continuation();
-                        h.destroy();
+                        auto* parent = hnd.promise().parent_propagator;
+                        hnd.promise().propagate_error(static_cast<job_error>(value.error()));
+                        auto next = hnd.promise().get_continuation();
+                        hnd.destroy();
                         if (parent != nullptr)
                         {
                             parent->destroy_frame();
@@ -839,8 +892,11 @@ namespace tempest::job
                     }
                 };
 
-                return detail::profiled_awaiter<promise_type, exp_awaiter>{
-                    *this, exp_awaiter{move(exp)}, profiler::suspend_reason::yield};
+                return detail::profiled_awaiter<promise_type, exp_awaiter>{*this,
+                                                                           exp_awaiter{
+                                                                               .value = move(exp),
+                                                                           },
+                                                                           profiler::suspend_reason::yield};
             }
 
             auto await_transform(set_task_name stn) noexcept -> detail::set_task_name_awaiter
@@ -866,8 +922,7 @@ namespace tempest::job
                 {
                     auto actual = detail::get_underlying_awaiter(forward<Awaitable>(awaitable));
                     auto reason = detail::get_suspend_reason(actual);
-                    return detail::profiled_awaiter<promise_type, decltype(actual)>{
-                        *this, move(actual), reason};
+                    return detail::profiled_awaiter<promise_type, decltype(actual)>{*this, move(actual), reason};
                 }
             }
         };
@@ -1027,56 +1082,45 @@ namespace tempest::job
             return _handle ? _handle.promise().session : nullptr;
         }
 
-        auto with_profiler(profiler::profiler_session& session) & noexcept -> task&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = &session;
-            }
-            return *this;
-        }
-
-        auto with_profiler(profiler::profiler_session& session) && noexcept -> task&&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = &session;
-            }
-            return move(*this);
-        }
-
-        auto with_profiler(profiler::profiler_session* session) & noexcept -> task&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = session;
-            }
-            return *this;
-        }
-
-        auto with_profiler(profiler::profiler_session* session) && noexcept -> task&&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = session;
-            }
-            return move(*this);
-        }
-
-        auto set_profiler(profiler::profiler_session& session) noexcept -> void
-        {
-            if (_handle)
-            {
-                _handle.promise().session = &session;
-            }
-        }
-
         auto set_profiler(profiler::profiler_session* session) noexcept -> void
         {
             if (_handle)
             {
                 _handle.promise().session = session;
+                if (session != nullptr && session->is_enabled() && _handle.promise().coroutine_id == 0)
+                {
+                    _handle.promise().coroutine_id = session->allocate_coroutine_id();
+                }
             }
+        }
+
+        auto set_profiler(profiler::profiler_session& session) noexcept -> void
+        {
+            set_profiler(&session);
+        }
+
+        auto with_profiler(profiler::profiler_session& session) & noexcept -> task&
+        {
+            set_profiler(&session);
+            return *this;
+        }
+
+        auto with_profiler(profiler::profiler_session& session) && noexcept -> task&&
+        {
+            set_profiler(&session);
+            return move(*this);
+        }
+
+        auto with_profiler(profiler::profiler_session* session) & noexcept -> task&
+        {
+            set_profiler(session);
+            return *this;
+        }
+
+        auto with_profiler(profiler::profiler_session* session) && noexcept -> task&&
+        {
+            set_profiler(session);
+            return move(*this);
         }
 
         [[nodiscard]] auto name() const noexcept -> string_view
@@ -1121,7 +1165,7 @@ namespace tempest::job
             result_type result{};
             coroutine_handle<> continuation{nullptr};
             detail::error_propagator* parent_propagator{nullptr};
-            uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
+            uint64_t coroutine_id{0};
             uint32_t current_slice_index{0};
             string_view name{"task"};
             uint64_t spawned_by_thread_id{tempest::this_thread::get_id().to_uint64()};
@@ -1132,9 +1176,12 @@ namespace tempest::job
 
             template <typename... Args>
                 requires(sizeof...(Args) > 0)
-            explicit promise_type(Args&&... args)
-                : session{detail::find_profiler_session(forward<Args>(args)...)}
+            explicit promise_type(Args&&... args) : session{detail::find_profiler_session(forward<Args>(args)...)}
             {
+                if (session != nullptr && session->is_enabled())
+                {
+                    coroutine_id = session->allocate_coroutine_id();
+                }
             }
             promise_type() = default;
 
@@ -1190,8 +1237,8 @@ namespace tempest::job
             auto destroy_frame() -> void override
             {
                 auto* parent = parent_propagator;
-                auto h = coroutine_handle<promise_type>::from_promise(*this);
-                h.destroy();
+                auto hnd = coroutine_handle<promise_type>::from_promise(*this);
+                hnd.destroy();
                 if (parent != nullptr)
                 {
                     parent->destroy_frame();
@@ -1200,7 +1247,7 @@ namespace tempest::job
 
             // Await transform for child fallible task
             template <typename ChildT, typename ChildE>
-                requires (!is_void_v<ChildE>)
+                requires(!is_void_v<ChildE>)
             auto await_transform(task<ChildT, ChildE>&& child)
             {
                 struct child_task_awaiter
@@ -1212,33 +1259,40 @@ namespace tempest::job
                         return child_task.is_ready() && child_task.has_value();
                     }
 
-                    auto await_suspend(coroutine_handle<promise_type> h) noexcept -> coroutine_handle<>
+                    auto await_suspend(coroutine_handle<promise_type> hnd) noexcept -> coroutine_handle<>
                     {
                         if (child_task.is_ready())
                         {
                             auto err = child_task.error();
-                            auto* parent = h.promise().parent_propagator;
-                            h.promise().propagate_error(static_cast<job_error>(err));
-                            auto next = h.promise().get_continuation();
-                            h.destroy();
+                            auto* parent = hnd.promise().parent_propagator;
+                            hnd.promise().propagate_error(static_cast<job_error>(err));
+                            auto next = hnd.promise().get_continuation();
+                            hnd.destroy();
                             if (parent != nullptr)
                             {
                                 parent->destroy_frame();
                             }
                             return next ? next : noop_coroutine();
                         }
-                        child_task.handle().promise().continuation = h;
-                        child_task.handle().promise().parent_propagator = &h.promise();
+                        child_task.handle().promise().continuation = hnd;
+                        child_task.handle().promise().parent_propagator = &hnd.promise();
                         if (child_task.handle().promise().session == nullptr)
                         {
-                            child_task.handle().promise().session = h.promise().session;
+                            child_task.handle().promise().session = hnd.promise().session;
+                        }
+                        if (child_task.handle().promise().session != nullptr &&
+                            child_task.handle().promise().session->is_enabled() &&
+                            child_task.handle().promise().coroutine_id == 0)
+                        {
+                            child_task.handle().promise().coroutine_id =
+                                child_task.handle().promise().session->allocate_coroutine_id();
                         }
                         if (child_task.handle().promise().spawned_by_coroutine_id == 0)
                         {
-                            child_task.handle().promise().spawned_by_coroutine_id = h.promise().coroutine_id;
+                            child_task.handle().promise().spawned_by_coroutine_id = hnd.promise().coroutine_id;
                         }
                         child_task.handle().promise().awaited_by_thread_id = tempest::this_thread::get_id().to_uint64();
-                        child_task.handle().promise().awaited_by_coroutine_id = h.promise().coroutine_id;
+                        child_task.handle().promise().awaited_by_coroutine_id = hnd.promise().coroutine_id;
                         return child_task.handle();
                     }
 
@@ -1264,17 +1318,17 @@ namespace tempest::job
                 {
                     unexpected<Err> error;
 
-                    constexpr auto await_ready() const noexcept -> bool
+                    [[nodiscard]] constexpr auto await_ready() const noexcept -> bool
                     {
                         return false;
                     }
 
-                    auto await_suspend(coroutine_handle<promise_type> h) noexcept -> coroutine_handle<>
+                    auto await_suspend(coroutine_handle<promise_type> hnd) noexcept -> coroutine_handle<>
                     {
-                        auto* parent = h.promise().parent_propagator;
-                        h.promise().propagate_error(static_cast<job_error>(error.value));
-                        auto next = h.promise().get_continuation();
-                        h.destroy();
+                        auto* parent = hnd.promise().parent_propagator;
+                        hnd.promise().propagate_error(static_cast<job_error>(error.value));
+                        auto next = hnd.promise().get_continuation();
+                        hnd.destroy();
                         if (parent != nullptr)
                         {
                             parent->destroy_frame();
@@ -1287,8 +1341,8 @@ namespace tempest::job
                     }
                 };
 
-                return detail::profiled_awaiter<promise_type, unexp_awaiter>{
-                    *this, unexp_awaiter{unexp}, profiler::suspend_reason::yield};
+                return detail::profiled_awaiter<promise_type, unexp_awaiter>{*this, unexp_awaiter{unexp},
+                                                                             profiler::suspend_reason::yield};
             }
 
             // Await transform for expected<Val, Err>
@@ -1304,12 +1358,12 @@ namespace tempest::job
                         return value.has_value();
                     }
 
-                    auto await_suspend(coroutine_handle<promise_type> h) noexcept -> coroutine_handle<>
+                    auto await_suspend(coroutine_handle<promise_type> hnd) noexcept -> coroutine_handle<>
                     {
-                        auto* parent = h.promise().parent_propagator;
-                        h.promise().propagate_error(static_cast<job_error>(value.error()));
-                        auto next = h.promise().get_continuation();
-                        h.destroy();
+                        auto* parent = hnd.promise().parent_propagator;
+                        hnd.promise().propagate_error(static_cast<job_error>(value.error()));
+                        auto next = hnd.promise().get_continuation();
+                        hnd.destroy();
                         if (parent != nullptr)
                         {
                             parent->destroy_frame();
@@ -1326,8 +1380,8 @@ namespace tempest::job
                     }
                 };
 
-                return detail::profiled_awaiter<promise_type, exp_awaiter>{
-                    *this, exp_awaiter{move(exp)}, profiler::suspend_reason::yield};
+                return detail::profiled_awaiter<promise_type, exp_awaiter>{*this, exp_awaiter{move(exp)},
+                                                                           profiler::suspend_reason::yield};
             }
 
             auto await_transform(set_task_name stn) noexcept -> detail::set_task_name_awaiter
@@ -1352,8 +1406,7 @@ namespace tempest::job
                 {
                     auto actual = detail::get_underlying_awaiter(forward<Awaitable>(awaitable));
                     auto reason = detail::get_suspend_reason(actual);
-                    return detail::profiled_awaiter<promise_type, decltype(actual)>{
-                        *this, move(actual), reason};
+                    return detail::profiled_awaiter<promise_type, decltype(actual)>{*this, move(actual), reason};
                 }
             }
         };
@@ -1508,56 +1561,45 @@ namespace tempest::job
             return _handle ? _handle.promise().session : nullptr;
         }
 
-        auto with_profiler(profiler::profiler_session& session) & noexcept -> task&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = &session;
-            }
-            return *this;
-        }
-
-        auto with_profiler(profiler::profiler_session& session) && noexcept -> task&&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = &session;
-            }
-            return move(*this);
-        }
-
-        auto with_profiler(profiler::profiler_session* session) & noexcept -> task&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = session;
-            }
-            return *this;
-        }
-
-        auto with_profiler(profiler::profiler_session* session) && noexcept -> task&&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = session;
-            }
-            return move(*this);
-        }
-
-        auto set_profiler(profiler::profiler_session& session) noexcept -> void
-        {
-            if (_handle)
-            {
-                _handle.promise().session = &session;
-            }
-        }
-
         auto set_profiler(profiler::profiler_session* session) noexcept -> void
         {
             if (_handle)
             {
                 _handle.promise().session = session;
+                if (session != nullptr && session->is_enabled() && _handle.promise().coroutine_id == 0)
+                {
+                    _handle.promise().coroutine_id = session->allocate_coroutine_id();
+                }
             }
+        }
+
+        auto set_profiler(profiler::profiler_session& session) noexcept -> void
+        {
+            set_profiler(&session);
+        }
+
+        auto with_profiler(profiler::profiler_session& session) & noexcept -> task&
+        {
+            set_profiler(&session);
+            return *this;
+        }
+
+        auto with_profiler(profiler::profiler_session& session) && noexcept -> task&&
+        {
+            set_profiler(&session);
+            return move(*this);
+        }
+
+        auto with_profiler(profiler::profiler_session* session) & noexcept -> task&
+        {
+            set_profiler(session);
+            return *this;
+        }
+
+        auto with_profiler(profiler::profiler_session* session) && noexcept -> task&&
+        {
+            set_profiler(session);
+            return move(*this);
         }
 
         [[nodiscard]] auto name() const noexcept -> string_view
@@ -1599,7 +1641,7 @@ namespace tempest::job
         {
             optional<T> result{nullopt};
             coroutine_handle<> continuation{nullptr};
-            uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
+            uint64_t coroutine_id{0};
             uint32_t current_slice_index{0};
             string_view name{"task"};
             uint64_t spawned_by_thread_id{tempest::this_thread::get_id().to_uint64()};
@@ -1610,9 +1652,12 @@ namespace tempest::job
 
             template <typename... Args>
                 requires(sizeof...(Args) > 0)
-            explicit promise_type(Args&&... args)
-                : session{detail::find_profiler_session(forward<Args>(args)...)}
+            explicit promise_type(Args&&... args) : session{detail::find_profiler_session(forward<Args>(args)...)}
             {
+                if (session != nullptr && session->is_enabled())
+                {
+                    coroutine_id = session->allocate_coroutine_id();
+                }
             }
             promise_type() = default;
 
@@ -1663,8 +1708,7 @@ namespace tempest::job
                 {
                     auto actual = detail::get_underlying_awaiter(forward<Awaitable>(awaitable));
                     auto reason = detail::get_suspend_reason(actual);
-                    return detail::profiled_awaiter<promise_type, decltype(actual)>{
-                        *this, move(actual), reason};
+                    return detail::profiled_awaiter<promise_type, decltype(actual)>{*this, move(actual), reason};
                 }
             }
         };
@@ -1780,56 +1824,45 @@ namespace tempest::job
             return _handle ? _handle.promise().session : nullptr;
         }
 
-        auto with_profiler(profiler::profiler_session& session) & noexcept -> task&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = &session;
-            }
-            return *this;
-        }
-
-        auto with_profiler(profiler::profiler_session& session) && noexcept -> task&&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = &session;
-            }
-            return move(*this);
-        }
-
-        auto with_profiler(profiler::profiler_session* session) & noexcept -> task&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = session;
-            }
-            return *this;
-        }
-
-        auto with_profiler(profiler::profiler_session* session) && noexcept -> task&&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = session;
-            }
-            return move(*this);
-        }
-
-        auto set_profiler(profiler::profiler_session& session) noexcept -> void
-        {
-            if (_handle)
-            {
-                _handle.promise().session = &session;
-            }
-        }
-
         auto set_profiler(profiler::profiler_session* session) noexcept -> void
         {
             if (_handle)
             {
                 _handle.promise().session = session;
+                if (session != nullptr && session->is_enabled() && _handle.promise().coroutine_id == 0)
+                {
+                    _handle.promise().coroutine_id = session->allocate_coroutine_id();
+                }
             }
+        }
+
+        auto set_profiler(profiler::profiler_session& session) noexcept -> void
+        {
+            set_profiler(&session);
+        }
+
+        auto with_profiler(profiler::profiler_session& session) & noexcept -> task&
+        {
+            set_profiler(&session);
+            return *this;
+        }
+
+        auto with_profiler(profiler::profiler_session& session) && noexcept -> task&&
+        {
+            set_profiler(&session);
+            return move(*this);
+        }
+
+        auto with_profiler(profiler::profiler_session* session) & noexcept -> task&
+        {
+            set_profiler(session);
+            return *this;
+        }
+
+        auto with_profiler(profiler::profiler_session* session) && noexcept -> task&&
+        {
+            set_profiler(session);
+            return move(*this);
         }
 
         [[nodiscard]] auto name() const noexcept -> string_view
@@ -1865,7 +1898,7 @@ namespace tempest::job
         struct promise_type : detail::promise_allocator_base
         {
             coroutine_handle<> continuation{nullptr};
-            uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
+            uint64_t coroutine_id{0};
             uint32_t current_slice_index{0};
             string_view name{"task"};
             uint64_t spawned_by_thread_id{tempest::this_thread::get_id().to_uint64()};
@@ -1876,9 +1909,12 @@ namespace tempest::job
 
             template <typename... Args>
                 requires(sizeof...(Args) > 0)
-            explicit promise_type(Args&&... args)
-                : session{detail::find_profiler_session(forward<Args>(args)...)}
+            explicit promise_type(Args&&... args) : session{detail::find_profiler_session(forward<Args>(args)...)}
             {
+                if (session != nullptr && session->is_enabled())
+                {
+                    coroutine_id = session->allocate_coroutine_id();
+                }
             }
             promise_type() = default;
 
@@ -1928,8 +1964,7 @@ namespace tempest::job
                 {
                     auto actual = detail::get_underlying_awaiter(forward<Awaitable>(awaitable));
                     auto reason = detail::get_suspend_reason(actual);
-                    return detail::profiled_awaiter<promise_type, decltype(actual)>{
-                        *this, move(actual), reason};
+                    return detail::profiled_awaiter<promise_type, decltype(actual)>{*this, move(actual), reason};
                 }
             }
         };
@@ -2034,56 +2069,45 @@ namespace tempest::job
             return _handle ? _handle.promise().session : nullptr;
         }
 
-        auto with_profiler(profiler::profiler_session& session) & noexcept -> task&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = &session;
-            }
-            return *this;
-        }
-
-        auto with_profiler(profiler::profiler_session& session) && noexcept -> task&&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = &session;
-            }
-            return move(*this);
-        }
-
-        auto with_profiler(profiler::profiler_session* session) & noexcept -> task&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = session;
-            }
-            return *this;
-        }
-
-        auto with_profiler(profiler::profiler_session* session) && noexcept -> task&&
-        {
-            if (_handle)
-            {
-                _handle.promise().session = session;
-            }
-            return move(*this);
-        }
-
-        auto set_profiler(profiler::profiler_session& session) noexcept -> void
-        {
-            if (_handle)
-            {
-                _handle.promise().session = &session;
-            }
-        }
-
         auto set_profiler(profiler::profiler_session* session) noexcept -> void
         {
             if (_handle)
             {
                 _handle.promise().session = session;
+                if (session != nullptr && session->is_enabled() && _handle.promise().coroutine_id == 0)
+                {
+                    _handle.promise().coroutine_id = session->allocate_coroutine_id();
+                }
             }
+        }
+
+        auto set_profiler(profiler::profiler_session& session) noexcept -> void
+        {
+            set_profiler(&session);
+        }
+
+        auto with_profiler(profiler::profiler_session& session) & noexcept -> task&
+        {
+            set_profiler(&session);
+            return *this;
+        }
+
+        auto with_profiler(profiler::profiler_session& session) && noexcept -> task&&
+        {
+            set_profiler(&session);
+            return move(*this);
+        }
+
+        auto with_profiler(profiler::profiler_session* session) & noexcept -> task&
+        {
+            set_profiler(session);
+            return *this;
+        }
+
+        auto with_profiler(profiler::profiler_session* session) && noexcept -> task&&
+        {
+            set_profiler(session);
+            return move(*this);
         }
 
         [[nodiscard]] auto name() const noexcept -> string_view
@@ -2173,8 +2197,8 @@ namespace tempest::job
     template <typename F>
     auto task<T, E>::then(F&& func) && -> detail::continuation_result_t<task<T, E>, F>
     {
-        auto cont = detail::make_continuation<detail::continuation_result_t<task<T, E>, F>>(
-            move(*this), forward<F>(func));
+        auto cont =
+            detail::make_continuation<detail::continuation_result_t<task<T, E>, F>>(move(*this), forward<F>(func));
         if (_handle && _handle.promise().session != nullptr)
         {
             cont.set_profiler(*_handle.promise().session);
@@ -2193,8 +2217,8 @@ namespace tempest::job
     template <typename F>
     auto task<void, E>::then(F&& func) && -> detail::continuation_result_t<task<void, E>, F>
     {
-        auto cont = detail::make_continuation<detail::continuation_result_t<task<void, E>, F>>(
-            move(*this), forward<F>(func));
+        auto cont =
+            detail::make_continuation<detail::continuation_result_t<task<void, E>, F>>(move(*this), forward<F>(func));
         if (_handle && _handle.promise().session != nullptr)
         {
             cont.set_profiler(*_handle.promise().session);
@@ -2213,8 +2237,8 @@ namespace tempest::job
     template <typename F>
     auto task<T, void>::then(F&& func) && -> detail::continuation_result_t<task<T, void>, F>
     {
-        auto cont = detail::make_continuation<detail::continuation_result_t<task<T, void>, F>>(
-            move(*this), forward<F>(func));
+        auto cont =
+            detail::make_continuation<detail::continuation_result_t<task<T, void>, F>>(move(*this), forward<F>(func));
         if (_handle && _handle.promise().session != nullptr)
         {
             cont.set_profiler(*_handle.promise().session);
@@ -2232,8 +2256,8 @@ namespace tempest::job
     template <typename F>
     inline auto task<void, void>::then(F&& func) && -> detail::continuation_result_t<task<void, void>, F>
     {
-        auto cont = detail::make_continuation<detail::continuation_result_t<task<void, void>, F>>(
-            move(*this), forward<F>(func));
+        auto cont = detail::make_continuation<detail::continuation_result_t<task<void, void>, F>>(move(*this),
+                                                                                                  forward<F>(func));
         if (_handle && _handle.promise().session != nullptr)
         {
             cont.set_profiler(*_handle.promise().session);

@@ -11,16 +11,16 @@ namespace tempest::job
 {
     struct core_info
     {
-        uint32_t core_id{0};
-        uint32_t logical_core_index{0};
-        core_class type{core_class::performance};
-        uint32_t efficiency_class{0};
-        uint64_t affinity_mask{0};
+        uint32_t core_id = 0;
+        uint32_t logical_core_index = 0;
+        core_class type = core_class::performance;
+        uint32_t efficiency_class = 0;
+        uint64_t affinity_mask = 0;
     };
 
     struct cpu_topology
     {
-        vector<core_info> cores{};
+        vector<core_info> cores;
 
         [[nodiscard]] auto total_core_count() const noexcept -> uint32_t
         {
@@ -29,10 +29,10 @@ namespace tempest::job
 
         [[nodiscard]] auto performance_core_count() const noexcept -> uint32_t
         {
-            auto count = 0u;
-            for (const auto& c : cores)
+            auto count = 0U;
+            for (const auto& core : cores)
             {
-                if (c.type == core_class::performance)
+                if (core.type == core_class::performance)
                 {
                     ++count;
                 }
@@ -42,10 +42,10 @@ namespace tempest::job
 
         [[nodiscard]] auto efficiency_core_count() const noexcept -> uint32_t
         {
-            auto count = 0u;
-            for (const auto& c : cores)
+            auto count = 0U;
+            for (const auto& core : cores)
             {
-                if (c.type == core_class::efficiency)
+                if (core.type == core_class::efficiency)
                 {
                     ++count;
                 }
@@ -56,11 +56,11 @@ namespace tempest::job
         [[nodiscard]] auto performance_mask() const noexcept -> uint64_t
         {
             auto mask = uint64_t{0};
-            for (const auto& c : cores)
+            for (const auto& core : cores)
             {
-                if (c.type == core_class::performance)
+                if (core.type == core_class::performance)
                 {
-                    mask |= c.affinity_mask;
+                    mask |= core.affinity_mask;
                 }
             }
             return mask;
@@ -69,11 +69,11 @@ namespace tempest::job
         [[nodiscard]] auto efficiency_mask() const noexcept -> uint64_t
         {
             auto mask = uint64_t{0};
-            for (const auto& c : cores)
+            for (const auto& core : cores)
             {
-                if (c.type == core_class::efficiency)
+                if (core.type == core_class::efficiency)
                 {
-                    mask |= c.affinity_mask;
+                    mask |= core.affinity_mask;
                 }
             }
             return mask;
@@ -81,7 +81,7 @@ namespace tempest::job
     };
 
     TEMPEST_API auto discover_cpu_topology() -> cpu_topology;
-    TEMPEST_API auto set_thread_affinity(tempest::thread& t, uint64_t mask) -> bool;
+    TEMPEST_API auto set_thread_affinity(tempest::thread& thr, uint64_t mask) -> bool;
     TEMPEST_API auto set_current_thread_affinity(uint64_t mask) -> bool;
 } // namespace tempest::job
 
