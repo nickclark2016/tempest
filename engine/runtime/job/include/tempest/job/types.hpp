@@ -55,10 +55,13 @@ namespace tempest::job
     {
       public:
         cancellation_state() = default;
+        cancellation_state(const cancellation_state&) = delete;
+        cancellation_state(cancellation_state&&) noexcept = delete;
+
         ~cancellation_state() = default;
 
-        cancellation_state(const cancellation_state&) = delete;
-        cancellation_state& operator=(const cancellation_state&) = delete;
+        auto operator=(const cancellation_state&) -> cancellation_state& = delete;
+        auto operator=(cancellation_state&&) noexcept -> cancellation_state& = delete;
 
         [[nodiscard]] auto is_cancellation_requested() const noexcept -> bool
         {
@@ -190,7 +193,7 @@ namespace tempest::job
         }
 
       private:
-        unique_ptr<cancellation_state> _state{};
+        unique_ptr<cancellation_state> _state;
     };
 } // namespace tempest::job
 
