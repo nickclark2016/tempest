@@ -31,7 +31,7 @@ namespace tempest::job
         virtual ~node_invoker() = default;
         auto operator=(const node_invoker&) -> node_invoker& = delete;
         auto operator=(node_invoker&&) noexcept -> node_invoker& = delete;
-        virtual auto execute(task_node& node) -> task<void> = 0;
+        virtual auto execute() -> task<expected<void, job_error>, void> = 0;
     };
 
     class TEMPEST_API task_node
@@ -40,8 +40,6 @@ namespace tempest::job
         friend class task_graph;
         friend class job_system;
         friend struct graph_executor;
-        template <typename F>
-        friend struct typed_node_invoker;
 
         task_node(string_view name, size_t tid, task_graph* graph) noexcept;
         task_node(const task_node&) = delete;
@@ -92,8 +90,8 @@ namespace tempest::job
         auto _add_successor(task_node* succ) -> void;
 
         string_view _name;
-        size_t _id{0};
-        task_graph* _graph{nullptr};
+        size_t _id = 0;
+        task_graph* _graph = 0;
 
         vector<task_node*> _successors;
         vector<task_node*> _predecessors;
@@ -117,7 +115,7 @@ namespace tempest::job
         {
         }
 
-        auto execute(task_node& node) -> task<void> override
+        auto execute() -> task<expected<void, job_error>, void> override
         {
             using Ret = invoke_result_t<F&>;
             if constexpr (detail::is_task_v<Ret>)
@@ -125,17 +123,19 @@ namespace tempest::job
                 auto t = callable();
                 struct raw_task_awaiter
                 {
-                    Ret& child;
-                    auto await_ready() const noexcept -> bool
+                    non_null<Ret> child;
+
+                    [[nodiscard]] auto await_ready() const noexcept -> bool
                     {
                         return child.is_ready();
                     }
-                    auto await_suspend(coroutine_handle<task<void>::promise_type> h) noexcept -> coroutine_handle<>
+
+                    [[nodiscard]] auto await_suspend(coroutine_handle<task<expected<void, job_error>, void>::promise_type> hnd) noexcept -> coroutine_handle<>
                     {
-                        child.handle().promise().continuation = h;
+                        child.handle().promise().continuation = hnd;
                         if (child.handle().promise().session == nullptr)
                         {
-                            child.handle().promise().session = h.promise().session;
+                            child.handle().promise().session = hnd.promise().session;
                         }
                         child.handle().promise().awaited_by_thread_id = tempest::this_thread::get_id().to_uint64();
                         return child.handle();
@@ -147,31 +147,24 @@ namespace tempest::job
                 co_await raw_task_awaiter{t};
                 if (!t.has_value())
                 {
-                    node._result = unexpected{static_cast<job_error>(t.error())};
+                    co_return unexpected{static_cast<job_error>(t.error())};
                 }
-                else
-                {
-                    node._result = expected<void, job_error>{};
-                }
+                co_return expected<void, job_error>{};
             }
             else if constexpr (requires { callable().has_value(); callable().error(); })
             {
                 auto res = callable();
                 if (!res.has_value())
                 {
-                    node._result = unexpected{static_cast<job_error>(res.error())};
+                    co_return unexpected{static_cast<job_error>(res.error())};
                 }
-                else
-                {
-                    node._result = expected<void, job_error>{};
-                }
+                co_return expected<void, job_error>{};
             }
             else
             {
                 callable();
-                node._result = expected<void, job_error>{};
+                co_return expected<void, job_error>{};
             }
-            co_return;
         }
     };
 
@@ -225,7 +218,7 @@ namespace tempest::job
         }
 
       private:
-        vector<unique_ptr<task_node>> _nodes{};
+        vector<unique_ptr<task_node>> _nodes;
     };
 
     /// @brief Result of executing a task_graph via linear move semantics.

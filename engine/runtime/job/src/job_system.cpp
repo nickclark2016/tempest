@@ -850,7 +850,7 @@ namespace tempest::job
 
             auto node_coro(task_node* node) -> task<void>
             {
-                co_await node->_invoker->execute(*node);
+                node->_result = co_await node->_invoker->execute();
                 if (!node->_result.has_value())
                 {
                     auto expected_err = static_cast<uint8_t>(job_error::none);
