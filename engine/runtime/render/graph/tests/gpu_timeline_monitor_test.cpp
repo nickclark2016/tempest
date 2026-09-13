@@ -476,6 +476,8 @@ TEST(gpu_timeline_monitor_test, cross_thread_gpu_signal_wakeup)
         this_thread::sleep_for(chrono::milliseconds(1));
     }
 
+    js.wait_idle();
+
     // 3. Assert
     EXPECT_TRUE(completed.load(memory_order::acquire));
 }
@@ -542,6 +544,8 @@ TEST(gpu_timeline_monitor_test, multiple_waiters_single_semaphore)
         this_thread::sleep_for(chrono::milliseconds(1));
     }
 
+    js.wait_idle();
+
     // 3. Assert
     EXPECT_TRUE(coro2_done.load(memory_order::acquire));
 }
@@ -591,6 +595,8 @@ TEST(gpu_timeline_monitor_test, monitor_destruction_cancellation)
         this_thread::sleep_for(chrono::milliseconds(1));
     }
 
+    js.wait_idle();
+
     // 3. Assert
     EXPECT_TRUE(done.load(memory_order::acquire));
     EXPECT_EQ(error_received.load(memory_order::acquire), gpu_sync_error::cancelled);
@@ -637,6 +643,8 @@ TEST(gpu_timeline_monitor_test, device_lost_cancellation)
     {
         this_thread::sleep_for(chrono::milliseconds(1));
     }
+
+    js.wait_idle();
 
     // 3. Assert
     EXPECT_TRUE(done.load(memory_order::acquire));

@@ -18,7 +18,16 @@ namespace tempest::render_graph
     auto render_graph_executor::execute_sync(rhi::device& dev, render_graph& graph, const frame_sync_options& frame_sync)
         -> expected<void, execution_error>
     {
-        auto t = execute(dev, graph, frame_sync);
+        auto sync_opts = frame_sync;
+        if (sync_opts.profiler == nullptr && _jobs != nullptr)
+        {
+            sync_opts.profiler = &_jobs->get_profiler();
+        }
+        auto t = execute(dev, graph, sync_opts);
+        if (sync_opts.profiler != nullptr)
+        {
+            t.set_profiler(sync_opts.profiler);
+        }
         t.resume();
         _jobs->wait_idle();
         while (!t.is_ready())

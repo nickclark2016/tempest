@@ -179,20 +179,6 @@ namespace tempest::profiler
         return _available_chunks.size();
     }
 
-    namespace
-    {
-        thread_local thread_profiler_context* tl_current_profiler_context{nullptr};
-    }
-
-    auto thread_profiler_context::set_current_thread_context(thread_profiler_context* ctx) noexcept -> void
-    {
-        tl_current_profiler_context = ctx;
-    }
-
-    auto thread_profiler_context::get_current_thread_context() noexcept -> thread_profiler_context*
-    {
-        return tl_current_profiler_context;
-    }
 
     auto thread_profiler_context::set_current_coroutine_id(uint64_t id) noexcept -> void
     {
@@ -212,10 +198,6 @@ namespace tempest::profiler
 
     thread_profiler_context::~thread_profiler_context()
     {
-        if (tl_current_profiler_context == this)
-        {
-            tl_current_profiler_context = nullptr;
-        }
         flush_active_chunk();
     }
 
@@ -566,11 +548,6 @@ namespace tempest::profiler
 
     auto profiler_session::get_or_register_thread() -> thread_profiler_context&
     {
-        if (tl_current_profiler_context != nullptr && &tl_current_profiler_context->get_session() == this)
-        {
-            return *tl_current_profiler_context;
-        }
-
         auto tid = tempest::this_thread::get_id().to_uint64();
         auto hash_val = hash<uint64_t>{}(tid);
         auto slot_idx = hash_val % max_thread_slots;
@@ -578,13 +555,10 @@ namespace tempest::profiler
         auto occupant = _slots[slot_idx].thread_id.load(memory_order::relaxed);
         if (occupant == tid && _slots[slot_idx].context) [[likely]]
         {
-            tl_current_profiler_context = _slots[slot_idx].context.get();
             return *_slots[slot_idx].context;
         }
 
-        auto& ctx = _register_thread_slow(tid);
-        tl_current_profiler_context = &ctx;
-        return ctx;
+        return _register_thread_slow(tid);
     }
 
     auto profiler_session::register_track(uint64_t track_id, string_view track_name) -> thread_profiler_context&

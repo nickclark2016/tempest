@@ -20,6 +20,41 @@ namespace tempest::job
     namespace detail
     {
         template <typename TaskType, typename ResultType>
+        auto when_all_leaf_runner(job_system& sys, TaskType t, ResultType* out, atomic<size_t>* remaining, async_event* done_event)
+            -> detached_task
+        {
+            struct raw_task_awaiter
+            {
+                TaskType& child;
+                auto await_ready() const noexcept -> bool
+                {
+                    return child.is_ready();
+                }
+                auto await_suspend(coroutine_handle<detached_task::promise_type> h) noexcept -> coroutine_handle<>
+                {
+                    child.handle().promise().continuation = h;
+                    if (child.handle().promise().session == nullptr)
+                    {
+                        child.handle().promise().session = h.promise().session;
+                    }
+                    child.handle().promise().awaited_by_thread_id = tempest::this_thread::get_id().to_uint64();
+                    return child.handle();
+                }
+                auto await_resume() noexcept -> void
+                {
+                }
+            };
+
+            co_await raw_task_awaiter{t};
+            *out = tempest::move(t.result());
+            if (remaining->fetch_sub(1, memory_order::acq_rel) == 1)
+            {
+                done_event->set();
+            }
+            co_return;
+        }
+
+        template <typename TaskType, typename ResultType>
         auto when_all_leaf_runner(TaskType t, ResultType* out, atomic<size_t>* remaining, async_event* done_event)
             -> detached_task
         {
@@ -30,15 +65,14 @@ namespace tempest::job
                 {
                     return child.is_ready();
                 }
-                auto await_suspend(coroutine_handle<> h) noexcept -> coroutine_handle<>
+                auto await_suspend(coroutine_handle<detached_task::promise_type> h) noexcept -> coroutine_handle<>
                 {
                     child.handle().promise().continuation = h;
-                    auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
-                    if (ctx != nullptr)
+                    if (child.handle().promise().session == nullptr)
                     {
-                        child.handle().promise().awaited_by_thread_id = ctx->get_thread_id();
-                        child.handle().promise().awaited_by_coroutine_id = ctx->get_current_coroutine_id();
+                        child.handle().promise().session = h.promise().session;
                     }
+                    child.handle().promise().awaited_by_thread_id = tempest::this_thread::get_id().to_uint64();
                     return child.handle();
                 }
                 auto await_resume() noexcept -> void
@@ -75,8 +109,12 @@ namespace tempest::job
 
         for (auto i = 0u; i < count; ++i)
         {
+            if (tasks[i].get_profiler() == nullptr)
+            {
+                tasks[i].set_profiler(&sys.get_profiler());
+            }
             auto runner = detail::when_all_leaf_runner(
-                tempest::move(tasks[i]), &results[i], remaining.get(), done_event.get());
+                sys, tempest::move(tasks[i]), &results[i], remaining.get(), done_event.get());
             sys.schedule(runner.handle, priority, affinity);
         }
 
@@ -124,7 +162,11 @@ namespace tempest::job
 
         auto launch_leaf = [&sys, rem = remaining.get(), ev = done_event.get()]<typename Tsk, typename Res>(
                                Tsk&& tsk, Res* out) {
-            auto runner = detail::when_all_leaf_runner(tempest::forward<Tsk>(tsk), out, rem, ev);
+            if (tsk.get_profiler() == nullptr)
+            {
+                tsk.set_profiler(&sys.get_profiler());
+            }
+            auto runner = detail::when_all_leaf_runner(sys, tempest::forward<Tsk>(tsk), out, rem, ev);
             sys.schedule(runner.handle);
         };
 

@@ -121,6 +121,12 @@ Do not use `std::shared_ptr` or `tempest::shared_ptr` for resource management, s
   2. **Frame Header Lane** (`frameHeaderHeight`): Houses frame boundary badge pills (`CPU #N`, `GPU #N`) and correlation latency markers (`Flight: ...`).
   3. **Call Stack Zone Area**: Call stack capture zones must start strictly beneath the frame header lane ($\text{rowY} = \text{currentY} + \text{trackHeaderHeight} + \text{frameHeaderHeight} + 4 + \text{depth} \times (\text{zoneHeight} + \text{zoneSpacing})$), with hit-testing synchronized to the exact same vertical offset.
 
+### 26. Strict Prohibition of `thread_local` and Global Variables
+Never introduce `thread_local`, global variables, or static mutable state anywhere in engine runtime libraries.
+- Engine subsystems, allocators, profilers, and contexts must be explicitly instantiated and passed via references, non-owning pointers with well-defined lifetimes, or deduced through coroutine arguments and execution contexts.
+- Thread-confinement must be achieved through worker-indexed state structures (e.g. `worker_state` looked up via `find_current_worker()` or passed down through `job_context`) rather than TLS.
+- Sockets, memory pools, allocators, and singletons must maintain clear RAII lifecycles tied to engine or system instances.
+
 ## Workflow & Build Guidelines
 
 ### Embedded Web Assets Build Integration
@@ -138,6 +144,13 @@ Whenever adding or updating test cases:
 - Add descriptive documentation comments (e.g., `/// @brief ...`) above every test function detailing the exact behavior, invariant, or edge case under test.
 - Use clear inline comments and numbered steps (`// 1. Setup ...`, `// 2. Act ...`, `// 3. Assert ...`) to demarcate test sections and expectations.
 - Group related test cases within files using structured section banners.
+
+### ThreadSanitizer (TSan) for Jobs & Concurrency
+Whenever modifying the job system, thread pool, work-stealing queues, coroutine tasks/awaiters, synchronization primitives (`async_mutex`, `async_event`), or any multi-threaded runtime subsystem:
+- **Mandatory TSan Verification**: You must compile and run the relevant test suites with ThreadSanitizer enabled.
+- **Premake Flag Requirement**: TSan flags are not enabled by default in Ninja build files. Premake must be explicitly invoked with `--use-tsan`:
+  `premake5 ninja --cc=clang --shared-engine --shell=posix --rhi-vulkan --use-tsan`
+- **Non-GPU Test Targets**: Only non-GPU test targets (tagged `non-gpu-test` in Premake, including `job-tests`, `profiler-tests`, `render-graph-tests`, `core-tests`, `ecs-tests`, `event-tests`, `serialization-tests`, `assets-tests`) support TSan. Do not run GPU-bound hardware driver tests (e.g., `rhi-vk-tests`) under TSan, as Vulkan ICD memory conflicts with TSan shadow memory.
 
 ### Build & Test Commands (Windows Clang)
 - **Premake Generation**:

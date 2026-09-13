@@ -125,9 +125,14 @@ namespace tempest::job
                     {
                         return child.is_ready();
                     }
-                    auto await_suspend(coroutine_handle<> h) noexcept -> coroutine_handle<>
+                    auto await_suspend(coroutine_handle<task<void>::promise_type> h) noexcept -> coroutine_handle<>
                     {
                         child.handle().promise().continuation = h;
+                        if (child.handle().promise().session == nullptr)
+                        {
+                            child.handle().promise().session = h.promise().session;
+                        }
+                        child.handle().promise().awaited_by_thread_id = tempest::this_thread::get_id().to_uint64();
                         return child.handle();
                     }
                     auto await_resume() noexcept -> void

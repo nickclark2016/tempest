@@ -605,37 +605,46 @@ namespace tempest::render_graph
             }
 
             flat_unordered_map<uint64_t, string> object_debug_names;
+            mutable mutex debug_names_mutex{};
 
             auto set_debug_name(rhi::buffer_handle handle, cstring_view name) -> void override
             {
+                auto guard = lock_guard{debug_names_mutex};
                 object_debug_names[handle.handle] = string{name.data(), name.size()};
             }
             auto set_debug_name(rhi::texture_handle handle, cstring_view name) -> void override
             {
+                auto guard = lock_guard{debug_names_mutex};
                 object_debug_names[handle.handle] = string{name.data(), name.size()};
             }
             auto set_debug_name(rhi::texture_view_handle handle, cstring_view name) -> void override
             {
+                auto guard = lock_guard{debug_names_mutex};
                 object_debug_names[handle.handle] = string{name.data(), name.size()};
             }
             auto set_debug_name(rhi::sampler_handle handle, cstring_view name) -> void override
             {
+                auto guard = lock_guard{debug_names_mutex};
                 object_debug_names[handle.handle] = string{name.data(), name.size()};
             }
             auto set_debug_name(rhi::graphics_pipeline_handle handle, cstring_view name) -> void override
             {
+                auto guard = lock_guard{debug_names_mutex};
                 object_debug_names[handle.handle] = string{name.data(), name.size()};
             }
             auto set_debug_name(rhi::compute_pipeline_handle handle, cstring_view name) -> void override
             {
+                auto guard = lock_guard{debug_names_mutex};
                 object_debug_names[handle.handle] = string{name.data(), name.size()};
             }
             auto set_debug_name(rhi::event_handle handle, cstring_view name) -> void override
             {
+                auto guard = lock_guard{debug_names_mutex};
                 object_debug_names[handle.handle] = string{name.data(), name.size()};
             }
             auto set_debug_name(rhi::semaphore_handle handle, cstring_view name) -> void override
             {
+                auto guard = lock_guard{debug_names_mutex};
                 object_debug_names[handle.handle] = string{name.data(), name.size()};
             }
 

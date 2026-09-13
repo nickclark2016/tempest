@@ -66,8 +66,6 @@ namespace tempest::profiler
         auto set_current_coroutine_id(uint64_t id) noexcept -> void;
         [[nodiscard]] auto get_current_coroutine_id() const noexcept -> uint64_t;
 
-        static auto set_current_thread_context(thread_profiler_context* ctx) noexcept -> void;
-        [[nodiscard]] static auto get_current_thread_context() noexcept -> thread_profiler_context*;
 
         auto set_thread_name(string_view name) -> void;
         [[nodiscard]] auto get_thread_name() const noexcept -> string_view;

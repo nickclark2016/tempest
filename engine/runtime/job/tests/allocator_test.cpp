@@ -3,7 +3,9 @@
 #include <tempest/array.hpp>
 #include <tempest/job/allocator.hpp>
 #include <tempest/job/context.hpp>
+#include <tempest/job/job_system.hpp>
 #include <tempest/job/task.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/profiler/session.hpp>
 #include <tempest/thread.hpp>
 #include <tempest/vector.hpp>
@@ -167,6 +169,26 @@ namespace tempest::job::tests
         {
             co_return val + 1;
         }
+
+        auto coro_with_context([[maybe_unused]] const job_context& ctx, int val) -> task<int>
+        {
+            co_return val + 10;
+        }
+
+        struct dummy_allocator_provider
+        {
+            job_allocator& alloc;
+
+            [[nodiscard]] auto get_job_allocator() noexcept -> job_allocator&
+            {
+                return alloc;
+            }
+
+            auto member_coro(int val) -> task<int>
+            {
+                co_return val * 3;
+            }
+        };
     } // namespace
 
     /// @brief Verifies that coroutines accepting job_allocator& route their frame
@@ -224,17 +246,13 @@ namespace tempest::job::tests
         // 4. Act & Assert: Profiler metrics tracking (frame_bytes and is_heap)
         {
             auto prof = profiler::profiler_session{true};
-            auto& thread_ctx = prof.get_or_register_thread();
-            profiler::thread_profiler_context::set_current_thread_context(&thread_ctx);
 
             {
-                auto t = coro_with_allocator(alloc, 5);
+                auto t = coro_with_allocator(alloc, 5).with_profiler(prof);
                 t.handle().resume();
                 EXPECT_TRUE(t.handle().done());
                 EXPECT_EQ(t.handle().promise().result.value(), 10);
             }
-
-            profiler::thread_profiler_context::set_current_thread_context(nullptr);
 
             auto chunks = prof.drain_completed_chunks();
             ASSERT_FALSE(chunks.empty());
@@ -264,65 +282,92 @@ namespace tempest::job::tests
         }
     }
 
-    /// @brief Verifies that job_allocator::set_current binds a thread-local fallback
-    ///        allocator so coroutines without explicit allocator arguments allocate
-    ///        from the thread-local slab pool rather than heap fallback.
-    TEST(allocator_test, thread_local_current_allocator_fallback)
+    /// @brief Verifies that coroutines accepting job_context route their frame
+    ///        allocation to slabs via concept-based argument introspection without TLS.
+    TEST(allocator_test, context_forwarded_coroutine_allocation)
+    {
+        // 1. Setup
+        auto log = logger{};
+        auto prof = profiler::profiler_session{false};
+        auto config = job_system_config{
+            .performance_worker_count = 1,
+            .efficiency_worker_count = 0,
+        };
+        auto sys = job_system{log, prof, config};
+        auto& alloc = sys.get_dispatch_allocator();
+
+        auto ctx = job_context{
+            .system = sys,
+            .allocator = alloc,
+            .worker_index = 0,
+            .core_type = core_class::performance,
+        };
+
+        // 2. Act: Coroutine with job_context parameter
+        const auto telem_before = alloc.get_telemetry();
+        auto t = coro_with_context(ctx, 40);
+        const auto telem_after_alloc = alloc.get_telemetry();
+
+        // Slabs SHOULD be incremented because ctx.allocator provided the slab allocator
+        EXPECT_EQ(telem_after_alloc.active_live_frames, telem_before.active_live_frames + 1);
+
+        auto allocated_in_slab = false;
+        for (size_t i = 0; i < slab_class_count; ++i)
+        {
+            if (telem_after_alloc.allocations_per_class[i] > telem_before.allocations_per_class[i])
+            {
+                allocated_in_slab = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(allocated_in_slab);
+
+        t.handle().resume();
+        EXPECT_TRUE(t.handle().done());
+        EXPECT_EQ(t.handle().promise().result.value(), 50);
+
+        // 3. Assert: Drain and ensure active live frames return to baseline
+        t = {};
+        alloc.drain_remote_frees();
+        const auto telem_after_free = alloc.get_telemetry();
+        EXPECT_EQ(telem_after_free.active_live_frames, telem_before.active_live_frames);
+    }
+
+    /// @brief Verifies that member coroutines on types implementing get_job_allocator()
+    ///        route frame allocation to slabs via member argument introspection without TLS.
+    TEST(allocator_test, member_function_coroutine_allocation)
     {
         // 1. Setup
         auto alloc = job_allocator{};
-        EXPECT_EQ(job_allocator::get_current(), nullptr);
+        auto provider = dummy_allocator_provider{alloc};
 
-        job_allocator::set_current(&alloc);
-        EXPECT_EQ(job_allocator::get_current(), &alloc);
+        // 2. Act: Member coroutine invocation passing *this to promise new
+        const auto telem_before = alloc.get_telemetry();
+        auto t = provider.member_coro(10);
+        const auto telem_after_alloc = alloc.get_telemetry();
 
-        // 2. Act: Coroutine without allocator parameters while current allocator is set
+        // Slabs SHOULD be incremented because get_job_allocator() was deduced from provider
+        EXPECT_EQ(telem_after_alloc.active_live_frames, telem_before.active_live_frames + 1);
+
+        auto allocated_in_slab = false;
+        for (size_t i = 0; i < slab_class_count; ++i)
         {
-            const auto telem_before = alloc.get_telemetry();
-            auto t = coro_heap_fallback(200);
-            const auto telem_after_alloc = alloc.get_telemetry();
-
-            // Slabs SHOULD be incremented because get_current() provided the slab allocator
-            EXPECT_EQ(telem_after_alloc.active_live_frames, telem_before.active_live_frames + 1);
-            EXPECT_EQ(telem_after_alloc.heap_fallback_count, telem_before.heap_fallback_count);
-
-            bool allocated_in_slab = false;
-            for (size_t i = 0; i < slab_class_count; ++i)
+            if (telem_after_alloc.allocations_per_class[i] > telem_before.allocations_per_class[i])
             {
-                if (telem_after_alloc.allocations_per_class[i] > telem_before.allocations_per_class[i])
-                {
-                    allocated_in_slab = true;
-                    break;
-                }
+                allocated_in_slab = true;
+                break;
             }
-            EXPECT_TRUE(allocated_in_slab);
-
-            t.handle().resume();
-            EXPECT_TRUE(t.handle().done());
-            EXPECT_EQ(t.handle().promise().result.value(), 201);
-
-            t = {};
-            alloc.drain_remote_frees();
-            const auto telem_after_free = alloc.get_telemetry();
-            EXPECT_EQ(telem_after_free.active_live_frames, telem_before.active_live_frames);
         }
+        EXPECT_TRUE(allocated_in_slab);
 
-        // 3. Reset and Assert heap fallback when get_current() is null
-        job_allocator::set_current(nullptr);
-        EXPECT_EQ(job_allocator::get_current(), nullptr);
+        t.handle().resume();
+        EXPECT_TRUE(t.handle().done());
+        EXPECT_EQ(t.handle().promise().result.value(), 30);
 
-        {
-            const auto telem_before = alloc.get_telemetry();
-            auto t = coro_heap_fallback(300);
-            const auto telem_after_alloc = alloc.get_telemetry();
-
-            EXPECT_EQ(telem_after_alloc.active_live_frames, telem_before.active_live_frames);
-
-            t.handle().resume();
-            EXPECT_TRUE(t.handle().done());
-            EXPECT_EQ(t.handle().promise().result.value(), 301);
-
-            t = {};
-        }
+        // 3. Assert: Drain and ensure active live frames return to baseline
+        t = {};
+        alloc.drain_remote_frees();
+        const auto telem_after_free = alloc.get_telemetry();
+        EXPECT_EQ(telem_after_free.active_live_frames, telem_before.active_live_frames);
     }
 } // namespace tempest::job::tests

@@ -2,8 +2,11 @@
 
 #include <tempest/atomic.hpp>
 #include <tempest/job/job_system.hpp>
+#include <tempest/job/when_all.hpp>
 #include <tempest/logger.hpp>
+#include <tempest/profiler/capture.hpp>
 #include <tempest/profiler/session.hpp>
+#include <tempest/string_view.hpp>
 #include <tempest/vector.hpp>
 
 namespace tempest::job::tests
@@ -241,5 +244,85 @@ namespace tempest::job::tests
 
         // 3. Assert: All coroutines scheduled through job_context executed to completion
         EXPECT_EQ(executed.load(memory_order::relaxed), task_count);
+    }
+
+    // =========================================================================
+    // SECTION: Worker Thread & Coroutine Automatic Profiling Telemetry
+    // =========================================================================
+
+    /// @brief Verifies that tasks dispatched via async, parallel_for, and when_all
+    ///        automatically record execution slices on worker threads without requiring
+    ///        explicit with_profiler() calls, and that worker threads register valid tracks.
+    TEST(worker_pool_test, worker_thread_and_coroutine_profiling_auto_binding)
+    {
+        // 1. Setup: Enable profiling session and job_system with performance and efficiency workers
+        auto log = logger{};
+        auto prof = profiler::profiler_session{true};
+        auto config = job_system_config{
+            .performance_worker_count = 2,
+            .efficiency_worker_count = 2,
+            .enable_work_stealing = true,
+        };
+        auto sys = job_system{log, prof, config};
+
+        // 2. Act: Execute tasks via async, parallel_for, and when_all without manual with_profiler
+        auto async_executed = atomic<int>{0};
+        auto async_task = sys.async([&async_executed]() -> task<void> {
+            async_executed.store(1, memory_order::release);
+            co_return;
+        });
+
+        auto pfor_executed = atomic<int>{0};
+        auto pfor_task = sys.parallel_for(range<size_t>{0, 20}, [&pfor_executed]([[maybe_unused]] size_t idx) {
+            pfor_executed.fetch_add(1, memory_order::relaxed);
+        });
+
+        auto when_all_executed = atomic<int>{0};
+        auto coro_factory = [&when_all_executed]() -> task<int> {
+            when_all_executed.fetch_add(1, memory_order::relaxed);
+            co_return 42;
+        };
+
+        auto leaf_tasks = vector<task<int>>{};
+        for (auto i = 0; i < 4; ++i)
+        {
+            leaf_tasks.push_back(coro_factory());
+        }
+        auto all_task = when_all(sys, move(leaf_tasks));
+
+        sys.schedule(pfor_task);
+        sys.schedule(all_task);
+
+        sys.wait_idle();
+
+        EXPECT_EQ(async_executed.load(memory_order::acquire), 1);
+        EXPECT_EQ(pfor_executed.load(memory_order::relaxed), 20);
+        EXPECT_EQ(when_all_executed.load(memory_order::relaxed), 4);
+
+        // 3. Assert: Capture profiler data and verify worker threads have recorded tracks and zones
+        auto capture = profiler::create_capture_from_session(prof);
+
+        auto found_worker_track = false;
+        auto found_coroutine_slices = false;
+
+        for (const auto& track : capture.tracks)
+        {
+            auto track_name_view = string_view{track.name.data(), track.name.size()};
+            if (tempest::search(track_name_view, "JobWorker") != track_name_view.end())
+            {
+                found_worker_track = true;
+                for (const auto& zone : track.zones)
+                {
+                    if (zone.coroutine_id > 0)
+                    {
+                        found_coroutine_slices = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        EXPECT_TRUE(found_worker_track);
+        EXPECT_TRUE(found_coroutine_slices);
     }
 } // namespace tempest::job::tests

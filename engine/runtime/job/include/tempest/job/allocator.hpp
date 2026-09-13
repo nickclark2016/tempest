@@ -6,6 +6,7 @@
 #include <tempest/atomic.hpp>
 #include <tempest/int.hpp>
 #include <tempest/job/types.hpp>
+#include <tempest/mutex.hpp>
 
 namespace tempest::job
 {
@@ -105,8 +106,6 @@ namespace tempest::job
         job_allocator(job_allocator&&) noexcept = delete;
         job_allocator& operator=(job_allocator&&) noexcept = delete;
 
-        [[nodiscard]] static auto get_current() noexcept -> job_allocator*;
-        static auto set_current(job_allocator* alloc) noexcept -> void;
 
         [[nodiscard]] auto allocate(size_t size) -> void*;
         static auto deallocate(void* ptr, size_t size) noexcept -> void;
@@ -120,7 +119,9 @@ namespace tempest::job
 
       private:
         auto _allocate_slab_chunk(size_t size_class) -> void;
+        auto _drain_remote_frees_locked() noexcept -> void;
 
+        mutable mutex _alloc_mutex{};
         array<free_slot_node*, slab_class_count> _local_free_list{};
         array<slab_chunk*, slab_class_count> _chunks{};
         atomic<remote_free_node*> _remote_free_head{nullptr};

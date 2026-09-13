@@ -433,14 +433,11 @@ namespace tempest::job::tests
         EXPECT_TRUE(cont.is_ready());
     }
 
-    /// @brief Verifies that a coroutine executing with an active profiler session
-    ///        records execution slices with matching coroutine ID, incrementing slice indices,
-    ///        and propagated suspend reasons.
-    TEST(task_test, coroutine_profiler_slice_tracking)
+    /// @brief Verify that task execution records coroutine execution slices when profiler is enabled
+    TEST(task_test, coroutine_execution_slices_recorded)
     {
         // 1. Setup
         auto prof = profiler::profiler_session{true};
-        [[maybe_unused]] auto& ctx = prof.get_or_register_thread();
 
         auto evt = async_event{false};
         auto resumed = false;
@@ -452,7 +449,7 @@ namespace tempest::job::tests
         };
 
         // 2. Act: Start coroutine (slice 0 runs until co_await evt suspends)
-        auto t = test_coroutine();
+        auto t = test_coroutine().with_profiler(prof);
         const auto coro_id = t.coroutine_id();
         EXPECT_GT(coro_id, 0U);
 
@@ -492,8 +489,6 @@ namespace tempest::job::tests
         // Slice 1 completed
         EXPECT_EQ(coro_zones[1].slice_index, 1U);
         EXPECT_EQ(coro_zones[1].reason, profiler::suspend_reason::completed);
-
-        profiler::thread_profiler_context::set_current_thread_context(nullptr);
     }
 
     /// @brief Verify that task naming via with_name() and set_name() updates task name and profiler slice zone names
@@ -501,15 +496,13 @@ namespace tempest::job::tests
     {
         // 1. Setup profiler
         auto prof = profiler::profiler_session{true};
-        auto& ctx = prof.get_or_register_thread();
-        profiler::thread_profiler_context::set_current_thread_context(&ctx);
 
         auto test_coro = []() -> task<int> {
             co_return 99;
         };
 
         // 2. Act: Name coroutine fluently before running
-        auto t = test_coro().with_name("MyCustomRenderPass");
+        auto t = test_coro().with_profiler(prof).with_name("MyCustomRenderPass");
         EXPECT_EQ(t.name(), "MyCustomRenderPass");
         const auto coro_id = t.coroutine_id();
 
@@ -533,8 +526,6 @@ namespace tempest::job::tests
             }
         }
         EXPECT_TRUE(found_custom_name);
-
-        profiler::thread_profiler_context::set_current_thread_context(nullptr);
     }
 
     /// @brief Verify that co_await set_task_name dynamically renames the task and active profiler slice
@@ -542,8 +533,6 @@ namespace tempest::job::tests
     {
         // 1. Setup profiler
         auto prof = profiler::profiler_session{true};
-        auto& ctx = prof.get_or_register_thread();
-        profiler::thread_profiler_context::set_current_thread_context(&ctx);
 
         auto test_coro = []() -> task<void> {
             co_await set_task_name{"DynamicPassName"};
@@ -551,7 +540,7 @@ namespace tempest::job::tests
         };
 
         // 2. Act: Run coroutine that self-renames
-        auto t = test_coro();
+        auto t = test_coro().with_profiler(prof);
         const auto coro_id = t.coroutine_id();
 
         const auto completed = t.resume();
@@ -574,8 +563,6 @@ namespace tempest::job::tests
             }
         }
         EXPECT_TRUE(found_dynamic_name);
-
-        profiler::thread_profiler_context::set_current_thread_context(nullptr);
     }
 
     /// @brief Verify that child coroutines track both their spawning origin and awaiter consumer in profiler slices
@@ -585,7 +572,6 @@ namespace tempest::job::tests
         auto prof = profiler::profiler_session{true};
         auto& ctx = prof.get_or_register_thread();
         const auto tid = ctx.get_thread_id();
-        profiler::thread_profiler_context::set_current_thread_context(&ctx);
 
         auto child_task = []() -> task<int> {
             co_return 42;
@@ -600,7 +586,7 @@ namespace tempest::job::tests
         };
 
         // 2. Act: Spawn parent and execute to completion
-        auto p = parent_task();
+        auto p = parent_task().with_profiler(prof);
         const auto parent_coro_id = p.coroutine_id();
         const auto completed = p.resume();
         EXPECT_TRUE(completed);
@@ -637,7 +623,5 @@ namespace tempest::job::tests
 
         EXPECT_TRUE(found_parent);
         EXPECT_TRUE(found_child);
-
-        profiler::thread_profiler_context::set_current_thread_context(nullptr);
     }
 } // namespace tempest::job::tests

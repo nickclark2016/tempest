@@ -3,28 +3,12 @@
 
 namespace tempest::job
 {
-    static thread_local job_allocator* t_current_allocator = nullptr;
-
-    auto job_allocator::get_current() noexcept -> job_allocator*
-    {
-        return t_current_allocator;
-    }
-
-    auto job_allocator::set_current(job_allocator* alloc) noexcept -> void
-    {
-        t_current_allocator = alloc;
-    }
-
-    job_allocator::job_allocator() = default;
+job_allocator::job_allocator() = default;
 
     job_allocator::~job_allocator()
     {
-        if (t_current_allocator == this)
-        {
-            t_current_allocator = nullptr;
-        }
-
-        drain_remote_frees();
+        auto guard = lock_guard{_alloc_mutex};
+        _drain_remote_frees_locked();
 
         for (size_t cls = 0; cls < slab_class_count; ++cls)
         {
@@ -42,7 +26,8 @@ namespace tempest::job
 
     auto job_allocator::allocate(size_t size) -> void*
     {
-        drain_remote_frees();
+        auto guard = lock_guard{_alloc_mutex};
+        _drain_remote_frees_locked();
 
         const auto cls = get_size_class(size);
         if (cls < 0)
@@ -109,6 +94,12 @@ namespace tempest::job
     }
 
     auto job_allocator::drain_remote_frees() noexcept -> void
+    {
+        auto guard = lock_guard{_alloc_mutex};
+        _drain_remote_frees_locked();
+    }
+
+    auto job_allocator::_drain_remote_frees_locked() noexcept -> void
     {
         auto* head = _remote_free_head.exchange(nullptr, memory_order::acq_rel);
         while (head != nullptr)
