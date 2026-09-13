@@ -13,16 +13,16 @@ namespace tempest::job
     {
     }
 
-    auto async_event::_resume(coroutine_handle<> h) noexcept -> void
+    auto async_event::_resume(coroutine_handle<> hnd) noexcept -> void
     {
         auto* sys = _sys;
         if (sys != nullptr)
         {
-            sys->schedule(h);
+            sys->schedule(hnd);
         }
         else
         {
-            h.resume();
+            hnd.resume();
         }
     }
 
@@ -87,34 +87,34 @@ namespace tempest::job
 
     auto async_event::event_awaiter::await_ready() const noexcept -> bool
     {
-        auto guard = lock_guard{event._mutex};
-        if (event._signaled)
+        auto guard = lock_guard{event->_mutex};
+        if (event->_signaled)
         {
-            if (event._mode == event_reset_mode::auto_reset)
+            if (event->_mode == event_reset_mode::auto_reset)
             {
-                event._signaled = false;
+                event->_signaled = false;
             }
             return true;
         }
         return false;
     }
 
-    auto async_event::event_awaiter::await_suspend(coroutine_handle<> h) noexcept -> bool
+    auto async_event::event_awaiter::await_suspend(coroutine_handle<> hnd) noexcept -> bool
     {
-        waiter.handle = h;
+        waiter.handle = hnd;
 
-        auto guard = lock_guard{event._mutex};
-        if (event._signaled)
+        auto guard = lock_guard{event->_mutex};
+        if (event->_signaled)
         {
-            if (event._mode == event_reset_mode::auto_reset)
+            if (event->_mode == event_reset_mode::auto_reset)
             {
-                event._signaled = false;
+                event->_signaled = false;
             }
             return false;
         }
 
-        waiter.next = event._waiters;
-        event._waiters = &waiter;
+        waiter.next = event->_waiters;
+        event->_waiters = &waiter;
         return true;
     }
 } // namespace tempest::job

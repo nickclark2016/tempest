@@ -2,6 +2,7 @@
 #define tempest_job_async_event_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/coroutine.hpp>
 #include <tempest/int.hpp>
 #include <tempest/mutex.hpp>
@@ -32,9 +33,9 @@ namespace tempest::job
         ~async_event() = default;
 
         async_event(const async_event&) = delete;
-        async_event& operator=(const async_event&) = delete;
+        auto operator=(const async_event&) -> async_event& = delete;
         async_event(async_event&&) = delete;
-        async_event& operator=(async_event&&) = delete;
+        auto operator=(async_event&&) -> async_event& = delete;
 
         auto set() noexcept -> void;
         auto reset() noexcept -> void;
@@ -42,11 +43,11 @@ namespace tempest::job
 
         struct event_awaiter
         {
-            async_event& event;
+            non_null<async_event> event;
             async_event_waiter waiter{};
 
             [[nodiscard]] auto await_ready() const noexcept -> bool;
-            auto await_suspend(coroutine_handle<> h) noexcept -> bool;
+            auto await_suspend(coroutine_handle<> hnd) noexcept -> bool;
             constexpr auto await_resume() const noexcept -> void
             {
             }
@@ -70,13 +71,13 @@ namespace tempest::job
       private:
         friend struct event_awaiter;
 
-        mutable mutex _mutex{};
+        mutable mutex _mutex;
         event_reset_mode _mode{event_reset_mode::auto_reset};
         bool _signaled{false};
         async_event_waiter* _waiters{nullptr};
         job_system* _sys{nullptr};
 
-        auto _resume(coroutine_handle<> h) noexcept -> void;
+        auto _resume(coroutine_handle<> hnd) noexcept -> void;
     };
 } // namespace tempest::job
 

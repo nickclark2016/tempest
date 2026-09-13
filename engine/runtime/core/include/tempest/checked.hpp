@@ -83,12 +83,7 @@ namespace tempest
             return tempest::move(*_ptr);
         }
 
-        constexpr auto operator->() noexcept -> T*
-        {
-            return _ptr;
-        }
-
-        constexpr auto operator->() const noexcept -> const T*
+        constexpr auto operator->() const noexcept -> T*
         {
             return _ptr;
         }

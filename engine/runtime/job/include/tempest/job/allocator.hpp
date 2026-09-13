@@ -10,34 +10,49 @@
 namespace tempest::job
 {
     inline constexpr size_t slab_class_count = 6;
-    inline constexpr size_t slab_class_sizes[slab_class_count] = {64, 128, 256, 512, 1024, 2048};
-    inline constexpr size_t slab_chunk_size = 64 * 1024; // 64 KB
+    inline constexpr array<size_t, slab_class_count> slab_class_sizes = {64, 128, 256, 512, 1024, 2048};
+    inline constexpr size_t slab_chunk_size =
+        static_cast<size_t>(64U) * 1024U; // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+
+    inline constexpr size_t size_class_64b = 64;
+    inline constexpr size_t size_class_128b = 128;
+    inline constexpr size_t size_class_256b = 256;
+    inline constexpr size_t size_class_512b = 512;
+    inline constexpr size_t size_class_1kb = 1024;
+    inline constexpr size_t size_class_2kb = 2048;
+
+    inline constexpr int32_t size_class_index_64b = 0;
+    inline constexpr int32_t size_class_index_128b = 1;
+    inline constexpr int32_t size_class_index_256b = 2;
+    inline constexpr int32_t size_class_index_512b = 3;
+    inline constexpr int32_t size_class_index_1kb = 4;
+    inline constexpr int32_t size_class_index_2kb = 5;
 
     constexpr auto get_size_class(size_t size) noexcept -> int32_t
     {
-        if (size <= 64)
+        if (size <= size_class_64b)
         {
-            return 0;
+            return size_class_index_64b;
         }
-        if (size <= 128)
+        if (size <= size_class_128b)
         {
-            return 1;
+            return size_class_index_128b;
         }
-        if (size <= 256)
+        if (size <= size_class_256b)
         {
-            return 2;
+            return size_class_index_256b;
         }
-        if (size <= 512)
+        if (size <= size_class_512b)
         {
-            return 3;
+            return size_class_index_512b;
         }
-        if (size <= 1024)
+        if (size <= size_class_1kb)
         {
-            return 4;
+            return size_class_index_1kb;
         }
-        if (size <= 2048)
+        if (size <= size_class_2kb)
         {
-            return 5;
+            return size_class_index_2kb;
         }
         return -1;
     }
@@ -62,7 +77,10 @@ namespace tempest::job
 
         [[nodiscard]] static auto from_pointer(void* ptr) noexcept -> slab_chunk*
         {
-            return reinterpret_cast<slab_chunk*>(reinterpret_cast<uintptr_t>(ptr) & ~(slab_chunk_size - 1));
+            // return reinterpret_cast<slab_chunk*>(reinterpret_cast<uintptr_t>(ptr) & ~(slab_chunk_size - 1));
+            const auto offset = reinterpret_cast<uintptr_t>(ptr) & (slab_chunk_size - 1);
+            auto* const base = reinterpret_cast<byte*>(ptr) - offset;
+            return reinterpret_cast<slab_chunk*>(base);
         }
     };
 
