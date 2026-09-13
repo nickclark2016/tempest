@@ -255,7 +255,7 @@ namespace tempest::job
                             break;
                         }
                         auto remaining_items = rng.last - curr;
-                        auto chunk = tempest::max(part.min_chunk_size, remaining_items / (2ULL * workers));
+                        auto chunk = tempest::max(part.min_chunk_size, remaining_items / (size_t{2} * workers));
                         chunk = tempest::min(remaining_items, chunk);
                         if (next->compare_exchange_weak(curr, curr + chunk, memory_order::relaxed))
                         {
@@ -309,7 +309,28 @@ namespace tempest::job
             return parallel_for<Partitioner>(range<size_t>{0, count}, task_priority::normal, tempest::move(body));
         }
 
+        /// @brief Executes a task graph DAG using borrowed reference semantics.
+        /// @details **LIFETIME PRECONDITION**: The caller MUST guarantee that `graph` outlives
+        ///          the returned task and remains valid until execution has completed. If the returned
+        ///          task is not immediately `co_await`ed or is returned across scopes where `graph` is
+        ///          destroyed, worker threads will encounter use-after-free errors.
+        ///          This overload is intended for persistent subsystem-owned graphs (e.g. member variables
+        ///          reused across frames). For transient or caller-scoped graphs, prefer the by-value
+        ///          overload `execute(task_graph)` for compiler-enforced lifetime safety.
+        /// @param graph Reference to the task graph to execute.
+        /// @return A task resolving to expected<void, error_code>.
         auto execute(task_graph& graph) -> task<expected<void, error_code>>;
+
+        /// @brief Executes a task graph DAG using linear move semantics.
+        /// @details Takes full ownership of `graph` by moving it directly into the coroutine frame,
+        ///          guaranteeing that the graph and its task nodes remain alive for the exact duration of
+        ///          execution with ZERO reliance on caller lifetime discipline.
+        ///          Upon completion, the graph is unconditionally returned inside `task_graph_result`
+        ///          across both success and error paths, preventing use-after-move hazards and enabling
+        ///          immediate inspection, error logging, or multi-frame reuse without reallocation.
+        /// @param graph The task graph to execute (transferred by rvalue move).
+        /// @return A task resolving to task_graph_result containing the restored graph and execution status.
+        auto execute(task_graph&& graph) -> task<task_graph_result, void>;
 
         auto wait_idle() -> void;
         auto step() -> bool;

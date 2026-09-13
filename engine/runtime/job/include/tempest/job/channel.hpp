@@ -113,7 +113,7 @@ namespace tempest::job
                 {
                     if (_enqueue_pos.compare_exchange_weak(pos, pos + 1, memory_order::relaxed))
                     {
-                        new (cell.storage) T(forward<U>(value));
+                        new (cell.storage.data()) T(forward<U>(value));
                         cell.sequence.store(pos + 1, memory_order::release);
                         _notify_consumer();
                         return {};
@@ -148,7 +148,7 @@ namespace tempest::job
                 {
                     if (_dequeue_pos.compare_exchange_weak(pos, pos + 1, memory_order::relaxed))
                     {
-                        auto* ptr = reinterpret_cast<T*>(cell.storage);
+                        auto* ptr = reinterpret_cast<T*>(cell.storage.data());
                         auto val = move(*ptr);
                         ptr->~T();
                         cell.sequence.store(pos + Capacity, memory_order::release);
@@ -229,15 +229,15 @@ namespace tempest::job
             auto await_suspend(coroutine_handle<> hnd) noexcept -> bool
             {
                 node.handle = hnd;
-                node.scheduler = chan._sys;
-                auto* old_head = chan._producer_waiters.load(memory_order::relaxed);
+                node.scheduler = chan->_sys;
+                auto* old_head = chan->_producer_waiters.load(memory_order::relaxed);
                 do
                 {
                     node.next = old_head;
-                } while (!chan._producer_waiters.compare_exchange_weak(old_head, &node, memory_order::release));
+                } while (!chan->_producer_waiters.compare_exchange_weak(old_head, &node, memory_order::release));
 
                 // If space freed or closed, avoid missing wakeups
-                return chan->is_closed();
+                return !chan->is_closed();
             }
 
             auto await_resume() const noexcept -> void
@@ -263,14 +263,14 @@ namespace tempest::job
             auto await_suspend(coroutine_handle<> hnd) noexcept -> bool
             {
                 node.handle = hnd;
-                node.scheduler = chan._sys;
-                auto* old_head = chan._consumer_waiters.load(memory_order::relaxed);
+                node.scheduler = chan->_sys;
+                auto* old_head = chan->_consumer_waiters.load(memory_order::relaxed);
                 do
                 {
                     node.next = old_head;
-                } while (!chan._consumer_waiters.compare_exchange_weak(old_head, &node, memory_order::release));
+                } while (!chan->_consumer_waiters.compare_exchange_weak(old_head, &node, memory_order::release));
 
-                return chan.is_closed();
+                return !chan->is_closed();
             }
 
             auto await_resume() const noexcept -> void

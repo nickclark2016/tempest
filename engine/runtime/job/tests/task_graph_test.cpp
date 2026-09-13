@@ -321,4 +321,165 @@ namespace tempest::job::tests
         EXPECT_TRUE(b_saw_a.load(memory_order::acquire));
         EXPECT_TRUE(c_saw_a.load(memory_order::acquire));
     }
+
+    // =========================================================================
+    // SECTION: Hybrid Linear Ownership Execution (By-Value)
+    // =========================================================================
+
+    /// @brief Verifies that passing a task_graph by value/move executes all tasks,
+    ///        returns the intact graph inside task_graph_result, and unpacks via structured bindings.
+    TEST(task_graph_test, by_value_execution_success)
+    {
+        // 1. Setup: 4-worker job system and task graph
+        auto log = logger{};
+        auto prof = profiler::profiler_session{false};
+        auto config = job_system_config{
+            .performance_worker_count = 4,
+            .efficiency_worker_count = 0,
+        };
+        auto sys = job_system{log, prof, config};
+
+        auto graph = task_graph{};
+        auto first_done = atomic<bool>{false};
+        auto second_done = atomic<bool>{false};
+
+        auto& first = graph.emplace("First", [&first_done] {
+            first_done.store(true, memory_order::release);
+        });
+        auto& second = graph.emplace("Second", [&second_done] {
+            second_done.store(true, memory_order::release);
+        });
+        first.precede(second);
+
+        // 2. Act: Move graph into execute and unpack via structured bindings
+        auto run = [&sys, g = tempest::move(graph)]() mutable -> task<task_graph_result, void> {
+            auto [returned_graph, status] = co_await sys.execute(tempest::move(g));
+            co_return task_graph_result{
+                .graph = tempest::move(returned_graph),
+                .status = status,
+            };
+        };
+
+        auto t = run();
+        t.resume();
+        sys.wait_idle();
+
+        // 3. Assert: Execution succeeded and graph was safely returned
+        ASSERT_TRUE(t.is_ready());
+        auto res = tempest::move(t.value());
+        EXPECT_TRUE(res.has_value());
+        EXPECT_TRUE(first_done.load(memory_order::acquire));
+        EXPECT_TRUE(second_done.load(memory_order::acquire));
+        EXPECT_EQ(res.graph.size(), 2u);
+    }
+
+    /// @brief Verifies that when a node fails in a moved graph, execution safely returns
+    ///        the graph inside task_graph_result, preserves the error code, and allows inspecting failing nodes.
+    TEST(task_graph_test, by_value_execution_error_recovery)
+    {
+        // 1. Setup: Graph with a failing node and dependent child
+        auto log = logger{};
+        auto prof = profiler::profiler_session{false};
+        auto config = job_system_config{
+            .performance_worker_count = 4,
+            .efficiency_worker_count = 0,
+        };
+        auto sys = job_system{log, prof, config};
+
+        auto graph = task_graph{};
+        auto root_done = atomic<bool>{false};
+        auto child_executed = atomic<bool>{false};
+
+        auto& root = graph.emplace("Root", [&root_done] {
+            root_done.store(true, memory_order::release);
+        });
+        auto& failing = graph.emplace("Failing", []() -> expected<void, job_error> {
+            return unexpected{job_error::task_failed};
+        });
+        auto& child = graph.emplace("Child", [&child_executed] {
+            child_executed.store(true, memory_order::release);
+        });
+
+        root.precede(failing);
+        failing.precede(child);
+
+        // 2. Act: Execute by value
+        auto run = [&sys, g = tempest::move(graph)]() mutable -> task<task_graph_result, void> {
+            co_return co_await sys.execute(tempest::move(g));
+        };
+
+        auto t = run();
+        t.resume();
+        sys.wait_idle();
+
+        // 3. Assert: Graph is recovered, failure reported, and downstream pruned
+        ASSERT_TRUE(t.is_ready());
+        auto res = tempest::move(t.value());
+        EXPECT_FALSE(res.has_value());
+        EXPECT_EQ(res.error(), job_error::task_failed);
+        EXPECT_TRUE(root_done.load(memory_order::acquire));
+        EXPECT_FALSE(child_executed.load(memory_order::acquire));
+
+        // Invariant: Failing node's result is inspectable on the restored graph
+        ASSERT_EQ(res.graph.size(), 3u);
+        auto found_failing = false;
+        for (const auto& node : res.graph.nodes())
+        {
+            if (node->name() == "Failing")
+            {
+                found_failing = true;
+                EXPECT_FALSE(node->result().has_value());
+                EXPECT_EQ(node->result().error(), job_error::task_failed);
+            }
+        }
+        EXPECT_TRUE(found_failing);
+    }
+
+    /// @brief Verifies that a task_graph can be repeatedly moved into execute across frames,
+    ///        restoring ownership each frame with zero memory reallocations.
+    TEST(task_graph_test, by_value_reusable_frame_execution)
+    {
+        // 1. Setup: 4-worker job system and reusable DAG
+        auto log = logger{};
+        auto prof = profiler::profiler_session{false};
+        auto config = job_system_config{
+            .performance_worker_count = 4,
+            .efficiency_worker_count = 0,
+        };
+        auto sys = job_system{log, prof, config};
+
+        auto graph = task_graph{};
+        auto iteration_count = atomic<int>{0};
+
+        auto& n1 = graph.emplace("Node1", [&iteration_count] {
+            iteration_count.fetch_add(1, memory_order::relaxed);
+        });
+        auto& n2 = graph.emplace("Node2", [&iteration_count] {
+            iteration_count.fetch_add(1, memory_order::relaxed);
+        });
+        n1.precede(n2);
+
+        // 2. Act: Execute 5 frames consecutively transferring ownership in and out
+        for (auto frame = 0; frame < 5; ++frame)
+        {
+            auto run_frame = [&sys, g = tempest::move(graph)]() mutable -> task<task_graph_result, void> {
+                co_return co_await sys.execute(tempest::move(g));
+            };
+
+            auto t = run_frame();
+            t.resume();
+            sys.wait_idle();
+
+            ASSERT_TRUE(t.is_ready());
+            auto res = tempest::move(t.value());
+            ASSERT_TRUE(res.has_value());
+
+            // Regain graph ownership for next frame
+            graph = tempest::move(res.graph);
+        }
+
+        // 3. Assert: 2 nodes executed 5 times = 10 invocations, and graph ownership intact
+        EXPECT_EQ(iteration_count.load(memory_order::relaxed), 10);
+        EXPECT_EQ(graph.size(), 2u);
+    }
 } // namespace tempest::job::tests

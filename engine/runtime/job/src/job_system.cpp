@@ -819,33 +819,17 @@ namespace tempest::job
         }
     }
 
-    auto job_system::execute(task_graph& graph) -> task<expected<void, error_code>>
+    struct graph_executor
     {
-        if (graph.empty())
-        {
-            co_return expected<void, error_code>{};
-        }
-
-        auto count = graph.size();
-        auto remaining = make_unique<atomic<size_t>>(count);
-        auto first_error = make_unique<atomic<uint8_t>>(static_cast<uint8_t>(job_error::none));
-        auto completion_event = make_unique<async_event>(*this);
-
-        // 1. Reset runtime counters with zero allocations
-        for (auto& node : graph.nodes())
-        {
-            node->_runtime_in_degree.store(node->_static_in_degree, memory_order::relaxed);
-            node->_failed.store(false, memory_order::relaxed);
-            node->_result = expected<void, job_error>{};
-            node->_task = task<void>{};
-        }
-
-        struct executor_context
-        {
             job_system* sys;
-            atomic<size_t>* remaining;
-            atomic<uint8_t>* first_error;
-            async_event* completion_event;
+            atomic<size_t> remaining;
+            atomic<uint8_t> first_error{static_cast<uint8_t>(job_error::none)};
+            async_event completion_event;
+
+            explicit graph_executor(job_system* s, size_t count)
+                : sys{s}, remaining{count}, completion_event{*s}
+            {
+            }
 
             auto prune_node(task_node* n) -> void
             {
@@ -858,9 +842,9 @@ namespace tempest::job
                         prune_node(succ);
                     }
                 }
-                if (remaining->fetch_sub(1, memory_order::acq_rel) == 1)
+                if (remaining.fetch_sub(1, memory_order::acq_rel) == 1)
                 {
-                    completion_event->set();
+                    completion_event.set();
                 }
             }
 
@@ -870,7 +854,7 @@ namespace tempest::job
                 if (!node->_result.has_value())
                 {
                     auto expected_err = static_cast<uint8_t>(job_error::none);
-                    [[maybe_unused]] auto exchanged = first_error->compare_exchange_strong(
+                    [[maybe_unused]] auto exchanged = first_error.compare_exchange_strong(
                         expected_err, static_cast<uint8_t>(node->_result.error()), memory_order::acq_rel);
 
                     for (auto* succ : node->_successors)
@@ -900,9 +884,9 @@ namespace tempest::job
                     }
                 }
 
-                if (remaining->fetch_sub(1, memory_order::acq_rel) == 1)
+                if (remaining.fetch_sub(1, memory_order::acq_rel) == 1)
                 {
-                    completion_event->set();
+                    completion_event.set();
                 }
             }
 
@@ -915,33 +899,81 @@ namespace tempest::job
                     sys->schedule(node->_task.handle());
                 }
             }
+
+            auto init_and_run(task_graph& graph) -> void
+            {
+                for (auto& node : graph.nodes())
+                {
+                    node->_runtime_in_degree.store(node->_static_in_degree, memory_order::relaxed);
+                    node->_failed.store(false, memory_order::relaxed);
+                    node->_result = expected<void, job_error>{};
+                    node->_task = task<void>{};
+                }
+
+                for (auto& node : graph.nodes())
+                {
+                    if (node->_static_in_degree == 0)
+                    {
+                        schedule_node(node.get());
+                    }
+                }
+            }
         };
 
-        auto ctx = make_unique<executor_context>(executor_context{
-            .sys = this,
-            .remaining = remaining.get(),
-            .first_error = first_error.get(),
-            .completion_event = completion_event.get(),
-        });
-
-        // Find and schedule root nodes
-        for (auto& node : graph.nodes())
+    // SAFETY: The caller MUST guarantee that `graph` outlives the returned task.
+    // This overload is intended for persistent subsystem-owned graphs.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
+    auto job_system::execute(task_graph& graph) -> task<expected<void, error_code>>
+    {
+        if (graph.empty())
         {
-            if (node->_static_in_degree == 0)
-            {
-                ctx->schedule_node(node.get());
-            }
+            co_return expected<void, error_code>{};
         }
 
-        co_await completion_event->wait();
+        auto executor = make_unique<graph_executor>(this, graph.size());
+        executor->init_and_run(graph);
 
-        auto final_err = static_cast<job_error>(first_error->load(memory_order::acquire));
+        co_await executor->completion_event.wait();
+
+        auto final_err = static_cast<job_error>(executor->first_error.load(memory_order::acquire));
         if (final_err != job_error::none)
         {
             co_await unexpected{final_err};
         }
 
         co_return expected<void, error_code>{};
+    }
+
+    auto job_system::execute(task_graph&& graph) -> task<task_graph_result, void>
+    {
+        return [](job_system* sys, task_graph g) -> task<task_graph_result, void> {
+            if (g.empty())
+            {
+                co_return task_graph_result{
+                    .graph = tempest::move(g),
+                    .status = expected<void, error_code>{},
+                };
+            }
+
+            auto executor = make_unique<graph_executor>(sys, g.size());
+            executor->init_and_run(g);
+
+            co_await executor->completion_event.wait();
+
+            auto final_err = static_cast<job_error>(executor->first_error.load(memory_order::acquire));
+            if (final_err != job_error::none)
+            {
+                co_return task_graph_result{
+                    .graph = tempest::move(g),
+                    .status = unexpected{final_err},
+                };
+            }
+
+            co_return task_graph_result{
+                .graph = tempest::move(g),
+                .status = expected<void, error_code>{},
+            };
+        }(this, tempest::move(graph));
     }
 
     auto job_system::get_dispatch_allocator() noexcept -> job_allocator&

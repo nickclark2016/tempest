@@ -62,9 +62,14 @@ namespace tempest::job
             waiter->next = old_head;
         } while (!_waiters_in.compare_exchange_weak(old_head, waiter, memory_order::release));
 
-        // If we successfully enqueued the waiter, we need to check if the mutex is still locked.
-        // If the mutex is unlocked, we can try to acquire it and resume the waiter immediately
-        return _locked.load(memory_order::acquire) == 0 && try_lock();
+        // If the lock was released in the meantime, try to acquire
+        if (_locked.load(memory_order::acquire) == 0 && try_lock())
+        {
+            // Acquired lock immediately without yielding!
+            return false;
+        }
+
+        return true; // Suspend caller
     }
 
     auto async_mutex::lock_awaiter::await_suspend(coroutine_handle<> hnd) noexcept -> bool

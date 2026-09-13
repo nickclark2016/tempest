@@ -19,14 +19,18 @@ namespace tempest::job
 {
     class task_graph;
     class job_system;
-
-
+    struct graph_executor;
 
     class task_node;
 
     struct node_invoker
     {
+        node_invoker() = default;
+        node_invoker(const node_invoker&) = delete;
+        node_invoker(node_invoker&&) noexcept = delete;
         virtual ~node_invoker() = default;
+        auto operator=(const node_invoker&) -> node_invoker& = delete;
+        auto operator=(node_invoker&&) noexcept -> node_invoker& = delete;
         virtual auto execute(task_node& node) -> task<void> = 0;
     };
 
@@ -35,24 +39,25 @@ namespace tempest::job
       public:
         friend class task_graph;
         friend class job_system;
+        friend struct graph_executor;
         template <typename F>
         friend struct typed_node_invoker;
 
-        task_node(string_view name, size_t id, task_graph* graph) noexcept;
-        ~task_node() = default;
-
+        task_node(string_view name, size_t tid, task_graph* graph) noexcept;
         task_node(const task_node&) = delete;
-        task_node& operator=(const task_node&) = delete;
-        task_node(task_node&&) = delete;
-        task_node& operator=(task_node&&) = delete;
+        task_node(task_node&&) noexcept = delete;
+        ~task_node() = default;
+        
+        auto operator=(const task_node&) -> task_node& = delete;
+        auto operator=(task_node&&) -> task_node& = delete;
 
         template <typename... Nodes>
         auto precede(task_node& first, Nodes&... rest) -> task_node&
         {
-            task_node* nodes[] = {&first, (&rest)...};
-            for (auto* n : nodes)
+            auto const nodes = array{&first, (&rest)...};
+            for (auto* node : nodes)
             {
-                _add_successor(n);
+                _add_successor(node);
             }
             return *this;
         }
@@ -63,10 +68,10 @@ namespace tempest::job
         template <typename... Nodes>
         auto succeed(task_node& first, Nodes&... rest) -> task_node&
         {
-            task_node* nodes[] = {&first, (&rest)...};
-            for (auto* n : nodes)
+            auto nodes = array{&first, (&rest)...};
+            for (auto* node : nodes)
             {
-                n->_add_successor(this);
+                node->_add_successor(this);
             }
             return *this;
         }
@@ -86,20 +91,20 @@ namespace tempest::job
       private:
         auto _add_successor(task_node* succ) -> void;
 
-        string_view _name{};
+        string_view _name;
         size_t _id{0};
         task_graph* _graph{nullptr};
 
-        vector<task_node*> _successors{};
-        vector<task_node*> _predecessors{};
-        size_t _static_in_degree{0};
+        vector<task_node*> _successors;
+        vector<task_node*> _predecessors;
+        size_t _static_in_degree = 0;
 
-        atomic<size_t> _runtime_in_degree{0};
-        atomic<bool> _failed{false};
-        expected<void, job_error> _result{expected<void, job_error>{}};
+        atomic<size_t> _runtime_in_degree = 0;
+        atomic<bool> _failed = false;
+        expected<void, job_error> _result;
 
-        unique_ptr<node_invoker> _invoker{};
-        task<void> _task{};
+        unique_ptr<node_invoker> _invoker;
+        task<void> _task;
     };
 
     template <typename F>
@@ -108,7 +113,7 @@ namespace tempest::job
         F callable;
 
         template <typename Fn>
-        explicit typed_node_invoker(Fn&& fn) : callable{tempest::forward<Fn>(fn)}
+        explicit typed_node_invoker(Fn&& func) : callable{tempest::forward<Fn>(func)}
         {
         }
 
@@ -221,6 +226,31 @@ namespace tempest::job
 
       private:
         vector<unique_ptr<task_node>> _nodes{};
+    };
+
+    /// @brief Result of executing a task_graph via linear move semantics.
+    /// @details Holds the restored task_graph (guaranteed to be returned across both success
+    ///          and error paths) alongside the overall execution status. Being an aggregate,
+    ///          it directly supports C++ structured bindings: `auto [graph, status] = co_await ...`.
+    struct TEMPEST_API task_graph_result
+    {
+        task_graph graph;
+        expected<void, error_code> status;
+
+        [[nodiscard]] auto has_value() const noexcept -> bool
+        {
+            return status.has_value();
+        }
+
+        [[nodiscard]] auto error() const noexcept -> error_code
+        {
+            return status.error();
+        }
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return status.has_value();
+        }
     };
 } // namespace tempest::job
 
