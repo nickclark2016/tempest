@@ -80,7 +80,7 @@ namespace tempest::job
         [[nodiscard]] auto try_lock() noexcept -> bool;
         auto unlock() noexcept -> void;
 
-        struct lock_awaiter
+        struct TEMPEST_API lock_awaiter
         {
             non_null<async_mutex> mutex;
             async_mutex_waiter waiter{};
@@ -122,7 +122,7 @@ namespace tempest::job
             }
         };
 
-        struct scoped_lock_awaiter
+        struct TEMPEST_API scoped_lock_awaiter
         {
             non_null<async_mutex> mutex;
             async_mutex_waiter waiter{};

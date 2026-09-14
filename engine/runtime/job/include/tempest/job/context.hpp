@@ -1,6 +1,7 @@
 #ifndef tempest_job_context_hpp
 #define tempest_job_context_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/checked.hpp>
 #include <tempest/coroutine.hpp>
 #include <tempest/int.hpp>
@@ -14,7 +15,7 @@ namespace tempest::job
     template <typename T, typename E>
     class task;
 
-    struct job_context
+    struct TEMPEST_API job_context
     {
         non_null<job_system> system;
         non_null<job_allocator> allocator;

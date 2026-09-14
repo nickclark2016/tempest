@@ -65,7 +65,7 @@ namespace tempest::job
         auto reset() noexcept -> void;
         [[nodiscard]] auto is_set() const noexcept -> bool;
 
-        struct event_awaiter
+        struct TEMPEST_API event_awaiter
         {
             non_null<async_event> event;
             async_event_waiter waiter{};
