@@ -32,6 +32,7 @@ scoped.project('rhi-vk', function()
 
     scoped.usage("rhi-vk:includedirs", function()
         uses {
+            'vma',
             'vulkan',
         }
 
@@ -132,7 +133,7 @@ scoped.group('Tests', function()
         uses {
             'googletest',
             'tempest',
-            'vulkan',
+            'rhi-vk:includedirs',
             'glfw',
         }
     end)
