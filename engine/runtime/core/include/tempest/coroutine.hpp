@@ -258,9 +258,8 @@ namespace std
         }
 
       private:
-        constexpr coroutine_handle() noexcept
+        coroutine_handle() noexcept : _frame_ptr(__builtin_coro_noop())
         {
-            _frame_ptr = __builtin_coro_noop();
         }
 
         void* _frame_ptr = nullptr;
