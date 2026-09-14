@@ -74,12 +74,10 @@ scoped.group('Tests', function()
         files {
             'tests/**.cpp',
             'tests/**.hpp',
-            'src/**.cpp',
         }
 
         includedirs {
             'include',
-            'src',
         }
 
         uses {

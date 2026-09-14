@@ -54,7 +54,6 @@ namespace tempest::job
         {
             close();
             // Drain remaining items
-            T item;
             while (try_pop().has_value())
             {
             }

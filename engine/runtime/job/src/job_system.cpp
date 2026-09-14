@@ -172,18 +172,18 @@ namespace tempest::job
                 if (e_count > 0)
                 {
                     auto next = next_injection_worker.fetch_add(1, memory_order::relaxed);
-                    target_idx = p_count + (next % e_count);
+                    target_idx = p_count + static_cast<uint32_t>(next % e_count);
                 }
                 else
                 {
                     auto next = next_injection_worker.fetch_add(1, memory_order::relaxed);
-                    target_idx = next % workers.size();
+                    target_idx = static_cast<uint32_t>(next % workers.size());
                 }
             }
             else
             {
                 auto next = next_injection_worker.fetch_add(1, memory_order::relaxed);
-                target_idx = next % workers.size();
+                target_idx = static_cast<uint32_t>(next % workers.size());
             }
 
             workers[target_idx]->injection_queue.push(item);

@@ -35,7 +35,7 @@ namespace tempest
     /// A no-op coroutine behaves as if it does nothing other than control flow of a coroutine, suspends immediately
     /// upon beginning and resumption, has no state such that destroying it is a no-op, and never reaches a final
     /// suspended state if a coroutine handle refers to it.
-    TEMPEST_API struct noop_coroutine_promise
+    struct TEMPEST_API noop_coroutine_promise
     {
     };
 } // namespace tempest
@@ -283,7 +283,7 @@ namespace tempest
     using std::noop_coroutine;
 
     /// \brief A type that can be used to indicate that a coroutine should never suspend.
-    TEMPEST_API struct suspend_never
+    struct TEMPEST_API suspend_never
     {
         [[nodiscard]] constexpr auto await_ready() const noexcept -> bool
         {
@@ -300,7 +300,7 @@ namespace tempest
     };
 
     /// \brief A type that can be used to indicate that a coroutine should always suspend.
-    TEMPEST_API struct suspend_always
+    struct TEMPEST_API suspend_always
     {
         [[nodiscard]] constexpr auto await_ready() const noexcept -> bool
         {
