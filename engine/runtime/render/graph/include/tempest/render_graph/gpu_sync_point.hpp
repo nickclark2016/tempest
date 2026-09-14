@@ -64,7 +64,7 @@ namespace tempest::render_graph
         auto operator=(gpu_sync_point&& other) noexcept -> gpu_sync_point&;
 
         [[nodiscard]] auto await_ready() noexcept -> bool;
-        auto await_suspend(coroutine_handle<> handle) noexcept -> void;
+        auto await_suspend(coroutine_handle<> handle) noexcept -> bool;
         [[nodiscard]] auto await_resume() noexcept -> expected<void, gpu_sync_error>;
 
         [[nodiscard]] constexpr auto suspend_reason_tag() const noexcept -> profiler::suspend_reason

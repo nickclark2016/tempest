@@ -23,6 +23,10 @@ namespace
         uint64_t next_handle{1};
         rhi::device_desc desc{};
         atomic<bool> device_lost_flag{false};
+        atomic<size_t> signal_call_count{0};
+        atomic<size_t> out_of_order_signals{0};
+        atomic<size_t> wait_call_count{0};
+        mutable atomic<size_t> get_semaphore_value_call_count{0};
 
         mutable mutex sem_mutex{};
         flat_unordered_map<uint64_t, uint64_t> semaphore_values{};
@@ -83,6 +87,7 @@ namespace
 
         [[nodiscard]] auto get_semaphore_value(rhi::semaphore_handle semaphore) const -> uint64_t override
         {
+            get_semaphore_value_call_count.fetch_add(1, memory_order::relaxed);
             auto guard = lock_guard{sem_mutex};
             auto iter = semaphore_values.find(semaphore.handle);
             if (iter != semaphore_values.end())
@@ -94,13 +99,20 @@ namespace
 
         auto signal_semaphore(rhi::semaphore_handle semaphore, uint64_t value) -> void override
         {
+            signal_call_count.fetch_add(1, memory_order::relaxed);
             auto guard = lock_guard{sem_mutex};
+            auto iter = semaphore_values.find(semaphore.handle);
+            if (iter != semaphore_values.end() && value <= iter->second)
+            {
+                out_of_order_signals.fetch_add(1, memory_order::relaxed);
+            }
             semaphore_values[semaphore.handle] = value;
         }
 
         auto wait_semaphores(span<const rhi::host_sync_point> sync_points, uint64_t timeout_ns,
                              bool wait_any) -> rhi::wait_status override
         {
+            wait_call_count.fetch_add(1, memory_order::relaxed);
             const auto start = chrono::steady_clock::now();
             while (true)
             {
@@ -897,5 +909,152 @@ TEST(gpu_timeline_monitor_test, large_unique_semaphore_count_handling)
     // 3. Assert: All 48 unique semaphores woke up successfully without truncation
     EXPECT_EQ(completed_count.load(memory_order::acquire), sem_count);
 }
+
+/// @brief Verify that concurrent calls to wake() from multiple threads serialize
+///        properly with strictly monotonically increasing sequence values and zero out-of-order signals.
+TEST(gpu_timeline_monitor_test, high_contention_wake_serialization)
+{
+    // 1. Setup: Mock timeline device and 16 concurrent threads
+    auto dev = mock_timeline_device{};
+    auto log = logger{};
+    auto prof = profiler::profiler_session{false};
+    auto config = job::job_system_config{
+        .performance_worker_count = 4,
+        .efficiency_worker_count = 0,
+    };
+    auto js = job::job_system{log, prof, config};
+    auto monitor = gpu_timeline_monitor{dev, js, log};
+
+    constexpr auto thread_count = size_t{16};
+    constexpr auto wake_iterations = size_t{200};
+
+    // 2. Act: Concurrently invoke wake() from 16 threads
+    auto threads = vector<tempest::thread>{};
+    threads.reserve(thread_count);
+
+    for (size_t thread_index = 0; thread_index < thread_count; ++thread_index)
+    {
+        threads.push_back(tempest::thread([&monitor]() {
+            for (size_t iteration = 0; iteration < wake_iterations; ++iteration)
+            {
+                monitor.wake();
+            }
+        }));
+    }
+
+    for (auto& worker_thread : threads)
+    {
+        worker_thread.join();
+    }
+
+    monitor.stop();
+
+    // 3. Assert: Zero out-of-order signals occurred on the control semaphore
+    EXPECT_EQ(dev.out_of_order_signals.load(memory_order::acquire), 0U);
+    EXPECT_GE(dev.signal_call_count.load(memory_order::acquire), thread_count * wake_iterations);
+}
+
+/// @brief Verify that the monitor thread waits indefinitely when no active entries are present,
+///        eliminating periodic idle CPU polling wakeups.
+TEST(gpu_timeline_monitor_test, idle_zero_polling)
+{
+    // 1. Setup: Start monitor with zero active entries
+    auto dev = mock_timeline_device{};
+    auto log = logger{};
+    auto prof = profiler::profiler_session{false};
+    auto config = job::job_system_config{
+        .performance_worker_count = 2,
+        .efficiency_worker_count = 0,
+    };
+    auto js = job::job_system{log, prof, config};
+    auto monitor = gpu_timeline_monitor{dev, js, log};
+
+    // Give monitor thread a moment to reach wait_semaphores
+    this_thread::sleep_for(chrono::milliseconds(10));
+    const auto initial_waits = dev.wait_call_count.load(memory_order::acquire);
+    EXPECT_GE(initial_waits, 1U);
+
+    // 2. Act: Sleep for 120ms (more than 2x old 50ms polling interval)
+    this_thread::sleep_for(chrono::milliseconds(120));
+    const auto waits_after_sleep = dev.wait_call_count.load(memory_order::acquire);
+
+    // 3. Assert: Monitor did not wake up or re-enter wait_semaphores while idle
+    EXPECT_EQ(waits_after_sleep, initial_waits);
+
+    // 4. Act: Signaling wake unblocks the wait
+    monitor.wake();
+    this_thread::sleep_for(chrono::milliseconds(20));
+
+    // 5. Assert: Monitor woke up and called wait_semaphores again
+    EXPECT_GT(dev.wait_call_count.load(memory_order::acquire), initial_waits);
+
+    monitor.stop();
+}
+
+/// @brief Verify that multiple waiters awaiting the same timeline semaphore share
+///        a single cached get_semaphore_value query per monitor tick rather than
+///        issuing redundant Vulkan/RHI driver queries per waiter.
+TEST(gpu_timeline_monitor_test, query_deduplication_single_semaphore_many_waiters)
+{
+    // 1. Setup: 50 tasks waiting on a single timeline semaphore
+    auto dev = mock_timeline_device{};
+    auto log = logger{};
+    auto prof = profiler::profiler_session{false};
+    auto config = job::job_system_config{
+        .performance_worker_count = 4,
+        .efficiency_worker_count = 0,
+    };
+    auto js = job::job_system{log, prof, config};
+    auto monitor = gpu_timeline_monitor{dev, js, log};
+
+    const auto sem = dev.create_timeline_semaphore();
+    constexpr auto waiter_count = size_t{50};
+    auto completed_count = atomic<size_t>{0};
+
+    // 2. Act: Register 50 waits for milestone 1 on the same semaphore
+    auto tasks = vector<job::task<void>>{};
+    tasks.reserve(waiter_count);
+
+    for (size_t index = 0; index < waiter_count; ++index)
+    {
+        tasks.push_back(js.async([&]() -> job::task<void> {
+            auto wait_res = co_await monitor.wait(rhi::host_sync_point{.semaphore = sem, .value = 1});
+            if (wait_res)
+            {
+                completed_count.fetch_add(1, memory_order::release);
+            }
+            co_return;
+        }));
+    }
+
+    this_thread::sleep_for(chrono::milliseconds(20));
+    EXPECT_EQ(completed_count.load(memory_order::acquire), 0U);
+
+    // Reset query counter before completion tick
+    dev.get_semaphore_value_call_count.store(0, memory_order::release);
+
+    // Advance timeline semaphore to milestone 1 and wake
+    dev.signal_semaphore(sem, 1);
+    monitor.wake();
+
+    const auto deadline = chrono::steady_clock::now() + chrono::seconds(3);
+    while (completed_count.load(memory_order::acquire) < waiter_count && chrono::steady_clock::now() < deadline)
+    {
+        this_thread::sleep_for(chrono::milliseconds(1));
+    }
+
+    js.wait_idle();
+
+    // 3. Assert: All 50 waiters completed successfully
+    EXPECT_EQ(completed_count.load(memory_order::acquire), waiter_count);
+
+    // Assert: Queries for the user semaphore were deduplicated per tick (far less than 50 queries)
+    const auto queries = dev.get_semaphore_value_call_count.load(memory_order::acquire);
+    EXPECT_LE(queries, 10U);
+
+    monitor.stop();
+}
+
+
 
 

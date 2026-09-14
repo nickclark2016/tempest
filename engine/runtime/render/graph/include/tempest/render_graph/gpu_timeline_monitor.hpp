@@ -8,6 +8,7 @@
 #include <tempest/intrusive_stack.hpp>
 #include <tempest/job/job_system.hpp>
 #include <tempest/logger.hpp>
+#include <tempest/mutex.hpp>
 #include <tempest/render_graph/gpu_sync_point.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/thread.hpp>
@@ -62,6 +63,7 @@ namespace tempest::render_graph
 
         rhi::semaphore_handle _control_semaphore{};
         atomic<uint64_t> _control_seq{0};
+        mutex _wake_mutex{};
         uint64_t _last_seen_control_val{0};
 
         atomic<bool> _stop_requested{false};
@@ -70,6 +72,13 @@ namespace tempest::render_graph
         intrusive_mpsc_stack<wait_entry> _pending_requests{};
         vector<wait_entry*> _active_entries{};
         vector<rhi::host_sync_point> _wait_points_buffer{};
+
+        struct semaphore_query_cache
+        {
+            rhi::semaphore_handle semaphore{};
+            uint64_t current_value{0};
+        };
+        vector<semaphore_query_cache> _semaphore_query_cache{};
     };
 } // namespace tempest::render_graph
 
