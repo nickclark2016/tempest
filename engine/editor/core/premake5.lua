@@ -119,7 +119,6 @@ scoped.group('Tests', function()
         uses {
             'googletest',
             'editor-core',
-            'rhi-vk',
             'tempest',
             'imgui',
             'glfw',

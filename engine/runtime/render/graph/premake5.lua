@@ -77,7 +77,6 @@ scoped.group('Tests', function()
 
         uses {
             'googletest',
-            'job',
             'tempest',
         }
     end)

@@ -127,9 +127,6 @@ scoped.group('Tests', function()
 
         uses {
             'googletest',
-            'job',
-            'render-graph',
-            'rhi-vk',
             'tempest',
             'glfw',
         }
