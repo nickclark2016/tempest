@@ -58,14 +58,6 @@ scoped.project('job', function()
         links {
             'job',
         }
-
-        scoped.filter({ 'system:linux' }, function()
-            links { 'atomic' }
-        end)
-
-        scoped.filter({ 'system:windows' }, function()
-            links { 'Synchronization' }
-        end)
     end)
 end)
 

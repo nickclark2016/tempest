@@ -225,6 +225,7 @@ scoped.project('tempest', function()
             links {
                 'pthread',
                 'X11',
+                'atomic',
             }
         end)
 

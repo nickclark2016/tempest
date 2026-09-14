@@ -94,6 +94,7 @@ scoped.project('core', function()
 
         scoped.filter({
             'system:linux',
+            'kind:not StaticLib',
         }, function()
             links {
                 'atomic',
@@ -102,6 +103,7 @@ scoped.project('core', function()
 
         scoped.filter({
             'system:windows',
+            'kind:not StaticLib',
         }, function()
             links {
                 'Synchronization',
