@@ -55,26 +55,18 @@ namespace tempest::job
     auto async_mutex::_enqueue_waiter(async_mutex_waiter* waiter, coroutine_handle<> hnd) noexcept -> bool
     {
         waiter->handle = hnd;
-
-        auto* old_head = _waiters_in.load(memory_order::relaxed);
-        do
-        {
-            waiter->next = old_head;
-        } while (!_waiters_in.compare_exchange_weak(old_head, waiter, memory_order::release));
-
-        // If the lock was released in the meantime, try to acquire
-        const auto acquired = _locked.load(memory_order::acquire) == 0 && try_lock();
-        return !acquired; // return true if we need to suspend, false if we acquired the lock
+        _waiters_in.push(non_null{*waiter});
+        return true;
     }
 
     auto async_mutex::lock_awaiter::await_suspend(coroutine_handle<> hnd) noexcept -> bool
     {
-        return mutex-> _enqueue_waiter(&waiter, hnd);
+        return mutex->_enqueue_waiter(&waiter, hnd);
     }
 
     auto async_mutex::scoped_lock_awaiter::await_suspend(coroutine_handle<> hnd) noexcept -> bool
     {
-        return mutex-> _enqueue_waiter(&waiter, hnd);
+        return mutex->_enqueue_waiter(&waiter, hnd);
     }
 
     auto async_mutex::unlock() noexcept -> void
@@ -90,29 +82,20 @@ namespace tempest::job
         }
 
         // 2. Transfer incoming waiters to _waiters_out and reverse (LIFO -> FIFO)
-        auto* incoming = _waiters_in.exchange(nullptr, memory_order::acq_rel);
+        auto* const incoming = _waiters_in.drain();
         if (incoming != nullptr)
         {
-            // Reverse list
-            async_mutex_waiter* reversed = nullptr;
-            while (incoming != nullptr)
-            {
-                auto* next = incoming->next;
-                incoming->next = reversed;
-                reversed = incoming;
-                incoming = next;
-            }
-
+            auto* const reversed = intrusive_mpsc_stack<async_mutex_waiter>::reverse(incoming);
             _waiters_out = reversed->next;
             _resume(reversed->handle);
             return;
         }
 
         // 3. No waiters: release lock
-        _locked.store(0, memory_order::release);
+        _locked.store(0, memory_order::seq_cst);
 
         // Double-check race where a waiter enqueued right before we stored 0
-        if (_waiters_in.load(memory_order::acquire) != nullptr && try_lock())
+        if (!_waiters_in.empty(memory_order::seq_cst) && try_lock())
         {
             // Recurse to pop that waiter
             unlock();

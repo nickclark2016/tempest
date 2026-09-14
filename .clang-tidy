@@ -22,4 +22,6 @@ ExtraArgs:
 CheckOptions:
   - key: cppcoreguidelines-rvalue-reference-param-not-moved.MoveFunction
     value: 'tempest::move'
+  - readability-identifier-naming.LocalVariableIgnoredRegexp: '^_$'
+  - readability-identifier-length.LocalVariableIgnoredRegexp: '^_$'
 ...

@@ -32,6 +32,7 @@ namespace tempest
         /// @param node Non-null pointer to the node being pushed.
         auto push(non_null<T> node) noexcept -> void
         {
+            _get_node(node.get()).next = nullptr;
             push_range(node, node);
         }
 
@@ -42,6 +43,7 @@ namespace tempest
         {
             auto* const first_node = first.get();
             auto* const last_node = last.get();
+            TEMPEST_ASSERT(_get_node(last_node).next == nullptr);
             auto* old_head = _head.load(memory_order::relaxed);
             do
             {
@@ -56,11 +58,49 @@ namespace tempest
             return _head.exchange(nullptr, memory_order::acq_rel);
         }
 
-        /// @brief Checks whether the stack is currently empty.
-        /// @return True if empty, false otherwise.
-        [[nodiscard]] auto empty() const noexcept -> bool
+        /// @brief Atomically exchanges the head pointer with a new value.
+        /// @param desired Pointer to set as new head.
+        /// @param mo Memory order for exchange.
+        /// @return Former top node of the stack.
+        auto exchange(T* desired, memory_order mo = memory_order::acq_rel) noexcept -> T*
         {
-            return _head.load(memory_order::relaxed) == nullptr;
+            return _head.exchange(desired, mo);
+        }
+
+        /// @brief Checks whether the stack is currently empty.
+        /// @param mo Memory order for loading the head pointer.
+        /// @return True if empty, false otherwise.
+        [[nodiscard]] auto empty(memory_order mo = memory_order::relaxed) const noexcept -> bool
+        {
+            return _head.load(mo) == nullptr;
+        }
+
+        /// @brief Loads the head pointer.
+        /// @param mo Memory order for loading the head pointer.
+        /// @return Current head pointer.
+        [[nodiscard]] auto load(memory_order mo = memory_order::acquire) const noexcept -> T*
+        {
+            return _head.load(mo);
+        }
+
+        /// @brief Stores a new head pointer.
+        /// @param desired New head pointer.
+        /// @param mo Memory order for store.
+        auto store(T* desired, memory_order mo = memory_order::release) noexcept -> void
+        {
+            _head.store(desired, mo);
+        }
+
+        /// @brief Compares and exchanges the head pointer weakly.
+        auto compare_exchange_weak(T*& expected, T* desired, memory_order success, memory_order failure) noexcept -> bool
+        {
+            return _head.compare_exchange_weak(expected, desired, success, failure);
+        }
+
+        /// @brief Compares and exchanges the head pointer strongly.
+        auto compare_exchange_strong(T*& expected, T* desired, memory_order success, memory_order failure) noexcept -> bool
+        {
+            return _head.compare_exchange_strong(expected, desired, success, failure);
         }
 
         /// @brief Reverses a singly linked Treiber chain in-place.

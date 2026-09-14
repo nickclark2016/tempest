@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 
+#include <tempest/atomic.hpp>
 #include <tempest/job/async_mutex.hpp>
 #include <tempest/job/task.hpp>
+#include <tempest/thread.hpp>
 #include <tempest/vector.hpp>
 
 namespace tempest::job::tests
@@ -122,5 +124,78 @@ namespace tempest::job::tests
         EXPECT_TRUE(t1.is_ready());
         EXPECT_TRUE(t2.is_ready());
         EXPECT_TRUE(t3.is_ready());
+    }
+
+    /// @brief Stresses tight-loop lock and immediate unlock across concurrent coroutines to ensure no double-resumes or frame UAF.
+    TEST(async_mutex_test, contended_immediate_unlock_stress)
+    {
+        // 1. Setup
+        auto mtx = async_mutex{};
+        constexpr auto iterations = 500;
+        constexpr auto thread_count = 4;
+        auto executed_count = atomic<int>{0};
+
+        auto worker_coro = [&mtx, &executed_count]() -> task<void> {
+            for (auto index = 0; index < iterations; ++index)
+            {
+                auto guard = co_await mtx.scoped_lock();
+                executed_count.fetch_add(1, memory_order::relaxed);
+            }
+            co_return;
+        };
+
+        auto threads = vector<tempest::thread>{};
+        threads.reserve(thread_count);
+
+        auto tasks = vector<task<void>>{};
+        tasks.reserve(thread_count);
+
+        // 2. Act: Spawn threads running coroutines that contend heavily
+        for (auto index = 0; index < thread_count; ++index)
+        {
+            tasks.push_back(worker_coro());
+            threads.push_back(tempest::thread([&tasks, index]() {
+                tasks[static_cast<size_t>(index)].resume();
+            }));
+        }
+
+        for (auto& thread : threads)
+        {
+            thread.join();
+        }
+
+        // 3. Assert: All iterations executed with exclusive access, zero double resumes
+        EXPECT_EQ(executed_count.load(memory_order::relaxed), thread_count * iterations);
+    }
+
+    /// @brief Verifies Store-Load sequential consistency between releasing the mutex and checking for newly enqueued waiters.
+    TEST(async_mutex_test, store_load_interleaving_stress)
+    {
+        // 1. Setup: Alternating tight unlock and lock interleaving
+        auto mtx = async_mutex{};
+        auto counter = 0;
+        constexpr auto loop_count = 1000;
+
+        auto worker_coro = [&mtx, &counter]() -> task<void> {
+            for (auto index = 0; index < loop_count; ++index)
+            {
+                auto guard = co_await mtx.scoped_lock();
+                ++counter;
+            }
+            co_return;
+        };
+
+        // 2. Act
+        auto t1 = worker_coro();
+        auto t2 = worker_coro();
+
+        auto thread1 = tempest::thread([&t1]() { t1.resume(); });
+        auto thread2 = tempest::thread([&t2]() { t2.resume(); });
+
+        thread1.join();
+        thread2.join();
+
+        // 3. Assert: Counter accurately reflects all critical section executions
+        EXPECT_EQ(counter, 2 * loop_count);
     }
 } // namespace tempest::job::tests

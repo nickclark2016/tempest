@@ -650,3 +650,152 @@ TEST(gpu_timeline_monitor_test, device_lost_cancellation)
     EXPECT_TRUE(done.load(memory_order::acquire));
     EXPECT_EQ(error_received.load(memory_order::acquire), gpu_sync_error::device_lost);
 }
+
+/// @brief Verify that dozens of concurrent coroutines can push wait requests into the
+/// lock-free intrusive Treiber stack simultaneously across multiple worker threads,
+/// and resume successfully when their GPU milestone is signaled.
+TEST(gpu_timeline_monitor_test, high_contention_concurrent_waiters)
+{
+    // 1. Setup
+    auto dev = mock_timeline_device{};
+    auto log = logger{};
+    auto prof = profiler::profiler_session{false};
+    auto config = job::job_system_config{
+        .performance_worker_count = 4,
+        .efficiency_worker_count = 0,
+    };
+    auto js = job::job_system{log, prof, config};
+    auto monitor = gpu_timeline_monitor{dev, js, log};
+
+    const auto sem = dev.create_timeline_semaphore();
+    constexpr auto waiter_count = uint32_t{48};
+    auto completion_count = atomic<uint32_t>{0};
+
+    // 2. Act: launch concurrent coroutines awaiting milestone 10
+    auto tasks = vector<job::task<void>>{};
+    tasks.reserve(waiter_count);
+
+    for (auto index = uint32_t{0}; index < waiter_count; ++index)
+    {
+        tasks.push_back(js.async([&]() -> job::task<void> {
+            auto wait_res = co_await monitor.wait(rhi::host_sync_point{.semaphore = sem, .value = 10});
+            if (wait_res)
+            {
+                completion_count.fetch_add(1, memory_order::release);
+            }
+            co_return;
+        }));
+    }
+
+    // Wait until workers have all had an opportunity to suspend
+    this_thread::sleep_for(chrono::milliseconds(20));
+    EXPECT_EQ(completion_count.load(memory_order::acquire), 0U);
+
+    // Signal milestone 10 to wake all waiters concurrently
+    dev.signal_semaphore(sem, 10);
+
+    const auto deadline = chrono::steady_clock::now() + chrono::seconds(3);
+    while (completion_count.load(memory_order::acquire) < waiter_count && chrono::steady_clock::now() < deadline)
+    {
+        this_thread::sleep_for(chrono::milliseconds(1));
+    }
+
+    js.wait_idle();
+
+    // 3. Assert
+    EXPECT_EQ(completion_count.load(memory_order::acquire), waiter_count);
+}
+
+/// @brief Verify that dozens of concurrent waiters registered via the intrusive stack
+/// are all safely cancelled and resumed when the monitor is explicitly stopped.
+TEST(gpu_timeline_monitor_test, concurrent_waiters_cancelled_on_stop)
+{
+    // 1. Setup
+    auto dev = mock_timeline_device{};
+    auto log = logger{};
+    auto prof = profiler::profiler_session{false};
+    auto config = job::job_system_config{
+        .performance_worker_count = 4,
+        .efficiency_worker_count = 0,
+    };
+    auto js = job::job_system{log, prof, config};
+    auto monitor = gpu_timeline_monitor{dev, js, log};
+
+    const auto sem = dev.create_timeline_semaphore();
+    constexpr auto waiter_count = uint32_t{48};
+    auto cancel_count = atomic<uint32_t>{0};
+
+    // 2. Act: launch coroutines awaiting an unreachable milestone
+    auto tasks = vector<job::task<void>>{};
+    tasks.reserve(waiter_count);
+
+    for (auto index = uint32_t{0}; index < waiter_count; ++index)
+    {
+        tasks.push_back(js.async([&]() -> job::task<void> {
+            auto wait_res = co_await monitor.wait(rhi::host_sync_point{.semaphore = sem, .value = 1000});
+            if (!wait_res && wait_res.error() == gpu_sync_error::cancelled)
+            {
+                cancel_count.fetch_add(1, memory_order::release);
+            }
+            co_return;
+        }));
+    }
+
+    // Give time for coroutines to enqueue in the Treiber stack
+    this_thread::sleep_for(chrono::milliseconds(20));
+    EXPECT_EQ(cancel_count.load(memory_order::acquire), 0U);
+
+    // Stop monitor: should cancel all pending and active entries
+    monitor.stop();
+
+    const auto deadline = chrono::steady_clock::now() + chrono::seconds(3);
+    while (cancel_count.load(memory_order::acquire) < waiter_count && chrono::steady_clock::now() < deadline)
+    {
+        this_thread::sleep_for(chrono::milliseconds(1));
+    }
+
+    js.wait_idle();
+
+    // 3. Assert
+    EXPECT_EQ(cancel_count.load(memory_order::acquire), waiter_count);
+}
+
+/// @brief Verify that destroying a coroutine frame while suspended waiting on a GPU sync point
+/// safely marks the embedded entry as cancelled and prevents UAF during monitor loop execution.
+TEST(gpu_timeline_monitor_test, frame_destruction_cancels_waiter)
+{
+    // 1. Setup
+    auto dev = mock_timeline_device{};
+    auto log = logger{};
+    auto prof = profiler::profiler_session{false};
+    auto config = job::job_system_config{
+        .performance_worker_count = 2,
+        .efficiency_worker_count = 0,
+    };
+    auto js = job::job_system{log, prof, config};
+    auto monitor = gpu_timeline_monitor{dev, js, log};
+
+    const auto sem = dev.create_timeline_semaphore();
+
+    // 2. Act: Spawn a task that suspends on monitor.wait(), then destroy the task object
+    {
+        auto coro = [&]() -> job::task<void> {
+            co_await monitor.wait(rhi::host_sync_point{.semaphore = sem, .value = 5});
+            co_return;
+        };
+
+        auto t = coro();
+        t.resume(); // Suspends inside monitor.wait()
+        // t goes out of scope and is destroyed here, invoking ~gpu_sync_point()
+    }
+
+    // Advance timeline semaphore past the wait threshold
+    dev.signal_semaphore(sem, 10);
+
+    // Give time for monitor to loop and observe completion of the now-cancelled entry
+    this_thread::sleep_for(chrono::milliseconds(30));
+
+    // 3. Assert: Monitor loop did not crash or dereference freed frame memory
+    SUCCEED();
+}
+

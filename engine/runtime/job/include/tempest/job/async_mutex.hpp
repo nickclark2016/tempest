@@ -6,14 +6,14 @@
 #include <tempest/checked.hpp>
 #include <tempest/coroutine.hpp>
 #include <tempest/int.hpp>
+#include <tempest/intrusive_stack.hpp>
 #include <tempest/profiler/types.hpp>
 
 namespace tempest::job
 {
-    struct async_mutex_waiter
+    struct async_mutex_waiter : treiber_node<async_mutex_waiter>
     {
         coroutine_handle<> handle{nullptr};
-        async_mutex_waiter* next{nullptr};
     };
 
     class async_mutex;
@@ -114,10 +114,10 @@ namespace tempest::job
 
         auto _enqueue_waiter(async_mutex_waiter* waiter, coroutine_handle<> hnd) noexcept -> bool;
 
-        atomic<uint32_t> _locked{0};
-        atomic<async_mutex_waiter*> _waiters_in{nullptr};
-        async_mutex_waiter* _waiters_out{nullptr};
-        job_system* _sys{nullptr};
+        atomic<uint32_t> _locked = 0U;
+        intrusive_mpsc_stack<async_mutex_waiter> _waiters_in;
+        async_mutex_waiter* _waiters_out = nullptr;
+        job_system* _sys = nullptr;
 
         auto _resume(coroutine_handle<> hnd) noexcept -> void;
     };

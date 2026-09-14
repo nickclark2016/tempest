@@ -776,18 +776,39 @@ namespace tempest::job
             return true;
         }
 
-        // Multi-threaded mode step: try popping from worker 0
-        for (auto priority = 0U; priority < static_cast<size_t>(task_priority::count); ++priority)
+        // Multi-threaded mode step:
+        auto* curr_worker = _impl->find_current_worker();
+        if (curr_worker != nullptr && curr_worker->owner == this)
         {
-            auto res = _impl->workers[0]->deques[priority].pop();
-            if (res.has_value())
+            for (auto priority = 0U; priority < static_cast<size_t>(task_priority::count); ++priority)
             {
-                if (res->handle && !res->handle.done())
+                auto res = curr_worker->deques[priority].pop();
+                if (res.has_value())
                 {
-                    res->handle.resume();
+                    if (res->handle && !res->handle.done())
+                    {
+                        res->handle.resume();
+                    }
+                    _impl->active_tasks.fetch_sub(1, memory_order::release);
+                    return true;
                 }
-                _impl->active_tasks.fetch_sub(1, memory_order::release);
-                return true;
+            }
+        }
+
+        for (auto& worker : _impl->workers)
+        {
+            for (auto priority = 0U; priority < static_cast<size_t>(task_priority::count); ++priority)
+            {
+                auto res = worker->deques[priority].steal();
+                if (res.has_value())
+                {
+                    if (res->handle && !res->handle.done())
+                    {
+                        res->handle.resume();
+                    }
+                    _impl->active_tasks.fetch_sub(1, memory_order::release);
+                    return true;
+                }
             }
         }
 

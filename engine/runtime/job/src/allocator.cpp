@@ -87,12 +87,8 @@ job_allocator::job_allocator() = default;
 
     auto job_allocator::push_remote_free(void* ptr) noexcept -> void
     {
-        auto* node = reinterpret_cast<remote_free_node*>(ptr);
-        auto* old_head = _remote_free_head.load(memory_order::acquire);
-        do
-        {
-            node->next = old_head;
-        } while (!_remote_free_head.compare_exchange_weak(old_head, node, memory_order::acq_rel, memory_order::acquire));
+        auto* const node = reinterpret_cast<remote_free_node*>(ptr);
+        _remote_free_head.push(non_null{*node});
     }
 
     auto job_allocator::drain_remote_frees() noexcept -> void
@@ -103,14 +99,14 @@ job_allocator::job_allocator() = default;
 
     auto job_allocator::_drain_remote_frees_locked() noexcept -> void
     {
-        auto* head = _remote_free_head.exchange(nullptr, memory_order::acq_rel);
+        auto* head = _remote_free_head.drain();
         while (head != nullptr)
         {
-            auto* next = head->next;
-            auto* chunk = slab_chunk::from_pointer(head);
+            auto* const next = head->next;
+            auto* const chunk = slab_chunk::from_pointer(head);
             const auto cls = chunk->size_class;
 
-            auto* slot = reinterpret_cast<free_slot_node*>(head);
+            auto* const slot = reinterpret_cast<free_slot_node*>(head);
             slot->next = _local_free_list[cls];
             _local_free_list[cls] = slot;
 

@@ -5,6 +5,7 @@
 #include <tempest/array.hpp>
 #include <tempest/atomic.hpp>
 #include <tempest/int.hpp>
+#include <tempest/intrusive_stack.hpp>
 #include <tempest/job/types.hpp>
 #include <tempest/mutex.hpp>
 
@@ -90,9 +91,8 @@ namespace tempest::job
         free_slot_node* next{nullptr};
     };
 
-    struct remote_free_node
+    struct remote_free_node : treiber_node<remote_free_node>
     {
-        remote_free_node* next{nullptr};
     };
 
     class TEMPEST_API job_allocator
@@ -123,7 +123,7 @@ namespace tempest::job
         mutable mutex _alloc_mutex;
         array<free_slot_node*, slab_class_count> _local_free_list{};
         array<slab_chunk*, slab_class_count> _chunks{};
-        atomic<remote_free_node*> _remote_free_head{nullptr};
+        intrusive_mpsc_stack<remote_free_node> _remote_free_head;
 
         array<atomic<uint64_t>, slab_class_count> _allocations_per_class{};
         atomic<uint64_t> _heap_fallback_count{0};

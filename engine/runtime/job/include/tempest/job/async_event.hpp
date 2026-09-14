@@ -2,10 +2,11 @@
 #define tempest_job_async_event_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/atomic.hpp>
 #include <tempest/checked.hpp>
 #include <tempest/coroutine.hpp>
 #include <tempest/int.hpp>
-#include <tempest/mutex.hpp>
+#include <tempest/intrusive_stack.hpp>
 #include <tempest/profiler/types.hpp>
 
 namespace tempest::job
@@ -16,10 +17,9 @@ namespace tempest::job
         manual
     };
 
-    struct async_event_waiter
+    struct async_event_waiter : treiber_node<async_event_waiter>
     {
         coroutine_handle<> handle{nullptr};
-        async_event_waiter* next{nullptr};
     };
 
     class job_system;
@@ -71,10 +71,24 @@ namespace tempest::job
       private:
         friend struct event_awaiter;
 
-        mutable mutex _mutex;
+        async_event_waiter _sentinel{};
+
+        [[nodiscard]] auto _signaled_sentinel() noexcept -> async_event_waiter*
+        {
+            return &_sentinel;
+        }
+
+        [[nodiscard]] auto _signaled_sentinel() const noexcept -> const async_event_waiter*
+        {
+            return &_sentinel;
+        }
+
         event_reset_mode _mode{event_reset_mode::auto_reset};
-        bool _signaled{false};
-        async_event_waiter* _waiters{nullptr};
+
+        intrusive_mpsc_stack<async_event_waiter> _waiters_in{};
+        async_event_waiter* _waiters_out{nullptr};
+        atomic<bool> _claim{false};
+
         job_system* _sys{nullptr};
 
         auto _resume(coroutine_handle<> hnd) noexcept -> void;

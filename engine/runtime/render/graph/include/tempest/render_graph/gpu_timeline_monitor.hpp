@@ -5,9 +5,9 @@
 #include <tempest/atomic.hpp>
 #include <tempest/coroutine.hpp>
 #include <tempest/int.hpp>
+#include <tempest/intrusive_stack.hpp>
 #include <tempest/job/job_system.hpp>
 #include <tempest/logger.hpp>
-#include <tempest/mutex.hpp>
 #include <tempest/render_graph/gpu_sync_point.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/thread.hpp>
@@ -18,6 +18,8 @@ namespace tempest::render_graph
     class TEMPEST_API gpu_timeline_monitor
     {
       public:
+        using wait_entry = gpu_wait_entry;
+
         gpu_timeline_monitor(rhi::device& dev, job::job_system& jobs, logger& log);
         ~gpu_timeline_monitor();
 
@@ -47,20 +49,11 @@ namespace tempest::render_graph
             return _log;
         }
 
-        auto register_wait(coroutine_handle<> handle, rhi::host_sync_point sp,
-                           job::task_priority priority, job::core_class affinity,
-                           gpu_sync_error* error_out) -> void;
+        auto register_wait(wait_entry& entry) -> void;
+        auto wake() noexcept -> void;
+        [[nodiscard]] auto is_stopped() const noexcept -> bool;
 
       private:
-        struct wait_entry
-        {
-            coroutine_handle<> handle{};
-            rhi::host_sync_point sync_point{};
-            job::task_priority priority{job::task_priority::normal};
-            job::core_class affinity{job::core_class::any};
-            gpu_sync_error* error_out{nullptr};
-        };
-
         auto _monitor_loop() -> void;
 
         rhi::device& _device;
@@ -74,9 +67,8 @@ namespace tempest::render_graph
         atomic<bool> _stop_requested{false};
         thread _thread{};
 
-        mutex _mutex{};
-        vector<wait_entry> _pending_requests{};
-        vector<wait_entry> _active_entries{};
+        intrusive_mpsc_stack<wait_entry> _pending_requests{};
+        vector<wait_entry*> _active_entries{};
     };
 } // namespace tempest::render_graph
 
