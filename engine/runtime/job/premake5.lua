@@ -1,15 +1,5 @@
 scoped.project('job', function()
-    scoped.filter({
-        'options:shared-engine',
-    }, function()
-        kind 'SharedLib'
-    end)
-
-    scoped.filter({
-        'not options:shared-engine',
-    }, function()
-        kind 'StaticLib'
-    end)
+    kind 'StaticLib'
 
     language 'C++'
     cppdialect 'C++20'
@@ -58,6 +48,7 @@ scoped.project('job', function()
     scoped.usage("INTERFACE", function()
         uses {
             'job:includedirs',
+            'core',
         }
 
         dependson {
@@ -67,6 +58,14 @@ scoped.project('job', function()
         links {
             'job',
         }
+
+        scoped.filter({ 'system:linux' }, function()
+            links { 'atomic' }
+        end)
+
+        scoped.filter({ 'system:windows' }, function()
+            links { 'Synchronization' }
+        end)
     end)
 end)
 

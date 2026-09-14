@@ -93,6 +93,22 @@ scoped.project('core', function()
         }
 
         scoped.filter({
+            'system:linux',
+        }, function()
+            links {
+                'atomic',
+            }
+        end)
+
+        scoped.filter({
+            'system:windows',
+        }, function()
+            links {
+                'Synchronization',
+            }
+        end)
+
+        scoped.filter({
             'system:windows',
             'toolset:not msc*'
         }, function()
