@@ -4,6 +4,7 @@
 #include <tempest/job/async_mutex.hpp>
 #include <tempest/job/task.hpp>
 #include <tempest/thread.hpp>
+#include <tempest/type_traits.hpp>
 #include <tempest/vector.hpp>
 
 namespace tempest::job::tests
@@ -275,5 +276,195 @@ namespace tempest::job::tests
 
         // 3. Assert: Exclusivity was strictly maintained without lost wakeups or dropped updates
         EXPECT_EQ(shared_counter, thread_count * iterations_per_thread);
+    }
+
+    /// @brief Verifies compile-time ergonomics of scoped_lock_guard ensuring it cannot
+    ///        be manually constructed from an unheld async_mutex, and can only be acquired
+    ///        via co_await mtx.scoped_lock().
+    TEST(async_mutex_test, scoped_lock_guard_ergonomics)
+    {
+        // 1. Assert: scoped_lock_guard cannot be constructed from an async_mutex lvalue or rvalue
+        static_assert(!is_constructible_v<scoped_lock_guard, async_mutex&>,
+                      "scoped_lock_guard must not be publicly constructible from async_mutex reference");
+        static_assert(!is_constructible_v<scoped_lock_guard, async_mutex>,
+                      "scoped_lock_guard must not be publicly constructible from async_mutex value");
+        static_assert(!is_copy_constructible_v<scoped_lock_guard>,
+                      "scoped_lock_guard must not be copy-constructible");
+        static_assert(is_move_constructible_v<scoped_lock_guard>,
+                      "scoped_lock_guard must be move-constructible");
+
+        // 2. Setup & Act: Legitimate acquisition via co_await mtx.scoped_lock()
+        auto mtx = async_mutex{};
+        auto acquired = false;
+
+        auto test_coro = [&mtx, &acquired]() -> task<void> {
+            auto guard = co_await mtx.scoped_lock();
+            acquired = true;
+            co_return;
+        };
+
+        auto t = test_coro();
+        t.resume();
+
+        // 3. Assert
+        EXPECT_TRUE(acquired);
+    }
+
+    // =========================================================================
+    // SECTION: Coroutine Frame Cancellation & Waiter Lifetime Tests
+    // =========================================================================
+
+    /// @brief Verifies that destroying a coroutine task while suspended on mtx.lock()
+    ///        unlinks cleanly without use-after-free or dangling pointers, and allows
+    ///        subsequent tasks to acquire the lock.
+    TEST(async_mutex_test, destroy_suspended_coroutine_lock)
+    {
+        // 1. Setup: Mutex is initially locked
+        auto mtx = async_mutex{};
+        EXPECT_TRUE(mtx.try_lock());
+
+        auto cancelled_task_ran = false;
+        auto subsequent_task_ran = false;
+
+        {
+            auto waiting_coro = [&mtx, &cancelled_task_ran]() -> task<void> {
+                co_await mtx.lock();
+                cancelled_task_ran = true;
+                mtx.unlock();
+                co_return;
+            };
+
+            auto t = waiting_coro();
+            t.resume(); // Suspends because mtx is locked
+            EXPECT_FALSE(cancelled_task_ran);
+
+            // 2. Act: Destroy t while suspended
+        }
+
+        // Unlock mtx. The cancelled waiter must be skipped and retired cleanly.
+        mtx.unlock();
+        EXPECT_FALSE(cancelled_task_ran);
+
+        // 3. Assert: Subsequent acquisition succeeds
+        auto subsequent_coro = [&mtx, &subsequent_task_ran]() -> task<void> {
+            co_await mtx.lock();
+            subsequent_task_ran = true;
+            mtx.unlock();
+            co_return;
+        };
+
+        auto t2 = subsequent_coro();
+        t2.resume();
+        EXPECT_TRUE(subsequent_task_ran);
+    }
+
+    /// @brief Verifies that destroying a coroutine task while suspended on mtx.scoped_lock()
+    ///        unlinks cleanly and preserves mutex integrity.
+    TEST(async_mutex_test, destroy_suspended_coroutine_scoped_lock)
+    {
+        // 1. Setup: Mutex is initially locked
+        auto mtx = async_mutex{};
+        EXPECT_TRUE(mtx.try_lock());
+
+        auto cancelled_task_ran = false;
+        auto subsequent_task_ran = false;
+
+        {
+            auto waiting_coro = [&mtx, &cancelled_task_ran]() -> task<void> {
+                auto guard = co_await mtx.scoped_lock();
+                cancelled_task_ran = true;
+                co_return;
+            };
+
+            auto t = waiting_coro();
+            t.resume(); // Suspends because mtx is locked
+            EXPECT_FALSE(cancelled_task_ran);
+
+            // 2. Act: Destroy t while suspended
+        }
+
+        mtx.unlock();
+        EXPECT_FALSE(cancelled_task_ran);
+
+        // 3. Assert: Subsequent scoped_lock succeeds
+        auto subsequent_coro = [&mtx, &subsequent_task_ran]() -> task<void> {
+            auto guard = co_await mtx.scoped_lock();
+            subsequent_task_ran = true;
+            co_return;
+        };
+
+        auto t2 = subsequent_coro();
+        t2.resume();
+        EXPECT_TRUE(subsequent_task_ran);
+    }
+
+    /// @brief Verifies that multiple interleaved cancelled and active waiters are properly
+    ///        handled in FIFO order without lost wakeups or corruption.
+    TEST(async_mutex_test, multiple_waiters_with_interleaved_cancellation)
+    {
+        // 1. Setup: Hold lock
+        auto mtx = async_mutex{};
+        EXPECT_TRUE(mtx.try_lock());
+
+        auto order = vector<int>{};
+
+        auto make_waiter = [&mtx, &order](int id) -> task<void> {
+            auto guard = co_await mtx.scoped_lock();
+            order.push_back(id);
+            co_return;
+        };
+
+        auto t0 = make_waiter(0);
+        auto t1 = make_waiter(1);
+        auto t2 = make_waiter(2);
+        auto t3 = make_waiter(3);
+
+        t0.resume();
+        t1.resume();
+        t2.resume();
+        t3.resume();
+
+        // 2. Act: Cancel t1 and t3 before unlocking
+        t1 = task<void>{};
+        t3 = task<void>{};
+
+        // Unlock mtx -> t0 should acquire and finish
+        mtx.unlock();
+
+        // 3. Assert: t0 executed, t2 executed, cancelled ones did not execute
+        ASSERT_EQ(order.size(), 2U);
+        EXPECT_EQ(order[0], 0);
+        EXPECT_EQ(order[1], 2);
+    }
+
+    /// @brief Verifies that destroying an async_mutex with pending waiters retires them
+    ///        safely without hanging or use-after-free when the coroutines are destroyed.
+    TEST(async_mutex_test, destroy_async_mutex_with_pending_waiters)
+    {
+        // 1. Setup & Act: Create mutex and suspend tasks on it, then destroy mutex
+        auto ran = false;
+        auto t = task<void>{};
+
+        {
+            auto mtx = async_mutex{};
+            EXPECT_TRUE(mtx.try_lock());
+
+            auto waiting_coro = [&mtx, &ran]() -> task<void> {
+                co_await mtx.lock();
+                ran = true;
+                mtx.unlock();
+                co_return;
+            };
+
+            t = waiting_coro();
+            t.resume(); // Suspends
+            // mtx goes out of scope and is destroyed here
+        }
+
+        // 2. Act: Destroy t after mutex was destroyed
+        t = task<void>{};
+
+        // 3. Assert: Did not crash or hang
+        EXPECT_FALSE(ran);
     }
 } // namespace tempest::job::tests

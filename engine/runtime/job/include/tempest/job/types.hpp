@@ -36,6 +36,14 @@ namespace tempest::job
         task_failed,
     };
 
+    enum class wait_state : uint8_t
+    {
+        pending = 0,
+        completed,
+        cancelled,
+        retired,
+    };
+
     using error_code = job_error;
 
     struct task_affinity

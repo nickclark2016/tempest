@@ -124,7 +124,7 @@ namespace tempest::job::tests
         // Wait until all threads have begun execution
         while (ready_count.load(memory_order::acquire) < thread_count)
         {
-            // Spin until all threads are ready
+            tempest::this_thread::yield();
         }
 
         // 2. Act: Signal the event concurrently from multiple setter threads
@@ -432,5 +432,147 @@ namespace tempest::job::tests
             EXPECT_TRUE(done.load(memory_order::acquire));
             EXPECT_EQ(evt, nullptr);
         }
+    }
+
+    // =========================================================================
+    // SECTION: Coroutine Frame Cancellation & Waiter Lifetime Tests
+    // =========================================================================
+
+    /// @brief Verifies that destroying a coroutine task suspended on an auto-reset event
+    ///        unlinks cleanly without use-after-free, and preserves subsequent signaling.
+    TEST(async_event_test, destroy_suspended_coroutine_auto_reset)
+    {
+        // 1. Setup
+        auto evt = async_event{false, event_reset_mode::auto_reset};
+        auto cancelled_ran = false;
+        auto subsequent_ran = false;
+
+        {
+            auto waiting_coro = [&evt, &cancelled_ran]() -> task<void> {
+                co_await evt.wait();
+                cancelled_ran = true;
+                co_return;
+            };
+
+            auto t = waiting_coro();
+            t.resume(); // Suspends on wait()
+            EXPECT_FALSE(cancelled_ran);
+
+            // 2. Act: Destroy task while suspended
+        }
+
+        // Signal event
+        evt.set();
+
+        // 3. Assert: Signal was not consumed by the cancelled task; a new waiter receives it
+        auto subsequent_coro = [&evt, &subsequent_ran]() -> task<void> {
+            co_await evt.wait();
+            subsequent_ran = true;
+            co_return;
+        };
+
+        auto t2 = subsequent_coro();
+        t2.resume();
+        EXPECT_TRUE(subsequent_ran);
+        EXPECT_FALSE(cancelled_ran);
+    }
+
+    /// @brief Verifies that destroying a coroutine task suspended on a manual-reset event
+    ///        unlinks cleanly and doesn't prevent other waiters from being signaled.
+    TEST(async_event_test, destroy_suspended_coroutine_manual_reset)
+    {
+        // 1. Setup
+        auto evt = async_event{false, event_reset_mode::manual};
+        auto cancelled_ran = false;
+        auto active_ran = false;
+
+        auto t_active = waiter_task(evt, &active_ran);
+        t_active.resume();
+
+        {
+            auto waiting_coro = [&evt, &cancelled_ran]() -> task<void> {
+                co_await evt.wait();
+                cancelled_ran = true;
+                co_return;
+            };
+
+            auto t_cancel = waiting_coro();
+            t_cancel.resume();
+
+            // 2. Act: Destroy t_cancel while suspended
+        }
+
+        evt.set();
+
+        // 3. Assert: Active waiter ran, cancelled did not run
+        EXPECT_TRUE(active_ran);
+        EXPECT_FALSE(cancelled_ran);
+    }
+
+    /// @brief Verifies that multiple auto-reset waiters with interleaved cancellations
+    ///        receive signals in FIFO order without lost wakeups.
+    TEST(async_event_test, auto_reset_multiple_waiters_interleaved_cancellation)
+    {
+        // 1. Setup
+        auto evt = async_event{false, event_reset_mode::auto_reset};
+        auto order = vector<int>{};
+
+        auto make_waiter = [&evt, &order](int id) -> task<void> {
+            co_await evt.wait();
+            order.push_back(id);
+            co_return;
+        };
+
+        auto t0 = make_waiter(0);
+        auto t1 = make_waiter(1);
+        auto t2 = make_waiter(2);
+        auto t3 = make_waiter(3);
+
+        t0.resume();
+        t1.resume();
+        t2.resume();
+        t3.resume();
+
+        // 2. Act: Cancel t1 and t3
+        t1 = task<void>{};
+        t3 = task<void>{};
+
+        // Signal twice
+        evt.set();
+        evt.set();
+
+        // 3. Assert: Only t0 and t2 were awakened
+        ASSERT_EQ(order.size(), 2U);
+        EXPECT_EQ(order[0], 0);
+        EXPECT_EQ(order[1], 2);
+    }
+
+    /// @brief Verifies that destroying an async_event with pending waiters cleans up
+    ///        safely without hanging or memory corruption when tasks are destroyed.
+    TEST(async_event_test, destroy_async_event_with_pending_waiters)
+    {
+        // 1. Setup & Act
+        auto ran = false;
+        auto t = task<void>{};
+
+        {
+            auto evt = async_event{false, event_reset_mode::auto_reset};
+
+            auto waiting_coro = [&evt, &ran]() -> task<void> {
+                co_await evt.wait();
+                ran = true;
+                co_return;
+            };
+
+            t = waiting_coro();
+            t.resume();
+            // evt destroyed here
+        }
+
+        // 2. Act: Destroy task after event was destroyed
+        t = task<void>{};
+
+        // 3. Assert
+        EXPECT_FALSE(ran);
     }
 } // namespace tempest::job::tests
