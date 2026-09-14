@@ -31,6 +31,7 @@ scoped.project('core', function()
         links {
             'dl',
             'pthread',
+            'atomic',
         }
     end)
 
@@ -120,6 +121,10 @@ scoped.group('Tests', function()
             'tempest',
             'googletest',
         }
+
+        scoped.filter({ 'system:linux' }, function()
+            links { 'atomic' }
+        end)
     
         externalwarnings 'Off'
         warnings 'Extra'

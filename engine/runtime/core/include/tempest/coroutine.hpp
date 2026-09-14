@@ -30,17 +30,29 @@ namespace tempest
     {
     };
 
-    /// \brief A coroutine handle type that can be used to resume or destroy a coroutine.
-    /// \tparam Promise The promise type associated with the coroutine. Defaults to void.
+    /// \brief A promise type that can be used for coroutine that is a no-op
+    ///
+    /// A no-op coroutine behaves as if it does nothing other than control flow of a coroutine, suspends immediately
+    /// upon beginning and resumption, has no state such that destroying it is a no-op, and never reaches a final
+    /// suspended state if a coroutine handle refers to it.
+    TEMPEST_API struct noop_coroutine_promise
+    {
+    };
+} // namespace tempest
+
+// The ISO C++20 standard ([expr.await] §3.3) and compilers such as MSVC require symmetric transfer
+// await_suspend return types to be a specialization of std::coroutine_handle.
+namespace std
+{
+    using nullptr_t = decltype(nullptr);
+
     template <typename Promise = void>
     struct coroutine_handle;
 
     template <>
     struct coroutine_handle<void>
     {
-        constexpr coroutine_handle() noexcept : _frame_ptr(nullptr)
-        {
-        }
+        constexpr coroutine_handle() noexcept = default;
 
         constexpr coroutine_handle(nullptr_t nptr) noexcept : _frame_ptr(nptr)
         {
@@ -71,20 +83,12 @@ namespace tempest
 
         [[nodiscard]] auto done() const noexcept -> bool
         {
-#if defined(TEMPEST_PLATFORM_WINDOWS)
             return __builtin_coro_done(_frame_ptr);
-#elif defined(TEMPEST_PLATFORM_LINUX)
-            return __builtin_coro_done(_frame_ptr);
-#endif
         }
 
         auto resume() const -> void
         {
-#if defined(TEMPEST_PLATFORM_WINDOWS)
             __builtin_coro_resume(_frame_ptr);
-#elif defined(TEMPEST_PLATFORM_LINUX)
-            __builtin_coro_resume(_frame_ptr);
-#endif
         }
 
         auto operator()() const -> void
@@ -94,38 +98,48 @@ namespace tempest
 
         auto destroy() const -> void
         {
-#if defined(TEMPEST_PLATFORM_WINDOWS)
             __builtin_coro_destroy(_frame_ptr);
-#elif defined(TEMPEST_PLATFORM_LINUX)
-            __builtin_coro_destroy(_frame_ptr);
-#endif
+        }
+
+        friend constexpr auto operator==(const coroutine_handle& lhs, const coroutine_handle& rhs) noexcept -> bool
+        {
+            return lhs._frame_ptr == rhs._frame_ptr;
+        }
+
+        friend constexpr auto operator!=(const coroutine_handle& lhs, const coroutine_handle& rhs) noexcept -> bool
+        {
+            return lhs._frame_ptr != rhs._frame_ptr;
         }
 
       private:
-        void* _frame_ptr;
+        void* _frame_ptr = nullptr;
     };
-
-    [[nodiscard]] constexpr auto operator==(const coroutine_handle<void>& lhs,
-                                            const coroutine_handle<void>& rhs) noexcept -> bool
-    {
-        return lhs.address() == rhs.address();
-    }
-
-    [[nodiscard]] constexpr auto operator!=(const coroutine_handle<void>& lhs,
-                                            const coroutine_handle<void>& rhs) noexcept -> bool
-    {
-        return !(lhs == rhs);
-    }
 
     template <typename Promise>
     struct coroutine_handle
     {
-        constexpr coroutine_handle() noexcept : _frame_ptr(nullptr)
-        {
-        }
+        constexpr coroutine_handle() noexcept = default;
 
         constexpr coroutine_handle(nullptr_t nptr) noexcept : _frame_ptr(nptr)
         {
+        }
+
+        auto operator=(nullptr_t nptr) noexcept -> coroutine_handle&
+        {
+            _frame_ptr = nptr;
+            return *this;
+        }
+
+        [[nodiscard]] constexpr auto address() const noexcept -> void*
+        {
+            return _frame_ptr;
+        }
+
+        [[nodiscard]] static constexpr auto from_address(void* addr) noexcept -> coroutine_handle
+        {
+            auto coro_handle = coroutine_handle{};
+            coro_handle._frame_ptr = addr;
+            return coro_handle;
         }
 
         [[nodiscard]] static auto from_promise(Promise& prom) -> coroutine_handle
@@ -137,33 +151,9 @@ namespace tempest
             return coro_handle;
         }
 
-        auto operator=(nullptr_t nptr) noexcept -> coroutine_handle&
-        {
-            _frame_ptr = nptr;
-            return *this;
-        }
-
-        [[nodiscard]] constexpr auto address() const noexcept -> void*
-        {
-            return _frame_ptr;
-        }
-
-        [[nodiscard]] static constexpr auto from_address(void* addr) noexcept -> coroutine_handle
-        {
-            auto coro_handle = coroutine_handle{};
-            coro_handle._frame_ptr = addr;
-            return coro_handle;
-        }
-
         [[nodiscard]] constexpr operator coroutine_handle<>() const noexcept
         {
             return coroutine_handle<>::from_address(_frame_ptr);
-        }
-
-        [[nodiscard]] constexpr auto promise() const -> Promise&
-        {
-            auto* const prom_ptr = __builtin_coro_promise(_frame_ptr, alignof(Promise), false);
-            return *reinterpret_cast<Promise*>(prom_ptr);
         }
 
         [[nodiscard]] constexpr explicit operator bool() const noexcept
@@ -173,20 +163,12 @@ namespace tempest
 
         [[nodiscard]] auto done() const noexcept -> bool
         {
-#if defined(TEMPEST_PLATFORM_WINDOWS)
             return __builtin_coro_done(_frame_ptr);
-#elif defined(TEMPEST_PLATFORM_LINUX)
-            return __builtin_coro_done(_frame_ptr);
-#endif
         }
 
         auto resume() const -> void
         {
-#if defined(TEMPEST_PLATFORM_WINDOWS)
             __builtin_coro_resume(_frame_ptr);
-#elif defined(TEMPEST_PLATFORM_LINUX)
-            __builtin_coro_resume(_frame_ptr);
-#endif
         }
 
         auto operator()() const -> void
@@ -196,25 +178,30 @@ namespace tempest
 
         auto destroy() const -> void
         {
-#if defined(TEMPEST_PLATFORM_WINDOWS)
             __builtin_coro_destroy(_frame_ptr);
-#elif defined(TEMPEST_PLATFORM_LINUX)
-            __builtin_coro_destroy(_frame_ptr);
-#endif
+        }
+
+        [[nodiscard]] constexpr auto promise() const -> Promise&
+        {
+            auto* const prom_ptr = __builtin_coro_promise(_frame_ptr, alignof(Promise), false);
+            return *reinterpret_cast<Promise*>(prom_ptr);
+        }
+
+        friend constexpr auto operator==(const coroutine_handle& lhs, const coroutine_handle& rhs) noexcept -> bool
+        {
+            return lhs._frame_ptr == rhs._frame_ptr;
+        }
+
+        friend constexpr auto operator!=(const coroutine_handle& lhs, const coroutine_handle& rhs) noexcept -> bool
+        {
+            return lhs._frame_ptr != rhs._frame_ptr;
         }
 
       private:
-        void* _frame_ptr;
+        void* _frame_ptr = nullptr;
     };
 
-    /// \brief A promise type that can be used for coroutine that is a no-op
-    ///
-    /// A no-op coroutine behaves as if it does nothing other than control flow of a coroutine, suspends immediately
-    /// upon beginning and resumption, has no state such that destroying it is a no-op, and never reaches a final
-    /// suspended state if a coroutine handle refers to it.
-    TEMPEST_API struct noop_coroutine_promise
-    {
-    };
+    using noop_coroutine_promise = tempest::noop_coroutine_promise;
 
     template <>
     struct coroutine_handle<noop_coroutine_promise>
@@ -260,10 +247,23 @@ namespace tempest
             return _frame_ptr;
         }
 
-      private:
-        coroutine_handle() noexcept = default;
+        friend constexpr auto operator==(const coroutine_handle& lhs, const coroutine_handle& rhs) noexcept -> bool
+        {
+            return lhs._frame_ptr == rhs._frame_ptr;
+        }
 
-        void* _frame_ptr = __builtin_coro_noop();
+        friend constexpr auto operator!=(const coroutine_handle& lhs, const coroutine_handle& rhs) noexcept -> bool
+        {
+            return lhs._frame_ptr != rhs._frame_ptr;
+        }
+
+      private:
+        constexpr coroutine_handle() noexcept
+        {
+            _frame_ptr = __builtin_coro_noop();
+        }
+
+        void* _frame_ptr = nullptr;
     };
 
     using noop_coroutine_handle = coroutine_handle<noop_coroutine_promise>;
@@ -272,6 +272,16 @@ namespace tempest
     {
         return noop_coroutine_handle{};
     }
+} // namespace std
+
+namespace tempest
+{
+    template <typename Promise = void>
+    using coroutine_handle = std::coroutine_handle<Promise>;
+
+    using noop_coroutine_handle = std::noop_coroutine_handle;
+
+    using std::noop_coroutine;
 
     /// \brief A type that can be used to indicate that a coroutine should never suspend.
     TEMPEST_API struct suspend_never
@@ -308,20 +318,8 @@ namespace tempest
     };
 } // namespace tempest
 
-// To make the compiler magic happy, we provide an alias for the coroutine_handle<void> type in the std namespace.
-
 namespace std
 {
-    template <typename Promise = void>
-    struct coroutine_handle : tempest::coroutine_handle<Promise>
-    {
-    };
-
-    using noop_coroutine_promise = tempest::noop_coroutine_promise;
-    using noop_coroutine_handle = tempest::coroutine_handle<noop_coroutine_promise>;
-
-    using tempest::noop_coroutine;
-
     template <typename Result, typename... Args>
     struct coroutine_traits : tempest::coroutine_traits<Result, Args...>
     {

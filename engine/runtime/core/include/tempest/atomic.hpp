@@ -12,6 +12,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h> // Interlocked* functions
+#include <intrin.h>
 
 #ifdef __clang__
 #define DISABLE_DEPRECATION_WARNINGS                                                                                   \
@@ -725,6 +726,115 @@ namespace tempest
             }
 
             type storage;
+        };
+
+        template <typename T>
+        struct atomic_storage<T, 16>
+        {
+            using type = remove_cvref_t<T>;
+
+            void store(const type& value) noexcept
+            {
+                store(value, memory_order::seq_cst);
+            }
+
+            void store(const type& value, const memory_order order) noexcept
+            {
+                validate_memory_order(order);
+
+                __int64 desired[2];
+                memcpy(desired, &value, sizeof(type));
+
+                __int64 expected[2] = {0, 0};
+                auto* const dest = const_cast<volatile __int64*>(reinterpret_cast<const volatile __int64*>(&storage));
+                _InterlockedCompareExchange128(dest, 0, 0, expected);
+
+                while (!_InterlockedCompareExchange128(dest, desired[1], desired[0], expected))
+                {
+                }
+            }
+
+            [[nodiscard]] auto load(const memory_order order = memory_order::seq_cst) const noexcept -> type
+            {
+                validate_memory_order(order);
+
+                __int64 result[2] = {0, 0};
+                auto* const dest = const_cast<volatile __int64*>(reinterpret_cast<const volatile __int64*>(&storage));
+                _InterlockedCompareExchange128(dest, 0, 0, result);
+
+                type val{};
+                memcpy(&val, result, sizeof(type));
+                return val;
+            }
+
+            [[nodiscard]] auto exchange(const type& desired, const memory_order order = memory_order::seq_cst) noexcept -> type
+            {
+                validate_memory_order(order);
+
+                __int64 desired_arr[2];
+                memcpy(desired_arr, &desired, sizeof(type));
+
+                __int64 expected[2] = {0, 0};
+                auto* const dest = const_cast<volatile __int64*>(reinterpret_cast<const volatile __int64*>(&storage));
+                _InterlockedCompareExchange128(dest, 0, 0, expected);
+
+                while (!_InterlockedCompareExchange128(dest, desired_arr[1], desired_arr[0], expected))
+                {
+                }
+
+                type result{};
+                memcpy(&result, expected, sizeof(type));
+                return result;
+            }
+
+            [[nodiscard]] auto compare_exchange_strong(type& expected, const type desired,
+                                                       const memory_order order = memory_order::seq_cst) noexcept -> bool
+            {
+                validate_memory_order(order);
+
+                __int64 desired_arr[2];
+                memcpy(desired_arr, &desired, sizeof(type));
+
+                __int64 expected_arr[2];
+                memcpy(expected_arr, &expected, sizeof(type));
+
+                auto* const dest = const_cast<volatile __int64*>(reinterpret_cast<const volatile __int64*>(&storage));
+                if (_InterlockedCompareExchange128(dest, desired_arr[1], desired_arr[0], expected_arr))
+                {
+                    return true;
+                }
+
+                memcpy(&expected, expected_arr, sizeof(type));
+                return false;
+            }
+
+            auto wait(type expected, const memory_order order = memory_order::seq_cst) const noexcept -> void
+            {
+                validate_memory_order(order);
+
+                for (;;)
+                {
+                    const auto observed = load(order);
+                    if (memcmp(&observed, &expected, sizeof(type)) != 0)
+                    {
+                        return;
+                    }
+
+                    atomic_wait_direct(&storage, &expected, 8, INFINITE);
+                }
+            }
+
+            auto notify_one() noexcept -> void
+            {
+                WakeByAddressSingle(&storage);
+            }
+
+            auto notify_all() noexcept -> void
+            {
+                WakeByAddressAll(&storage);
+            }
+
+            alignas(16) type storage{};
         };
 #elif defined(__linux__) || defined(__APPLE__)
 

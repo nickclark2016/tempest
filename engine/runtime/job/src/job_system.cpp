@@ -19,15 +19,27 @@
 #include <windows.h>
 #endif
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 namespace tempest::job
 {
     namespace
     {
         inline auto cpu_pause() noexcept -> void
         {
-#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+#if defined(_MSC_VER)
+#if defined(_M_X64) || defined(_M_IX86)
+            _mm_pause();
+#elif defined(_M_ARM64) || defined(_M_ARM)
+            __yield();
+#else
+            this_thread::yield();
+#endif
+#elif defined(__x86_64__) || defined(__i386__)
             asm volatile("pause" ::: "memory");
-#elif defined(__aarch64__) || defined(_M_ARM64)
+#elif defined(__aarch64__) || defined(__arm__)
             asm volatile("yield" ::: "memory");
 #else
             this_thread::yield();
