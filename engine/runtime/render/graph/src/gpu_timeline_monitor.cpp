@@ -294,6 +294,11 @@ namespace tempest::render_graph
             // 3. Build unique sync points (zero-allocation stack buffer)
             _last_seen_control_val = _device.get_semaphore_value(_control_semaphore);
 
+            if (_stop_requested.load(memory_order::acquire))
+            {
+                break;
+            }
+
             if (!_pending_requests.empty())
             {
                 continue;
@@ -324,6 +329,11 @@ namespace tempest::render_graph
                 {
                     _wait_points_buffer.push_back(entry->sync_point);
                 }
+            }
+
+            if (_stop_requested.load(memory_order::acquire))
+            {
+                break;
             }
 
             // 4. Wait

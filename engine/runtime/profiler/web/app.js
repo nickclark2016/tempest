@@ -531,8 +531,10 @@
       }
     }
     updateDataBounds(cpuFrame);
-
     // 2. Process GPU tracks: route each GPU zone to its originating CPU frame_index
+    const affectedFrames = new Set();
+    affectedFrames.add(cpuFrame);
+
     if (frame.gpu_tracks && frame.gpu_tracks.length > 0) {
       for (const t of frame.gpu_tracks) {
         if (!t.zones || t.zones.length === 0) continue;
@@ -565,7 +567,7 @@
           if (!gtrack.zones.some(ez => ez.name === z.name && ez.start_ns === z.start_ns && ez.depth === z.depth)) {
             gtrack.zones.push(z);
           }
-          updateDataBounds(targetGpuFrame);
+          affectedFrames.add(targetGpuFrame);
         }
       }
     }
@@ -576,7 +578,11 @@
       state.frames.splice(0, state.frames.length - 1000);
     }
 
-    const frameMin = updateDataBounds(cpuFrame);
+    let frameMin = Infinity;
+    for (const f of affectedFrames) {
+      const minVal = updateDataBounds(f);
+      if (minVal < frameMin) frameMin = minVal;
+    }
     recalculateTracksAndMetrics();
 
     // Throttled stats recalculation to keep live 60 FPS silky smooth
@@ -610,13 +616,14 @@
     let cpuMax = -Infinity;
     let gpuMin = Infinity;
     let gpuMax = -Infinity;
-    let graphicsGpuMin = Infinity;
-    let graphicsGpuMax = -Infinity;
 
     if (frame.cpu_tracks) {
       for (const t of frame.cpu_tracks) {
         if (t.zones) {
           for (const z of t.zones) {
+            if (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== frame.frame_index) {
+              continue;
+            }
             if (z.start_ns < cpuMin) cpuMin = z.start_ns;
             if (z.end_ns > cpuMax) cpuMax = z.end_ns;
             if (z.start_ns < frameMin) frameMin = z.start_ns;
@@ -627,15 +634,13 @@
     }
     if (frame.gpu_tracks) {
       for (const t of frame.gpu_tracks) {
-        const isGraphics = !t.name || t.name.toLowerCase().includes('graphics') || frame.gpu_tracks.length === 1;
         if (t.zones) {
           for (const z of t.zones) {
+            if (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== frame.frame_index) {
+              continue;
+            }
             if (z.start_ns < gpuMin) gpuMin = z.start_ns;
             if (z.end_ns > gpuMax) gpuMax = z.end_ns;
-            if (isGraphics) {
-              if (z.start_ns < graphicsGpuMin) graphicsGpuMin = z.start_ns;
-              if (z.end_ns > graphicsGpuMax) graphicsGpuMax = z.end_ns;
-            }
             if (z.start_ns < frameMin) frameMin = z.start_ns;
             if (z.end_ns > frameMax) frameMax = z.end_ns;
           }
@@ -651,13 +656,11 @@
 
     frame.cpuStartNs = cpuMin !== Infinity ? cpuMin : null;
     frame.cpuEndNs = cpuMax !== -Infinity ? cpuMax : null;
-    frame.cpuDurationNs = (frame.cpuStartNs !== null && frame.cpuEndNs !== null) ? (frame.cpuEndNs - frame.cpuStartNs) : 0;
+    frame.cpuDurationNs = (frame.cpuStartNs !== null && frame.cpuEndNs !== null) ? Math.max(0, frame.cpuEndNs - frame.cpuStartNs) : 0;
 
-    const effectiveGpuMin = graphicsGpuMin !== Infinity ? graphicsGpuMin : gpuMin;
-    const effectiveGpuMax = graphicsGpuMax !== -Infinity ? graphicsGpuMax : gpuMax;
-    frame.gpuStartNs = effectiveGpuMin !== Infinity ? effectiveGpuMin : null;
-    frame.gpuEndNs = effectiveGpuMax !== -Infinity ? effectiveGpuMax : null;
-    frame.gpuDurationNs = (frame.gpuStartNs !== null && frame.gpuEndNs !== null) ? (frame.gpuEndNs - frame.gpuStartNs) : 0;
+    frame.gpuStartNs = gpuMin !== Infinity ? gpuMin : null;
+    frame.gpuEndNs = gpuMax !== -Infinity ? gpuMax : null;
+    frame.gpuDurationNs = (frame.gpuStartNs !== null && frame.gpuEndNs !== null) ? Math.max(0, frame.gpuEndNs - frame.gpuStartNs) : 0;
 
     if (frameMin !== Infinity && frameMax !== -Infinity) {
       if (state.baseTimeNs === null) {
@@ -2719,10 +2722,10 @@
     dom.popoutCpuVal.textContent = formatTime(frame.cpuDurationNs || 0);
     dom.popoutGpuVal.textContent = formatTime(frame.gpuDurationNs || 0);
 
-    const flightNs = (frame.gpuStartNs !== null && frame.cpuEndNs !== null && frame.gpuStartNs >= frame.cpuEndNs)
-      ? (frame.gpuStartNs - frame.cpuEndNs)
-      : ((frame.gpuStartNs !== null && frame.cpuStartNs !== null) ? Math.max(0, frame.gpuStartNs - frame.cpuStartNs) : 0);
-    dom.popoutFlightVal.textContent = (frame.gpuStartNs !== null && (frame.cpuEndNs !== null || frame.cpuStartNs !== null)) ? formatTime(flightNs) : 'N/A';
+    const flightNs = (frame.gpuStartNs !== null && frame.cpuStartNs !== null)
+      ? Math.max(0, frame.gpuStartNs - frame.cpuStartNs)
+      : 0;
+    dom.popoutFlightVal.textContent = (frame.gpuStartNs !== null && frame.cpuStartNs !== null) ? formatTime(flightNs) : 'N/A';
 
     const ftMs = (frame.cpuDurationNs && frame.cpuDurationNs > 0)
       ? (frame.cpuDurationNs / 1000000)
@@ -2738,7 +2741,7 @@
     // Sync selected zone from main view if it belongs to this frame
     if (state.selectedZone && (state.selectedZone.frame_index === frame.frame_index || findParentFrame(state.selectedZone)?.frame_index === frame.frame_index)) {
       popoutState.selectedZone = state.selectedZone;
-      updatePopoutInspector(popoutState.selectedZone);
+      selectPopoutZone(popoutState.selectedZone);
     } else {
       popoutState.selectedZone = null;
       dom.popoutInspectorPlaceholder.style.display = 'flex';

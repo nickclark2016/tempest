@@ -62,6 +62,9 @@ namespace tempest::profiler
         auto record_frame(float fps, float frame_time_ms, float cpu_time_ms, float gpu_time_ms,
                           const telemetry_frame& frame) -> void;
 
+        auto update_gpu_stats(uint64_t frame_index, float gpu_time_ms,
+                              span<const telemetry_track> gpu_tracks) -> bool;
+
         [[nodiscard]] auto get_rolling_fps() const noexcept -> float;
         [[nodiscard]] auto get_rolling_frame_time_ms() const noexcept -> float;
         [[nodiscard]] auto get_rolling_cpu_time_ms() const noexcept -> float;
@@ -78,10 +81,12 @@ namespace tempest::profiler
       private:
         struct frame_sample
         {
+            uint64_t frame_index{0};
             float fps{0.0f};
             float frame_time_ms{0.0f};
             float cpu_time_ms{0.0f};
             float gpu_time_ms{0.0f};
+            bool gpu_measured{false};
             vector<hot_zone_entry> cpu_zones{};
             vector<hot_zone_entry> gpu_zones{};
         };

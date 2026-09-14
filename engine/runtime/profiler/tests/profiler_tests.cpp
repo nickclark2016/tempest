@@ -2113,6 +2113,69 @@ TEST(profiler_tests, frame_stats_accumulator_rolling_hot_zones)
     EXPECT_NEAR(top_cpu[1].exclusive_duration_ms, 1.5, 1e-4);
 }
 
+/// @brief Verifies retrospective GPU metrics and hot zone attribution to past recording frames in frame_stats_accumulator.
+TEST(profiler_tests, frame_stats_accumulator_retrospective_gpu_attribution)
+{
+    // 1. Setup: Create accumulator with capacity 4 frames
+    auto acc = tempest::profiler::frame_stats_accumulator{4};
+
+    auto frame1 = tempest::profiler::telemetry_frame{.frame_index = 1};
+    auto frame2 = tempest::profiler::telemetry_frame{.frame_index = 2};
+    auto frame3 = tempest::profiler::telemetry_frame{.frame_index = 3};
+
+    // 2. Act: Record Frame 1 and Frame 2 with CPU metrics only (GPU work in flight)
+    acc.record_frame(60.0F, 16.6F, 4.0F, 0.0F, frame1);
+    acc.record_frame(60.0F, 16.6F, 5.0F, 0.0F, frame2);
+
+    // Initial rolling GPU time should be 0 since no frames have completed GPU measurements yet
+    EXPECT_FLOAT_EQ(acc.get_rolling_gpu_time_ms(), 0.0F);
+
+    // 3. Act: Frame 3 is submitted; queries for Frame 1 are harvested
+    acc.record_frame(60.0F, 16.6F, 6.0F, 0.0F, frame3);
+
+    auto gpu_tracks_frame1 = tempest::vector<tempest::profiler::telemetry_track>{};
+    auto gtrack1 = tempest::profiler::telemetry_track{
+        .track_id = 0x8000'0001ULL,
+        .name = "Graphics Queue",
+        .zones = {},
+    };
+    gtrack1.zones.push_back(tempest::profiler::telemetry_zone{
+        .name = "GBufferPass",
+        .start_ns = 0,
+        .end_ns = 3'500'000,
+        .depth = 1,
+        .frame_index = 1,
+    });
+    gtrack1.zones.push_back(tempest::profiler::telemetry_zone{
+        .name = "ShadowPass",
+        .start_ns = 3'500'000,
+        .end_ns = 5'500'000,
+        .depth = 1,
+        .frame_index = 1,
+    });
+    gpu_tracks_frame1.push_back(tempest::move(gtrack1));
+
+    // Retrospectively update Frame 1 with 5.5ms GPU time and hot zones
+    const auto updated = acc.update_gpu_stats(
+        1, 5.5F, tempest::span<const tempest::profiler::telemetry_track>{gpu_tracks_frame1.data(), gpu_tracks_frame1.size()});
+    EXPECT_TRUE(updated);
+
+    // 4. Assert: Rolling GPU average is computed only over measured frames (5.5ms) without in-flight 0ms bias
+    EXPECT_NEAR(acc.get_rolling_gpu_time_ms(), 5.5F, 1e-3);
+
+    // 5. Assert: Top GPU hot zones correctly attribute Frame 1's passes
+    const auto top_gpu = acc.get_top_gpu_hot_zones(5);
+    ASSERT_GE(top_gpu.size(), 2U);
+    EXPECT_EQ(top_gpu[0].name, "GBufferPass");
+    EXPECT_NEAR(top_gpu[0].exclusive_duration_ms, 3.5, 1e-3);
+    EXPECT_EQ(top_gpu[1].name, "ShadowPass");
+    EXPECT_NEAR(top_gpu[1].exclusive_duration_ms, 2.0, 1e-3);
+
+    // 6. Act & Assert: Attempting to update a non-existent frame returns false
+    const auto update_missing = acc.update_gpu_stats(999, 10.0F, {});
+    EXPECT_FALSE(update_missing);
+}
+
 /// @brief Verify RFC 6455 compliance: rejection of reserved bits, invalid opcodes, oversized/fragmented control frames,
 /// and unmasked client frames.
 TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)

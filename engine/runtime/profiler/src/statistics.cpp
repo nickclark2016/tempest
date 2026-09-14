@@ -319,16 +319,20 @@ namespace tempest::profiler
     auto frame_stats_accumulator::record_frame(float fps, float frame_time_ms, float cpu_time_ms, float gpu_time_ms,
                                                const telemetry_frame& frame) -> void
     {
+        const auto has_explicit_gpu_time = gpu_time_ms > 0.0F;
         auto cpu_hot = extract_hot_zones(span<const telemetry_track>{frame.cpu_tracks.data(), frame.cpu_tracks.size()},
                                          false, 100);
         auto gpu_hot =
             extract_hot_zones(span<const telemetry_track>{frame.gpu_tracks.data(), frame.gpu_tracks.size()}, true, 100);
+        const auto has_gpu_zones = !gpu_hot.empty();
 
         _history[_head] = frame_sample{
+            .frame_index = frame.frame_index,
             .fps = fps,
             .frame_time_ms = frame_time_ms,
             .cpu_time_ms = cpu_time_ms,
             .gpu_time_ms = gpu_time_ms,
+            .gpu_measured = has_explicit_gpu_time || has_gpu_zones,
             .cpu_zones = tempest::move(cpu_hot),
             .gpu_zones = tempest::move(gpu_hot),
         };
@@ -338,6 +342,22 @@ namespace tempest::profiler
         {
             ++_count;
         }
+    }
+
+    auto frame_stats_accumulator::update_gpu_stats(uint64_t frame_index, float gpu_time_ms,
+                                                   span<const telemetry_track> gpu_tracks) -> bool
+    {
+        for (auto i = size_t{0}; i < _count; ++i)
+        {
+            if (_history[i].frame_index == frame_index)
+            {
+                _history[i].gpu_time_ms = gpu_time_ms;
+                _history[i].gpu_measured = true;
+                _history[i].gpu_zones = extract_hot_zones(gpu_tracks, true, 100);
+                return true;
+            }
+        }
+        return false;
     }
 
     auto frame_stats_accumulator::get_rolling_fps() const noexcept -> float
@@ -389,11 +409,20 @@ namespace tempest::profiler
             return 0.0F;
         }
         auto sum = 0.0;
+        auto measured_count = size_t{0};
         for (auto i = size_t{0}; i < _count; ++i)
         {
-            sum += _history[i].gpu_time_ms;
+            if (_history[i].gpu_measured)
+            {
+                sum += _history[i].gpu_time_ms;
+                ++measured_count;
+            }
         }
-        return static_cast<float>(sum / static_cast<double>(_count));
+        if (measured_count == 0)
+        {
+            return 0.0F;
+        }
+        return static_cast<float>(sum / static_cast<double>(measured_count));
     }
 
     auto frame_stats_accumulator::get_top_cpu_hot_zones(size_t count) const -> vector<hot_zone_entry>
@@ -495,7 +524,21 @@ namespace tempest::profiler
             }
         }
 
-        const auto divisor = static_cast<double>(_count);
+        auto measured_count = size_t{0};
+        for (auto i = size_t{0}; i < _count; ++i)
+        {
+            if (_history[i].gpu_measured)
+            {
+                ++measured_count;
+            }
+        }
+
+        if (measured_count == 0)
+        {
+            return {};
+        }
+
+        const auto divisor = static_cast<double>(measured_count);
         for (auto& entry : aggregated)
         {
             entry.exclusive_duration_ms /= divisor;

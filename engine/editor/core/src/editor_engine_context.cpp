@@ -1,6 +1,7 @@
 #include <tempest/editor_engine_context.hpp>
 
 #include <tempest/array.hpp>
+#include <tempest/flat_unordered_map.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/move.hpp>
 #include <tempest/optional.hpp>
@@ -267,22 +268,63 @@ namespace tempest::editor
         auto capture = profiler::create_capture_from_session(_profiler_session);
         auto telemetry = profiler::create_telemetry_frame_from_capture(current_frame_index, capture);
 
-        auto gpu_time_ns = uint64_t{0};
+        auto gpu_time_ns_by_frame = flat_unordered_map<uint64_t, uint64_t>{};
+        auto gpu_tracks_by_frame = flat_unordered_map<uint64_t, vector<profiler::telemetry_track>>{};
+
         for (const auto& gtrack : telemetry.gpu_tracks)
         {
             const auto z_span = span<const profiler::telemetry_zone>{gtrack.zones.data(), gtrack.zones.size()};
             const auto exclusives = profiler::compute_exclusive_durations_telemetry(z_span);
-            for (const auto& ez : exclusives)
+            for (auto zi = size_t{0}; zi < exclusives.size(); ++zi)
             {
-                gpu_time_ns += ez.exclusive_duration_ns;
+                const auto& ez = exclusives[zi];
+                const auto& orig_zone = gtrack.zones[zi];
+                const auto z_frame_idx = orig_zone.frame_index;
+                gpu_time_ns_by_frame[z_frame_idx] += ez.exclusive_duration_ns;
+            }
+
+            for (const auto& z : gtrack.zones)
+            {
+                auto& frame_tracks = gpu_tracks_by_frame[z.frame_index];
+                auto* existing_tr = static_cast<profiler::telemetry_track*>(nullptr);
+                for (auto& tr : frame_tracks)
+                {
+                    if (tr.track_id == gtrack.track_id)
+                    {
+                        existing_tr = &tr;
+                        break;
+                    }
+                }
+                if (existing_tr == nullptr)
+                {
+                    frame_tracks.push_back(profiler::telemetry_track{
+                        .track_id = gtrack.track_id,
+                        .name = gtrack.name,
+                        .zones = {},
+                    });
+                    existing_tr = &frame_tracks.back();
+                }
+                existing_tr->zones.push_back(z);
             }
         }
-        _last_gpu_time_ms = static_cast<float>(gpu_time_ns) / 1000000.0F;
 
         const auto frame_ms = _delta_frame_time.count() > 0.0f ? (_delta_frame_time.count() * 1000.0f) : 16.67f;
         const auto fps = frame_ms > 0.0F ? (1000.0F / frame_ms) : 60.0F;
 
-        _stats_accumulator.record_frame(fps, frame_ms, _last_cpu_time_ms, _last_gpu_time_ms, telemetry);
+        // Record current frame CPU metrics; GPU metrics for current_frame_index remain in flight
+        _stats_accumulator.record_frame(fps, frame_ms, _last_cpu_time_ms, 0.0F, telemetry);
+
+        // Retrospectively attribute harvested GPU metrics to their respective recording frames
+        for (const auto& [target_frame_idx, target_gpu_time_ns] : gpu_time_ns_by_frame)
+        {
+            const auto target_gpu_ms = static_cast<float>(target_gpu_time_ns) / 1000000.0F;
+            _last_gpu_time_ms = target_gpu_ms;
+
+            const auto& frame_tracks = gpu_tracks_by_frame[target_frame_idx];
+            _stats_accumulator.update_gpu_stats(
+                target_frame_idx, target_gpu_ms,
+                span<const profiler::telemetry_track>{frame_tracks.data(), frame_tracks.size()});
+        }
 
         _last_telemetry_frame = tempest::move(telemetry);
 
