@@ -1,5 +1,6 @@
 #include <tempest/job/async_event.hpp>
 #include <tempest/job/job_system.hpp>
+#include <tempest/thread.hpp>
 
 namespace tempest::job
 {
@@ -49,7 +50,7 @@ namespace tempest::job
     auto async_event::reset() noexcept -> void
     {
         auto* expected_sentinel = _signaled_sentinel();
-        [[maybe_unused]] const auto _ =
+        [[maybe_unused]] const auto old_value =
             _waiters_in.compare_exchange_strong(expected_sentinel, nullptr, memory_order::acq_rel, memory_order::relaxed);
     }
 
@@ -60,6 +61,8 @@ namespace tempest::job
 
     auto async_event::set() noexcept -> void
     {
+        auto* const sys = _sys;
+
         if (_mode == event_reset_mode::manual)
         {
             auto* const old_head = _waiters_in.exchange(_signaled_sentinel(), memory_order::acq_rel);
@@ -72,7 +75,14 @@ namespace tempest::job
             while (current_waiter != nullptr)
             {
                 auto* const next_waiter = current_waiter->next;
-                _resume(current_waiter->handle);
+                if (sys != nullptr)
+                {
+                    sys->schedule(current_waiter->handle);
+                }
+                else
+                {
+                    current_waiter->handle.resume();
+                }
                 current_waiter = next_waiter;
             }
             return;
@@ -80,20 +90,38 @@ namespace tempest::job
 
         // Auto-reset mode:
         auto to_resume = coroutine_handle<>{nullptr};
+        while (true)
         {
-            while (_claim.exchange(true, memory_order::acquire))
+            for (auto spin = 0U; _claim.exchange(true, memory_order::acquire); ++spin)
             {
-                cpu_pause();
+                constexpr auto spin_threshold = 16U;
+
+                if (spin < spin_threshold)
+                {
+                    cpu_pause();
+                }
+                else
+                {
+                    tempest::this_thread::yield();
+                }
             }
 
             if (_waiters_out == nullptr)
             {
+                if (_waiters_in.load(memory_order::acquire) == _signaled_sentinel())
+                {
+                    _claim.store(false, memory_order::release);
+                    return;
+                }
+
                 auto* const incoming = _waiters_in.drain();
                 if (incoming == _signaled_sentinel())
                 {
                     _waiters_in.store(_signaled_sentinel(), memory_order::release);
+                    _claim.store(false, memory_order::release);
+                    return;
                 }
-                else if (incoming != nullptr)
+                if (incoming != nullptr)
                 {
                     _waiters_out = intrusive_mpsc_stack<async_event_waiter>::reverse(incoming);
                 }
@@ -105,17 +133,41 @@ namespace tempest::job
                 _waiters_out = waiter->next;
                 to_resume = waiter->handle;
                 _claim.store(false, memory_order::release);
+                break;
             }
-            else
+
+            // No waiters in _waiters_out and ingress was empty.
+            // Release claim BEFORE publishing the sentinel, because the instant
+            // _signaled_sentinel() is published, a consumer can wake up and destroy `this`.
+            _claim.store(false, memory_order::release);
+
+            auto* expected = static_cast<async_event_waiter*>(nullptr);
+            if (_waiters_in.compare_exchange_strong(expected, _signaled_sentinel(), memory_order::acq_rel,
+                                                    memory_order::acquire))
             {
-                _claim.store(false, memory_order::release);
-                _waiters_in.store(_signaled_sentinel(), memory_order::release);
+                // Successfully signaled. `this` might be deleted by consumer immediately.
+                return;
             }
+
+            if (expected == _signaled_sentinel())
+            {
+                // Already signaled by another concurrent set().
+                return;
+            }
+
+            // A waiter arrived during the window! Loop to re-acquire claim and pop it.
         }
 
         if (to_resume)
         {
-            _resume(to_resume);
+            if (sys != nullptr)
+            {
+                sys->schedule(to_resume);
+            }
+            else
+            {
+                to_resume.resume();
+            }
         }
     }
 

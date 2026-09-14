@@ -27,13 +27,10 @@ namespace tempest::render_graph
             auto expected_state = wait_state::pending;
             if (_entry.state.compare_exchange_strong(expected_state, wait_state::cancelled, memory_order::acq_rel))
             {
-                if (!_monitor->is_stopped())
+                _monitor->wake();
+                while (_entry.state.load(memory_order::acquire) != wait_state::retired)
                 {
-                    _monitor->wake();
-                    while (_entry.state.load(memory_order::acquire) != wait_state::retired && !_monitor->is_stopped())
-                    {
-                        tempest::this_thread::yield();
-                    }
+                    tempest::this_thread::yield();
                 }
             }
         }
@@ -93,6 +90,7 @@ namespace tempest::render_graph
     gpu_timeline_monitor::gpu_timeline_monitor(rhi::device& dev, job::job_system& jobs, logger& log)
         : _device{dev}, _jobs{jobs}, _log{log}
     {
+        _wait_points_buffer.reserve(32);
         _control_semaphore = _device.create_timeline_semaphore();
         _thread = thread{[this]() { _monitor_loop(); }};
     }
@@ -139,6 +137,20 @@ namespace tempest::render_graph
         }
 
         _pending_requests.push(entry);
+
+        if (_stop_requested.load(memory_order::acquire))
+        {
+            auto expected_state = wait_state::pending;
+            if (entry.state.compare_exchange_strong(expected_state, wait_state::completed, memory_order::acq_rel))
+            {
+                if (entry.error_out != nullptr)
+                {
+                    *entry.error_out = gpu_sync_error::cancelled;
+                }
+                _jobs.schedule(entry.handle, entry.priority, entry.affinity);
+            }
+            return;
+        }
 
         wake();
     }
@@ -217,12 +229,11 @@ namespace tempest::render_graph
                 pending_head = next_node;
             }
 
-            // 2. Check completions
-            auto remaining_entries = vector<wait_entry*>{};
-            remaining_entries.reserve(_active_entries.size());
-
-            for (auto* entry : _active_entries)
+            // 2. Check completions (zero-allocation in-place compaction)
+            auto write_index = size_t{0};
+            for (size_t read_index = 0; read_index < _active_entries.size(); ++read_index)
             {
+                auto* entry = _active_entries[read_index];
                 if (entry->state.load(memory_order::acquire) == wait_state::cancelled)
                 {
                     entry->state.store(wait_state::retired, memory_order::release);
@@ -248,17 +259,17 @@ namespace tempest::render_graph
                 }
                 else
                 {
-                    remaining_entries.push_back(entry);
+                    _active_entries[write_index++] = entry;
                 }
             }
-            _active_entries = tempest::move(remaining_entries);
+            _active_entries.resize(write_index);
 
             if (_stop_requested.load(memory_order::acquire))
             {
                 break;
             }
 
-            // 3. Build unique sync points
+            // 3. Build unique sync points (zero-allocation stack buffer)
             _last_seen_control_val = _device.get_semaphore_value(_control_semaphore);
 
             if (!_pending_requests.empty())
@@ -266,8 +277,8 @@ namespace tempest::render_graph
                 continue;
             }
 
-            auto wait_points = vector<rhi::host_sync_point>{};
-            wait_points.push_back(rhi::host_sync_point{
+            _wait_points_buffer.clear();
+            _wait_points_buffer.push_back(rhi::host_sync_point{
                 .semaphore = _control_semaphore,
                 .value = _last_seen_control_val + 1,
             });
@@ -275,7 +286,7 @@ namespace tempest::render_graph
             for (const auto* entry : _active_entries)
             {
                 auto found = false;
-                for (auto& wp : wait_points)
+                for (auto& wp : _wait_points_buffer)
                 {
                     if (wp.semaphore == entry->sync_point.semaphore)
                     {
@@ -289,14 +300,14 @@ namespace tempest::render_graph
                 }
                 if (!found)
                 {
-                    wait_points.push_back(entry->sync_point);
+                    _wait_points_buffer.push_back(entry->sync_point);
                 }
             }
 
             // 4. Wait
             constexpr auto wait_timeout_ns = uint64_t{50'000'000ULL}; // 50 ms
             const auto status = _device.wait_semaphores(
-                span<const rhi::host_sync_point>{wait_points.data(), wait_points.size()},
+                span<const rhi::host_sync_point>{_wait_points_buffer.data(), _wait_points_buffer.size()},
                 wait_timeout_ns,
                 /*wait_any=*/true
             );

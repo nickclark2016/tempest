@@ -69,6 +69,7 @@ namespace tempest::render_graph
 
         intrusive_mpsc_stack<wait_entry> _pending_requests{};
         vector<wait_entry*> _active_entries{};
+        vector<rhi::host_sync_point> _wait_points_buffer{};
     };
 } // namespace tempest::render_graph
 

@@ -198,4 +198,82 @@ namespace tempest::job::tests
         // 3. Assert: Counter accurately reflects all critical section executions
         EXPECT_EQ(counter, 2 * loop_count);
     }
+
+    /// @brief Verifies that an async_mutex allocated dynamically can be unlocked and immediately destroyed
+    ///        by the awakened coroutine without memory corruption or use-after-free under TSan.
+    TEST(async_mutex_test, destruct_immediately_on_unlock)
+    {
+        // 1. Setup: 100 iterations of allocating a mutex, suspending a waiter, and unlocking it
+        for (auto iteration = 0; iteration < 100; ++iteration)
+        {
+            auto* mtx = new async_mutex{};
+            EXPECT_TRUE(mtx->try_lock()); // Manually hold the lock
+
+            auto done_flag = atomic<bool>{false};
+
+            auto waiter_coroutine = [&mtx, &done_flag]() -> task<void> {
+                co_await mtx->lock();
+                delete mtx;
+                mtx = nullptr;
+                done_flag.store(true, memory_order::release);
+                co_return;
+            };
+
+            auto waiter_task = waiter_coroutine();
+            waiter_task.resume(); // Suspends because lock is held
+            EXPECT_FALSE(done_flag.load(memory_order::acquire));
+
+            // 2. Act: Unlock from another thread
+            auto unlocking_thread = tempest::thread([mtx]() {
+                mtx->unlock();
+            });
+            unlocking_thread.join();
+
+            // 3. Assert: Mutex was acquired, destroyed, and task completed cleanly
+            EXPECT_TRUE(done_flag.load(memory_order::acquire));
+            EXPECT_EQ(mtx, nullptr);
+        }
+    }
+
+    /// @brief Stresses high-concurrency race windows between lock acquisition, suspension, and release.
+    TEST(async_mutex_test, high_concurrency_race_window_stress)
+    {
+        // 1. Setup: 8 threads repeatedly acquiring and releasing the lock
+        auto mtx = async_mutex{};
+        constexpr auto thread_count = 8;
+        constexpr auto iterations_per_thread = 500;
+        auto shared_counter = int{0};
+
+        auto worker_coroutine = [&mtx, &shared_counter]() -> task<void> {
+            for (auto step = 0; step < iterations_per_thread; ++step)
+            {
+                auto guard = co_await mtx.scoped_lock();
+                ++shared_counter;
+            }
+            co_return;
+        };
+
+        auto threads = vector<tempest::thread>{};
+        threads.reserve(thread_count);
+
+        auto tasks = vector<task<void>>{};
+        tasks.reserve(thread_count);
+
+        // 2. Act
+        for (auto thread_index = 0; thread_index < thread_count; ++thread_index)
+        {
+            tasks.push_back(worker_coroutine());
+            threads.push_back(tempest::thread([&tasks, thread_index]() {
+                tasks[static_cast<size_t>(thread_index)].resume();
+            }));
+        }
+
+        for (auto& thread : threads)
+        {
+            thread.join();
+        }
+
+        // 3. Assert: Exclusivity was strictly maintained without lost wakeups or dropped updates
+        EXPECT_EQ(shared_counter, thread_count * iterations_per_thread);
+    }
 } // namespace tempest::job::tests

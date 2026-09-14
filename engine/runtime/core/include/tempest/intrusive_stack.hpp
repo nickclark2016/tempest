@@ -60,35 +60,35 @@ namespace tempest
 
         /// @brief Atomically exchanges the head pointer with a new value.
         /// @param desired Pointer to set as new head.
-        /// @param mo Memory order for exchange.
+        /// @param order Memory order for exchange.
         /// @return Former top node of the stack.
-        auto exchange(T* desired, memory_order mo = memory_order::acq_rel) noexcept -> T*
+        auto exchange(T* desired, memory_order order = memory_order::acq_rel) noexcept -> T*
         {
-            return _head.exchange(desired, mo);
+            return _head.exchange(desired, order);
         }
 
         /// @brief Checks whether the stack is currently empty.
-        /// @param mo Memory order for loading the head pointer.
+        /// @param order Memory order for loading the head pointer.
         /// @return True if empty, false otherwise.
-        [[nodiscard]] auto empty(memory_order mo = memory_order::relaxed) const noexcept -> bool
+        [[nodiscard]] auto empty(memory_order order = memory_order::relaxed) const noexcept -> bool
         {
-            return _head.load(mo) == nullptr;
+            return _head.load(order) == nullptr;
         }
 
         /// @brief Loads the head pointer.
-        /// @param mo Memory order for loading the head pointer.
+        /// @param order Memory order for loading the head pointer.
         /// @return Current head pointer.
-        [[nodiscard]] auto load(memory_order mo = memory_order::acquire) const noexcept -> T*
+        [[nodiscard]] auto load(memory_order order = memory_order::acquire) const noexcept -> T*
         {
-            return _head.load(mo);
+            return _head.load(order);
         }
 
         /// @brief Stores a new head pointer.
         /// @param desired New head pointer.
-        /// @param mo Memory order for store.
-        auto store(T* desired, memory_order mo = memory_order::release) noexcept -> void
+        /// @param order Memory order for store.
+        auto store(T* desired, memory_order order = memory_order::release) noexcept -> void
         {
-            _head.store(desired, mo);
+            _head.store(desired, order);
         }
 
         /// @brief Compares and exchanges the head pointer weakly.

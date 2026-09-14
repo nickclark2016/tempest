@@ -114,10 +114,21 @@ namespace tempest::job
 
         auto _enqueue_waiter(async_mutex_waiter* waiter, coroutine_handle<> hnd) noexcept -> bool;
 
-        atomic<uint32_t> _locked = 0U;
+        async_mutex_waiter _sentinel{};
+
+        [[nodiscard]] auto _locked_sentinel() noexcept -> async_mutex_waiter*
+        {
+            return &_sentinel;
+        }
+
+        [[nodiscard]] auto _locked_sentinel() const noexcept -> const async_mutex_waiter*
+        {
+            return &_sentinel;
+        }
+
         intrusive_mpsc_stack<async_mutex_waiter> _waiters_in;
-        async_mutex_waiter* _waiters_out = nullptr;
-        job_system* _sys = nullptr;
+        async_mutex_waiter* _waiters_out{nullptr};
+        job_system* _sys{nullptr};
 
         auto _resume(coroutine_handle<> hnd) noexcept -> void;
     };

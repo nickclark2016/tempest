@@ -48,15 +48,33 @@ namespace tempest::job
 
     auto async_mutex::try_lock() noexcept -> bool
     {
-        uint32_t expected = 0;
-        return _locked.compare_exchange_strong(expected, 1, memory_order::acquire);
+        auto* expected = static_cast<async_mutex_waiter*>(nullptr);
+        return _waiters_in.compare_exchange_strong(expected, _locked_sentinel(), memory_order::acquire,
+                                                   memory_order::relaxed);
     }
 
     auto async_mutex::_enqueue_waiter(async_mutex_waiter* waiter, coroutine_handle<> hnd) noexcept -> bool
     {
         waiter->handle = hnd;
-        _waiters_in.push(non_null{*waiter});
-        return true;
+        auto* old_head = _waiters_in.load(memory_order::acquire);
+        while (true)
+        {
+            if (old_head == nullptr)
+            {
+                if (_waiters_in.compare_exchange_weak(old_head, _locked_sentinel(), memory_order::acquire,
+                                                      memory_order::acquire))
+                {
+                    return false;
+                }
+                continue;
+            }
+
+            waiter->next = (old_head == _locked_sentinel()) ? nullptr : old_head;
+            if (_waiters_in.compare_exchange_weak(old_head, waiter, memory_order::release, memory_order::acquire))
+            {
+                return true;
+            }
+        }
     }
 
     auto async_mutex::lock_awaiter::await_suspend(coroutine_handle<> hnd) noexcept -> bool
@@ -81,24 +99,28 @@ namespace tempest::job
             return;
         }
 
-        // 2. Transfer incoming waiters to _waiters_out and reverse (LIFO -> FIFO)
-        auto* const incoming = _waiters_in.drain();
-        if (incoming != nullptr)
+        // 2. Transfer incoming waiters to _waiters_out
+        auto* current_head = _waiters_in.load(memory_order::acquire);
+        while (true)
         {
-            auto* const reversed = intrusive_mpsc_stack<async_mutex_waiter>::reverse(incoming);
-            _waiters_out = reversed->next;
-            _resume(reversed->handle);
-            return;
-        }
+            if (current_head == _locked_sentinel())
+            {
+                if (_waiters_in.compare_exchange_weak(current_head, nullptr, memory_order::release,
+                                                      memory_order::acquire))
+                {
+                    return;
+                }
+                continue;
+            }
 
-        // 3. No waiters: release lock
-        _locked.store(0, memory_order::seq_cst);
-
-        // Double-check race where a waiter enqueued right before we stored 0
-        if (!_waiters_in.empty(memory_order::seq_cst) && try_lock())
-        {
-            // Recurse to pop that waiter
-            unlock();
+            if (_waiters_in.compare_exchange_weak(current_head, _locked_sentinel(), memory_order::acq_rel,
+                                                  memory_order::acquire))
+            {
+                auto* const reversed = intrusive_mpsc_stack<async_mutex_waiter>::reverse(current_head);
+                _waiters_out = reversed->next;
+                _resume(reversed->handle);
+                return;
+            }
         }
     }
 } // namespace tempest::job

@@ -799,3 +799,103 @@ TEST(gpu_timeline_monitor_test, frame_destruction_cancels_waiter)
     SUCCEED();
 }
 
+/// @brief Verify that registering a wait on an already stopped monitor completes immediately with cancelled status.
+TEST(gpu_timeline_monitor_test, register_wait_after_stop_immediate_completion)
+{
+    // 1. Setup
+    auto dev = mock_timeline_device{};
+    auto log = logger{};
+    auto prof = profiler::profiler_session{false};
+    auto config = job::job_system_config{
+        .performance_worker_count = 2,
+        .efficiency_worker_count = 0,
+    };
+    auto js = job::job_system{log, prof, config};
+    auto monitor = gpu_timeline_monitor{dev, js, log};
+
+    const auto sem = dev.create_timeline_semaphore();
+
+    // 2. Act: Stop the monitor before registering waits
+    monitor.stop();
+
+    auto error_received = gpu_sync_error::none;
+    auto coro = [&]() -> job::task<void> {
+        auto wait_res = co_await monitor.wait(rhi::host_sync_point{.semaphore = sem, .value = 10});
+        if (!wait_res)
+        {
+            error_received = wait_res.error();
+        }
+        co_return;
+    };
+
+    auto t = coro();
+    t.resume();
+    js.wait_idle();
+
+    // 3. Assert: Immediately received cancelled error without hanging
+    EXPECT_EQ(error_received, gpu_sync_error::cancelled);
+}
+
+/// @brief Verify that more than 32 unique semaphores can be waited on concurrently without dropping any.
+TEST(gpu_timeline_monitor_test, large_unique_semaphore_count_handling)
+{
+    // 1. Setup
+    auto dev = mock_timeline_device{};
+    auto log = logger{};
+    auto prof = profiler::profiler_session{false};
+    auto config = job::job_system_config{
+        .performance_worker_count = 4,
+        .efficiency_worker_count = 0,
+    };
+    auto js = job::job_system{log, prof, config};
+    auto monitor = gpu_timeline_monitor{dev, js, log};
+
+    constexpr auto sem_count = size_t{48};
+    auto sems = vector<rhi::semaphore_handle>{};
+    sems.reserve(sem_count);
+    for (size_t index = 0; index < sem_count; ++index)
+    {
+        sems.push_back(dev.create_timeline_semaphore());
+    }
+
+    auto completed_count = atomic<size_t>{0};
+
+    // 2. Act: Launch 48 tasks waiting on 48 distinct semaphores
+    auto tasks = vector<job::task<void>>{};
+    tasks.reserve(sem_count);
+
+    for (size_t index = 0; index < sem_count; ++index)
+    {
+        tasks.push_back(js.async([&, index]() -> job::task<void> {
+            auto wait_res = co_await monitor.wait(rhi::host_sync_point{.semaphore = sems[index], .value = 1});
+            if (wait_res)
+            {
+                completed_count.fetch_add(1, memory_order::release);
+            }
+            co_return;
+        }));
+    }
+
+    this_thread::sleep_for(chrono::milliseconds(20));
+    EXPECT_EQ(completed_count.load(memory_order::acquire), 0U);
+
+    // Signal all 48 semaphores
+    for (size_t index = 0; index < sem_count; ++index)
+    {
+        dev.signal_semaphore(sems[index], 1);
+    }
+    monitor.wake();
+
+    const auto deadline = chrono::steady_clock::now() + chrono::seconds(3);
+    while (completed_count.load(memory_order::acquire) < sem_count && chrono::steady_clock::now() < deadline)
+    {
+        this_thread::sleep_for(chrono::milliseconds(1));
+    }
+
+    js.wait_idle();
+
+    // 3. Assert: All 48 unique semaphores woke up successfully without truncation
+    EXPECT_EQ(completed_count.load(memory_order::acquire), sem_count);
+}
+
+

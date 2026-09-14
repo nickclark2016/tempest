@@ -85,7 +85,7 @@ namespace tempest::job
 
         event_reset_mode _mode{event_reset_mode::auto_reset};
 
-        intrusive_mpsc_stack<async_event_waiter> _waiters_in{};
+        intrusive_mpsc_stack<async_event_waiter> _waiters_in;
         async_event_waiter* _waiters_out{nullptr};
         atomic<bool> _claim{false};
 
