@@ -54,3 +54,12 @@ When implementing programmable vertex pulling shaders with Slang and Vulkan Buff
 * **Pipeline Stages for Start Timestamps**: Do **NOT** use `pipeline_stage::top_of_pipe` for start timestamps in multi-pass command buffers. `TOP_OF_PIPE` triggers as soon as the GPU command processor parses the command packet, causing all subsequent passes in a queue batch to share identical start timestamps and accumulate prior passes' execution durations.
 * **Record After Barriers**: Record start timestamps using `pipeline_stage::bottom_of_pipe` (or `pipeline_stage::all_commands`) **after** pre-pass pipeline barriers so start timestamps reflect when preceding GPU execution and barrier flushes finish.
 * **Query Exact Written Count**: When reading back query results via `get_query_pool_results`, only query the exact count of queries written (`recorded_timestamp_count`), never the full query pool capacity (`timestamp_count`). Requesting unwritten queries in the pool range causes `vkGetQueryPoolResults` without `VK_QUERY_RESULT_WAIT_BIT` to return `VK_NOT_READY` and silently drop query readbacks.
+
+---
+
+## 8. Vulkan Debug Utils & Object Naming Synchronization
+* **Host Synchronization Requirement**: Per the Vulkan specification for `vkSetDebugUtilsObjectNameEXT`, host access to `pNameInfo->objectHandle` **must be externally synchronized**.
+* **Prohibition in Concurrent Command Recording**: Never call `dev.set_debug_name()` or `set_object_name()` inside concurrent pass-recording worker tasks (such as render graph `record_task`). Concurrent calls on shared handles cause data races in Vulkan Validation Layers (VVL) and driver state tables (`nvoglv64.dll`), leading to access violations.
+* **Sequential Naming on Creation & Reuse**:
+  - Name newly allocated textures and buffers sequentially on the host/main thread upon initial creation (`dev.create_texture`, `dev.create_buffer`).
+  - When the transient allocator reuses or aliases pooled physical resources for a registered resource with a different name, update the debug name sequentially during `transient_allocator::allocate()` on the main thread prior to dispatching pass recording tasks.

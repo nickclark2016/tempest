@@ -57,6 +57,7 @@ Deep-dive specifications, post-mortem rationales, and extended code recipes are 
 - **Transient Resource Eviction**: Declare surface-dependent transient targets with `rg_texture_size::surface_relative(...)`. Evict mismatched targets on their next idle flight cycle during resize; never clear active descriptor tables during resize callbacks while UI painting is in progress. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#3-render-graph-barrier-solver--layout-tracking))
 - **UI Offscreen Sampling Barrier**: Offscreen render targets sampled by UI passes must transition from color write to fragment read before recording the UI pass. Update UI logic (`on_paint()`) before 3D scene rendering. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#4-pipeline-barriers--ui-sampling-synchronization))
 - **Mipmap Pre-Blit Barrier**: Transition uploaded mip levels from `pipeline_stage::copy` write to `pipeline_stage::blit` read before issuing `blit_texture`. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#4-pipeline-barriers--ui-sampling-synchronization))
+- **Object Naming Synchronization**: `vkSetDebugUtilsObjectNameEXT` requires external host synchronization on `pNameInfo->objectHandle`. Never call `set_debug_name()` in parallel pass-recording worker tasks; update names sequentially on the main thread during creation or transient pool reuse. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/rendering_vulkan.md#8-vulkan-debug-utils--object-naming-synchronization))
 
 ### Profiler, Telemetry & Network
 - **`scoped_zone` Scope**: Encapsulate top-level CPU profiling zones (`profiler::scoped_zone`) in an explicit nested scope `{ ... }` that terminates *before* invoking `collect_and_broadcast_telemetry()` so frame durations commit to frame $N$, not $N+1$. ([Details](file:///home/ntc0531/repos/tempest/.agents/references/profiler_telemetry.md#1-frame-level-scoped_zone-raii-scope-before-telemetry-capture))
@@ -104,6 +105,9 @@ Whenever modifying the job system, thread pool, work queues, coroutines, or sync
 
 ### 7. Build & Test Commands Reference
 - **Premake**: `premake5 ninja --cc=clang --shared-engine --shell=posix --rhi-vulkan`
-- **Build Tests**: `ninja -C build/ninja rhi-vk-tests render-graph-tests`
-- **Run Tests**: `bin/Debug/windows-clang/rhi-vk-tests.exe` (or Linux binary path)
+- **Build with Ninja on Windows**: Ninja build files contain POSIX shell pre/post-build steps (`sh -c 'mkdir -p ...'`). On Windows, always invoke Ninja via Git Bash with a login shell:
+  `& "C:\Program Files\Git\bin\bash.exe" -l -c "ninja -C build/ninja <target>"`
+  *(Do NOT use plain `ninja` from PowerShell, and do NOT invoke WSL `bash.exe` which lacks Windows LLVM/Clang in PATH).*
+- **Native Commands**: Run `git` commands (`git status`, `git diff`), test executables, and premake directly in PowerShell without Git Bash.
+- **Run Tests**: `bin/Debug/windows-clang/render-graph-tests.exe` (or `rhi-vk-tests.exe`)
 - **Commit Messages**: Single line under 80 characters.
