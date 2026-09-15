@@ -1,12 +1,13 @@
 #ifndef tempest_core_atomic_hpp
 #define tempest_core_atomic_hpp
 
-#include <climits>
 #include <tempest/api.hpp>
+#include <tempest/array.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/enum.hpp>
 #include <tempest/int.hpp>
 #include <tempest/type_traits.hpp>
+#include <tempest/utility.hpp>
 
 #if defined(TEMPEST_PLATFORM_WINDOWS)
 #define WIN32_LEAN_AND_MEAN
@@ -729,7 +730,7 @@ namespace tempest
         };
 
         template <typename T>
-        struct atomic_storage<T, 16>
+        struct atomic_storage<T, 16> // NOLINT - We require cx16 CPU instruction support, so 128-bit atomics are always lockfree
         {
             using type = remove_cvref_t<T>;
 
@@ -742,14 +743,14 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                __int64 desired[2];
-                memcpy(desired, &value, sizeof(type));
+                auto desired = tempest::array<int64_t, 2>{};
+                memcpy(desired.data(), &value, sizeof(type));
 
-                __int64 expected[2] = {0, 0};
-                auto* const dest = const_cast<volatile __int64*>(reinterpret_cast<const volatile __int64*>(&storage));
-                _InterlockedCompareExchange128(dest, 0, 0, expected);
+                auto expected = tempest::array<int64_t, 2>{0, 0};
+                auto* const dest = const_cast<volatile __int64*>(reinterpret_cast<const volatile int64_t*>(&storage));
+                _InterlockedCompareExchange128(dest, 0, 0, expected.data());
 
-                while (!_InterlockedCompareExchange128(dest, desired[1], desired[0], expected))
+                while (_InterlockedCompareExchange128(dest, desired[1], desired[0], expected.data()) == 0)
                 {
                 }
             }
@@ -758,12 +759,12 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                __int64 result[2] = {0, 0};
-                auto* const dest = const_cast<volatile __int64*>(reinterpret_cast<const volatile __int64*>(&storage));
-                _InterlockedCompareExchange128(dest, 0, 0, result);
+                auto result = tempest::array<int64_t, 2>{0, 0};
+                auto* const dest = const_cast<volatile int64_t*>(reinterpret_cast<const volatile __int64*>(&storage));
+                _InterlockedCompareExchange128(dest, 0, 0, result.data());
 
                 type val{};
-                memcpy(&val, result, sizeof(type));
+                memcpy(&val, result.data(), sizeof(type));
                 return val;
             }
 
@@ -771,19 +772,19 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                __int64 desired_arr[2];
-                memcpy(desired_arr, &desired, sizeof(type));
+                auto desired_arr = tempest::array<int64_t, 2>{};
+                memcpy(desired_arr.data(), &desired, sizeof(type));
 
-                __int64 expected[2] = {0, 0};
+                auto expected = tempest::array<int64_t, 2>{0, 0};
                 auto* const dest = const_cast<volatile __int64*>(reinterpret_cast<const volatile __int64*>(&storage));
-                _InterlockedCompareExchange128(dest, 0, 0, expected);
+                _InterlockedCompareExchange128(dest, 0, 0, expected.data());
 
                 while (!_InterlockedCompareExchange128(dest, desired_arr[1], desired_arr[0], expected))
                 {
                 }
 
                 type result{};
-                memcpy(&result, expected, sizeof(type));
+                memcpy(&result, expected.data(), sizeof(type));
                 return result;
             }
 
@@ -792,19 +793,19 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                __int64 desired_arr[2];
-                memcpy(desired_arr, &desired, sizeof(type));
+                auto desired_arr = tempest::array<int64_t, 2>{};
+                memcpy(desired_arr.data(), &desired, sizeof(type));
 
-                __int64 expected_arr[2];
-                memcpy(expected_arr, &expected, sizeof(type));
+                auto expected_arr = tempest::array<int64_t, 2>{};
+                memcpy(expected_arr.data(), &expected, sizeof(type));
 
                 auto* const dest = const_cast<volatile __int64*>(reinterpret_cast<const volatile __int64*>(&storage));
-                if (_InterlockedCompareExchange128(dest, desired_arr[1], desired_arr[0], expected_arr))
+                if (_InterlockedCompareExchange128(dest, desired_arr[1], desired_arr[0], expected_arr.data()) != 0)
                 {
                     return true;
                 }
 
-                memcpy(&expected, expected_arr, sizeof(type));
+                memcpy(&expected, expected_arr.data(), sizeof(type));
                 return false;
             }
 
@@ -820,7 +821,7 @@ namespace tempest
                         return;
                     }
 
-                    atomic_wait_direct(&storage, &expected, 8, INFINITE);
+                    atomic_wait_direct(&storage, &expected, sizeof(uint64_t), INFINITE);
                 }
             }
 
@@ -834,7 +835,7 @@ namespace tempest
                 WakeByAddressAll(&storage);
             }
 
-            alignas(16) type storage{};
+            alignas(16) type storage{}; // NOLINT -- 16 bit alignment for storage to keep us aligned with InterlockedCompareExchange128
         };
 #elif defined(__linux__) || defined(__APPLE__)
 
@@ -1334,7 +1335,7 @@ namespace tempest
         detail::atomic_storage<T, sizeof(T)> _value;
     };
 
-    inline void atomic_thread_fence(memory_order order) noexcept
+    inline void atomic_thread_fence([[maybe_unused]] memory_order order) noexcept
     {
 #if defined(__linux__) || defined(__APPLE__)
         __atomic_thread_fence(detail::convert_memory_order(order));
