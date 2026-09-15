@@ -271,6 +271,14 @@ scoped.workspace('Tempest', function()
     end)
 
     scoped.filter({
+        'toolset:clang',
+        'action:not vs*',
+        'system:windows',
+    }, function()
+        buildoptions { '-mcx16' }
+    end)
+
+    scoped.filter({
         'options:use-asan'
     }, function()
         sanitize { 'Address' }
