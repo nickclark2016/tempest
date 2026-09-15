@@ -5,6 +5,7 @@
 #include <tempest/array.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/enum.hpp>
+#include <tempest/limits.hpp>
 #include <tempest/int.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
@@ -888,13 +889,13 @@ namespace tempest
         {
             if constexpr (sizeof(T) == 4)
             {
-                syscall(SYS_futex, addr, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
+                syscall(SYS_futex, addr, FUTEX_WAKE_PRIVATE, numeric_limits<int>::max(), nullptr, nullptr, 0);
                 return;
             }
 
             auto* proxy_futex = get_proxy_futex(addr);
             __atomic_fetch_add(proxy_futex, 1, convert_memory_order(order));
-            syscall(SYS_futex, proxy_futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
+            syscall(SYS_futex, proxy_futex, FUTEX_WAKE_PRIVATE, numeric_limits<int>::max(), nullptr, nullptr, 0);
         }
 
         template <typename T>
@@ -908,7 +909,7 @@ namespace tempest
 
             auto* proxy_futex = get_proxy_futex(addr);
             __atomic_fetch_add(proxy_futex, 1, convert_memory_order(order));
-            syscall(SYS_futex, proxy_futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr,
+            syscall(SYS_futex, proxy_futex, FUTEX_WAKE_PRIVATE, numeric_limits<int>::max(), nullptr, nullptr,
                     0); // We still wake MAX threads, since multiple threads could be waiting on the same shadow futex
         }
 
