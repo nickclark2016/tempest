@@ -779,7 +779,7 @@ namespace tempest
                 auto* const dest = const_cast<volatile __int64*>(reinterpret_cast<const volatile __int64*>(&storage));
                 _InterlockedCompareExchange128(dest, 0, 0, expected.data());
 
-                while (!_InterlockedCompareExchange128(dest, desired_arr[1], desired_arr[0], expected))
+                while (!_InterlockedCompareExchange128(dest, desired_arr[1], desired_arr[0], expected.data()))
                 {
                 }
 

@@ -24,11 +24,11 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
     ObjectData* objects = (ObjectData*)push_constants.objects_address;
 
     uint iid = instance_buffer[instance_id + start_instance];
-    ObjectData instance = objects[iid];
+    ObjectData* instance = &objects[iid];
 
-    Vertex v = pull_vertex(instance.mesh, vertex_id);
+    float3 pos = pull_position(instance.mesh, vertex_id);
 
-    float4 world_pos = mul(instance.model_matrix, float4(v.position, 1.0));
+    float4 world_pos = mul(instance.model_matrix, float4(pos, 1.0));
     float4 clip_pos = mul(push_constants.light_view_proj, world_pos);
 
     VertexOutput output;

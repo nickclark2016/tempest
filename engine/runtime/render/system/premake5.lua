@@ -86,11 +86,22 @@ scoped.project('render-system', function()
         end)
 
         scoped.filter({
-            'options:not debug-shaders'
+            'options:not debug-shaders',
+            'configurations:Release'
         }, function()
             buildcommands {
                 '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3',
                 '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.frag.spv -entry FSMain -O3',
+            }
+        end)
+
+        scoped.filter({
+            'options:not debug-shaders',
+            'configurations:not Release'
+        }, function()
+            buildcommands {
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3 -g3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.frag.spv -entry FSMain -O3 -g3',
             }
         end)
 
@@ -116,10 +127,20 @@ scoped.project('render-system', function()
         end)
 
         scoped.filter({
-            'options:not debug-shaders'
+            'options:not debug-shaders',
+            'configurations:Release'
         }, function()
             buildcommands {
                 '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.comp.spv -entry CSMain -O3',
+            }
+        end)
+
+        scoped.filter({
+            'options:not debug-shaders',
+            'configurations:not Release'
+        }, function()
+            buildcommands {
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.comp.spv -entry CSMain -O3 -g3',
             }
         end)
         

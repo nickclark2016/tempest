@@ -29,16 +29,18 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
     ObjectData* objects = (ObjectData*)push_constants.objects_address;
 
     uint iid = instance_buffer[instance_id + start_instance];
-    ObjectData instance = objects[iid];
+    ObjectData* instance = &objects[iid];
 
-    Vertex v = pull_vertex(instance.mesh, vertex_id);
+    float3 pos;
+    float2 uv;
+    pull_position_uv(instance.mesh, vertex_id, pos, uv);
 
-    float4 world_pos = mul(instance.model_matrix, float4(v.position, 1.0));
+    float4 world_pos = mul(instance.model_matrix, float4(pos, 1.0));
     float4 clip_pos = mul(push_constants.light_view_proj, world_pos);
 
     VertexOutput output;
     output.position = clip_pos;
-    output.uv = v.uv0;
+    output.uv = uv;
     output.base_color_factor = instance.material.base_texture_factor;
     output.base_texture_id = instance.material.base_texture_id;
     output.alpha_cutoff = instance.material.alpha_cutoff;

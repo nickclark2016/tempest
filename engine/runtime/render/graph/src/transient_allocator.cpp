@@ -137,6 +137,14 @@ namespace tempest::render_graph
                 pooled.in_use_this_frame = true;
                 pooled.last_pass_used = lifetime.last_pass;
 
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
+                if (!reg_tex.desc.name.empty() && pooled.desc.name != reg_tex.desc.name)
+                {
+                    dev.set_debug_name(pooled.handle, reg_tex.desc.name);
+                    pooled.desc.name = reg_tex.desc.name;
+                }
+#endif
+
                 _active_textures[tex_id] = physical_texture_allocation{
                     .handle = pooled.handle,
                     .default_view = pooled.view,
@@ -270,6 +278,14 @@ namespace tempest::render_graph
                 auto& pooled = _buffer_pool[found_index.value()];
                 pooled.in_use_this_frame = true;
                 pooled.last_pass_used = lifetime.last_pass;
+
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
+                if (!reg_buf.desc.name.empty() && pooled.desc.name != reg_buf.desc.name)
+                {
+                    dev.set_debug_name(pooled.handle, reg_buf.desc.name);
+                    pooled.desc.name = reg_buf.desc.name;
+                }
+#endif
 
                 _active_buffers[buf_id] = physical_buffer_allocation{
                     .handle = pooled.handle,

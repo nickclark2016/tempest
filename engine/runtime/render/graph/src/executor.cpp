@@ -442,7 +442,6 @@ namespace tempest::render_graph
 
                 auto record_task = [](
                     rhi::execution_port& exec_port,
-                    rhi::device& target_dev,
                     job::job_system& job_sys,
                     const pass_node& curr_pass,
                     const pass_sync_plan* curr_plan,
@@ -451,8 +450,6 @@ namespace tempest::render_graph
                     rhi::query_pool_handle stat_pool,
                     pass_execution_context& pass_ctx,
                     const transient_allocator& trans_alloc,
-                    span<const registered_texture> reg_texs,
-                    span<const registered_buffer> reg_bufs,
                     const rhi::command_list** out_cmd) -> job::task<void>
                 {
                     const auto opt_worker = job_sys.current_worker_index();
@@ -462,37 +459,6 @@ namespace tempest::render_graph
                     pass_cmd.begin();
 
 #ifdef TEMPEST_ENABLE_DEBUG_MARKERS
-                    for (const auto& access : curr_pass.texture_accesses)
-                    {
-                        if (access.texture.id < reg_texs.size())
-                        {
-                            const auto& reg_tex = reg_texs[access.texture.id];
-                            if (!reg_tex.desc.name.empty())
-                            {
-                                const auto* alloc = trans_alloc.get_texture(access.texture.id);
-                                if (alloc != nullptr)
-                                {
-                                    target_dev.set_debug_name(alloc->handle, reg_tex.desc.name);
-                                }
-                            }
-                        }
-                    }
-                    for (const auto& access : curr_pass.buffer_accesses)
-                    {
-                        if (access.buffer.id < reg_bufs.size())
-                        {
-                            const auto& reg_buf = reg_bufs[access.buffer.id];
-                            if (!reg_buf.desc.name.empty())
-                            {
-                                const auto* alloc = trans_alloc.get_buffer(access.buffer.id);
-                                if (alloc != nullptr)
-                                {
-                                    target_dev.set_debug_name(alloc->handle, reg_buf.desc.name);
-                                }
-                            }
-                        }
-                    }
-
                     pass_cmd.begin_debug_region(rhi::debug_label{.name = curr_pass.name.c_str()});
 #endif
 
@@ -603,9 +569,9 @@ namespace tempest::render_graph
                 };
 
                 pass_tasks.push_back(record_task(
-                    port, dev, *_jobs, pass, plan, p_alloc,
+                    port, *_jobs, pass, plan, p_alloc,
                     flight_state.timestamp_pool, q_state.pool,
-                    ctx, allocator, reg_textures, reg_buffers,
+                    ctx, allocator,
                     &pass_commands[i]).with_name(pass.name));
             }
 

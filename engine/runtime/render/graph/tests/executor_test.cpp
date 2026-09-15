@@ -502,16 +502,26 @@ namespace tempest::render_graph
                 return transfer_port;
             }
 
-            [[nodiscard]] auto create_buffer([[maybe_unused]] const rhi::buffer_desc& desc)
+            [[nodiscard]] auto create_buffer(const rhi::buffer_desc& desc)
                 -> rhi::buffer_handle override
             {
-                return rhi::buffer_handle{.handle = next_h++};
+                auto h = rhi::buffer_handle{.handle = next_h++};
+                if (!desc.name.empty())
+                {
+                    set_debug_name(h, desc.name);
+                }
+                return h;
             }
 
-            [[nodiscard]] auto create_texture([[maybe_unused]] const rhi::texture_desc& desc)
+            [[nodiscard]] auto create_texture(const rhi::texture_desc& desc)
                 -> rhi::texture_handle override
             {
-                return rhi::texture_handle{.handle = next_h++};
+                auto h = rhi::texture_handle{.handle = next_h++};
+                if (!desc.name.empty())
+                {
+                    set_debug_name(h, desc.name);
+                }
+                return h;
             }
 
             [[nodiscard]] auto create_texture_view([[maybe_unused]] rhi::texture_handle texture,
