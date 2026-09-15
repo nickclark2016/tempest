@@ -1172,7 +1172,8 @@ namespace tempest::render_system
 
         const auto non_transparent_draw_count = _opaque_draw_count + _alpha_masked_draw_count;
         const auto& depth_data =
-            add_depth_prepass(_graph, _pool, _shaders, _depth_target, non_transparent_draw_count, 0, gfx_stats);
+            add_depth_prepass(_graph, _pool, _shaders, _depth_target, _opaque_draw_count, _opaque_draw_offset,
+                              _alpha_masked_draw_count, _alpha_masked_draw_offset, gfx_stats);
 
         if (_cfg.enable_ssao)
         {

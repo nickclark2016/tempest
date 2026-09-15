@@ -4993,4 +4993,76 @@ namespace tempest::render_system::tests
 
         dev->wait_idle();
     }
+
+    /// @brief Verifies that add_depth_prepass registers both specialized opaque and alpha-masked
+    /// pipelines (zprepass_opaque_pipeline and zprepass_masked_pipeline) in the shader manager,
+    /// and that the render graph pass executes cleanly with separate opaque and masked batches.
+    TEST(render_system_tests, depth_prepass_opaque_and_masked_pipelines_and_execution)
+    {
+        // 1. Setup: Initialize test device, resource pool, shader manager, and render graph
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
+
+        constexpr const uint32_t width = 64;
+        constexpr const uint32_t height = 64;
+
+        auto graph = render_graph::render_graph{width, height};
+
+        auto depth_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "DepthPrepassTarget",
+        });
+
+        add_frame_upload_pass(graph, pool);
+
+        // 2. Act: Add depth prepass with distinct opaque and alpha-masked draw counts and offsets
+        const auto& depth_data = add_depth_prepass(graph, pool, shaders, depth_tex, 2, 0, 1, 2);
+
+        // 3. Assert: Verify depth texture validity and pipeline registration
+        EXPECT_TRUE(depth_data.depth_texture.is_valid());
+        EXPECT_EQ(depth_data.opaque_draw_count, 2U);
+        EXPECT_EQ(depth_data.opaque_draw_offset, 0U);
+        EXPECT_EQ(depth_data.alpha_masked_draw_count, 1U);
+        EXPECT_EQ(depth_data.alpha_masked_draw_offset, 2U);
+
+        // Verify both specialized pipelines are registered in shader_manager
+        const auto opaque_pipe_opt = shaders.find_graphics_pipeline("zprepass_opaque_pipeline");
+        ASSERT_TRUE(opaque_pipe_opt.has_value());
+        EXPECT_NE(shaders.get_rhi_pipeline(*opaque_pipe_opt).handle, 0ULL);
+
+        const auto masked_pipe_opt = shaders.find_graphics_pipeline("zprepass_masked_pipeline");
+        ASSERT_TRUE(masked_pipe_opt.has_value());
+        EXPECT_NE(shaders.get_rhi_pipeline(*masked_pipe_opt).handle, 0ULL);
+
+        // Mark sink on depth target so the pass is retained during compilation
+        struct depth_sink_data
+        {
+            render_graph::rg_texture_id depth;
+        };
+        graph.add_graphics_pass<depth_sink_data>(
+            "DepthSinkPass",
+            [d = depth_data.depth_texture](render_graph::pass_builder& builder, depth_sink_data& sink_data) -> void {
+                sink_data.depth = builder.read(d, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                               rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const depth_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
+               [[maybe_unused]] rhi::command_list&) -> void {});
+
+        // 4. Act: Compile and execute render graph
+        auto exec_res = graph.execute_sync(*dev);
+
+        // 5. Assert: Graph execution completes successfully
+        EXPECT_TRUE(exec_res.has_value());
+
+        dev->wait_idle();
+    }
 } // namespace tempest::render_system::tests

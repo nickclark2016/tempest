@@ -16,8 +16,10 @@ namespace tempest::render_system
         render_graph::rg_buffer_id instance_buffer;
         render_graph::rg_buffer_id draw_commands;
         render_graph::rg_buffer_id vertex_buffer;
-        uint32_t draw_count{0};
-        uint32_t draw_offset{0};
+        uint32_t opaque_draw_count{0};
+        uint32_t opaque_draw_offset{0};
+        uint32_t alpha_masked_draw_count{0};
+        uint32_t alpha_masked_draw_offset{0};
     };
 
     struct depth_prepass_push_constants
@@ -30,7 +32,8 @@ namespace tempest::render_system
 
     TEMPEST_API auto add_depth_prepass(
         render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
-        render_graph::rg_texture_id depth_tex, uint32_t draw_count, uint32_t draw_offset = 0,
+        render_graph::rg_texture_id depth_tex, uint32_t opaque_draw_count, uint32_t opaque_draw_offset = 0,
+        uint32_t alpha_masked_draw_count = 0, uint32_t alpha_masked_draw_offset = 0,
         enum_mask<rhi::pipeline_statistic_flags> pipeline_stats = rhi::pipeline_statistic_flags::none)
         -> const depth_prepass_data&;
 } // namespace tempest::render_system
