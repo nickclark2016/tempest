@@ -39,8 +39,3 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 
     return output;
 }
-
-[shader("fragment")]
-[earlydepthstencil]
-void FSMain() {
-}

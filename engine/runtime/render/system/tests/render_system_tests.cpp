@@ -1523,12 +1523,16 @@ namespace tempest::render_system::tests
         dev->wait_idle();
     }
 
-    /// @brief Verifies that the directional shadow pass registers both the opaque and alpha-masked
-    /// graphics pipelines, binds them in sequence with their respective draw offsets/counts, and
-    /// successfully executes on the GPU.
+    // =========================================================================
+    // Directional Shadow Depth Pipeline Tests
+    // =========================================================================
+
+    /// @brief Verifies that the directional shadow pass registers both the vertex-only opaque
+    /// (shadow_depth_opaque_pipeline) and alpha-masked (shadow_depth_masked_pipeline) graphics pipelines,
+    /// binds them in sequence with their respective draw offsets/counts, and successfully executes on the GPU.
     TEST(render_system_tests, shadow_pass_dual_pipeline_opaque_and_masked_execution)
     {
-        // 1. Setup Test Device, Asset Database, and Contexts
+        // 1. Setup: Test Device, Asset Database, and Contexts
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
@@ -4994,9 +4998,13 @@ namespace tempest::render_system::tests
         dev->wait_idle();
     }
 
-    /// @brief Verifies that add_depth_prepass registers both specialized opaque and alpha-masked
-    /// pipelines (zprepass_opaque_pipeline and zprepass_masked_pipeline) in the shader manager,
-    /// and that the render graph pass executes cleanly with separate opaque and masked batches.
+    // =========================================================================
+    // Depth Prepass Pipeline Tests
+    // =========================================================================
+
+    /// @brief Verifies that add_depth_prepass registers both specialized vertex-only opaque
+    /// (zprepass_opaque_pipeline) and alpha-masked (zprepass_masked_pipeline) pipelines in the
+    /// shader manager, and that the render graph pass executes cleanly with separate opaque and masked batches.
     TEST(render_system_tests, depth_prepass_opaque_and_masked_pipelines_and_execution)
     {
         // 1. Setup: Initialize test device, resource pool, shader manager, and render graph

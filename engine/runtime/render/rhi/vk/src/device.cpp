@@ -1501,6 +1501,16 @@ namespace tempest::rhi::vk
             });
         }
 
+        auto has_fragment_stage = false;
+        for (const auto& stage : stages)
+        {
+            if (stage.stage == VK_SHADER_STAGE_FRAGMENT_BIT)
+            {
+                has_fragment_stage = true;
+                break;
+            }
+        }
+
         auto color_blend_ci = VkPipelineColorBlendStateCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
             .pNext = nullptr,
@@ -1513,17 +1523,20 @@ namespace tempest::rhi::vk
         };
 
         // Dynamic states
-        auto dynamic_states = array{
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR,
-            VK_DYNAMIC_STATE_LINE_WIDTH,
-            VK_DYNAMIC_STATE_DEPTH_BIAS,
-            VK_DYNAMIC_STATE_BLEND_CONSTANTS,
-            VK_DYNAMIC_STATE_DEPTH_BOUNDS,
-            VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-            VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-            VK_DYNAMIC_STATE_STENCIL_REFERENCE,
-        };
+        auto dynamic_states = vector<VkDynamicState>{};
+        dynamic_states.reserve(9);
+        dynamic_states.push_back(VK_DYNAMIC_STATE_VIEWPORT);
+        dynamic_states.push_back(VK_DYNAMIC_STATE_SCISSOR);
+        dynamic_states.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
+        dynamic_states.push_back(VK_DYNAMIC_STATE_DEPTH_BIAS);
+        if (has_fragment_stage)
+        {
+            dynamic_states.push_back(VK_DYNAMIC_STATE_BLEND_CONSTANTS);
+        }
+        dynamic_states.push_back(VK_DYNAMIC_STATE_DEPTH_BOUNDS);
+        dynamic_states.push_back(VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK);
+        dynamic_states.push_back(VK_DYNAMIC_STATE_STENCIL_WRITE_MASK);
+        dynamic_states.push_back(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
 
         auto dynamic_state_ci = VkPipelineDynamicStateCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
@@ -1546,7 +1559,7 @@ namespace tempest::rhi::vk
             .pRasterizationState = &rasterization_ci,
             .pMultisampleState = &multisample_ci,
             .pDepthStencilState = &depth_stencil_ci,
-            .pColorBlendState = &color_blend_ci,
+            .pColorBlendState = has_fragment_stage ? &color_blend_ci : nullptr,
             .pDynamicState = &dynamic_state_ci,
             .layout = _default_pipeline_layout,
             .renderPass = VK_NULL_HANDLE,

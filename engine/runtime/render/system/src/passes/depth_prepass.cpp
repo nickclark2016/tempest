@@ -14,8 +14,7 @@ namespace tempest::render_system
         if (!opaque_pipe_h.has_value())
         {
             auto vs = shaders.register_shader_module("zprepass_opaque.vert.spv", rhi::shader_stage::vertex, "VSMain");
-            auto fs = shaders.register_shader_module("zprepass_opaque.frag.spv", rhi::shader_stage::fragment, "FSMain");
-            auto stages = array{vs, fs};
+            auto stages = array{vs};
 
             auto tmpl = graphics_pipeline_template{
                 .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
@@ -131,7 +130,7 @@ namespace tempest::render_system
                 {
                     pass_cmd.bind_pipeline(rhi_opaque_pipe);
                     pass_cmd.push_constants(
-                        rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,
+                        rhi::shader_stage::vertex, 0,
                         span<const byte>{reinterpret_cast<const byte*>(&constants), sizeof(constants)});
 
                     const auto byte_offset =

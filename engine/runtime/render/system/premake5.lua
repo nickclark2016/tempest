@@ -73,7 +73,70 @@ scoped.project('render-system', function()
         }
     end)
 
-    scoped.filter({ 'files:shaders/raster/**.slang' }, function()
+    premake.override(premake.fileconfig, "new", function(base, node, prj)
+        local fcfg = base(node, prj)
+        fcfg.terms.tags = table.shallowcopy(prj.terms.tags or {})
+        for _, block in ipairs(prj.blocks or {}) do
+            if block.tags then
+                local basedir = block._basedir or prj.location or "."
+                local rel = path.getrelative(basedir, fcfg.abspath)
+                local m = premake.criteria.matches(block._criteria, { files = rel })
+                if m then
+                    for _, tag in ipairs(block.tags) do
+                        table.insert(fcfg.terms.tags, tag)
+                    end
+                end
+            end
+        end
+        return fcfg
+    end)
+    scoped.filter({ 'files:shaders/raster/zprepass_opaque.slang' }, function()
+        tags { 'vertex-only' }
+    end)
+
+    scoped.filter({ 'files:shaders/raster/shadow_depth_opaque.slang' }, function()
+        tags { 'vertex-only' }
+    end)
+
+    scoped.filter({ 'files:shaders/raster/**.slang', 'tags:vertex-only' }, function()
+        buildmessage 'Compiling %{file.relpath}'
+
+        scoped.filter({
+            'options:debug-shaders'
+        }, function()
+            buildcommands {
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O0 -g3',
+            }
+        end)
+
+        scoped.filter({
+            'options:not debug-shaders',
+            'configurations:Release'
+        }, function()
+            buildcommands {
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3',
+            }
+        end)
+
+        scoped.filter({
+            'options:not debug-shaders',
+            'configurations:not Release'
+        }, function()
+            buildcommands {
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3 -g3',
+            }
+        end)
+
+        buildoutputs {
+            '%{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv',
+        }
+
+        buildinputs {
+            'shaders/common/**.slang',
+        }
+    end)
+
+    scoped.filter({ 'files:shaders/raster/**.slang', 'tags:not vertex-only' }, function()
         buildmessage 'Compiling %{file.relpath}'
 
         scoped.filter({
