@@ -1245,7 +1245,7 @@ namespace tempest::render_system::tests
     TEST(render_system_tests, resource_pool_directional_shadow_buffer_and_bda)
     {
         EXPECT_EQ(sizeof(shadow_cascade_data), 96ULL);
-        EXPECT_EQ(sizeof(directional_shadow_data), 400ULL);
+        EXPECT_EQ(sizeof(directional_shadow_data), 416ULL);
 
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
@@ -1808,21 +1808,49 @@ namespace tempest::render_system::tests
         }
     }
 
+    /// @brief Verifies memory layout, field offsets, and total byte size of pbr_opaque_push_constants.
     TEST(render_system_tests, pbr_opaque_push_constants_layout)
     {
+        // 1. Assert: verify struct size is exactly 48 bytes
         EXPECT_EQ(sizeof(pbr_opaque_push_constants), 48U);
+
+        // 2. Assert: verify 64-bit BDA buffer addresses
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, scene_constants_address), 0U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, objects_address), 8U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, instance_indices_address), 16U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, directional_shadow_address), 24U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, light_bitmask_address), 32U);
+
+        // 3. Assert: verify descriptor table indices
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, linear_sampler_index), 40U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, shadow_atlas_index), 44U);
     }
 
+    /// @brief Verifies memory layout, field offsets, and total byte size of pbr_masked_push_constants.
+    TEST(render_system_tests, pbr_masked_push_constants_layout)
+    {
+        // 1. Assert: verify struct size matches 48 bytes
+        EXPECT_EQ(sizeof(pbr_masked_push_constants), 48U);
+
+        // 2. Assert: verify 64-bit BDA buffer addresses
+        EXPECT_EQ(offsetof(pbr_masked_push_constants, scene_constants_address), 0U);
+        EXPECT_EQ(offsetof(pbr_masked_push_constants, objects_address), 8U);
+        EXPECT_EQ(offsetof(pbr_masked_push_constants, instance_indices_address), 16U);
+        EXPECT_EQ(offsetof(pbr_masked_push_constants, directional_shadow_address), 24U);
+        EXPECT_EQ(offsetof(pbr_masked_push_constants, light_bitmask_address), 32U);
+
+        // 3. Assert: verify descriptor table indices
+        EXPECT_EQ(offsetof(pbr_masked_push_constants, linear_sampler_index), 40U);
+        EXPECT_EQ(offsetof(pbr_masked_push_constants, shadow_atlas_index), 44U);
+    }
+
+    /// @brief Verifies memory layout, field offsets, and total byte size of scene_constants.
     TEST(render_system_tests, scene_constants_layout)
     {
+        // 1. Assert: verify struct size matches 400 bytes exactly
         EXPECT_EQ(sizeof(scene_constants), 400U);
+
+        // 2. Assert: verify camera and lighting field offsets
         EXPECT_EQ(offsetof(scene_constants, projection), 0U);
         EXPECT_EQ(offsetof(scene_constants, camera_position), 256U);
         EXPECT_EQ(offsetof(scene_constants, ambient_light), 272U);
@@ -1834,15 +1862,44 @@ namespace tempest::render_system::tests
         EXPECT_EQ(offsetof(scene_constants, light_bitmask_address), 344U);
         EXPECT_EQ(offsetof(scene_constants, light_count), 352U);
         EXPECT_EQ(offsetof(scene_constants, words_per_cluster), 356U);
-        EXPECT_EQ(offsetof(scene_constants, padding), 360U);
+
+        // 3. Assert: verify shadow comparison sampler index and padding offsets
+        EXPECT_EQ(offsetof(scene_constants, shadow_comparison_sampler_index), 360U);
+        EXPECT_EQ(offsetof(scene_constants, padding), 364U);
         EXPECT_EQ(offsetof(scene_constants, cluster_counts_tile_size), 368U);
         EXPECT_EQ(offsetof(scene_constants, cluster_depth_params), 384U);
     }
 
+    /// @brief Verifies memory layout, field offsets, and total byte size of directional_shadow_data.
     TEST(render_system_tests, directional_shadow_data_debug_mode_layout)
     {
-        EXPECT_EQ(sizeof(directional_shadow_data), 400ULL);
+        // 1. Assert: verify struct size is 416 bytes with 16-byte alignment
+        EXPECT_EQ(sizeof(directional_shadow_data), 416ULL);
+
+        // 2. Assert: verify shadow bias, debug mode, and precomputed texel size offsets
         EXPECT_EQ(offsetof(directional_shadow_data, debug_mode), 396ULL);
+        EXPECT_EQ(offsetof(directional_shadow_data, atlas_texel_size), 400ULL);
+        EXPECT_EQ(offsetof(directional_shadow_data, padding), 408ULL);
+    }
+
+    /// @brief Verifies that resource_pool initializes a valid hardware shadow comparison sampler
+    /// and allocates its descriptor in the global sampler heap.
+    TEST(render_system_tests, resource_pool_shadow_comparison_sampler)
+    {
+        // 1. Setup: create test Vulkan device
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        // 2. Act: construct resource_pool which initializes linear, point, and shadow comparison samplers
+        auto pool = resource_pool{*dev};
+
+        // 3. Assert: verify shadow comparison sampler handle and descriptor slot
+        const auto sampler = pool.get_shadow_comparison_sampler();
+        EXPECT_NE(sampler.handle, 0ULL);
+
+        const auto desc = pool.get_shadow_comparison_sampler_descriptor();
+        EXPECT_NE(desc.index, ~0U);
     }
 
     TEST(render_system_tests, shadow_debug_mode_visualization_cascades_and_shadow_factor)

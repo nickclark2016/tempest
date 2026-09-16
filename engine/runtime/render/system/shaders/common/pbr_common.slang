@@ -39,7 +39,7 @@ VertexOutput compute_vertex(uint vertex_id, uint instance_id, uint64_t instance_
     ObjectData* objects = (ObjectData*)objects_address;
 
     uint iid = instance_buffer[instance_id];
-    ObjectData instance = objects[iid];
+    ObjectData* instance = &objects[iid];
 
     Vertex v = pull_vertex(instance.mesh, vertex_id);
 
@@ -156,7 +156,7 @@ void evaluate_clustered_point_lights(
         while (mask != 0) {
             uint bit = firstbitlow(mask);
             uint light_idx = base_light_idx + bit;
-            LightPayload light = lights[light_idx];
+            LightPayload* light = &lights[light_idx];
 
             float3 pos_to_light = light.position_falloff.xyz - world_pos;
             float3 wi = normalize(pos_to_light);

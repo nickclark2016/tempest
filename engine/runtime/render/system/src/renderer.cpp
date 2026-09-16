@@ -994,6 +994,8 @@ namespace tempest::render_system
             });
         }
 
+        scene.shadow_comparison_sampler_index =
+            static_cast<int32_t>(_pool.get_shadow_comparison_sampler_descriptor().index);
         _pool.write_scene_constants(scene);
 
         // Create Transient Render Targets
@@ -1165,6 +1167,14 @@ namespace tempest::render_system
             if (_shadow_debug_mode != shadow_debug_mode::none)
             {
                 shadow_res.shadow_data.debug_mode = static_cast<uint32_t>(_shadow_debug_mode);
+            }
+
+            if (dir_shadow_plan.atlas_size.x > 0 && dir_shadow_plan.atlas_size.y > 0)
+            {
+                shadow_res.shadow_data.atlas_texel_size = {
+                    1.0F / static_cast<float>(dir_shadow_plan.atlas_size.x),
+                    1.0F / static_cast<float>(dir_shadow_plan.atlas_size.y),
+                };
             }
 
             _pool.write_directional_shadow_data(shadow_res.shadow_data);

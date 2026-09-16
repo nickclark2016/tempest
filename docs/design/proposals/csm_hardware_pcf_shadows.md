@@ -1,7 +1,7 @@
 # Proposal: Cascaded Shadow Map Hardware PCF & Sampling Overhaul
 
 ## Status
-Proposed
+Implemented
 
 ## Context
 In GPU execution profiles, line 72 of [`pbr.slang`](file:///d:/Code/tempest/engine/runtime/render/system/shaders/raster/pbr.slang#L72) calls [`sample_csm_shadow_info`](file:///d:/Code/tempest/engine/runtime/render/system/shaders/common/lighting.slang#L84-L156), which is responsible for **6,062 samples**—representing **40.3% of the entire PBR fragment shader runtime**.
@@ -65,27 +65,16 @@ In Slang, this is bound as `SamplerComparisonState`. Calling `SampleCmpLevelZero
 
 ---
 
-### 2. Precomputed Atlas Metrics in Push Constants
+### 2. Precomputed Atlas Metrics & Sampler Descriptor in Scene & Shadow Data
 
-Modify [`pbr_opaque_push_constants`](file:///d:/Code/tempest/engine/runtime/render/system/include/tempest/render_system/passes/pbr_opaque_pass.hpp) and Slang push constants:
+Rather than consuming precious push constant memory, the precomputed shadow metrics and comparison sampler descriptor index are stored directly in existing GPU uniform/BDA structures written once per frame in [`renderer.cpp`](file:///d:/Code/tempest/engine/runtime/render/system/src/renderer.cpp):
 
-```cpp
-struct pbr_opaque_push_constants
-{
-    uint64_t scene_constants_address{0};
-    uint64_t objects_address{0};
-    uint64_t instance_indices_address{0};
-    uint64_t directional_shadow_address{0};
-    uint64_t light_bitmask_address{0};
-    int32_t linear_sampler_index{-1};
-    int32_t shadow_comparison_sampler_index{-1};
-    int32_t shadow_atlas_index{-1};
-    float shadow_atlas_texel_size_x{0.0F}; // 1.0f / atlas_width
-    float shadow_atlas_texel_size_y{0.0F}; // 1.0f / atlas_height
-};
-```
+1. **`shadow_comparison_sampler_index` in `scene_constants` (`SceneGlobals` in Slang)**:
+   Replaces 8 bytes of existing padding at byte offset 360 (`padding[2]` -> `int32_t shadow_comparison_sampler_index` + `uint32_t padding[1]`). The struct remains **exactly 400 bytes** with zero size increase and zero push constant churn.
+2. **`atlas_texel_size` in `directional_shadow_data` (`DirectionalShadowData` in Slang)**:
+   Precomputed as `{1.0f / width, 1.0f / height}` on the CPU and placed at byte offset 400 on the same 64-byte L1/L2 cache line as `normal_bias` and `depth_bias` (416 bytes total, 16-byte aligned).
 
-This completely removes:
+This completely removes runtime dimension queries from fragment shaders:
 ```slang
 // ELIMINATED:
 uint atlas_width = 8192;
@@ -97,9 +86,9 @@ float2 texel_size = float2(1.0 / float(atlas_width), 1.0 / float(atlas_height));
 
 ---
 
-### 3. 4-Tap Rotated Poisson Disk PCF Kernel
+### 3. 4-Tap Poisson Disk Hardware PCF Kernel
 
-Replace the unrolled 9-tap software loop with a 4-tap Poisson disk kernel:
+Replace the unrolled 9-tap software loop with a 4-tap Poisson disk hardware comparison kernel:
 
 ```slang
 // lighting.slang
@@ -113,17 +102,20 @@ static const float2 POISSON_DISK_4[4] = {
 };
 
 [ForceInline]
-float sample_csm_shadow_hardware_pcf(
+ShadowSampleResult sample_csm_shadow_info(
     Texture2D shadow_atlas,
     SamplerComparisonState comparison_sampler,
     DirectionalShadowData* shadow_data,
     float3 world_pos,
     float3 geom_normal,
-    float view_depth,
-    float2 shadow_texel_size)
+    float view_depth)
 {
+    ShadowSampleResult result;
+    result.factor = 1.0;
+    result.cascade_index = -1;
+
     if (shadow_data == nullptr || shadow_data.cascade_count == 0) {
-        return 1.0;
+        return result;
     }
 
     // 1. Cascade Selection
@@ -137,10 +129,12 @@ float sample_csm_shadow_hardware_pcf(
     }
 
     if (cascade_idx < 0) {
-        return 1.0; // Beyond shadow distance
+        return result; // Beyond shadow distance
     }
 
-    // Direct pointer reference: avoid copying 96-byte struct to local registers
+    result.cascade_index = cascade_idx;
+
+    // Direct pointer reference: avoids copying 96-byte struct to local registers
     ShadowCascadeData* cascade = &shadow_data.cascades[cascade_idx];
 
     // 2. Normal Offset Bias
@@ -150,14 +144,14 @@ float sample_csm_shadow_hardware_pcf(
     float4 light_clip = mul(cascade.view_proj, float4(biased_pos, 1.0));
     float3 light_ndc = light_clip.xyz / light_clip.w;
 
-    // Fast bounds check
+    // Fast vectorized bounds check
     if (any(abs(light_ndc.xy) > 1.0) || light_ndc.z < 0.0 || light_ndc.z > 1.0) {
-        return 1.0;
+        return result;
     }
 
     float2 light_uv = light_ndc.xy * 0.5 + 0.5;
     float2 atlas_uv = cascade.uv_offset_scale.xy + light_uv * cascade.uv_offset_scale.zw;
-    float compare_depth = light_ndc.z + shadow_data.depth_bias; // Reverse-Z bias addition
+    float compare_depth = saturate(light_ndc.z + shadow_data.depth_bias);
 
     // 4. Hardware PCF (4 taps * 2x2 bilinear = 16 filtered depth samples)
     float shadow = 0.0;
@@ -165,11 +159,12 @@ float sample_csm_shadow_hardware_pcf(
 
     [unroll]
     for (int i = 0; i < 4; ++i) {
-        float2 offset_uv = atlas_uv + POISSON_DISK_4[i] * shadow_texel_size * filter_radius;
+        float2 offset_uv = atlas_uv + POISSON_DISK_4[i] * shadow_data.atlas_texel_size * filter_radius;
         shadow += shadow_atlas.SampleCmpLevelZero(comparison_sampler, offset_uv, compare_depth);
     }
 
-    return shadow * 0.25;
+    result.factor = shadow * 0.25;
+    return result;
 }
 ```
 

@@ -143,8 +143,10 @@ namespace tempest::render_system
           _mesh_indices{tempest::move(other._mesh_indices)}, _mesh_layouts{tempest::move(other._mesh_layouts)},
           _material_indices{tempest::move(other._material_indices)}, _materials{tempest::move(other._materials)},
           _textures{tempest::move(other._textures)}, _linear_sampler{other._linear_sampler},
-          _point_sampler{other._point_sampler}, _linear_sampler_descriptor{other._linear_sampler_descriptor},
+          _point_sampler{other._point_sampler}, _shadow_comparison_sampler{other._shadow_comparison_sampler},
+          _linear_sampler_descriptor{other._linear_sampler_descriptor},
           _point_sampler_descriptor{other._point_sampler_descriptor},
+          _shadow_comparison_sampler_descriptor{other._shadow_comparison_sampler_descriptor},
           _scene_constants_buffer{other._scene_constants_buffer},
           _directional_shadow_buffer{other._directional_shadow_buffer}, _lights_buffer{other._lights_buffer},
           _object_buffer{other._object_buffer}, _instance_buffer{other._instance_buffer},
@@ -157,6 +159,10 @@ namespace tempest::render_system
         other._staging_buffer = {};
         other._linear_sampler = {};
         other._point_sampler = {};
+        other._shadow_comparison_sampler = {};
+        other._linear_sampler_descriptor = {};
+        other._point_sampler_descriptor = {};
+        other._shadow_comparison_sampler_descriptor = {};
         other._scene_constants_buffer = {};
         other._directional_shadow_buffer = {};
         other._lights_buffer = {};
@@ -186,8 +192,10 @@ namespace tempest::render_system
             _textures = tempest::move(other._textures);
             _linear_sampler = other._linear_sampler;
             _point_sampler = other._point_sampler;
+            _shadow_comparison_sampler = other._shadow_comparison_sampler;
             _linear_sampler_descriptor = other._linear_sampler_descriptor;
             _point_sampler_descriptor = other._point_sampler_descriptor;
+            _shadow_comparison_sampler_descriptor = other._shadow_comparison_sampler_descriptor;
             _scene_constants_buffer = other._scene_constants_buffer;
             _directional_shadow_buffer = other._directional_shadow_buffer;
             _lights_buffer = other._lights_buffer;
@@ -202,6 +210,10 @@ namespace tempest::render_system
             other._staging_buffer = {};
             other._linear_sampler = {};
             other._point_sampler = {};
+            other._shadow_comparison_sampler = {};
+            other._linear_sampler_descriptor = {};
+            other._point_sampler_descriptor = {};
+            other._shadow_comparison_sampler_descriptor = {};
             other._scene_constants_buffer = {};
             other._directional_shadow_buffer = {};
             other._lights_buffer = {};
@@ -325,6 +337,19 @@ namespace tempest::render_system
         });
         _point_sampler_descriptor = _device->allocate_descriptor(rhi::descriptor_type::sampler);
         _device->write_sampler_descriptor(_point_sampler_descriptor, _point_sampler);
+
+        _shadow_comparison_sampler = _device->create_sampler(rhi::sampler_desc{
+            .min_filter = rhi::filter_mode::linear,
+            .mag_filter = rhi::filter_mode::linear,
+            .mipmap_mode = rhi::mipmap_mode::nearest,
+            .address_u = rhi::address_mode::clamp_to_edge,
+            .address_v = rhi::address_mode::clamp_to_edge,
+            .address_w = rhi::address_mode::clamp_to_edge,
+            .compare_op = rhi::compare_op::greater_or_equal,
+            .name = "ShadowComparisonSampler",
+        });
+        _shadow_comparison_sampler_descriptor = _device->allocate_descriptor(rhi::descriptor_type::sampler);
+        _device->write_sampler_descriptor(_shadow_comparison_sampler_descriptor, _shadow_comparison_sampler);
     }
 
     void resource_pool::load_meshes(span<const guid> mesh_ids, const core::mesh_registry& registry,
@@ -1023,6 +1048,16 @@ namespace tempest::render_system
         return _point_sampler_descriptor;
     }
 
+    auto resource_pool::get_shadow_comparison_sampler() const noexcept -> rhi::sampler_handle
+    {
+        return _shadow_comparison_sampler;
+    }
+
+    auto resource_pool::get_shadow_comparison_sampler_descriptor() const noexcept -> rhi::descriptor_handle
+    {
+        return _shadow_comparison_sampler_descriptor;
+    }
+
     void resource_pool::clear_staging_buffers()
     {
         if (_device != nullptr)
@@ -1074,6 +1109,11 @@ namespace tempest::render_system
             _device->free_descriptor(rhi::descriptor_type::sampler, _point_sampler_descriptor);
             _point_sampler_descriptor = {};
         }
+        if (_shadow_comparison_sampler_descriptor.index != ~0U)
+        {
+            _device->free_descriptor(rhi::descriptor_type::sampler, _shadow_comparison_sampler_descriptor);
+            _shadow_comparison_sampler_descriptor = {};
+        }
 
         if (_linear_sampler.handle != 0)
         {
@@ -1084,6 +1124,11 @@ namespace tempest::render_system
         {
             _device->destroy_sampler(_point_sampler);
             _point_sampler = {};
+        }
+        if (_shadow_comparison_sampler.handle != 0)
+        {
+            _device->destroy_sampler(_shadow_comparison_sampler);
+            _shadow_comparison_sampler = {};
         }
 
         auto destroy_buf = [this](rhi::buffer_handle& buf) -> void {

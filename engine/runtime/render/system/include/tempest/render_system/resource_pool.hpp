@@ -38,7 +38,8 @@ namespace tempest::render_system
         uint64_t light_bitmask_address{0};
         uint32_t light_count{0};
         uint32_t words_per_cluster{0}; // ceil(light_count / 32)
-        uint32_t padding[2]{0, 0};
+        int32_t shadow_comparison_sampler_index{-1};
+        uint32_t padding{0};
         math::vec4<uint32_t> cluster_counts_tile_size{16, 9, 24, 64};      // x, y, z, tile_size_px
         math::vec4<float> cluster_depth_params{0.1F, 1000.0F, 0.0F, 0.0F}; // near, far, log(far/near), pad
     };
@@ -58,6 +59,8 @@ namespace tempest::render_system
         float normal_bias{0.02F};
         float depth_bias{0.005F};
         uint32_t debug_mode{0};
+        math::vec2<float> atlas_texel_size{0.0F, 0.0F};
+        float padding[2]{0.0F, 0.0F};
     };
 
     enum class mipmap_generation_mode : uint8_t
@@ -167,8 +170,10 @@ namespace tempest::render_system
         // Samplers
         [[nodiscard]] auto get_linear_sampler() const noexcept -> rhi::sampler_handle;
         [[nodiscard]] auto get_point_sampler() const noexcept -> rhi::sampler_handle;
+        [[nodiscard]] auto get_shadow_comparison_sampler() const noexcept -> rhi::sampler_handle;
         [[nodiscard]] auto get_linear_sampler_descriptor() const noexcept -> rhi::descriptor_handle;
         [[nodiscard]] auto get_point_sampler_descriptor() const noexcept -> rhi::descriptor_handle;
+        [[nodiscard]] auto get_shadow_comparison_sampler_descriptor() const noexcept -> rhi::descriptor_handle;
 
         void clear_staging_buffers();
         void release_all();
@@ -198,8 +203,10 @@ namespace tempest::render_system
         flat_unordered_map<guid, texture_entry> _textures;
         rhi::sampler_handle _linear_sampler{};
         rhi::sampler_handle _point_sampler{};
+        rhi::sampler_handle _shadow_comparison_sampler{};
         rhi::descriptor_handle _linear_sampler_descriptor{};
         rhi::descriptor_handle _point_sampler_descriptor{};
+        rhi::descriptor_handle _shadow_comparison_sampler_descriptor{};
 
         // Dynamic Upload Buffers
         rhi::buffer_handle _scene_constants_buffer{};

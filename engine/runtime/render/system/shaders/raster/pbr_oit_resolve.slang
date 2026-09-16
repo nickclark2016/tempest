@@ -114,7 +114,8 @@ FragmentOutput FSMain(VertexOutput input) {
         shadow_data = (DirectionalShadowData*)push_constants.directional_shadow_address;
         float view_depth = -input.view_position.z;
         Texture2D shadow_atlas = bindless_textures[push_constants.shadow_atlas_index];
-        ShadowSampleResult shadow_res = sample_csm_shadow_info(shadow_atlas, mat_state.linear_sampler, shadow_data, input.world_position, input.normal, view_depth);
+        SamplerComparisonState cmp_sampler = bindless_comparison_samplers[scene.shadow_comparison_sampler_index];
+        ShadowSampleResult shadow_res = sample_csm_shadow_info(shadow_atlas, cmp_sampler, shadow_data, input.world_position, input.normal, view_depth);
         sun_shadow = shadow_res.factor;
         cascade_idx = shadow_res.cascade_index;
     }

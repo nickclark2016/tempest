@@ -73,6 +73,8 @@ struct DirectionalShadowData {
     float normal_bias;
     float depth_bias;
     uint debug_mode;
+    float2 atlas_texel_size;
+    float2 padding;
 };
 
 struct ShadowSampleResult {
@@ -80,8 +82,16 @@ struct ShadowSampleResult {
     int cascade_index;
 };
 
+// Canonical 4-tap Poisson distribution
+static const float2 POISSON_DISK_4[4] = {
+    float2(-0.38, -0.62),
+    float2( 0.65, -0.45),
+    float2(-0.52,  0.55),
+    float2( 0.42,  0.68)
+};
+
 [ForceInline]
-ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerState linear_sampler,
+ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerComparisonState comparison_sampler,
                                           DirectionalShadowData* shadow_data,
                                           float3 world_pos, float3 geom_normal, float view_depth) {
     ShadowSampleResult result;
@@ -94,6 +104,7 @@ ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerState l
 
     // 1. Select Cascade
     int cascade_idx = -1;
+    [unroll]
     for (uint i = 0; i < shadow_data.cascade_count; ++i) {
         if (view_depth < shadow_data.cascades[i].split_depth) {
             cascade_idx = (int)i;
@@ -106,7 +117,7 @@ ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerState l
     }
 
     result.cascade_index = cascade_idx;
-    ShadowCascadeData cascade = shadow_data.cascades[cascade_idx];
+    ShadowCascadeData* cascade = &shadow_data.cascades[cascade_idx];
 
     // 2. Normal Offset Bias
     float3 biased_pos = world_pos + geom_normal * shadow_data.normal_bias;
@@ -115,10 +126,8 @@ ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerState l
     float4 light_clip = mul(cascade.view_proj, float4(biased_pos, 1.0));
     float3 light_ndc = light_clip.xyz / light_clip.w;
 
-    // Outside shadow cascade frustum
-    if (light_ndc.x < -1.0 || light_ndc.x > 1.0 ||
-        light_ndc.y < -1.0 || light_ndc.y > 1.0 ||
-        light_ndc.z < 0.0  || light_ndc.z > 1.0) {
+    // Fast vectorized frustum bounds check
+    if (any(abs(light_ndc.xy) > 1.0) || light_ndc.z < 0.0 || light_ndc.z > 1.0) {
         return result;
     }
 
@@ -128,38 +137,28 @@ ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerState l
     // Transform into Atlas sub-region UV
     float2 atlas_uv = cascade.uv_offset_scale.xy + light_uv * cascade.uv_offset_scale.zw;
 
-    float current_depth = light_ndc.z; // In Reverse-Z, near is 1.0, far is 0.0
+    // Reverse-Z: lit if current_depth >= occluder depth (closer to near plane 1.0)
+    float compare_depth = saturate(light_ndc.z + shadow_data.depth_bias);
 
-    // 4. 3x3 PCF Kernel
-    uint atlas_width = 8192;
-    uint atlas_height = 8192;
-    shadow_atlas.GetDimensions(atlas_width, atlas_height);
-    float2 texel_size = float2(1.0 / float(atlas_width), 1.0 / float(atlas_height));
-
+    // 4. Hardware PCF (4 taps * 2x2 bilinear = 16 filtered depth samples)
     float shadow = 0.0;
-    // [unroll]
-    for (int x = -1; x <= 1; ++x) {
-        // [unroll]
-        for (int y = -1; y <= 1; ++y) {
-            float2 sample_uv = atlas_uv + float2(x, y) * texel_size;
-            float sampled_depth = shadow_atlas.SampleLevel(linear_sampler, sample_uv, 0).r;
-            
-            // Reverse-Z: current pixel is lit if its depth is >= occluder depth (closer to near plane 1.0)
-            if (current_depth >= sampled_depth - shadow_data.depth_bias) {
-                shadow += 1.0;
-            }
-        }
+    const float filter_radius = 1.5;
+
+    [unroll]
+    for (int i = 0; i < 4; ++i) {
+        float2 offset_uv = atlas_uv + POISSON_DISK_4[i] * shadow_data.atlas_texel_size * filter_radius;
+        shadow += shadow_atlas.SampleCmpLevelZero(comparison_sampler, offset_uv, compare_depth);
     }
 
-    result.factor = shadow / 9.0;
+    result.factor = shadow * 0.25;
     return result;
 }
 
 [ForceInline]
-float sample_csm_shadow(Texture2D shadow_atlas, SamplerState linear_sampler,
+float sample_csm_shadow(Texture2D shadow_atlas, SamplerComparisonState comparison_sampler,
                         DirectionalShadowData* shadow_data,
                         float3 world_pos, float3 geom_normal, float view_depth) {
-    return sample_csm_shadow_info(shadow_atlas, linear_sampler, shadow_data, world_pos, geom_normal, view_depth).factor;
+    return sample_csm_shadow_info(shadow_atlas, comparison_sampler, shadow_data, world_pos, geom_normal, view_depth).factor;
 }
 
 [ForceInline]

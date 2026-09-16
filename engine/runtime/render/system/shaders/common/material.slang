@@ -70,7 +70,9 @@ struct PixelData {
 };
 
 // Bindless Descriptors (Set 0 = Samplers, Set 1 = Sampled Images)
+#pragma warning(disable: 39001)
 [[vk::binding(0, 0)]] SamplerState bindless_samplers[];
+[[vk::binding(0, 0)]] SamplerComparisonState bindless_comparison_samplers[];
 [[vk::binding(0, 1)]] Texture2D bindless_textures[];
 
 half fetch_metallic(const MaterialState mat_state, float2 uv) {

@@ -3,31 +3,34 @@ import "mesh";
 
 [ForceInline]
 float2 pull_float2_f32(uint* src, uint byte_offset) {
-    uint index = byte_offset / 4;
+    let index = byte_offset >> 2;
+    let fsrc = (float*)src + index;
     return {
-        reinterpret<float>(src[index + 0]),
-        reinterpret<float>(src[index + 1]),
+        fsrc[0],
+        fsrc[1],
     };
 }
 
 [ForceInline]
 float3 pull_float3_f32(uint* src, uint byte_offset) {
-    uint index = byte_offset / 4;
+    let index = byte_offset >> 2;
+    let fsrc = (float*)src + index;
     return {
-        reinterpret<float>(src[index + 0]),
-        reinterpret<float>(src[index + 1]),
-        reinterpret<float>(src[index + 2]),
+        fsrc[0],
+        fsrc[1],
+        fsrc[2],
     };
 }
 
 [ForceInline]
 float4 pull_float4_f32(uint* src, uint byte_offset) {
-    uint index = byte_offset / 4;
+    let index = byte_offset >> 2;
+    let fsrc = (float*)src + index;
     return {
-        reinterpret<float>(src[index + 0]),
-        reinterpret<float>(src[index + 1]),
-        reinterpret<float>(src[index + 2]),
-        reinterpret<float>(src[index + 3]),
+        fsrc[0],
+        fsrc[1],
+        fsrc[2],
+        fsrc[3],
     };
 }
 
