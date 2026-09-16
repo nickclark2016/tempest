@@ -75,12 +75,19 @@ struct PixelData {
 [[vk::binding(0, 0)]] SamplerComparisonState bindless_comparison_samplers[];
 [[vk::binding(0, 1)]] Texture2D bindless_textures[];
 
-half fetch_metallic(const MaterialState mat_state, float2 uv) {
+[ForceInline]
+void fetch_metallic_roughness(const MaterialState mat_state, inout PixelData pixel) {
+    half roughness_factor = half(mat_state.mat.roughness_factor);
     half metallic_factor = half(mat_state.mat.metallic_factor);
+
     if (mat_state.mat.metallic_roughness_map_id < 0) {
-        return metallic_factor;
+        pixel.roughness = roughness_factor;
+        pixel.metallic = metallic_factor;
+    } else {
+        half4 mr_sample = half4(bindless_textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, pixel.uv));
+        pixel.roughness = roughness_factor * mr_sample.g;
+        pixel.metallic = metallic_factor * mr_sample.b;
     }
-    return metallic_factor * half(bindless_textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, uv).b);
 }
 
 void fetch_diffuse<let Policy : AlphaPolicy = AlphaPolicy::Opaque>(const MaterialState mat_state, inout PixelData pixel) {
@@ -105,25 +112,12 @@ void fetch_diffuse<let Policy : AlphaPolicy = AlphaPolicy::Opaque>(const Materia
             discard;
         }
     }
-    
-    half metallic = fetch_metallic(mat_state, pixel.uv);
 
     pixel.diffuse = color;
-    pixel.metallic = metallic;
-    pixel.f0 = lerp(half3(0.04h), color.rgb, metallic);
 }
 
 void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel) {
     fetch_diffuse<AlphaPolicy::Transparent>(mat_state, pixel);
-}
-
-void fetch_roughness(const MaterialState mat_state, inout PixelData pixel) {
-    half roughness_factor = half(mat_state.mat.roughness_factor);
-    if (mat_state.mat.metallic_roughness_map_id < 0) {
-        pixel.roughness = roughness_factor;
-    } else {
-        pixel.roughness = roughness_factor * half(bindless_textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, pixel.uv).g);
-    }
 }
 
 void fetch_normal(const MaterialState mat_state, inout PixelData pixel)
@@ -161,7 +155,8 @@ void fetch_transmission(const MaterialState mat_state, inout PixelData pixel) {
 
 void fetch_pixel_data<let Policy : AlphaPolicy = AlphaPolicy::Opaque>(const MaterialState mat_state, inout PixelData pixel) {
     fetch_diffuse<Policy>(mat_state, pixel);
-    fetch_roughness(mat_state, pixel);
+    fetch_metallic_roughness(mat_state, pixel);
+    pixel.f0 = lerp(half3(0.04h), pixel.diffuse.rgb, pixel.metallic);
     fetch_normal(mat_state, pixel);
 
     if (mat_state.mat.type == MaterialType::TRANSMISSIVE) {

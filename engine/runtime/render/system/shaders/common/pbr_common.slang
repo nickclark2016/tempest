@@ -163,10 +163,10 @@ void evaluate_clustered_point_lights(
             float n_dot_l = saturate(dot(float3(px.shading_normal), wi));
 
             if (n_dot_l > 0.0) {
-                let bxdf_res = bxdf.evaluate(params, geometry, wi, wo, n_dot_v, n_dot_l);
+                let bxdf_val = bxdf.evaluate(params, geometry, wi, wo, n_dot_v, n_dot_l);
                 float attenuation = compute_smooth_distance_attenuation(pos_to_light, light.position_falloff.w);
                 float3 radiance = light.color_intensity.rgb * light.color_intensity.w * attenuation;
-                color.rgb += half3(bxdf_res.bxdf * radiance * n_dot_l);
+                color.rgb += half3(bxdf_val * radiance * n_dot_l);
             }
 
             mask &= ~(1u << bit);
@@ -181,6 +181,7 @@ float4 evaluate_material_openpbr(
     const float3 world_pos,
     const float3 view_pos,
     const float2 screen_coord,
+    const float3 wo,
     float shadow_factor = 1.0,
     uint64_t light_bitmask_address = 0)
 {
@@ -188,7 +189,6 @@ float4 evaluate_material_openpbr(
     BxDFParams params = build_bxdf_params(px, mat_state);
     BxDFGeometry geometry = build_bxdf_geometry(px);
 
-    float3 wo = normalize(scene.camera.eye.xyz - world_pos);
     float n_dot_v = max(1e-4, dot(float3(px.shading_normal), wo));
 
     // Ambient light with directional hemisphere response (soft sky fill)
@@ -210,10 +210,10 @@ float4 evaluate_material_openpbr(
         float3 wi = normalize(-scene.sun.direction.xyz);
         float n_dot_l = saturate(dot(float3(px.shading_normal), wi));
 
-        let bxdf_result = bxdf.evaluate(params, geometry, wi, wo, n_dot_v, n_dot_l);
+        let bxdf_val = bxdf.evaluate(params, geometry, wi, wo, n_dot_v, n_dot_l);
         float3 radiance = scene.sun.color_intensity.rgb * scene.sun.color_intensity.w;
 
-        color.rgb += half3(bxdf_result.bxdf * (radiance * shadow_factor) * n_dot_l);
+        color.rgb += half3(bxdf_val * (radiance * shadow_factor) * n_dot_l);
     }
 
     // Clustered Point Lights

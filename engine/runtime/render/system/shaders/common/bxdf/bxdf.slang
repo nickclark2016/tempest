@@ -81,18 +81,6 @@ struct BxDFParams {
     GeometryParams geometry;
 }
 
-struct BxDFResult {
-    float3 bxdf;
-    float3 diffuse;
-    float3 subsurface;
-    float3 specular;
-    float3 coat;
-    float3 transmission;
-    float3 fuzz;
-
-    float n_dot_l;
-}
-
 struct BxDFGeometry {
     float3 normal;
     float3 geometric_normal;
@@ -105,5 +93,5 @@ struct BxDFGeometry {
 }
 
 interface IBxDF {
-    BxDFResult evaluate(in const BxDFParams params, in const BxDFGeometry geometry, float3 wi, float3 wo, float n_dot_v, float n_dot_l);
+    float3 evaluate(in const BxDFParams params, in const BxDFGeometry geometry, float3 wi, float3 wo, float n_dot_v, float n_dot_l);
 }

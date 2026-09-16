@@ -50,15 +50,15 @@ FragmentOutput FSMain(VertexOutput input) {
     mat_state.mat = mat;
     mat_state.linear_sampler = bindless_samplers[push_constants.linear_sampler_index];
 
+    SceneGlobals* scene = (SceneGlobals*)push_constants.scene_constants_address;
+
     PixelData pd;
     pd.uv = half2(input.uv);
     pd.geom_tangent = half3(input.tangent);
     pd.geom_bitangent = half3(input.bitangent);
     pd.geom_normal = half3(input.normal);
-
-    SceneGlobals* scene = (SceneGlobals*)push_constants.scene_constants_address;
-    float3 view_dir = normalize(scene.camera.eye.xyz - input.world_position);
-    pd.front_face = dot(view_dir, input.normal) > 0.0;
+    float3 wo = normalize(scene.camera.eye.xyz - input.world_position);
+    pd.front_face = dot(wo, input.normal) > 0.0;
     pd.ambient_occlusion = 1.0h;
 
     fetch_pixel_data(mat_state, pd);
@@ -67,7 +67,7 @@ FragmentOutput FSMain(VertexOutput input) {
     if (mat.type == MaterialType::TRANSMISSIVE) {
         float transmission = float(pd.transmission_factor);
         half dielectric_f0 = 0.16h * half(mat_state.mat.reflectance) * half(mat_state.mat.reflectance);
-        float v_dot_n = saturate(dot(view_dir, float3(pd.shading_normal)));
+        float v_dot_n = saturate(dot(wo, float3(pd.shading_normal)));
         float fresnel = float(dielectric_f0) + (1.0 - float(dielectric_f0)) * pow(1.0 - v_dot_n, 5.0);
         alpha = alpha * (1.0 - transmission * (1.0 - fresnel));
     }
@@ -123,7 +123,7 @@ FragmentOutput FSMain(VertexOutput input) {
     float4 color = evaluate_material_openpbr(
         pd, mat_state, scene,
         input.world_position, input.view_position, input.position.xy,
-        sun_shadow, push_constants.light_bitmask_address);
+        wo, sun_shadow, push_constants.light_bitmask_address);
 
     if (shadow_data != nullptr && shadow_data.debug_mode != 0) {
         color.rgb = apply_shadow_debug_visualization(color.rgb, sun_shadow, cascade_idx, shadow_data.debug_mode);

@@ -44,14 +44,14 @@ void FSMain(VertexOutput input) {
     mat_state.mat = mat;
     mat_state.linear_sampler = bindless_samplers[push_constants.linear_sampler_index];
 
+    SceneGlobals* scene = (SceneGlobals*)push_constants.scene_constants_address;
+    float3 view_dir = normalize(scene.camera.eye.xyz - input.world_position);
+
     PixelData pd;
     pd.uv = half2(input.uv);
     pd.geom_tangent = half3(input.tangent);
     pd.geom_bitangent = half3(input.bitangent);
     pd.geom_normal = half3(input.normal);
-
-    SceneGlobals* scene = (SceneGlobals*)push_constants.scene_constants_address;
-    float3 view_dir = normalize(scene.camera.eye.xyz - input.world_position);
     pd.front_face = dot(view_dir, input.normal) > 0.0;
     pd.ambient_occlusion = 1.0h;
 

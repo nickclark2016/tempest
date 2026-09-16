@@ -126,10 +126,7 @@ struct OpenPBRBxDF : IBxDF {
         return r;
     }
 
-    BxDFResult evaluate(in const BxDFParams params, in const BxDFGeometry geometry, float3 wi, float3 wo, float n_dot_v, float n_dot_l) {
-        var result = BxDFResult();
-        result.n_dot_l = n_dot_l;
-
+    float3 evaluate(in const BxDFParams params, in const BxDFGeometry geometry, float3 wi, float3 wo, float n_dot_v, float n_dot_l) {
         let n = geometry.normal;
         let h = normalize(wi + wo);
         let n_dot_h = saturate(dot(n, h));
@@ -148,63 +145,35 @@ struct OpenPBRBxDF : IBxDF {
 
         let glossy_diffuse = specular_slab.reflection + (1.0 - specular_slab.fresnel) * diffuse_slab;
 
-        var subsurface_slab = float3(0.0);
         var opaque_base = glossy_diffuse;
         if (params.subsurface.weight > 0.0) {
-            subsurface_slab = evaluate_subsurface_slab(params.subsurface, params.diffuse, n_dot_l);
+            let subsurface_slab = evaluate_subsurface_slab(params.subsurface, params.diffuse, n_dot_l);
             opaque_base = lerp(glossy_diffuse, subsurface_slab, params.subsurface.weight);
         }
 
-        var transmission_slab = float3(0.0);
         var dielectric_base = opaque_base;
         if (params.transmission.weight > 0.0) {
-            transmission_slab = evaluate_translucent_slab(params.transmission);
+            let transmission_slab = evaluate_translucent_slab(params.transmission);
             dielectric_base = lerp(opaque_base, transmission_slab, params.transmission.weight);
         }
 
-        var metal_slab = float3(0.0);
         var substrate = dielectric_base;
         if (params.metal.weight > 0.0) {
-            metal_slab = evaluate_metal_slab(params.metal, D, V, v_dot_h);
+            let metal_slab = evaluate_metal_slab(params.metal, D, V, v_dot_h);
             substrate = lerp(dielectric_base, metal_slab, params.metal.weight);
         }
 
-        var coat_fresnel = 0.0;
-        var coat_reflection = float3(0.0);
         if (params.coat.weight > 0.0) {
             let coat = evaluate_coat_slab(params.coat, geometry.coat_normal, h, wi, wo, v_dot_h);
-            coat_fresnel = coat.fresnel;
-            coat_reflection = coat.reflection;
-
-            float coat_atten = 1.0 - params.coat.weight * coat_fresnel * params.coat.darkening;
-            substrate = substrate * coat_atten + params.coat.weight * coat_reflection;
+            float coat_atten = 1.0 - params.coat.weight * coat.fresnel * params.coat.darkening;
+            substrate = substrate * coat_atten + params.coat.weight * coat.reflection;
         }
 
-        var fuzz_slab = float3(0.0);
         if (params.fuzz.weight > 0.0) {
-            fuzz_slab = evaluate_fuzz_slab(params.fuzz, n_dot_h, cl, cv);
+            let fuzz_slab = evaluate_fuzz_slab(params.fuzz, n_dot_h, cl, cv);
             substrate = lerp(substrate, fuzz_slab, params.fuzz.weight);
         }
 
-        let sss_w = params.subsurface.weight;
-        let trans_w = params.transmission.weight;
-        let metal_w = params.metal.weight;
-        let coat_atten = (params.coat.weight > 0.0)
-                         ? (1.0 - params.coat.weight * coat_fresnel * params.coat.darkening)
-                         : 1.0;
-        let fuzz_atten = 1.0 - params.fuzz.weight;
-        let outer_atten = coat_atten * fuzz_atten;
-
-        let glossy_atten = (1.0 - sss_w) * (1.0 - trans_w) * (1.0 - metal_w) * outer_atten;
-
-        result.diffuse      = diffuse_slab * (1.0 - specular_slab.fresnel) * glossy_atten;
-        result.specular     = specular_slab.reflection * glossy_atten + metal_slab * metal_w * outer_atten;
-        result.subsurface   = subsurface_slab * sss_w * (1.0 - trans_w) * (1.0 - metal_w) * outer_atten;
-        result.transmission = transmission_slab * trans_w * (1.0 - metal_w) * outer_atten;
-        result.coat         = coat_reflection * params.coat.weight * fuzz_atten;
-        result.fuzz         = fuzz_slab * params.fuzz.weight;
-        result.bxdf         = substrate;
-
-        return result;
+        return substrate;
     }
 }

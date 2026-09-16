@@ -51,8 +51,8 @@ FragmentOutput FSMain(VertexOutput input) {
     pd.geom_bitangent = half3(input.bitangent);
     pd.geom_normal = half3(input.normal);
 
-    float3 view_dir = normalize(scene.camera.eye.xyz - input.world_position);
-    pd.front_face = dot(view_dir, input.normal) > 0.0;
+    float3 wo = normalize(scene.camera.eye.xyz - input.world_position);
+    pd.front_face = dot(wo, input.normal) > 0.0;
     pd.ambient_occlusion = 1.0h;
 
     fetch_pixel_data<AlphaPolicy::Masked>(mat_state, pd);
@@ -77,7 +77,7 @@ FragmentOutput FSMain(VertexOutput input) {
     float4 color = evaluate_material_openpbr(
         pd, mat_state, scene,
         input.world_position, input.view_position, input.position.xy,
-        sun_shadow, push_constants.light_bitmask_address);
+        wo, sun_shadow, push_constants.light_bitmask_address);
 
     if (shadow_data != nullptr && shadow_data.debug_mode != 0) {
         color.rgb = apply_shadow_debug_visualization(color.rgb, sun_shadow, cascade_idx, shadow_data.debug_mode);
