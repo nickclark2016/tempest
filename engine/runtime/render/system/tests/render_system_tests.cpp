@@ -10,6 +10,7 @@
 #include <tempest/render_system/passes/frame_upload_pass.hpp>
 #include <tempest/render_system/passes/light_clustering_pass.hpp>
 #include <tempest/render_system/passes/light_culling_pass.hpp>
+#include <tempest/render_system/passes/pbr_masked_pass.hpp>
 #include <tempest/render_system/passes/pbr_opaque_pass.hpp>
 #include <tempest/render_system/passes/shadow_pass.hpp>
 #include <tempest/render_system/passes/skybox_pass.hpp>
@@ -779,14 +780,14 @@ namespace tempest::render_system::tests
 
         auto shaders = shader_manager{*dev, fixture.asset_db};
 
-        auto vs = shaders.register_shader_module("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
-        auto fs = shaders.register_shader_module("pbr.frag.spv", rhi::shader_stage::fragment, "FSMain");
+        auto vs = shaders.register_shader_module("pbr_opaque.vert.spv", rhi::shader_stage::vertex, "VSMain");
+        auto fs = shaders.register_shader_module("pbr_opaque.frag.spv", rhi::shader_stage::fragment, "FSMain");
         EXPECT_GT(vs.id, 0U);
         EXPECT_GT(fs.id, 0U);
         EXPECT_NE(vs.id, fs.id);
 
         // Idempotent re-registration of same module returns identical handle
-        auto vs_dup = shaders.register_shader_module("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
+        auto vs_dup = shaders.register_shader_module("pbr_opaque.vert.spv", rhi::shader_stage::vertex, "VSMain");
         EXPECT_EQ(vs.id, vs_dup.id);
 
         auto stages = array{vs, fs};
@@ -892,8 +893,8 @@ namespace tempest::render_system::tests
 
         auto shaders = shader_manager{*dev, fixture.asset_db};
 
-        auto vs = shaders.register_shader_module("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
-        auto fs = shaders.register_shader_module("pbr.frag.spv", rhi::shader_stage::fragment, "FSMain");
+        auto vs = shaders.register_shader_module("pbr_opaque.vert.spv", rhi::shader_stage::vertex, "VSMain");
+        auto fs = shaders.register_shader_module("pbr_opaque.frag.spv", rhi::shader_stage::fragment, "FSMain");
 
         auto stages = array{vs, fs};
         auto color_formats = array{rhi::data_format::rgba16_float};
@@ -927,7 +928,7 @@ namespace tempest::render_system::tests
         EXPECT_NE(reloaded_rhi2.handle, 0ULL);
 
         // Notify file changed triggers surgical reload
-        auto notify_ok = shaders.notify_file_changed(tempest::filesystem::path("pbr.frag.spv"));
+        auto notify_ok = shaders.notify_file_changed(tempest::filesystem::path("pbr_opaque.frag.spv"));
         EXPECT_TRUE(notify_ok);
 
         // Drain retired pipelines
@@ -944,8 +945,8 @@ namespace tempest::render_system::tests
 
         auto shaders = shader_manager{*dev, fixture.asset_db};
 
-        auto vs = shaders.register_shader_module("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
-        auto fs = shaders.register_shader_module("pbr.frag.spv", rhi::shader_stage::fragment, "FSMain");
+        auto vs = shaders.register_shader_module("pbr_opaque.vert.spv", rhi::shader_stage::vertex, "VSMain");
+        auto fs = shaders.register_shader_module("pbr_opaque.frag.spv", rhi::shader_stage::fragment, "FSMain");
 
         auto stages = array{vs, fs};
         auto color_formats = array{rhi::data_format::rgba16_float};
@@ -5063,6 +5064,182 @@ namespace tempest::render_system::tests
                 builder.mark_sink();
             },
             []([[maybe_unused]] const depth_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
+               [[maybe_unused]] rhi::command_list&) -> void {});
+
+        // 4. Act: Compile and execute render graph
+        auto exec_res = graph.execute_sync(*dev);
+
+        // 5. Assert: Graph execution completes successfully
+        EXPECT_TRUE(exec_res.has_value());
+
+        dev->wait_idle();
+    }
+
+    // =========================================================================
+    // PBR Pipeline Tests (Opaque vs. Masked Separation)
+    // =========================================================================
+
+    /// @brief Verifies that add_pbr_opaque_pass registers pbr_opaque_pipeline (using
+    /// pbr_opaque.vert.spv and pbr_opaque.frag.spv), binds required attachments, and
+    /// cleanly executes through the render graph.
+    TEST(render_system_tests, pbr_opaque_pass_pipeline_registration_and_execution)
+    {
+        // 1. Setup: Initialize test device, resource pool, shader manager, and render graph
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
+
+        constexpr const uint32_t width = 64;
+        constexpr const uint32_t height = 64;
+
+        auto graph = render_graph::render_graph{width, height};
+
+        auto hdr_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "TestOpaqueHDRTarget",
+        });
+
+        auto depth_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "TestOpaqueDepthTarget",
+        });
+
+        auto shadow_atlas = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "TestOpaqueShadowAtlas",
+        });
+
+        add_frame_upload_pass(graph, pool);
+
+        // 2. Act: Add PBR opaque pass with draw commands
+        const auto& opaque_data =
+            add_pbr_opaque_pass(graph, pool, shaders, hdr_tex, depth_tex, shadow_atlas, 1, 0);
+
+        // 3. Assert: Output texture and draw parameters are valid
+        EXPECT_TRUE(opaque_data.hdr_color.is_valid());
+        EXPECT_TRUE(opaque_data.depth_texture.is_valid());
+        EXPECT_EQ(opaque_data.draw_count, 1U);
+        EXPECT_EQ(opaque_data.draw_offset, 0U);
+
+        // Verify specialized opaque pipeline is registered in shader_manager
+        const auto opaque_pipe_opt = shaders.find_graphics_pipeline("pbr_opaque_pipeline");
+        ASSERT_TRUE(opaque_pipe_opt.has_value());
+        EXPECT_NE(shaders.get_rhi_pipeline(*opaque_pipe_opt).handle, 0ULL);
+
+        // Mark sink on output color texture so pass is retained
+        struct color_sink_data
+        {
+            render_graph::rg_texture_id color;
+        };
+        graph.add_graphics_pass<color_sink_data>(
+            "ColorSinkPass",
+            [c = opaque_data.hdr_color](render_graph::pass_builder& builder, color_sink_data& sink_data) -> void {
+                sink_data.color = builder.read(c, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                               rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const color_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
+               [[maybe_unused]] rhi::command_list&) -> void {});
+
+        // 4. Act: Compile and execute render graph
+        auto exec_res = graph.execute_sync(*dev);
+
+        // 5. Assert: Graph execution completes successfully
+        EXPECT_TRUE(exec_res.has_value());
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that add_pbr_masked_pass registers the specialized pbr_masked_pipeline
+    /// (using pbr_masked.vert.spv and pbr_masked.frag.spv), correctly binds attachments, and
+    /// cleanly executes through the render graph.
+    TEST(render_system_tests, pbr_masked_pass_pipeline_registration_and_execution)
+    {
+        // 1. Setup: Initialize test device, resource pool, shader manager, and render graph
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
+
+        constexpr const uint32_t width = 64;
+        constexpr const uint32_t height = 64;
+
+        auto graph = render_graph::render_graph{width, height};
+
+        auto hdr_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "TestMaskedHDRTarget",
+        });
+
+        auto depth_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "TestMaskedDepthTarget",
+        });
+
+        auto shadow_atlas = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "TestMaskedShadowAtlas",
+        });
+
+        add_frame_upload_pass(graph, pool);
+
+        // 2. Act: Add PBR masked pass with draw commands
+        const auto& masked_data =
+            add_pbr_masked_pass(graph, pool, shaders, hdr_tex, depth_tex, shadow_atlas, 1, 0);
+
+        // 3. Assert: Output texture and draw parameters are valid
+        EXPECT_TRUE(masked_data.hdr_color.is_valid());
+        EXPECT_TRUE(masked_data.depth_texture.is_valid());
+        EXPECT_EQ(masked_data.draw_count, 1U);
+        EXPECT_EQ(masked_data.draw_offset, 0U);
+
+        // Verify specialized masked pipeline is registered in shader_manager
+        const auto masked_pipe_opt = shaders.find_graphics_pipeline("pbr_masked_pipeline");
+        ASSERT_TRUE(masked_pipe_opt.has_value());
+        EXPECT_NE(shaders.get_rhi_pipeline(*masked_pipe_opt).handle, 0ULL);
+
+        // Mark sink on output color texture so pass is retained
+        struct color_sink_data
+        {
+            render_graph::rg_texture_id color;
+        };
+        graph.add_graphics_pass<color_sink_data>(
+            "ColorSinkPass",
+            [c = masked_data.hdr_color](render_graph::pass_builder& builder, color_sink_data& sink_data) -> void {
+                sink_data.color = builder.read(c, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                               rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const color_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
                [[maybe_unused]] rhi::command_list&) -> void {});
 
         // 4. Act: Compile and execute render graph

@@ -36,6 +36,7 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 }
 
 [shader("fragment")]
+[earlydepthstencil]
 FragmentOutput FSMain(VertexOutput input) {
     SceneGlobals* scene = (SceneGlobals*)push_constants.scene_constants_address;
     Material* mat = (Material*)input.material_address;
@@ -54,13 +55,7 @@ FragmentOutput FSMain(VertexOutput input) {
     pd.front_face = dot(view_dir, input.normal) > 0.0;
     pd.ambient_occlusion = 1.0h;
 
-    fetch_pixel_data(mat_state, pd);
-
-    if (mat.type == MaterialType::MASK) {
-        if (pd.diffuse.w < mat.alpha_cutoff) {
-            discard;
-        }
-    }
+    fetch_pixel_data<AlphaPolicy::Opaque>(mat_state, pd);
 
     float sun_shadow = 1.0;
     int cascade_idx = -1;
@@ -81,10 +76,6 @@ FragmentOutput FSMain(VertexOutput input) {
 
     if (shadow_data != nullptr && shadow_data.debug_mode != 0) {
         color.rgb = apply_shadow_debug_visualization(color.rgb, sun_shadow, cascade_idx, shadow_data.debug_mode);
-    }
-
-    if (mat.type == MaterialType::TRANSMISSIVE) {
-        color.a = mat.transmission_factor;
     }
 
     return FragmentOutput(color);

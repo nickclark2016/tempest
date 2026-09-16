@@ -11,6 +11,7 @@
 #include <tempest/render_system/passes/frame_upload_pass.hpp>
 #include <tempest/render_system/passes/light_clustering_pass.hpp>
 #include <tempest/render_system/passes/light_culling_pass.hpp>
+#include <tempest/render_system/passes/pbr_masked_pass.hpp>
 #include <tempest/render_system/passes/pbr_opaque_pass.hpp>
 #include <tempest/render_system/passes/shadow_pass.hpp>
 #include <tempest/render_system/passes/skybox_pass.hpp>
@@ -1170,7 +1171,6 @@ namespace tempest::render_system
             _directional_shadow_atlas_target = shadow_res.shadow_atlas;
         }
 
-        const auto non_transparent_draw_count = _opaque_draw_count + _alpha_masked_draw_count;
         const auto& depth_data =
             add_depth_prepass(_graph, _pool, _shaders, _depth_target, _opaque_draw_count, _opaque_draw_offset,
                               _alpha_masked_draw_count, _alpha_masked_draw_offset, gfx_stats);
@@ -1184,9 +1184,13 @@ namespace tempest::render_system
         }
 
         const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target, -1, gfx_stats);
-        const auto& pbr_data = add_pbr_opaque_pass(
+        const auto& pbr_opaque_data = add_pbr_opaque_pass(
             _graph, _pool, _shaders, skybox_data.hdr_color, depth_data.depth_texture, _directional_shadow_atlas_target,
-            non_transparent_draw_count, 0, culling_data.light_bitmask_buffer, gfx_stats);
+            _opaque_draw_count, _opaque_draw_offset, culling_data.light_bitmask_buffer, gfx_stats);
+        const auto& pbr_masked_data = add_pbr_masked_pass(
+            _graph, _pool, _shaders, pbr_opaque_data.hdr_color, depth_data.depth_texture,
+            _directional_shadow_atlas_target, _alpha_masked_draw_count, _alpha_masked_draw_offset,
+            culling_data.light_bitmask_buffer, gfx_stats);
 
         const auto& clear_data =
             add_transparency_clear_pass(_graph, _shaders, _moments_target, _zeroth_moment_target, width, height);
@@ -1198,7 +1202,7 @@ namespace tempest::render_system
             gather_data.zeroth_moment_texture, depth_data.depth_texture, _transparent_draw_count,
             _transparent_draw_offset, _directional_shadow_atlas_target, culling_data.light_bitmask_buffer, gfx_stats);
         const auto& blend_data =
-            add_transparency_blend_pass(_graph, _pool, _shaders, pbr_data.hdr_color, resolve_data.accum_texture,
+            add_transparency_blend_pass(_graph, _pool, _shaders, pbr_masked_data.hdr_color, resolve_data.accum_texture,
                                         gather_data.zeroth_moment_texture, rhi::data_format::rgba16_float, gfx_stats);
 
         const auto& tonemap_data =

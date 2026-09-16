@@ -1,20 +1,20 @@
-#include <tempest/render_system/passes/pbr_opaque_pass.hpp>
+#include <tempest/render_system/passes/pbr_masked_pass.hpp>
 
 #include <tempest/array.hpp>
 
 namespace tempest::render_system
 {
-    auto add_pbr_opaque_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+    auto add_pbr_masked_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
                              render_graph::rg_texture_id hdr_color_tex, render_graph::rg_texture_id depth_tex,
                              render_graph::rg_texture_id shadow_atlas, uint32_t draw_count, uint32_t draw_offset,
                              render_graph::rg_buffer_id light_bitmask_buf,
-                             enum_mask<rhi::pipeline_statistic_flags> pipeline_stats) -> const pbr_opaque_pass_data&
+                             enum_mask<rhi::pipeline_statistic_flags> pipeline_stats) -> const pbr_masked_pass_data&
     {
-        auto pipe_h = shaders.find_graphics_pipeline("pbr_opaque_pipeline");
+        auto pipe_h = shaders.find_graphics_pipeline("pbr_masked_pipeline");
         if (!pipe_h.has_value())
         {
-            auto vs = shaders.register_shader_module("pbr_opaque.vert.spv", rhi::shader_stage::vertex, "VSMain");
-            auto fs = shaders.register_shader_module("pbr_opaque.frag.spv", rhi::shader_stage::fragment, "FSMain");
+            auto vs = shaders.register_shader_module("pbr_masked.vert.spv", rhi::shader_stage::vertex, "VSMain");
+            auto fs = shaders.register_shader_module("pbr_masked.frag.spv", rhi::shader_stage::fragment, "FSMain");
             auto stages = array{vs, fs};
             auto color_formats = array{rhi::data_format::rgba16_float};
 
@@ -36,15 +36,15 @@ namespace tempest::render_system
                         .depth_compare_op = rhi::compare_op::greater_or_equal,
                     },
             };
-            pipe_h = shaders.register_graphics_pipeline("pbr_opaque_pipeline", tmpl);
+            pipe_h = shaders.register_graphics_pipeline("pbr_masked_pipeline", tmpl);
         }
 
         const auto pipe = *pipe_h;
 
-        return graph.add_graphics_pass<pbr_opaque_pass_data>(
-            "PBROpaquePass",
+        return graph.add_graphics_pass<pbr_masked_pass_data>(
+            "PBRMaskedPass",
             [&pool, hdr_color_tex, depth_tex, shadow_atlas, draw_count, draw_offset, light_bitmask_buf,
-             pipeline_stats](render_graph::pass_builder& builder, pbr_opaque_pass_data& data) {
+             pipeline_stats](render_graph::pass_builder& builder, pbr_masked_pass_data& data) {
                 if (pipeline_stats != rhi::pipeline_statistic_flags::none)
                 {
                     builder.enable_pipeline_statistics(pipeline_stats);
@@ -92,7 +92,7 @@ namespace tempest::render_system
                 data.draw_count = draw_count;
                 data.draw_offset = draw_offset;
             },
-            [&pool, &shaders, pipe](const pbr_opaque_pass_data& data, render_graph::pass_execution_context& ctx,
+            [&pool, &shaders, pipe](const pbr_masked_pass_data& data, render_graph::pass_execution_context& ctx,
                                     rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0)
                 {
@@ -111,7 +111,7 @@ namespace tempest::render_system
                 const auto shadow_desc_idx = ctx.get_texture_descriptor(data.shadow_atlas);
                 const auto shadow_atlas_idx = (shadow_desc_idx != ~0U) ? static_cast<int32_t>(shadow_desc_idx) : -1;
 
-                const auto constants = pbr_opaque_push_constants{
+                const auto constants = pbr_masked_push_constants{
                     .scene_constants_address = pool.get_scene_constants_address(),
                     .objects_address = pool.get_object_buffer_address(),
                     .instance_indices_address = pool.get_instance_buffer_address(),

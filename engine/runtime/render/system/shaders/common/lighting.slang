@@ -137,9 +137,9 @@ ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerState l
     float2 texel_size = float2(1.0 / float(atlas_width), 1.0 / float(atlas_height));
 
     float shadow = 0.0;
-    [unroll]
+    // [unroll]
     for (int x = -1; x <= 1; ++x) {
-        [unroll]
+        // [unroll]
         for (int y = -1; y <= 1; ++y) {
             float2 sample_uv = atlas_uv + float2(x, y) * texel_size;
             float sampled_depth = shadow_atlas.SampleLevel(linear_sampler, sample_uv, 0).r;
