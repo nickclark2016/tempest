@@ -6,6 +6,7 @@
 #include <tempest/ecs_events.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
+#include <tempest/inplace_vector.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
@@ -225,6 +226,11 @@ namespace tempest::render_system
             -> const render_graph::temporal_texture&
         {
             return _directional_shadow_temporal_atlas;
+        }
+
+        [[nodiscard]] auto get_retired_texture_count() const noexcept -> size_t
+        {
+            return _retired_textures.size();
         }
 
         [[nodiscard]] auto get_punctual_shadow_atlas_texture() const noexcept -> render_graph::rg_texture_id
@@ -467,6 +473,20 @@ namespace tempest::render_system
         void _init_lights_from_registry();
         void _ensure_assets_loaded();
         void _update_renderable_commands();
+
+        struct retired_texture_entry
+        {
+            inplace_vector<rhi::texture_handle, render_graph::max_temporal_slots> textures{};
+            inplace_vector<rhi::texture_view_handle, render_graph::max_temporal_slots> views{};
+            inplace_vector<rhi::descriptor_handle, render_graph::max_temporal_slots> descriptors{};
+            inplace_vector<rhi::host_sync_point, 3> required_sync_points{};
+        };
+
+        vector<retired_texture_entry> _retired_textures{};
+
+        void enqueue_texture_retirement(render_graph::temporal_resources res);
+        void process_deferred_texture_retirements();
+        void clear_retired_textures();
     };
 } // namespace tempest::render_system
 

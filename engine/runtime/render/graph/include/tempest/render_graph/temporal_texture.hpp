@@ -7,9 +7,18 @@
 #include <tempest/render_graph/types.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/span.hpp>
+#include <tempest/utility.hpp>
 
 namespace tempest::render_graph
 {
+    /// \brief Container holding extracted GPU resources from a temporal texture for safe retirement handover.
+    struct temporal_resources
+    {
+        inplace_vector<rhi::texture_handle, max_temporal_slots> textures{};
+        inplace_vector<rhi::texture_view_handle, max_temporal_slots> views{};
+        inplace_vector<rhi::descriptor_handle, max_temporal_slots> sampled_descriptors{};
+    };
+
     /// \brief Persistent, double/multi-buffered GPU texture container for temporal accumulation and history.
     ///
     /// Manages K physical texture allocations (where K = history_count + 1) in a ring buffer.
@@ -39,6 +48,22 @@ namespace tempest::render_graph
 
         /// \brief Destroy all allocated GPU texture and view resources.
         auto release(rhi::device& dev) -> void;
+
+        /// \brief Extract allocated GPU resources for deferred deletion handover, leaving container unallocated.
+        auto extract_resources() noexcept -> temporal_resources
+        {
+            auto res = temporal_resources{
+                .textures = tempest::move(_textures),
+                .views = tempest::move(_views),
+                .sampled_descriptors = tempest::move(_sampled_descriptors),
+            };
+            _textures.clear();
+            _views.clear();
+            _sampled_descriptors.clear();
+            _current_slot = 0;
+            _valid_history_frames = 0;
+            return res;
+        }
 
         /// \brief Logically invalidate all past history frames (e.g. on scene cuts or camera teleports).
         auto invalidate() noexcept -> void

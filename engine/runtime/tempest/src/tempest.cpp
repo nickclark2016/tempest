@@ -61,7 +61,11 @@ namespace tempest
             .version_major = 1,
             .version_minor = 0,
             .version_patch = 0,
+#if defined(TEMPEST_CONFIG_RELEASE) && !defined(TEMPEST_DEBUG_SHADERS)
+            .enable_api_validation = false,
+#else
             .enable_api_validation = true,
+#endif
             .api = rhi::graphics_api::vulkan,
         };
 

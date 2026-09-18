@@ -143,7 +143,10 @@ scoped.workspace('Tempest', function()
     scoped.filter({
         'configurations:Debug'
     }, function()
-        defines { '_DEBUG' }
+        defines {
+            '_DEBUG',
+            'TEMPEST_CONFIG_DEBUG',
+        }
 
         scoped.filter({
             'action:vs*'
@@ -161,14 +164,20 @@ scoped.workspace('Tempest', function()
     scoped.filter({
         'configurations:Release'
     }, function()
-        defines { 'NDEBUG' }
+        defines {
+            'NDEBUG',
+            'TEMPEST_CONFIG_RELEASE',
+        }
         optimize 'Full'
     end)
 
     scoped.filter({
         'configurations:RelWithDebugInfo'
     }, function()
-        defines { 'NDEBUG' }
+        defines { 
+            'NDEBUG',
+            'TEMPEST_CONFIG_RELWITHDEBUGINFO',
+        }
         optimize 'On'
     end)
 

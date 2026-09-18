@@ -5445,4 +5445,118 @@ namespace tempest::render_system::tests
 
         dev->wait_idle();
     }
+
+    /// @brief Verifies that dynamically changing the shadow map resolution does not immediately destroy
+    ///        in-flight GPU textures; instead, old resources are enqueued into the deferred retirement queue
+    ///        and safely drained only after timeline completion.
+    TEST(render_system_tests, renderer_shadow_map_resize_deferred_retirement)
+    {
+        // 1. Setup: Initialize device, registries, and renderer
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // Create sun light entity with 1024 resolution
+            auto sun_ent = registry.create();
+            registry.assign(sun_ent, directional_light_component{
+                                         .color = {1.0F, 1.0F, 1.0F},
+                                         .intensity = 2.0F,
+                                     });
+            registry.assign(sun_ent, shadow_caster_component{
+                                         .resolution = 1024,
+                                         .num_cascades = 4,
+                                         .split_lambda = 0.5F,
+                                         .max_shadow_distance = 100.0F,
+                                     });
+            auto sun_tx = ecs::transform_component::identity();
+            sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
+            registry.assign(sun_ent, sun_tx);
+
+            const auto proj = math::perspective(16.0F / 9.0F, math::as_radians(60.0F), 0.1F);
+            const auto eye = math::vec3<float>{0.0F, 2.0F, -10.0F};
+            const auto view =
+                math::look_at(eye, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F});
+            const auto override_camera = render_camera{
+                .proj = proj,
+                .inv_proj = math::inverse(proj),
+                .view = view,
+                .inv_view = math::inverse(view),
+                .eye_position = {eye.x, eye.y, eye.z, 1.0F},
+            };
+
+            // 2. Act: Prepare and render Frame 0 at 1024 resolution
+            rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
+            const auto& temporal_atlas = rend->get_directional_shadow_temporal_atlas();
+            EXPECT_TRUE(temporal_atlas.is_allocated());
+            EXPECT_EQ(rend->get_retired_texture_count(), 0U);
+
+            const auto old_desc = temporal_atlas.get_desc();
+            const auto old_w0 = temporal_atlas.get_write_texture();
+
+            auto res0 = rend->render();
+            EXPECT_TRUE(res0.has_value());
+
+            // 3. Act: Dynamically change shadow caster resolution to 2048
+            registry.replace(sun_ent, shadow_caster_component{
+                                          .resolution = 2048,
+                                          .num_cascades = 4,
+                                          .split_lambda = 0.5F,
+                                          .max_shadow_distance = 100.0F,
+                                      });
+
+            // Prepare Frame 1: must detect dimension mismatch and enqueue old resources for retirement
+            rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
+
+            // 4. Assert: Old resources were extracted into _retired_textures rather than destroyed immediately
+            EXPECT_EQ(rend->get_retired_texture_count(), 1U);
+            EXPECT_TRUE(temporal_atlas.is_allocated());
+            const auto new_desc = temporal_atlas.get_desc();
+            EXPECT_NE(new_desc.desc.size.absolute_width, old_desc.desc.size.absolute_width);
+            EXPECT_NE(temporal_atlas.get_write_texture().handle, old_w0.handle);
+
+            auto res1 = rend->render();
+            EXPECT_TRUE(res1.has_value());
+
+            // 5. Act: Render subsequent frames allowing timeline semaphores to complete and drain retired textures
+            rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
+            auto res2 = rend->render();
+            EXPECT_TRUE(res2.has_value());
+
+            rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
+            auto res3 = rend->render();
+            EXPECT_TRUE(res3.has_value());
+
+            // All GPU operations have retired through timeline sync
+            EXPECT_EQ(rend->get_retired_texture_count(), 0U);
+        }
+
+        dev->wait_idle();
+    }
 } // namespace tempest::render_system::tests
+

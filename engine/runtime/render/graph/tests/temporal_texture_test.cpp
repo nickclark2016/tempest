@@ -374,14 +374,19 @@ namespace tempest::render_graph
                 return rhi::semaphore_handle{.handle = next_h++};
             }
 
+            uint32_t destroyed_textures{0};
+            uint32_t destroyed_views{0};
+
             auto destroy_buffer([[maybe_unused]] rhi::buffer_handle buffer) -> void override
             {
             }
             auto destroy_texture([[maybe_unused]] rhi::texture_handle texture) -> void override
             {
+                ++destroyed_textures;
             }
             auto destroy_texture_view([[maybe_unused]] rhi::texture_view_handle view) -> void override
             {
+                ++destroyed_views;
             }
             auto destroy_sampler([[maybe_unused]] rhi::sampler_handle sampler) -> void override
             {
@@ -863,4 +868,64 @@ namespace tempest::render_graph
         color_tex.release(dev);
         depth_tex.release(dev);
     }
+
+    /// @brief Verifies that extract_resources() extracts all physical textures, views, and descriptors
+    ///        into a temporal_resources struct and leaves the temporal_texture unallocated, preventing
+    ///        premature destruction upon subsequent init() or release() calls.
+    TEST(temporal_texture_test, extract_resources_handover)
+    {
+        // 1. Setup: Allocate temporal_texture with 2 history slots (3 physical slots)
+        auto dev = mock_temporal_device{};
+        auto tex = temporal_texture{};
+
+        const auto desc = temporal_texture_desc{
+            .desc =
+                rg_texture_desc{
+                    .size = rg_texture_size::absolute(1920, 1080),
+                    .format = rhi::data_format::rgba8_unorm,
+                    .usage = rhi::texture_usage::sampled | rhi::texture_usage::color_attachment,
+                    .name = "HandoverTemporal",
+                },
+            .history_count = 2,
+        };
+
+        ASSERT_TRUE(tex.init(dev, desc, 1920, 1080));
+        EXPECT_TRUE(tex.is_allocated());
+        EXPECT_EQ(tex.get_all_textures().size(), 3U);
+        EXPECT_EQ(tex.get_all_views().size(), 3U);
+        EXPECT_EQ(tex.get_all_sampled_descriptors().size(), 3U);
+
+        // 2. Act: Extract resources from temporal_texture
+        auto extracted = tex.extract_resources();
+
+        // 3. Assert: temporal_texture is now unallocated and extracted resources hold the handles
+        EXPECT_FALSE(tex.is_allocated());
+        EXPECT_EQ(tex.get_all_textures().size(), 0U);
+        EXPECT_EQ(tex.get_all_views().size(), 0U);
+        EXPECT_EQ(tex.get_all_sampled_descriptors().size(), 0U);
+        EXPECT_EQ(tex.get_valid_history_count(), 0U);
+
+        EXPECT_EQ(extracted.textures.size(), 3U);
+        EXPECT_EQ(extracted.views.size(), 3U);
+        EXPECT_EQ(extracted.sampled_descriptors.size(), 3U);
+
+        // Subsequent release on tex should destroy 0 resources
+        tex.release(dev);
+        EXPECT_EQ(dev.destroyed_textures, 0U);
+        EXPECT_EQ(dev.destroyed_views, 0U);
+
+        // Cleaning up extracted resources manually
+        for (const auto desc_handle : extracted.sampled_descriptors)
+        {
+            dev.free_descriptor(rhi::descriptor_type::sampled_image, desc_handle);
+        }
+        for (size_t i = 0; i < extracted.views.size(); ++i)
+        {
+            dev.destroy_texture_view(extracted.views[i]);
+            dev.destroy_texture(extracted.textures[i]);
+        }
+        EXPECT_EQ(dev.destroyed_textures, 3U);
+        EXPECT_EQ(dev.destroyed_views, 3U);
+    }
 } // namespace tempest::render_graph
+

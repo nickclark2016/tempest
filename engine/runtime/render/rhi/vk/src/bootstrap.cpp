@@ -780,6 +780,7 @@ namespace tempest::rhi::vk
         extensions_to_enable.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
         extensions_to_enable.push_back(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
         extensions_to_enable.push_back(VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME);
+        extensions_to_enable.push_back(VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME);
 
         if (phys_dev.has_extension(VK_KHR_CALIBRATED_TIMESTAMPS_EXTENSION_NAME))
         {
@@ -804,30 +805,44 @@ namespace tempest::rhi::vk
         }
 
         // Feature chain
+        auto* pnext_chain_ptr = static_cast<void*>(nullptr); 
+#if defined(TEMPEST_DEBUG_SHADERS) || defined(TEMPEST_CONFIG_DEBUG) || defined(TEMPEST_CONFIG_RELWITHDEBUGINFO)
+        auto relaxed_features = VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR{
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR,
+            .pNext = pnext_chain_ptr,
+            .shaderRelaxedExtendedInstruction = VK_TRUE,
+        };
+
+        pnext_chain_ptr = &relaxed_features;
+#endif
+
         auto feat_interlock = VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT{
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT,
-            .pNext = nullptr,
+            .pNext = pnext_chain_ptr,
             .fragmentShaderPixelInterlock = VK_TRUE,
         };
+        pnext_chain_ptr = &feat_interlock;
 
         auto feat_desc_buffer = VkPhysicalDeviceDescriptorBufferFeaturesEXT{
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
-            .pNext = &feat_interlock,
+            .pNext = pnext_chain_ptr,
             .descriptorBuffer = VK_TRUE,
         };
+        pnext_chain_ptr = &feat_desc_buffer;
 
         auto feat_13 = VkPhysicalDeviceVulkan13Features{
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-            .pNext = &feat_desc_buffer,
+            .pNext = pnext_chain_ptr,
             .shaderDemoteToHelperInvocation = VK_TRUE,
             .synchronization2 = VK_TRUE,
             .dynamicRendering = VK_TRUE,
             .maintenance4 = VK_TRUE,
         };
+        pnext_chain_ptr = &feat_13;
 
         auto feat_12 = VkPhysicalDeviceVulkan12Features{
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-            .pNext = &feat_13,
+            .pNext = pnext_chain_ptr,
             .drawIndirectCount = VK_TRUE,
             .storageBuffer8BitAccess = VK_TRUE,
             .uniformAndStorageBuffer8BitAccess = VK_FALSE,
@@ -856,14 +871,16 @@ namespace tempest::rhi::vk
             .vulkanMemoryModelDeviceScope = VK_TRUE,
             .vulkanMemoryModelAvailabilityVisibilityChains = VK_TRUE,
         };
+        pnext_chain_ptr = &feat_12;
 
         auto feat_11 = VkPhysicalDeviceVulkan11Features{
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-            .pNext = &feat_12,
+            .pNext = pnext_chain_ptr,
             .storageBuffer16BitAccess = VK_TRUE,
             .uniformAndStorageBuffer16BitAccess = VK_TRUE,
             .shaderDrawParameters = VK_TRUE,
         };
+        pnext_chain_ptr = &feat_11;
 
         const auto feat_10 = VkPhysicalDeviceFeatures{
             .independentBlend = VK_TRUE,
@@ -883,15 +900,16 @@ namespace tempest::rhi::vk
             .shaderInt16 = VK_TRUE,
         };
 
-        const auto features2 = VkPhysicalDeviceFeatures2{
+        auto features2 = VkPhysicalDeviceFeatures2{
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-            .pNext = &feat_11,
+            .pNext = pnext_chain_ptr,
             .features = feat_10,
         };
+        pnext_chain_ptr = &features2;
 
         const auto device_ci = VkDeviceCreateInfo{
             .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .pNext = &features2,
+            .pNext = pnext_chain_ptr,
             .flags = 0,
             .queueCreateInfoCount = static_cast<uint32_t>(queue_cis.size()),
             .pQueueCreateInfos = queue_cis.data(),

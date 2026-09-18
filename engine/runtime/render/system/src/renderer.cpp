@@ -200,6 +200,7 @@ namespace tempest::render_system
                     slot.timeline_sem = {};
                 }
             }
+            clear_retired_textures();
             if (_directional_shadow_temporal_atlas.is_allocated())
             {
                 _directional_shadow_temporal_atlas.release(*_device);
@@ -241,7 +242,8 @@ namespace tempest::render_system
           _renderables_dirty_count{other._renderables_dirty_count}, _events{other._events},
           _point_light_indices{tempest::move(other._point_light_indices)},
           _point_light_entities{tempest::move(other._point_light_entities)},
-          _cached_lights{tempest::move(other._cached_lights)}, _lights_dirty_count{other._lights_dirty_count}
+          _cached_lights{tempest::move(other._cached_lights)}, _lights_dirty_count{other._lights_dirty_count},
+          _retired_textures{tempest::move(other._retired_textures)}
     {
         other._unsubscribe_events();
         other._device = nullptr;
@@ -287,6 +289,7 @@ namespace tempest::render_system
                         slot.timeline_sem = {};
                     }
                 }
+                clear_retired_textures();
                 _graph.get_allocator().release_all(*_device);
             }
 
@@ -310,6 +313,7 @@ namespace tempest::render_system
             _jobs = _owned_jobs ? *_owned_jobs : *other._jobs;
             _graph = tempest::move(other._graph);
             _directional_shadow_temporal_atlas = tempest::move(other._directional_shadow_temporal_atlas);
+            _retired_textures = tempest::move(other._retired_textures);
             _directional_shadow_atlas_target = other._directional_shadow_atlas_target;
             _punctual_shadow_atlas_target = other._punctual_shadow_atlas_target;
             _hdr_color_target = other._hdr_color_target;
@@ -539,6 +543,119 @@ namespace tempest::render_system
         --_renderables_dirty_count;
     }
 
+    void renderer::enqueue_texture_retirement(render_graph::temporal_resources res)
+    {
+        if ((_device == nullptr) || (res.textures.empty() && res.views.empty() && res.sampled_descriptors.empty()))
+        {
+            return;
+        }
+
+        auto entry = retired_texture_entry{
+            .textures = tempest::move(res.textures),
+            .views = tempest::move(res.views),
+            .descriptors = tempest::move(res.sampled_descriptors),
+        };
+
+        // Snapshot current timeline sync points from all execution ports
+        auto& gfx_port = _device->get_graphics_execution_port();
+        entry.required_sync_points.push_back(gfx_port.get_timeline_sync_point());
+
+        auto& comp_port = _device->get_async_compute_execution_port();
+        entry.required_sync_points.push_back(comp_port.get_timeline_sync_point());
+
+        auto& xfer_port = _device->get_async_transfer_execution_port();
+        entry.required_sync_points.push_back(xfer_port.get_timeline_sync_point());
+
+        _retired_textures.push_back(tempest::move(entry));
+    }
+
+    void renderer::process_deferred_texture_retirements()
+    {
+        if (_device == nullptr)
+        {
+            return;
+        }
+
+        for (auto* it = _retired_textures.begin(); it != _retired_textures.end();)
+        {
+            bool all_queues_completed = true;
+            for (const auto& sync_point : it->required_sync_points)
+            {
+                if (sync_point.semaphore.handle != 0 && sync_point.value > 0)
+                {
+                    const auto current_val = _device->get_semaphore_value(sync_point.semaphore);
+                    if (current_val < sync_point.value)
+                    {
+                        all_queues_completed = false;
+                        break;
+                    }
+                }
+            }
+
+            if (all_queues_completed)
+            {
+                for (const auto desc : it->descriptors)
+                {
+                    if (desc.index != ~0U)
+                    {
+                        _device->free_descriptor(rhi::descriptor_type::sampled_image, desc);
+                    }
+                }
+                for (const auto view : it->views)
+                {
+                    if (view.handle != 0)
+                    {
+                        _device->destroy_texture_view(view);
+                    }
+                }
+                for (const auto tex : it->textures)
+                {
+                    if (tex.handle != 0)
+                    {
+                        _device->destroy_texture(tex);
+                    }
+                }
+                it = _retired_textures.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+
+    void renderer::clear_retired_textures()
+    {
+        if (_device != nullptr)
+        {
+            for (const auto& it : _retired_textures)
+            {
+                for (const auto desc : it.descriptors)
+                {
+                    if (desc.index != ~0U)
+                    {
+                        _device->free_descriptor(rhi::descriptor_type::sampled_image, desc);
+                    }
+                }
+                for (const auto view : it.views)
+                {
+                    if (view.handle != 0)
+                    {
+                        _device->destroy_texture_view(view);
+                    }
+                }
+                for (const auto tex : it.textures)
+                {
+                    if (tex.handle != 0)
+                    {
+                        _device->destroy_texture(tex);
+                    }
+                }
+            }
+        }
+        _retired_textures.clear();
+    }
+
     auto renderer::_find_surface(window_handle win) noexcept -> surface_state*
     {
         if (win.is_valid())
@@ -716,6 +833,7 @@ namespace tempest::render_system
         }
 
         _shaders.process_deferred_retirements();
+        process_deferred_texture_retirements();
         while (_pool.get_frame_slot() != slot_idx)
         {
             _pool.advance_frame();
@@ -1018,6 +1136,11 @@ namespace tempest::render_system
                 current_desc.desc.size.absolute_width != dir_shadow_plan.atlas_size.x ||
                 current_desc.desc.size.absolute_height != dir_shadow_plan.atlas_size.y)
             {
+                if (_directional_shadow_temporal_atlas.is_allocated())
+                {
+                    enqueue_texture_retirement(_directional_shadow_temporal_atlas.extract_resources());
+                }
+
                 _directional_shadow_temporal_atlas.init(
                     *_device,
                     render_graph::temporal_texture_desc{
@@ -1037,7 +1160,7 @@ namespace tempest::render_system
         }
         else if (_device != nullptr && _directional_shadow_temporal_atlas.is_allocated())
         {
-            _directional_shadow_temporal_atlas.release(*_device);
+            enqueue_texture_retirement(_directional_shadow_temporal_atlas.extract_resources());
         }
 
         if (!_directional_shadow_temporal_atlas.is_allocated())

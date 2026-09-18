@@ -30,6 +30,14 @@ scoped.project('rhi-vk', function()
         'vulkan',
     }
 
+    scoped.filter({
+        'options:debug-shaders'
+    }, function()
+        defines {
+            'TEMPEST_DEBUG_SHADERS'
+        }
+    end)
+
     scoped.usage("rhi-vk:includedirs", function()
         uses {
             'vma',
