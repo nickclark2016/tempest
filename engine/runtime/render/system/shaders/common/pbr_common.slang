@@ -35,12 +35,11 @@ float f0_to_index_of_refraction(float f0) {
 VertexOutput compute_vertex(uint vertex_id, uint instance_id, uint64_t instance_buffer_address,
                             uint64_t objects_address, SceneGlobals* scene)
 {
-    uint* instance_buffer = (uint*)instance_buffer_address;
-    ObjectData* objects = (ObjectData*)objects_address;
-
-    uint iid = instance_buffer[instance_id];
-    ObjectData* instance = &objects[iid];
-
+    let instance_buffer = (uint*)instance_buffer_address;
+    let iid = instance_buffer[instance_id];
+    
+    let objects = (ObjectData*)WaveReadLaneFirst(objects_address);
+    let instance = &objects[iid];
     Vertex v = pull_vertex(instance.mesh, vertex_id);
 
     float4 world_pos = mul(instance.model_matrix, float4(v.position, 1.0));
@@ -111,11 +110,10 @@ BxDFGeometry build_bxdf_geometry(const PixelData px) {
     return g;
 }
 
-float compute_smooth_distance_attenuation(float3 pos_to_light, float radius) {
-    float distance_squared = dot(pos_to_light, pos_to_light);
-    float factor = distance_squared / max(radius * radius, 1e-4);
+float compute_smooth_distance_attenuation(float magnitude_squared, float radius) {
+    float factor = magnitude_squared / max(radius * radius, 1e-4);
     float smooth = saturate(1.0 - factor * factor);
-    return (smooth * smooth) / max(distance_squared, 1e-4);
+    return (smooth * smooth) / max(magnitude_squared, 1e-4);
 }
 
 void evaluate_clustered_point_lights(
@@ -131,41 +129,41 @@ void evaluate_clustered_point_lights(
     uint64_t light_bitmask_address,
     inout half4 color)
 {
-    uint64_t bitmask_addr = light_bitmask_address != 0 ? light_bitmask_address : scene.light_bitmask_address;
-    if (scene.light_count == 0 || bitmask_addr == 0 || scene.lights_address == 0) {
+    if (scene.light_count == 0) {
         return;
     }
 
-    var cluster_idx_opt = get_cluster_index(view_pos, screen_coord, scene);
+    let cluster_idx_opt = get_cluster_index(view_pos, screen_coord, scene);
     if (!cluster_idx_opt.hasValue) {
         return;
     }
 
-    uint cluster_idx = cluster_idx_opt.value;
-    uint* bitmasks = (uint*)bitmask_addr;
-    LightPayload* lights = (LightPayload*)scene.lights_address;
-    uint words_per_cluster = scene.words_per_cluster;
-    uint base_mask_idx = cluster_idx * words_per_cluster;
-
+    let words_per_cluster = WaveReadLaneFirst(scene.words_per_cluster);
+    let cluster_idx = cluster_idx_opt.value;
+    let base_mask_idx = cluster_idx * words_per_cluster;
+    
     let bxdf = OpenPBRBxDF();
-
+    
     for (uint w = 0; w < words_per_cluster; ++w) {
-        uint mask = bitmasks[base_mask_idx + w];
-        uint base_light_idx = w * 32;
+        let bitmasks = (uint*)WaveReadLaneFirst(light_bitmask_address);
+        var mask = bitmasks[base_mask_idx + w];
+        let base_light_idx = w * 32;
 
         while (mask != 0) {
-            uint bit = firstbitlow(mask);
-            uint light_idx = base_light_idx + bit;
-            LightPayload* light = &lights[light_idx];
+            let bit = firstbitlow(mask);
+            let light_idx = base_light_idx + bit;
+            let lights = (LightPayload*)WaveReadLaneFirst(scene.lights_address);
+            let light = &lights[light_idx];
 
-            float3 pos_to_light = light.position_falloff.xyz - world_pos;
-            float3 wi = normalize(pos_to_light);
-            float n_dot_l = saturate(dot(float3(px.shading_normal), wi));
+            let pos_to_light = light.position_falloff.xyz - world_pos;
+            let wi = normalize(pos_to_light);
+            let magnitude_squared = dot(pos_to_light, pos_to_light);
+            let n_dot_l = dot(float3(px.shading_normal), wi);
 
             if (n_dot_l > 0.0) {
                 let bxdf_val = bxdf.evaluate(params, geometry, wi, wo, n_dot_v, n_dot_l);
-                float attenuation = compute_smooth_distance_attenuation(pos_to_light, light.position_falloff.w);
-                float3 radiance = light.color_intensity.rgb * light.color_intensity.w * attenuation;
+                let attenuation = compute_smooth_distance_attenuation(magnitude_squared, light.position_falloff.w);
+                let radiance = light.color_intensity.rgb * light.color_intensity.w * attenuation;
                 color.rgb += half3(bxdf_val * radiance * n_dot_l);
             }
 
@@ -185,31 +183,30 @@ float4 evaluate_material_openpbr(
     float shadow_factor = 1.0,
     uint64_t light_bitmask_address = 0)
 {
-    let bxdf = OpenPBRBxDF();
-    BxDFParams params = build_bxdf_params(px, mat_state);
-    BxDFGeometry geometry = build_bxdf_geometry(px);
-
-    float n_dot_v = max(1e-4, dot(float3(px.shading_normal), wo));
-
     // Ambient light with directional hemisphere response (soft sky fill)
-    float up_factor = saturate(float(px.shading_normal.y) * 0.5 + 0.5);
-    float3 sky_ambient = scene.ambient_light.rgb * (0.7 + 0.3 * up_factor) * float(px.ambient_occlusion);
-    half4 color = px.diffuse * half4(half3(sky_ambient), 1.0h);
-
+    let up_factor = saturate(float(px.shading_normal.y) * 0.5 + 0.5);
+    let sky_ambient = scene.ambient_light.rgb * (0.7 + 0.3 * up_factor) * float(px.ambient_occlusion);
+    var color = px.diffuse * half4(half3(sky_ambient), 1.0h);
+    
+    let n_dot_v = max(1e-4, dot(float3(px.shading_normal), wo));
     if (mat_state.mat.type == MaterialType::TRANSMISSIVE) {
         half dielectric_f0 = 0.16h * half(mat_state.mat.reflectance) * half(mat_state.mat.reflectance);
         float roughness = float(px.roughness);
         float fresnel = float(dielectric_f0) + (max(1.0 - roughness, float(dielectric_f0)) - float(dielectric_f0)) * pow(1.0 - n_dot_v, 5.0);
-        float3 diffuse_ambient = px.diffuse.rgb * sky_ambient * (1.0 - params.transmission.weight);
+        float3 diffuse_ambient = px.diffuse.rgb * sky_ambient * (1.0 - px.transmission_factor);
         float3 specular_ambient = sky_ambient * fresnel * (1.0 - roughness);
         color.rgb = half3(diffuse_ambient + specular_ambient);
     }
+    
+    let params = build_bxdf_params(px, mat_state);
+    let geometry = build_bxdf_geometry(px);
 
     // Directional Sun Light
     {
         float3 wi = normalize(-scene.sun.direction.xyz);
         float n_dot_l = saturate(dot(float3(px.shading_normal), wi));
-
+        
+        let bxdf = OpenPBRBxDF();
         let bxdf_val = bxdf.evaluate(params, geometry, wi, wo, n_dot_v, n_dot_l);
         float3 radiance = scene.sun.color_intensity.rgb * scene.sun.color_intensity.w;
 

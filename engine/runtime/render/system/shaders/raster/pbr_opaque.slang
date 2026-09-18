@@ -38,46 +38,37 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 [shader("fragment")]
 [earlydepthstencil]
 FragmentOutput FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
-    SceneGlobals* scene = (SceneGlobals*)push_constants.scene_constants_address;
-    Material* mat = (Material*)input.material_address;
-
-    MaterialState mat_state;
-    mat_state.mat = mat;
-    mat_state.linear_sampler = bindless_samplers[push_constants.linear_sampler_index];
-
     PixelData pd;
     pd.uv = half2(input.uv);
     pd.geom_tangent = half3(input.tangent);
     pd.geom_bitangent = half3(input.bitangent);
     pd.geom_normal = half3(input.normal);
-
-    float3 wo = normalize(scene.camera.eye.xyz - input.world_position);
+    
+    MaterialState mat_state;
+    mat_state.mat_address = WaveReadLaneFirst(input.material_address);
+    mat_state.linear_sampler = bindless_samplers[push_constants.linear_sampler_index];
     pd.front_face = is_front_face;
     pd.ambient_occlusion = 1.0h;
 
     fetch_pixel_data<AlphaPolicy::Opaque>(mat_state, pd);
+    
+    
+    float view_depth = -input.view_position.z;
+    let shadow_atlas = bindless_textures[push_constants.shadow_atlas_index];
+    let scene = (SceneGlobals*)WaveReadLaneFirst(push_constants.scene_constants_address);
+    let shadow_comparison_sampler_idx = WaveReadLaneFirst(scene.shadow_comparison_sampler_index);
+    let cmp_sampler = bindless_comparison_samplers[shadow_comparison_sampler_idx];
+    let shadow_data = (DirectionalShadowData*)WaveReadLaneFirst(push_constants.directional_shadow_address);
+    let shadow_res = sample_csm_shadow_info(shadow_atlas, cmp_sampler, shadow_data, input.world_position, input.normal, view_depth);
+    let sun_shadow = shadow_res.factor;
+    let cascade_idx = shadow_res.cascade_index;
 
-    float sun_shadow = 1.0;
-    int cascade_idx = -1;
-    DirectionalShadowData* shadow_data = nullptr;
-    if (push_constants.shadow_atlas_index >= 0 && push_constants.directional_shadow_address != 0) {
-        shadow_data = (DirectionalShadowData*)push_constants.directional_shadow_address;
-        float view_depth = -input.view_position.z;
-        Texture2D shadow_atlas = bindless_textures[push_constants.shadow_atlas_index];
-        SamplerComparisonState cmp_sampler = bindless_comparison_samplers[scene.shadow_comparison_sampler_index];
-        ShadowSampleResult shadow_res = sample_csm_shadow_info(shadow_atlas, cmp_sampler, shadow_data, input.world_position, input.normal, view_depth);
-        sun_shadow = shadow_res.factor;
-        cascade_idx = shadow_res.cascade_index;
-    }
+    let wo = normalize(scene.camera.eye.xyz - input.world_position);
 
-    float4 color = evaluate_material_openpbr(
+    let color = evaluate_material_openpbr(
         pd, mat_state, scene,
         input.world_position, input.view_position, input.position.xy,
         wo, sun_shadow, push_constants.light_bitmask_address);
-
-    if (shadow_data != nullptr && shadow_data.debug_mode != 0) {
-        color.rgb = apply_shadow_debug_visualization(color.rgb, sun_shadow, cascade_idx, shadow_data.debug_mode);
-    }
 
     return FragmentOutput(color);
 }

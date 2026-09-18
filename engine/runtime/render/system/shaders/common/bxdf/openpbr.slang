@@ -130,17 +130,17 @@ struct OpenPBRBxDF : IBxDF {
         let n = geometry.normal;
         let h = normalize(wi + wo);
         let n_dot_h = saturate(dot(n, h));
-        let l_dot_h = saturate(dot(wi, h));
-        let v_dot_h = saturate(dot(wo, h));
-
-        let cv = max(n_dot_v, MIN_COS);
-        let cl = max(n_dot_l, MIN_COS);
-
         let specular_alpha = max(params.specular.roughness * params.specular.roughness, 1e-4);
         let D = D_GGX(specular_alpha, n_dot_h, h, n);
+        
+        let cv = max(n_dot_v, MIN_COS);
+        let cl = max(n_dot_l, MIN_COS);
         let V = V_SmithGGX(specular_alpha, cv, cl);
-
+        
+        let l_dot_h = saturate(dot(wi, h));
         let diffuse_slab = evaluate_diffuse_slab(params.diffuse, cv, cl, l_dot_h);
+        
+        let v_dot_h = saturate(dot(wo, h));
         let specular_slab = evaluate_specular_slab(params.specular, D, V, v_dot_h);
 
         let glossy_diffuse = specular_slab.reflection + (1.0 - specular_slab.fresnel) * diffuse_slab;
@@ -160,7 +160,7 @@ struct OpenPBRBxDF : IBxDF {
         var substrate = dielectric_base;
         if (params.metal.weight > 0.0) {
             let metal_slab = evaluate_metal_slab(params.metal, D, V, v_dot_h);
-            substrate = lerp(dielectric_base, metal_slab, params.metal.weight);
+            substrate = lerp(substrate, metal_slab, params.metal.weight);
         }
 
         if (params.coat.weight > 0.0) {
