@@ -10,7 +10,8 @@ namespace tempest::render_system
                                        render_graph::rg_texture_id depth_tex, uint32_t draw_count, uint32_t draw_offset,
                                        render_graph::rg_texture_id shadow_atlas,
                                        render_graph::rg_buffer_id light_bitmask_buf,
-                                       enum_mask<rhi::pipeline_statistic_flags> pipeline_stats)
+                                       enum_mask<rhi::pipeline_statistic_flags> pipeline_stats,
+                                       uint64_t directional_shadow_address)
         -> const transparency_resolve_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_oit_resolve_pipeline");
@@ -116,8 +117,9 @@ namespace tempest::render_system
                 data.draw_count = draw_count;
                 data.draw_offset = draw_offset;
             },
-            [&pool, &shaders, pipe](const transparency_resolve_pass_data& data,
-                                    render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
+            [&pool, &shaders, pipe, directional_shadow_address](const transparency_resolve_pass_data& data,
+                                                                render_graph::pass_execution_context& ctx,
+                                                                rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0)
                 {
                     return;
@@ -151,11 +153,14 @@ namespace tempest::render_system
                     bitmask_gpu_addr = ctx.get_buffer(data.light_bitmask_buffer).gpu_address;
                 }
 
+                const auto shadow_addr = (directional_shadow_address != 0) ? directional_shadow_address
+                                                                           : pool.get_directional_shadow_address();
+
                 const auto constants = transparency_resolve_push_constants{
                     .scene_constants_address = pool.get_scene_constants_address(),
                     .objects_address = pool.get_object_buffer_address(),
                     .instance_indices_address = pool.get_instance_buffer_address(),
-                    .directional_shadow_address = pool.get_directional_shadow_address(),
+                    .directional_shadow_address = shadow_addr,
                     .light_bitmask_address = bitmask_gpu_addr,
                     .moments_storage_index = moments_idx,
                     .zeroth_moment_storage_index = zeroth_idx,

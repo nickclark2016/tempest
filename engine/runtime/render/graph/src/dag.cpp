@@ -39,16 +39,19 @@ namespace tempest::render_graph
     }
 
     auto dag_compiler::import_texture(rhi::texture_handle handle, rhi::texture_view_handle view,
-                                      rhi::image_layout initial_layout) -> rg_texture_id
+                                      rhi::image_layout initial_layout, rhi::descriptor_handle sampled_descriptor,
+                                      optional<rg_texture_desc> desc)
+        -> rg_texture_id
     {
         const auto resource_id = static_cast<uint32_t>(_textures.size());
         _textures.push_back(registered_texture{
             .id = resource_id,
-            .desc = {},
+            .desc = desc.value_or(rg_texture_desc{}),
             .is_imported = true,
             .imported_handle = handle,
             .imported_view = view,
             .initial_layout = initial_layout,
+            .imported_sampled_descriptor = sampled_descriptor,
         });
 
         return rg_texture_id{
@@ -59,7 +62,7 @@ namespace tempest::render_graph
 
     auto dag_compiler::import_texture(rhi::texture_handle handle, rhi::image_layout initial_layout) -> rg_texture_id
     {
-        return import_texture(handle, {}, initial_layout);
+        return import_texture(handle, {}, initial_layout, {});
     }
 
     auto dag_compiler::import_buffer(rhi::buffer_handle handle) -> rg_buffer_id

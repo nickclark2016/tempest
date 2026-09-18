@@ -22,7 +22,9 @@ namespace tempest::render_graph
         auto create_buffer(const rg_buffer_desc& desc) -> rg_buffer_id;
 
         auto import_texture(rhi::texture_handle handle, rhi::texture_view_handle view,
-                            rhi::image_layout initial_layout = rhi::image_layout::undefined) -> rg_texture_id;
+                            rhi::image_layout initial_layout = rhi::image_layout::undefined,
+                            rhi::descriptor_handle sampled_descriptor = {},
+                            optional<rg_texture_desc> desc = nullopt) -> rg_texture_id;
         auto import_texture(rhi::texture_handle handle, rhi::image_layout initial_layout = rhi::image_layout::undefined)
             -> rg_texture_id;
         auto import_buffer(rhi::buffer_handle handle) -> rg_buffer_id;
@@ -42,6 +44,8 @@ namespace tempest::render_graph
 
         auto use_temporal_texture(temporal_texture& tex, uint32_t requested_history_depth = 1) -> temporal_binding;
         auto set_temporal_color_attachment(uint32_t slot, const rg_temporal_color_attachment& attachment)
+            -> rg_texture_id;
+        auto set_temporal_depth_stencil_attachment(const rg_temporal_depth_stencil_attachment& attachment)
             -> rg_texture_id;
         void clear_temporal_texture(temporal_texture& tex, rhi::clear_color_value clear_value = {});
 

@@ -1283,6 +1283,11 @@ namespace tempest::render_system::tests
             const auto addr_f1 = pool.get_directional_shadow_address();
             EXPECT_EQ(addr_f1, buf.gpu_address + sizeof(directional_shadow_data));
 
+            // Verify history delta=1 accesses previous slot 0
+            const auto addr_history = pool.get_directional_shadow_address(1);
+            EXPECT_EQ(addr_history, addr_f0);
+            EXPECT_EQ(pool.get_directional_shadow_address(0), addr_f1);
+
             auto shadow_data_f1 = directional_shadow_data{};
             shadow_data_f1.cascade_count = 4;
             shadow_data_f1.normal_bias = 0.02F;
@@ -1517,6 +1522,19 @@ namespace tempest::render_system::tests
 
         EXPECT_EQ(shadow_res.shadow_data.cascade_count, 4U);
         EXPECT_TRUE(shadow_res.shadow_atlas.is_valid());
+
+        // Verify FrameUploadPass and ShadowPass both execute on graphics queue with no cross-queue waits
+        const auto compile_res = graph.compile();
+        ASSERT_TRUE(compile_res.has_value());
+        const auto& dag = compile_res.value();
+        auto solver = render_graph::barrier_solver{};
+        const auto all_passes = graph.get_compiler().get_passes();
+        const auto sync = solver.solve(dag, all_passes, graph.get_allocator(), graph.get_compiler().get_registered_textures());
+        for (const auto& batch : sync.queue_batches)
+        {
+            EXPECT_EQ(batch.queue, render_graph::queue_type::graphics);
+            EXPECT_TRUE(batch.wait_batch_indices.empty());
+        }
 
         auto exec_res = graph.execute_sync(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -5304,6 +5322,126 @@ namespace tempest::render_system::tests
 
         // 5. Assert: Graph execution completes successfully
         EXPECT_TRUE(exec_res.has_value());
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that the directional shadow map is double-buffered via temporal_texture:
+    ///        Frame 0 falls back to current write target (cold start), while Frame 1 and subsequent
+    ///        frames engage history sampling with matched shadow data addresses.
+    TEST(render_system_tests, renderer_double_buffered_shadow_map_lifecycle)
+    {
+        // 1. Setup: Initialize test device, ECS registry with sun light and camera override
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // Create sun light entity
+            auto sun_ent = registry.create();
+            registry.assign(sun_ent, directional_light_component{
+                                         .color = {1.0F, 1.0F, 1.0F},
+                                         .intensity = 2.0F,
+                                     });
+            registry.assign(sun_ent, shadow_caster_component{
+                                         .resolution = 2048,
+                                         .num_cascades = 4,
+                                         .split_lambda = 0.5F,
+                                         .max_shadow_distance = 100.0F,
+                                     });
+            auto sun_tx = ecs::transform_component::identity();
+            sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
+            registry.assign(sun_ent, sun_tx);
+
+            // Standalone render_camera Override
+            const auto proj = math::perspective(16.0F / 9.0F, math::as_radians(60.0F), 0.1F);
+            const auto eye = math::vec3<float>{0.0F, 2.0F, -10.0F};
+            const auto view =
+                math::look_at(eye, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F});
+            const auto override_camera = render_camera{
+                .proj = proj,
+                .inv_proj = math::inverse(proj),
+                .view = view,
+                .inv_view = math::inverse(view),
+                .eye_position = {eye.x, eye.y, eye.z, 1.0F},
+            };
+
+            auto has_shadow_pass = [](renderer& r) -> bool {
+                const auto compile_res = r.get_render_graph().compile();
+                if (!compile_res.has_value())
+                {
+                    return false;
+                }
+                for (const auto pass_idx : compile_res.value().sorted_pass_indices)
+                {
+                    if (r.get_render_graph().get_compiler().get_pass(pass_idx).name == "ShadowPass")
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            // 2. Act: Prepare and render Frame 0 (Cold start)
+            rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
+            const auto& temporal_atlas = rend->get_directional_shadow_temporal_atlas();
+            EXPECT_TRUE(temporal_atlas.is_allocated());
+            EXPECT_EQ(temporal_atlas.get_valid_history_count(), 0U);
+            EXPECT_FALSE(temporal_atlas.is_history_valid(1));
+            EXPECT_TRUE(has_shadow_pass(*rend));
+
+            auto res0 = rend->render();
+            EXPECT_TRUE(res0.has_value());
+
+            // After Frame 0 renders, temporal_atlas should have swapped, giving 1 valid history frame
+            EXPECT_EQ(temporal_atlas.get_valid_history_count(), 1U);
+            EXPECT_TRUE(temporal_atlas.is_history_valid(1));
+
+            // 3. Act: Prepare and render Frame 1 (History active - ensure ShadowPass is not culled)
+            rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
+            EXPECT_TRUE(temporal_atlas.is_history_valid(1));
+            EXPECT_TRUE(has_shadow_pass(*rend));
+
+            auto res1 = rend->render();
+            EXPECT_TRUE(res1.has_value());
+
+            // 4. Act: Prepare and render Frame 2 (History active, slot rotated back)
+            rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
+            EXPECT_TRUE(temporal_atlas.is_history_valid(1));
+            EXPECT_TRUE(has_shadow_pass(*rend));
+
+            auto res2 = rend->render();
+            EXPECT_TRUE(res2.has_value());
+
+            // 5. Assert: Temporal atlas history remains valid and advances
+            EXPECT_EQ(temporal_atlas.get_valid_history_count(), 1U);
+            EXPECT_TRUE(temporal_atlas.is_history_valid(1));
+        }
 
         dev->wait_idle();
     }

@@ -312,6 +312,7 @@ namespace tempest::render_graph
             uint32_t submit_calls = 0;
             vector<const rhi::command_list*> submitted_commands;
             vector<rhi::device_sync_point> last_wait_sync;
+            vector<vector<rhi::device_sync_point>> all_wait_syncs;
             vector<rhi::device_sync_point> last_signal_sync;
             vector<string> debug_regions;
             vector<string> debug_markers;
@@ -367,10 +368,13 @@ namespace tempest::render_graph
                     submitted_commands.push_back(c);
                 }
                 last_wait_sync.clear();
+                auto current_waits = vector<rhi::device_sync_point>{};
                 for (const auto& w : wait_semaphores)
                 {
                     last_wait_sync.push_back(w);
+                    current_waits.push_back(w);
                 }
+                all_wait_syncs.push_back(tempest::move(current_waits));
                 last_signal_sync.clear();
                 for (const auto& s : signal_semaphores)
                 {
@@ -1519,5 +1523,194 @@ namespace tempest::render_graph
         EXPECT_FALSE(dev.transfer_port.submitted_commands.empty());
         EXPECT_FALSE(dev.compute_port.submitted_commands.empty());
         EXPECT_FALSE(dev.graphics_port.submitted_commands.empty());
+    }
+
+    /// @brief Verify that when frame_sync.presented_texture is specified, the frame acquire
+    /// wait semaphore is attached only to the batch that actually accesses the presented texture,
+    /// rather than stalling earlier offscreen graphics batches (e.g. shadow map generation).
+    TEST(executor_test, swapchain_wait_semaphore_deferred_to_presented_texture_batch)
+    {
+        // 1. Setup: Multi-batch graph with offscreen graphics, compute, and presentation graphics
+        auto dev = mock_device_with_ports{};
+        auto log = logger{};
+        auto prof = profiler::profiler_session{false};
+        auto jobs = job::job_system{log, prof, job::job_system_config{.performance_worker_count = 0, .efficiency_worker_count = 0}};
+        auto rg = render_graph{jobs, 1920, 1080};
+
+        const auto presented_tex_handle = rhi::texture_handle{.handle = 888};
+        const auto presented_view_handle = rhi::texture_view_handle{.handle = 889};
+        const auto acquire_sem = rhi::semaphore_handle{.handle = 777};
+
+        // Pass 1: Offscreen graphics pass (e.g., ShadowPass)
+        struct shadow_data
+        {
+            rg_texture_id shadow_tex;
+        };
+        rg.add_graphics_pass<shadow_data>(
+            "ShadowPass",
+            [](pass_builder& builder, shadow_data& data) {
+                auto t = builder.create_texture(rg_texture_desc{.name = "ShadowAtlas"});
+                data.shadow_tex = builder.write(t, rhi::pipeline_stage::early_fragment_tests,
+                                                rhi::resource_access::write, rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const shadow_data&, pass_execution_context&, rhi::command_list&) {});
+
+        // Pass 2: Compute pass to split the graphics queue into separate execution batches
+        struct compute_data
+        {
+            rg_buffer_id buf;
+        };
+        rg.add_compute_pass<compute_data>(
+            "IntermediateCompute",
+            [](pass_builder& builder, compute_data& data) {
+                auto b = builder.create_buffer(rg_buffer_desc{.size = 256, .name = "ComputeBuf"});
+                data.buf = builder.write(b, rhi::pipeline_stage::compute, rhi::resource_access::write);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const compute_data&, pass_execution_context&, rhi::command_list&) {});
+
+        // Pass 3: Presentation graphics pass writing to the imported presented texture
+        struct present_data
+        {
+            rg_texture_id sc_tex;
+        };
+        const auto sc_imported = rg.import_texture(presented_tex_handle, presented_view_handle, rhi::image_layout::undefined);
+        rg.add_graphics_pass<present_data>(
+            "PresentPass",
+            [sc_imported](pass_builder& builder, present_data& data) {
+                data.sc_tex = builder.write(sc_imported, rhi::pipeline_stage::attachment_output,
+                                            rhi::resource_access::write, rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const present_data&, pass_execution_context&, rhi::command_list&) {});
+
+        const auto sync_opts = frame_sync_options{
+            .wait_semaphore = acquire_sem,
+            .wait_stages = rhi::pipeline_stage::attachment_output,
+            .presented_texture = presented_tex_handle,
+            .flight_slot_index = 0,
+            .frames_in_flight = 2,
+        };
+
+        // 2. Act: Execute graph
+        const auto exec_res = rg.execute_sync(dev, sync_opts);
+        ASSERT_TRUE(exec_res.has_value());
+
+        // 3. Assert: Verify graphics port had two distinct submits and wait semaphore placement
+        ASSERT_EQ(dev.graphics_port.submit_calls, 2U);
+        ASSERT_EQ(dev.graphics_port.all_wait_syncs.size(), 2U);
+
+        // Submit 0 (ShadowPass batch) must NOT wait on the swapchain acquire semaphore
+        const auto& batch0_waits = dev.graphics_port.all_wait_syncs[0];
+        for (const auto& w : batch0_waits)
+        {
+            EXPECT_NE(w.semaphore.handle, acquire_sem.handle);
+        }
+
+        // Submit 1 (PresentPass batch) MUST wait on the swapchain acquire semaphore
+        const auto& batch1_waits = dev.graphics_port.all_wait_syncs[1];
+        auto found_acquire = false;
+        for (const auto& w : batch1_waits)
+        {
+            if (w.semaphore.handle == acquire_sem.handle)
+            {
+                found_acquire = true;
+                EXPECT_EQ(w.stages, rhi::pipeline_stage::attachment_output);
+            }
+        }
+        EXPECT_TRUE(found_acquire);
+    }
+
+    /// @brief Verifies that independent graphics passes (e.g. shadow map generation) execute without
+    ///        waiting on concurrent async compute batches, while dependent graphics passes wait on the
+    ///        exact async compute timeline semaphore value.
+    TEST(executor_test, cross_queue_decoupled_timeline_synchronization_allows_independent_passes_to_run_without_wait)
+    {
+        // 1. Setup: Multi-queue graph with async compute, independent graphics, and dependent graphics
+        auto dev = mock_device_with_ports{};
+        auto log = logger{};
+        auto prof = profiler::profiler_session{false};
+        auto jobs = job::job_system{log, prof, job::job_system_config{.performance_worker_count = 0, .efficiency_worker_count = 0}};
+        auto rg = render_graph{jobs, 1920, 1080};
+
+        struct compute_data
+        {
+            rg_buffer_id light_grid;
+        };
+        rg.add_compute_pass<compute_data>(
+            "LightClustering",
+            [](pass_builder& builder, compute_data& data) {
+                auto b = builder.create_buffer(rg_buffer_desc{.size = 1024, .name = "LightGrid"});
+                data.light_grid = builder.write(b, rhi::pipeline_stage::compute, rhi::resource_access::write);
+                builder.set_execution_queue(queue_type::async_compute);
+            },
+            []([[maybe_unused]] const compute_data&, pass_execution_context&, rhi::command_list&) {});
+
+        struct shadow_data
+        {
+            rg_texture_id shadow_map;
+        };
+        rg.add_graphics_pass<shadow_data>(
+            "ShadowPass",
+            [](pass_builder& builder, shadow_data& data) {
+                auto t = builder.create_texture(rg_texture_desc{
+                    .size = rg_texture_size::absolute(2048, 2048),
+                    .format = rhi::data_format::depth32_float,
+                    .name = "ShadowMap",
+                });
+                data.shadow_map = builder.write(t, rhi::pipeline_stage::attachment_output,
+                                                rhi::resource_access::write,
+                                                rhi::image_layout::depth_stencil_attachment_optimal);
+            },
+            []([[maybe_unused]] const shadow_data&, pass_execution_context&, rhi::command_list&) {});
+
+        struct pbr_data
+        {
+            rg_buffer_id light_grid;
+            rg_texture_id shadow_map;
+            rg_texture_id color_hdr;
+        };
+        rg.add_graphics_pass<pbr_data>(
+            "PBROpaquePass",
+            [](pass_builder& builder, pbr_data& data) {
+                data.light_grid = builder.read(rg_buffer_id{.id = 0, .version = 1},
+                                               rhi::pipeline_stage::fragment,
+                                               rhi::resource_access::read);
+                data.shadow_map = builder.read(rg_texture_id{.id = 0, .version = 1},
+                                               rhi::pipeline_stage::fragment,
+                                               rhi::resource_access::read,
+                                               rhi::image_layout::depth_stencil_read_only_optimal);
+                auto c = builder.create_texture(rg_texture_desc{.name = "ColorHDR"});
+                data.color_hdr = builder.write(c, rhi::pipeline_stage::attachment_output,
+                                               rhi::resource_access::write,
+                                               rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const pbr_data&, pass_execution_context&, rhi::command_list&) {});
+
+        // 2. Act: Execute graph
+        const auto exec_res = rg.execute_sync(dev);
+        ASSERT_TRUE(exec_res.has_value());
+
+        // 3. Assert: Verify submissions and decoupled synchronization
+        EXPECT_EQ(dev.compute_port.submit_calls, 1U);
+        EXPECT_EQ(dev.graphics_port.submit_calls, 2U);
+        ASSERT_EQ(dev.graphics_port.all_wait_syncs.size(), 2U);
+
+        // Batch 0 on Graphics (ShadowPass) must have NO wait sync points
+        EXPECT_TRUE(dev.graphics_port.all_wait_syncs[0].empty());
+
+        // Batch 1 on Graphics (PBROpaquePass) MUST wait on the async compute timeline semaphore
+        ASSERT_EQ(dev.graphics_port.all_wait_syncs[1].size(), 1U);
+        const auto& pbr_wait = dev.graphics_port.all_wait_syncs[1][0];
+
+        // The semaphore waited on must match the semaphore signaled by the compute batch
+        ASSERT_EQ(dev.compute_port.last_signal_sync.size(), 1U);
+        const auto& compute_signal = dev.compute_port.last_signal_sync[0];
+
+        EXPECT_EQ(pbr_wait.semaphore.handle, compute_signal.semaphore.handle);
+        EXPECT_EQ(pbr_wait.value, compute_signal.value);
+        EXPECT_EQ(pbr_wait.stages, rhi::pipeline_stage::top_of_pipe);
     }
 } // namespace tempest::render_graph

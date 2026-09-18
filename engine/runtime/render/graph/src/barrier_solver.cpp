@@ -1,3 +1,4 @@
+#include <tempest/algorithm.hpp>
 #include <tempest/render_graph/barrier_solver.hpp>
 
 namespace tempest::render_graph
@@ -37,6 +38,7 @@ namespace tempest::render_graph
         auto result = solved_synchronization{};
         auto last_known_textures = flat_unordered_map<uint64_t, texture_state_record>{};
         auto last_known_buffers = flat_unordered_map<uint64_t, buffer_state_record>{};
+        auto pass_cross_queue_deps = flat_unordered_map<uint32_t, vector<uint32_t>>{};
 
         for (const auto pass_idx : dag.sorted_pass_indices)
         {
@@ -76,22 +78,27 @@ namespace tempest::render_graph
                     auto src_stages = enum_mask<rhi::pipeline_stage>{rhi::pipeline_stage::top_of_pipe};
                     auto src_access = rhi::resource_access::none;
 
-                    const auto persistent_it = _persistent_texture_states.find(handle_val);
-                    if (persistent_it != _persistent_texture_states.end())
-                    {
-                        src_layout = persistent_it->second.layout;
-                        src_stages = persistent_it->second.stages;
-                        src_access = persistent_it->second.access;
-                    }
-                    else if (access.texture.id < registered_textures.size() &&
-                             registered_textures[access.texture.id].is_imported)
-                    {
-                        src_layout = registered_textures[access.texture.id].initial_layout;
-                    }
+                    const auto is_cleared_attachment = (access.load_op == rhi::load_op::clear);
 
-                    if (static_cast<bool>(dst_stages & rhi::pipeline_stage::attachment_output))
+                    if (!is_cleared_attachment)
                     {
-                        src_stages |= rhi::pipeline_stage::attachment_output;
+                        const auto persistent_it = _persistent_texture_states.find(handle_val);
+                        if (persistent_it != _persistent_texture_states.end())
+                        {
+                            src_layout = persistent_it->second.layout;
+                            src_stages = persistent_it->second.stages;
+                            src_access = persistent_it->second.access;
+                        }
+                        else if (access.texture.id < registered_textures.size() &&
+                                 registered_textures[access.texture.id].is_imported)
+                        {
+                            src_layout = registered_textures[access.texture.id].initial_layout;
+                        }
+
+                        if (static_cast<bool>(dst_stages & rhi::pipeline_stage::attachment_output))
+                        {
+                            src_stages |= rhi::pipeline_stage::attachment_output;
+                        }
                     }
 
                     const auto layout_changed = (src_layout != dst_layout);
@@ -138,6 +145,15 @@ namespace tempest::render_graph
                     const auto queue_changed = (prev.queue != dst_queue);
 
                     const auto need_barrier = layout_changed || was_written || is_written || queue_changed;
+
+                    if (queue_changed && (was_written || is_written || layout_changed))
+                    {
+                        auto& deps = pass_cross_queue_deps[pass_idx];
+                        if (tempest::find(deps.begin(), deps.end(), prev.pass_index) == deps.end())
+                        {
+                            deps.push_back(prev.pass_index);
+                        }
+                    }
 
                     if (need_barrier)
                     {
@@ -230,6 +246,15 @@ namespace tempest::render_graph
 
                     const auto need_barrier = was_written || is_written || queue_changed;
 
+                    if (queue_changed && (was_written || is_written))
+                    {
+                        auto& deps = pass_cross_queue_deps[pass_idx];
+                        if (tempest::find(deps.begin(), deps.end(), prev.pass_index) == deps.end())
+                        {
+                            deps.push_back(prev.pass_index);
+                        }
+                    }
+
                     if (need_barrier)
                     {
                         plan.buffer_barriers.push_back(rhi::buffer_barrier{
@@ -265,7 +290,9 @@ namespace tempest::render_graph
             result.pass_plans.push_back(tempest::move(plan));
         }
 
-        // 3. Form contiguous queue execution batches
+        // 3. Form contiguous queue execution batches with cross-queue dependency tracking
+        auto pass_to_batch = flat_unordered_map<uint32_t, size_t>{};
+
         for (const auto pass_idx : dag.sorted_pass_indices)
         {
             if (pass_idx >= all_passes.size())
@@ -274,16 +301,72 @@ namespace tempest::render_graph
             }
 
             const auto& pass = all_passes[pass_idx];
-            if (result.queue_batches.empty() || result.queue_batches.back().queue != pass.queue)
+
+            // Determine which batches this pass depends on
+            auto required_wait_batches = vector<size_t>{};
+            const auto dep_it = pass_cross_queue_deps.find(pass_idx);
+            if (dep_it != pass_cross_queue_deps.end())
             {
-                result.queue_batches.push_back(queue_sync_batch{
-                    .queue = pass.queue,
-                    .pass_indices = vector<uint32_t>{init_list, pass_idx},
-                });
+                for (const auto prod_pass_idx : dep_it->second)
+                {
+                    const auto prod_batch_it = pass_to_batch.find(prod_pass_idx);
+                    if (prod_batch_it != pass_to_batch.end())
+                    {
+                        const auto prod_batch_idx = prod_batch_it->second;
+                        if (tempest::find(required_wait_batches.begin(), required_wait_batches.end(),
+                                          prod_batch_idx) == required_wait_batches.end())
+                        {
+                            required_wait_batches.push_back(prod_batch_idx);
+                        }
+                    }
+                }
+                tempest::sort(required_wait_batches.begin(), required_wait_batches.end());
+            }
+
+            auto start_new_batch = false;
+            if (result.queue_batches.empty())
+            {
+                start_new_batch = true;
             }
             else
             {
-                result.queue_batches.back().pass_indices.push_back(pass_idx);
+                auto& current_batch = result.queue_batches.back();
+                if (current_batch.queue != pass.queue)
+                {
+                    start_new_batch = true;
+                }
+                else
+                {
+                    // Same queue: check if this pass introduces new cross-queue dependencies
+                    // that the current batch does not already have
+                    for (const auto dep_batch_idx : required_wait_batches)
+                    {
+                        if (tempest::find(current_batch.wait_batch_indices.begin(),
+                                          current_batch.wait_batch_indices.end(),
+                                          dep_batch_idx) == current_batch.wait_batch_indices.end())
+                        {
+                            start_new_batch = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (start_new_batch)
+            {
+                const auto new_batch_idx = result.queue_batches.size();
+                result.queue_batches.push_back(queue_sync_batch{
+                    .queue = pass.queue,
+                    .pass_indices = vector<uint32_t>{init_list, pass_idx},
+                    .wait_batch_indices = tempest::move(required_wait_batches),
+                });
+                pass_to_batch[pass_idx] = new_batch_idx;
+            }
+            else
+            {
+                auto& current_batch = result.queue_batches.back();
+                current_batch.pass_indices.push_back(pass_idx);
+                pass_to_batch[pass_idx] = result.queue_batches.size() - 1;
             }
         }
 

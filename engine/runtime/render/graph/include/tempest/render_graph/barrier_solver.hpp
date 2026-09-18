@@ -26,6 +26,7 @@ namespace tempest::render_graph
     {
         queue_type queue = queue_type::graphics;
         vector<uint32_t> pass_indices;
+        vector<size_t> wait_batch_indices;
     };
 
     /// \brief Complete synchronization plan for an entire compiled frame graph.

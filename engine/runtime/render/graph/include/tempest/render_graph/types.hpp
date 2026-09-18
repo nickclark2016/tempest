@@ -302,6 +302,18 @@ namespace tempest::render_graph
         rhi::clear_color_value clear_value{0.0F, 0.0F, 0.0F, 1.0F};
         rg_subresource_range subresource{};
     };
+
+    /// \brief Depth/stencil attachment description referencing a persistent temporal texture.
+    struct rg_temporal_depth_stencil_attachment
+    {
+        temporal_texture& texture;
+        rhi::load_op depth_load_op = rhi::load_op::clear;
+        rhi::store_op depth_store_op = rhi::store_op::store;
+        rhi::load_op stencil_load_op = rhi::load_op::dont_care;
+        rhi::store_op stencil_store_op = rhi::store_op::dont_care;
+        rhi::clear_depth_stencil_value clear_value{0.0F, 0};
+        rg_subresource_range subresource{};
+    };
 } // namespace tempest::render_graph
 
 namespace tempest

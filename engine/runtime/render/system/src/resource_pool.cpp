@@ -899,10 +899,14 @@ namespace tempest::render_system
         return _scene_constants_buffer.gpu_address + (static_cast<uint64_t>(_frame_slot) * sizeof(scene_constants));
     }
 
-    auto resource_pool::get_directional_shadow_address() const noexcept -> uint64_t
+    auto resource_pool::get_directional_shadow_address(uint32_t history_delta) const noexcept -> uint64_t
     {
+        const auto slot = (_cfg.frames_in_flight > 0)
+                              ? (_frame_slot + _cfg.frames_in_flight - (history_delta % _cfg.frames_in_flight)) %
+                                    _cfg.frames_in_flight
+                              : 0;
         return _directional_shadow_buffer.gpu_address +
-               (static_cast<uint64_t>(_frame_slot) * sizeof(directional_shadow_data));
+               (static_cast<uint64_t>(slot) * sizeof(directional_shadow_data));
     }
 
     auto resource_pool::get_lights_buffer_address() const noexcept -> uint64_t
@@ -981,6 +985,12 @@ namespace tempest::render_system
         {
             auto* dst = static_cast<directional_shadow_data*>(_directional_shadow_buffer.cpu_address) + _frame_slot;
             tempest::memcpy(dst, &data, sizeof(data));
+
+            for (uint32_t slot = 0; slot < _cfg.frames_in_flight; ++slot)
+            {
+                auto* s = static_cast<directional_shadow_data*>(_directional_shadow_buffer.cpu_address) + slot;
+                s->debug_mode = data.debug_mode;
+            }
         }
     }
 

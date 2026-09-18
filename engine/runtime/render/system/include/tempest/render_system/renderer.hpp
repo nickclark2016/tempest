@@ -10,6 +10,7 @@
 #include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/render_graph/render_graph.hpp>
+#include <tempest/render_graph/temporal_texture.hpp>
 #include <tempest/render_system/camera_system.hpp>
 #include <tempest/render_system/render_components.hpp>
 #include <tempest/render_system/resource_pool.hpp>
@@ -215,6 +216,17 @@ namespace tempest::render_system
             return _directional_shadow_atlas_target;
         }
 
+        [[nodiscard]] auto get_directional_shadow_temporal_atlas() noexcept -> render_graph::temporal_texture&
+        {
+            return _directional_shadow_temporal_atlas;
+        }
+
+        [[nodiscard]] auto get_directional_shadow_temporal_atlas() const noexcept
+            -> const render_graph::temporal_texture&
+        {
+            return _directional_shadow_temporal_atlas;
+        }
+
         [[nodiscard]] auto get_punctual_shadow_atlas_texture() const noexcept -> render_graph::rg_texture_id
         {
             return _punctual_shadow_atlas_target;
@@ -380,6 +392,9 @@ namespace tempest::render_system
         unique_ptr<job::job_system> _owned_jobs{};
         non_null<job::job_system> _jobs;
         render_graph::render_graph _graph;
+
+        // Persistent Temporal Textures
+        render_graph::temporal_texture _directional_shadow_temporal_atlas{};
 
         // Render Targets (Transient in Render Graph)
         render_graph::rg_texture_id _directional_shadow_atlas_target{};

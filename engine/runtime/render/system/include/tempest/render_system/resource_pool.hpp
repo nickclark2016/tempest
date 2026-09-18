@@ -122,7 +122,7 @@ namespace tempest::render_system
         [[nodiscard]] auto get_material(const guid& id) const noexcept -> optional<material_payload>;
         [[nodiscard]] auto get_texture_descriptor_index(const guid& id) const noexcept -> int16_t;
         [[nodiscard]] auto get_scene_constants_address() const noexcept -> uint64_t;
-        [[nodiscard]] auto get_directional_shadow_address() const noexcept -> uint64_t;
+        [[nodiscard]] auto get_directional_shadow_address(uint32_t history_delta = 0) const noexcept -> uint64_t;
         [[nodiscard]] auto get_lights_buffer_address() const noexcept -> uint64_t;
         [[nodiscard]] auto get_object_buffer_address() const noexcept -> uint64_t;
         [[nodiscard]] auto get_instance_buffer_address() const noexcept -> uint64_t;

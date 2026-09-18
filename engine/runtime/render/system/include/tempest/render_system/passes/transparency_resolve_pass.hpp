@@ -47,7 +47,8 @@ namespace tempest::render_system
         render_graph::rg_texture_id zeroth_moment_tex, render_graph::rg_texture_id depth_tex, uint32_t draw_count,
         uint32_t draw_offset = 0, render_graph::rg_texture_id shadow_atlas = {},
         render_graph::rg_buffer_id light_bitmask_buf = {},
-        enum_mask<rhi::pipeline_statistic_flags> pipeline_stats = rhi::pipeline_statistic_flags::none)
+        enum_mask<rhi::pipeline_statistic_flags> pipeline_stats = rhi::pipeline_statistic_flags::none,
+        uint64_t directional_shadow_address = 0)
         -> const transparency_resolve_pass_data&;
 } // namespace tempest::render_system
 

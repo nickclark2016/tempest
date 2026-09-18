@@ -118,8 +118,8 @@ namespace tempest::render_graph
 
         non_null<job::job_system> _jobs;
         barrier_solver _barrier_solver;
-        rhi::semaphore_handle _timeline_semaphore{};
-        uint64_t _current_timeline_value{0};
+        flat_unordered_map<queue_type, rhi::semaphore_handle> _queue_timeline_semaphores{};
+        flat_unordered_map<queue_type, uint64_t> _queue_timeline_values{};
 
         vector<flight_query_state> _flight_query_rings{};
     };

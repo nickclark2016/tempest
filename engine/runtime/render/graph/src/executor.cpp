@@ -314,11 +314,6 @@ namespace tempest::render_graph
 
         auto ctx = pass_execution_context{&graph};
 
-        if (_timeline_semaphore.handle == 0)
-        {
-            _timeline_semaphore = dev.create_timeline_semaphore();
-        }
-
         struct pass_query_allocation
         {
             uint32_t start_ts{0};
@@ -379,7 +374,7 @@ namespace tempest::render_graph
         }
 
         auto wait_semaphore_consumed = false;
-        auto last_batch_signal_val = uint64_t{0};
+        auto batch_signal_values = vector<uint64_t>(sync.queue_batches.size(), 0);
 
         for (size_t batch_idx = 0; batch_idx < sync.queue_batches.size(); ++batch_idx)
         {
@@ -630,8 +625,23 @@ namespace tempest::render_graph
             auto wait_sync = vector<rhi::device_sync_point>{};
             auto signal_sync = vector<rhi::device_sync_point>{};
 
-            // Cross-queue timeline wait from previous batch
-            if (batch_idx > 0 && last_batch_signal_val > 0)
+            // Cross-queue timeline waits for batches this batch depends on
+            auto max_wait_per_queue = flat_unordered_map<queue_type, uint64_t>{};
+            for (const auto dep_batch_idx : batch.wait_batch_indices)
+            {
+                if (dep_batch_idx < sync.queue_batches.size())
+                {
+                    const auto& dep_batch = sync.queue_batches[dep_batch_idx];
+                    const auto dep_val = batch_signal_values[dep_batch_idx];
+                    if (dep_val > 0)
+                    {
+                        max_wait_per_queue[dep_batch.queue] =
+                            tempest::max(max_wait_per_queue[dep_batch.queue], dep_val);
+                    }
+                }
+            }
+
+            for (const auto& [dep_queue, wait_val] : max_wait_per_queue)
             {
                 auto wait_stages = rhi::pipeline_stage::top_of_pipe;
                 if (batch.queue == queue_type::async_compute)
@@ -643,17 +653,54 @@ namespace tempest::render_graph
                     wait_stages = rhi::pipeline_stage::all_transfer;
                 }
 
-                wait_sync.push_back(rhi::device_sync_point{
-                    .semaphore = _timeline_semaphore,
-                    .value = last_batch_signal_val,
-                    .stages = wait_stages,
-                });
+                auto sem_it = _queue_timeline_semaphores.find(dep_queue);
+                if (sem_it != _queue_timeline_semaphores.end() && sem_it->second.handle != 0)
+                {
+                    wait_sync.push_back(rhi::device_sync_point{
+                        .semaphore = sem_it->second,
+                        .value = wait_val,
+                        .stages = wait_stages,
+                    });
+                }
             }
 
-            // Frame acquire binary semaphore wait (on the first graphics batch or first batch)
+            // Frame acquire binary semaphore wait (on the batch accessing presented_texture, or final batch)
             if (!wait_semaphore_consumed && frame_sync.wait_semaphore.has_value())
             {
-                if (batch.queue == queue_type::graphics || is_last_batch)
+                auto should_wait = false;
+                if (frame_sync.presented_texture.has_value())
+                {
+                    const auto presented_handle = *frame_sync.presented_texture;
+                    for (const auto pass_idx : batch.pass_indices)
+                    {
+                        if (pass_idx < all_passes.size())
+                        {
+                            for (const auto& access : all_passes[pass_idx].texture_accesses)
+                            {
+                                const auto* alloc = allocator.get_texture(access.texture.id);
+                                if (alloc != nullptr && alloc->handle.handle == presented_handle.handle)
+                                {
+                                    should_wait = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (should_wait)
+                        {
+                            break;
+                        }
+                    }
+                    if (is_last_batch)
+                    {
+                        should_wait = true;
+                    }
+                }
+                else
+                {
+                    should_wait = (batch.queue == queue_type::graphics || is_last_batch);
+                }
+
+                if (should_wait)
                 {
                     wait_sync.push_back(rhi::device_sync_point{
                         .semaphore = *frame_sync.wait_semaphore,
@@ -664,16 +711,20 @@ namespace tempest::render_graph
                 }
             }
 
-            // Cross-queue timeline signal for next batch
-            if (!is_last_batch)
+            // Cross-queue timeline signal for this batch
+            auto& queue_sem = _queue_timeline_semaphores[batch.queue];
+            if (queue_sem.handle == 0)
             {
-                last_batch_signal_val = ++_current_timeline_value;
-                signal_sync.push_back(rhi::device_sync_point{
-                    .semaphore = _timeline_semaphore,
-                    .value = last_batch_signal_val,
-                    .stages = rhi::pipeline_stage::bottom_of_pipe,
-                });
+                queue_sem = dev.create_timeline_semaphore();
             }
+            const auto batch_signal_val = ++_queue_timeline_values[batch.queue];
+            batch_signal_values[batch_idx] = batch_signal_val;
+
+            signal_sync.push_back(rhi::device_sync_point{
+                .semaphore = queue_sem,
+                .value = batch_signal_val,
+                .stages = rhi::pipeline_stage::bottom_of_pipe,
+            });
 
             // Frame render binary semaphore signal (on the final presenting batch)
             if (is_last_batch && frame_sync.signal_semaphore.has_value())
@@ -770,12 +821,16 @@ namespace tempest::render_graph
 
     void render_graph_executor::release(rhi::device& dev)
     {
-        if (_timeline_semaphore.handle != 0)
+        for (auto& [q, sem] : _queue_timeline_semaphores)
         {
-            dev.destroy_semaphore(_timeline_semaphore);
-            _timeline_semaphore = {};
+            if (sem.handle != 0)
+            {
+                dev.destroy_semaphore(sem);
+                sem = {};
+            }
         }
-        _current_timeline_value = 0;
+        _queue_timeline_semaphores.clear();
+        _queue_timeline_values.clear();
 
         for (auto& slot : _flight_query_rings)
         {

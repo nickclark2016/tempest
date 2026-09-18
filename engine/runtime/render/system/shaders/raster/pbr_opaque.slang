@@ -65,10 +65,14 @@ FragmentOutput FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
 
     let wo = normalize(scene.camera.eye.xyz - input.world_position);
 
-    let color = evaluate_material_openpbr(
+    float4 color = evaluate_material_openpbr(
         pd, mat_state, scene,
         input.world_position, input.view_position, input.position.xy,
         wo, sun_shadow, push_constants.light_bitmask_address);
+
+    if (shadow_data != nullptr && shadow_data.debug_mode != 0) {
+        color.rgb = apply_shadow_debug_visualization(color.rgb, sun_shadow, cascade_idx, shadow_data.debug_mode);
+    }
 
     return FragmentOutput(color);
 }

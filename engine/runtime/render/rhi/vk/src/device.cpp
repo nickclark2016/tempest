@@ -465,6 +465,10 @@ namespace tempest::rhi::vk
                 return VK_IMAGE_LAYOUT_GENERAL;
             case image_layout::present:
                 return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            case image_layout::depth_stencil_attachment_optimal:
+                return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            case image_layout::depth_stencil_read_only_optimal:
+                return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
             }
             return VK_IMAGE_LAYOUT_GENERAL;
         }

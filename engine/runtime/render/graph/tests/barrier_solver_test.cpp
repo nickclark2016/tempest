@@ -469,4 +469,325 @@ namespace tempest::render_graph
         ASSERT_EQ(sync.queue_batches[2].pass_indices.size(), 1U);
         EXPECT_EQ(sync.queue_batches[2].pass_indices[0], 4U);
     }
+
+    /// @brief Verifies that passes on the same queue family are split into separate batches when a subsequent
+    ///        pass introduces cross-queue dependencies not required by preceding passes, ensuring independent
+    ///        passes (e.g. shadow map generation) can run immediately without stalling on async compute.
+    TEST(barrier_solver_test, cross_queue_dependency_batch_splitting_and_wait_indices)
+    {
+        // 1. Setup: Mock device, allocator with 1 buffer and 1 texture
+        auto dev = mock_test_device{};
+        auto allocator = transient_allocator{};
+
+        const auto textures = vector<registered_texture>{
+            init_list,
+            registered_texture{
+                .id = 0,
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::absolute(2048, 2048),
+                        .format = rhi::data_format::depth32_float,
+                        .name = "ShadowMap",
+                    },
+            },
+        };
+
+        const auto buffers = vector<registered_buffer>{
+            init_list,
+            registered_buffer{
+                .id = 0,
+                .desc =
+                    rg_buffer_desc{
+                        .size = 1024,
+                        .name = "LightGrid",
+                    },
+            },
+        };
+
+        auto tex_lifetimes = flat_unordered_map<uint32_t, resource_lifetime>{};
+        tex_lifetimes[0] = resource_lifetime{.first_pass = 1, .last_pass = 2};
+        auto buf_lifetimes = flat_unordered_map<uint32_t, resource_lifetime>{};
+        buf_lifetimes[0] = resource_lifetime{.first_pass = 0, .last_pass = 2};
+
+        const auto dag = compiled_dag{
+            .sorted_pass_indices = vector<uint32_t>{init_list, 0U, 1U, 2U},
+            .resolved_texture_aliases = {},
+            .resolved_buffer_aliases = {},
+            .texture_lifetimes = tempest::move(tex_lifetimes),
+            .buffer_lifetimes = tempest::move(buf_lifetimes),
+        };
+
+        allocator.allocate(dev, dag, textures, buffers, 1920, 1080);
+
+        // Define 3 passes:
+        // Pass 0: LightClustering on async_compute (writes LightGrid buffer)
+        // Pass 1: ShadowPass on graphics (writes ShadowMap texture, no cross-queue deps)
+        // Pass 2: PBROpaquePass on graphics (reads LightGrid buffer and ShadowMap texture)
+        const auto passes = vector<pass_node>{
+            init_list,
+            pass_node{
+                .name = "LightClustering",
+                .pass_index = 0,
+                .queue = queue_type::async_compute,
+                .buffer_accesses =
+                    vector<buffer_access>{
+                        init_list,
+                        buffer_access{
+                            .buffer = rg_buffer_id{.id = 0, .version = 1},
+                            .type = access_type::write,
+                            .stages = rhi::pipeline_stage::compute,
+                            .access = rhi::resource_access::write,
+                        },
+                    },
+            },
+            pass_node{
+                .name = "ShadowPass",
+                .pass_index = 1,
+                .queue = queue_type::graphics,
+                .texture_accesses =
+                    vector<texture_access>{
+                        init_list,
+                        texture_access{
+                            .texture = rg_texture_id{.id = 0, .version = 1},
+                            .type = access_type::write,
+                            .stages = rhi::pipeline_stage::attachment_output,
+                            .access = rhi::resource_access::write,
+                            .layout = rhi::image_layout::depth_stencil_attachment_optimal,
+                            .load_op = rhi::load_op::clear,
+                        },
+                    },
+            },
+            pass_node{
+                .name = "PBROpaquePass",
+                .pass_index = 2,
+                .queue = queue_type::graphics,
+                .texture_accesses =
+                    vector<texture_access>{
+                        init_list,
+                        texture_access{
+                            .texture = rg_texture_id{.id = 0, .version = 1},
+                            .type = access_type::read,
+                            .stages = rhi::pipeline_stage::fragment,
+                            .access = rhi::resource_access::read,
+                            .layout = rhi::image_layout::depth_stencil_read_only_optimal,
+                        },
+                    },
+                .buffer_accesses =
+                    vector<buffer_access>{
+                        init_list,
+                        buffer_access{
+                            .buffer = rg_buffer_id{.id = 0, .version = 1},
+                            .type = access_type::read,
+                            .stages = rhi::pipeline_stage::fragment,
+                            .access = rhi::resource_access::read,
+                        },
+                    },
+            },
+        };
+
+        // 2. Act: Solve synchronization
+        auto solver = barrier_solver{};
+        const auto sync = solver.solve(dag, passes, allocator, {});
+
+        // 3. Assert: 3 batches must be formed
+        // Batch 0: Async Compute [Pass 0] (no wait)
+        // Batch 1: Graphics [Pass 1] (no wait on Batch 0, allows immediate shadow recording!)
+        // Batch 2: Graphics [Pass 2] (waits on Batch 0)
+        ASSERT_EQ(sync.queue_batches.size(), 3U);
+
+        EXPECT_EQ(sync.queue_batches[0].queue, queue_type::async_compute);
+        ASSERT_EQ(sync.queue_batches[0].pass_indices.size(), 1U);
+        EXPECT_EQ(sync.queue_batches[0].pass_indices[0], 0U);
+        EXPECT_TRUE(sync.queue_batches[0].wait_batch_indices.empty());
+
+        EXPECT_EQ(sync.queue_batches[1].queue, queue_type::graphics);
+        ASSERT_EQ(sync.queue_batches[1].pass_indices.size(), 1U);
+        EXPECT_EQ(sync.queue_batches[1].pass_indices[0], 1U);
+        EXPECT_TRUE(sync.queue_batches[1].wait_batch_indices.empty());
+
+        EXPECT_EQ(sync.queue_batches[2].queue, queue_type::graphics);
+        ASSERT_EQ(sync.queue_batches[2].pass_indices.size(), 1U);
+        EXPECT_EQ(sync.queue_batches[2].pass_indices[0], 2U);
+        ASSERT_EQ(sync.queue_batches[2].wait_batch_indices.size(), 1U);
+        EXPECT_EQ(sync.queue_batches[2].wait_batch_indices[0], 0U);
+    }
+
+    /// @brief Verifies that an attachment with load_op::clear emits an initial transition from undefined at
+    ///        top_of_pipe, ignoring any persistent cross-frame state (such as fragment shader read) to prevent
+    ///        false execution stalls at the start of the frame.
+    TEST(barrier_solver_test, cleared_attachment_bypasses_persistent_state_to_top_of_pipe)
+    {
+        // 1. Setup mock device, transient allocator, and registered depth texture
+        auto dev = mock_test_device{};
+        auto allocator = transient_allocator{};
+
+        const auto textures = vector<registered_texture>{
+            init_list,
+            registered_texture{
+                .id = 0,
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::absolute(2048, 2048),
+                        .format = rhi::data_format::depth32_float,
+                        .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+                        .name = "ShadowMap",
+                    },
+            },
+        };
+
+        auto lifetimes = flat_unordered_map<uint32_t, resource_lifetime>{};
+        lifetimes[0] = resource_lifetime{.first_pass = 0, .last_pass = 0};
+
+        const auto dag = compiled_dag{
+            .sorted_pass_indices = vector<uint32_t>{init_list, 0U},
+            .resolved_texture_aliases = {},
+            .resolved_buffer_aliases = {},
+            .texture_lifetimes = tempest::move(lifetimes),
+            .buffer_lifetimes = {},
+        };
+
+        allocator.allocate(dev, dag, textures, {}, 2048, 2048);
+        const auto* alloc = allocator.get_texture(0);
+        ASSERT_NE(alloc, nullptr);
+
+        auto solver = barrier_solver{};
+
+        // Simulate Frame 0 persistent state: texture was read in fragment shader stage in a previous frame
+        solver.set_texture_state(alloc->handle.handle, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                 rhi::image_layout::general, queue_type::graphics);
+
+        // 2. Act: Pass 0 clears the depth texture in early/late fragment tests
+        const auto passes = vector<pass_node>{
+            init_list,
+            pass_node{
+                .name = "ShadowPass",
+                .pass_index = 0,
+                .queue = queue_type::graphics,
+                .texture_accesses =
+                    vector<texture_access>{
+                        init_list,
+                        texture_access{
+                            .texture = rg_texture_id{.id = 0, .version = 0},
+                            .type = access_type::write,
+                            .stages = rhi::pipeline_stage::early_fragment_tests | rhi::pipeline_stage::late_fragment_tests,
+                            .access = rhi::resource_access::read_write,
+                            .layout = rhi::image_layout::general,
+                            .load_op = rhi::load_op::clear,
+                            .store_op = rhi::store_op::store,
+                            .attachment = attachment_type::depth_stencil,
+                        },
+                    },
+            },
+        };
+
+        const auto sync = solver.solve(dag, passes, allocator, textures);
+
+        // 3. Assert: Initial transition must be from undefined at top_of_pipe, NOT waiting on fragment
+        ASSERT_EQ(sync.pass_plans.size(), 1U);
+        ASSERT_EQ(sync.pass_plans[0].texture_barriers.size(), 1U);
+        const auto& b = sync.pass_plans[0].texture_barriers[0];
+        EXPECT_EQ(b.src.layout, rhi::image_layout::undefined);
+        EXPECT_EQ(b.src.stages, rhi::pipeline_stage::top_of_pipe);
+        EXPECT_EQ(b.src.access, rhi::resource_access::none);
+        EXPECT_EQ(b.dst.layout, rhi::image_layout::general);
+        EXPECT_TRUE(static_cast<bool>(b.dst.stages & rhi::pipeline_stage::early_fragment_tests));
+    }
+
+    /// @brief Verify that depth-stencil attachments transition to depth_stencil_attachment_optimal
+    ///        from undefined, and subsequently transition to sampled layouts (general or read-only)
+    ///        when consumed by downstream reading passes.
+    TEST(barrier_solver_test, depth_attachment_optimal_transitions_to_optimal_layout)
+    {
+        // 1. Setup mock device, transient allocator, and registered depth texture
+        auto dev = mock_test_device{};
+        auto allocator = transient_allocator{};
+
+        const auto textures = vector<registered_texture>{
+            init_list,
+            registered_texture{
+                .id = 0,
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::absolute(2048, 2048),
+                        .format = rhi::data_format::depth32_float,
+                        .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+                        .name = "OptimalDepthMap",
+                    },
+            },
+        };
+
+        auto lifetimes = flat_unordered_map<uint32_t, resource_lifetime>{};
+        lifetimes[0] = resource_lifetime{.first_pass = 0, .last_pass = 1};
+
+        const auto dag = compiled_dag{
+            .sorted_pass_indices = vector<uint32_t>{init_list, 0U, 1U},
+            .resolved_texture_aliases = {},
+            .resolved_buffer_aliases = {},
+            .texture_lifetimes = tempest::move(lifetimes),
+            .buffer_lifetimes = {},
+        };
+
+        allocator.allocate(dev, dag, textures, {}, 2048, 2048);
+        const auto* alloc = allocator.get_texture(0);
+        ASSERT_NE(alloc, nullptr);
+
+        auto solver = barrier_solver{};
+
+        // 2. Act: Pass 0 writes depth attachment in optimal layout, Pass 1 samples it
+        const auto passes = vector<pass_node>{
+            init_list,
+            pass_node{
+                .name = "DepthWritePass",
+                .pass_index = 0,
+                .queue = queue_type::graphics,
+                .texture_accesses =
+                    vector<texture_access>{
+                        init_list,
+                        texture_access{
+                            .texture = rg_texture_id{.id = 0, .version = 0},
+                            .type = access_type::write,
+                            .stages = rhi::pipeline_stage::early_fragment_tests | rhi::pipeline_stage::late_fragment_tests,
+                            .access = rhi::resource_access::read_write,
+                            .layout = rhi::image_layout::depth_stencil_attachment_optimal,
+                            .load_op = rhi::load_op::clear,
+                            .store_op = rhi::store_op::store,
+                            .attachment = attachment_type::depth_stencil,
+                        },
+                    },
+            },
+            pass_node{
+                .name = "DepthSamplePass",
+                .pass_index = 1,
+                .queue = queue_type::graphics,
+                .texture_accesses =
+                    vector<texture_access>{
+                        init_list,
+                        texture_access{
+                            .texture = rg_texture_id{.id = 0, .version = 1},
+                            .type = access_type::read,
+                            .stages = rhi::pipeline_stage::fragment,
+                            .access = rhi::resource_access::read,
+                            .layout = rhi::image_layout::depth_stencil_read_only_optimal,
+                        },
+                    },
+            },
+        };
+
+        const auto sync = solver.solve(dag, passes, allocator, textures);
+
+        // 3. Assert: Pass 0 transitions from undefined to depth_stencil_attachment_optimal
+        ASSERT_EQ(sync.pass_plans.size(), 2U);
+        ASSERT_EQ(sync.pass_plans[0].texture_barriers.size(), 1U);
+        const auto& b0 = sync.pass_plans[0].texture_barriers[0];
+        EXPECT_EQ(b0.src.layout, rhi::image_layout::undefined);
+        EXPECT_EQ(b0.dst.layout, rhi::image_layout::depth_stencil_attachment_optimal);
+
+        // Pass 1 transitions from depth_stencil_attachment_optimal to depth_stencil_read_only_optimal
+        ASSERT_EQ(sync.pass_plans[1].texture_barriers.size(), 1U);
+        const auto& b1 = sync.pass_plans[1].texture_barriers[0];
+        EXPECT_EQ(b1.src.layout, rhi::image_layout::depth_stencil_attachment_optimal);
+        EXPECT_EQ(b1.dst.layout, rhi::image_layout::depth_stencil_read_only_optimal);
+        EXPECT_EQ(b1.src.stages, rhi::pipeline_stage::early_fragment_tests | rhi::pipeline_stage::late_fragment_tests);
+        EXPECT_EQ(b1.dst.stages, rhi::pipeline_stage::fragment);
+    }
 } // namespace tempest::render_graph

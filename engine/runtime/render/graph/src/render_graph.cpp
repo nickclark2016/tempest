@@ -118,9 +118,11 @@ namespace tempest::render_graph
     }
 
     auto pass_builder::import_texture(rhi::texture_handle handle, rhi::texture_view_handle view,
-                                      rhi::image_layout initial_layout) -> rg_texture_id
+                                      rhi::image_layout initial_layout, rhi::descriptor_handle sampled_descriptor,
+                                      optional<rg_texture_desc> desc)
+        -> rg_texture_id
     {
-        return _graph->import_texture(handle, view, initial_layout);
+        return _graph->import_texture(handle, view, initial_layout, sampled_descriptor, desc);
     }
 
     auto pass_builder::import_texture(rhi::texture_handle handle, rhi::image_layout initial_layout) -> rg_texture_id
@@ -215,7 +217,7 @@ namespace tempest::render_graph
             .type = access_type::write,
             .stages = rhi::pipeline_stage::early_fragment_tests | rhi::pipeline_stage::late_fragment_tests,
             .access = rhi::resource_access::read_write,
-            .layout = rhi::image_layout::general,
+            .layout = rhi::image_layout::depth_stencil_attachment_optimal,
             .subresource = attachment.subresource,
             .load_op = attachment.depth_load_op,
             .store_op = attachment.depth_store_op,
@@ -242,14 +244,17 @@ namespace tempest::render_graph
             {
                 const auto h = tex.get_history_texture(delta);
                 const auto v = tex.get_history_view(delta);
-                const auto imported_id = import_texture(h, v, rhi::image_layout::general);
+                const auto desc = tex.get_history_sampled_descriptor(delta);
+                const auto imported_id = import_texture(h, v, rhi::image_layout::general, desc, tex.get_desc().desc);
                 binding.history_reads.push_back(imported_id);
             }
         }
 
         const auto write_h = tex.get_write_texture();
         const auto write_v = tex.get_write_view();
-        binding.target_write = import_texture(write_h, write_v, rhi::image_layout::undefined);
+        const auto write_desc = tex.get_write_sampled_descriptor();
+        binding.target_write =
+            import_texture(write_h, write_v, rhi::image_layout::undefined, write_desc, tex.get_desc().desc);
 
         return binding;
     }
@@ -261,7 +266,11 @@ namespace tempest::render_graph
 
         const auto write_h = attachment.texture.get_write_texture();
         const auto write_v = attachment.texture.get_write_view();
-        const auto imported_id = import_texture(write_h, write_v, rhi::image_layout::undefined);
+        const auto write_desc = attachment.texture.get_write_sampled_descriptor();
+        const auto imported_id = import_texture(write_h, write_v, rhi::image_layout::undefined, write_desc,
+                                                attachment.texture.get_desc().desc);
+
+        mark_sink();
 
         return set_color_attachment(slot, rg_color_attachment{
                                               .texture = imported_id,
@@ -270,6 +279,30 @@ namespace tempest::render_graph
                                               .clear_value = attachment.clear_value,
                                               .subresource = attachment.subresource,
                                           });
+    }
+
+    auto pass_builder::set_temporal_depth_stencil_attachment(const rg_temporal_depth_stencil_attachment& attachment)
+        -> rg_texture_id
+    {
+        _graph->track_temporal_resource(&attachment.texture);
+
+        const auto write_h = attachment.texture.get_write_texture();
+        const auto write_v = attachment.texture.get_write_view();
+        const auto write_desc = attachment.texture.get_write_sampled_descriptor();
+        const auto imported_id = import_texture(write_h, write_v, rhi::image_layout::undefined, write_desc,
+                                                attachment.texture.get_desc().desc);
+
+        mark_sink();
+
+        return set_depth_stencil_attachment(rg_depth_stencil_attachment{
+            .texture = imported_id,
+            .depth_load_op = attachment.depth_load_op,
+            .depth_store_op = attachment.depth_store_op,
+            .stencil_load_op = attachment.stencil_load_op,
+            .stencil_store_op = attachment.stencil_store_op,
+            .clear_value = attachment.clear_value,
+            .subresource = attachment.subresource,
+        });
     }
 
     void pass_builder::clear_temporal_texture(temporal_texture& tex, rhi::clear_color_value clear_value)
@@ -419,9 +452,11 @@ namespace tempest::render_graph
     }
 
     auto render_graph::import_texture(rhi::texture_handle handle, rhi::texture_view_handle view,
-                                      rhi::image_layout initial_layout) -> rg_texture_id
+                                      rhi::image_layout initial_layout, rhi::descriptor_handle sampled_descriptor,
+                                      optional<rg_texture_desc> desc)
+        -> rg_texture_id
     {
-        return _compiler.import_texture(handle, view, initial_layout);
+        return _compiler.import_texture(handle, view, initial_layout, sampled_descriptor, desc);
     }
 
     auto render_graph::import_texture(rhi::texture_handle handle, rhi::image_layout initial_layout) -> rg_texture_id

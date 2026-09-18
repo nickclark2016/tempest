@@ -121,6 +121,32 @@ namespace tempest::render_graph
             return span<const rhi::texture_view_handle>{_views.data(), _views.size()};
         }
 
+        /// \brief Access sampled image descriptor for current write target (Frame N).
+        [[nodiscard]] auto get_write_sampled_descriptor() const noexcept -> rhi::descriptor_handle
+        {
+            return _sampled_descriptors.empty() ? rhi::descriptor_handle{} : _sampled_descriptors[_current_slot];
+        }
+
+        /// \brief Access sampled image descriptor for history from frame N - frame_delta.
+        /// \param frame_delta 1 = Frame N-1, 2 = Frame N-2, etc.
+        [[nodiscard]] auto get_history_sampled_descriptor(uint32_t frame_delta = 1) const noexcept
+            -> rhi::descriptor_handle
+        {
+            if (_sampled_descriptors.empty())
+            {
+                return rhi::descriptor_handle{};
+            }
+            const auto count = static_cast<uint32_t>(_sampled_descriptors.size());
+            const auto slot = (_current_slot + count - (frame_delta % count)) % count;
+            return _sampled_descriptors[slot];
+        }
+
+        /// \brief Access all sampled descriptors in the ring buffer.
+        [[nodiscard]] auto get_all_sampled_descriptors() const noexcept -> span<const rhi::descriptor_handle>
+        {
+            return span<const rhi::descriptor_handle>{_sampled_descriptors.data(), _sampled_descriptors.size()};
+        }
+
         /// \brief Access the configuration descriptor.
         [[nodiscard]] auto get_desc() const noexcept -> const temporal_texture_desc&
         {
@@ -140,6 +166,7 @@ namespace tempest::render_graph
 
         inplace_vector<rhi::texture_handle, max_temporal_slots> _textures{};
         inplace_vector<rhi::texture_view_handle, max_temporal_slots> _views{};
+        inplace_vector<rhi::descriptor_handle, max_temporal_slots> _sampled_descriptors{};
     };
 } // namespace tempest::render_graph
 

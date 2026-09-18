@@ -666,4 +666,201 @@ namespace tempest::render_graph
 
         tex.release(dev);
     }
+
+    /// @brief Verifies that temporal_texture can be bound as a depth/stencil attachment in render graph passes.
+    TEST(temporal_texture_test, temporal_depth_stencil_attachment_binding)
+    {
+        // 1. Setup mock device, temporal depth texture, and render graph
+        auto dev = mock_temporal_device{};
+        auto depth_tex = temporal_texture{};
+
+        const auto desc = temporal_texture_desc{
+            .desc =
+                rg_texture_desc{
+                    .size = rg_texture_size::absolute(2048, 2048),
+                    .format = rhi::data_format::depth32_float,
+                    .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+                    .name = "TemporalShadowMap",
+                },
+            .history_count = 1, // 2 slots: write and 1 history frame
+        };
+        EXPECT_TRUE(depth_tex.init(dev, desc, 2048, 2048));
+        EXPECT_EQ(depth_tex.get_all_textures().size(), 2U);
+
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 2048, 2048};
+
+        struct depth_pass_data
+        {
+            rg_texture_id depth_target{};
+        };
+
+        // 2. Act - Bind write slot of temporal depth texture as depth/stencil attachment
+        rg.add_graphics_pass<depth_pass_data>(
+            "ShadowDepthPass",
+            [&depth_tex](pass_builder& builder, depth_pass_data& data) {
+                data.depth_target = builder.set_temporal_depth_stencil_attachment(rg_temporal_depth_stencil_attachment{
+                    .texture = depth_tex,
+                    .depth_load_op = rhi::load_op::clear,
+                    .depth_store_op = rhi::store_op::store,
+                    .clear_value = {.depth = 0.0F, .stencil = 0},
+                });
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const depth_pass_data& data, [[maybe_unused]] pass_execution_context& pass_ctx,
+               [[maybe_unused]] rhi::command_list& cmd) {});
+
+        // 3. Assert - Compile and execute Frame 0
+        const auto compile_res = rg.compile();
+        EXPECT_TRUE(compile_res.has_value());
+
+        const auto exec_res = rg.execute_sync(dev);
+        EXPECT_TRUE(exec_res.has_value());
+        EXPECT_EQ(depth_tex.get_valid_history_count(), 1U);
+        EXPECT_TRUE(depth_tex.is_history_valid(1));
+
+        depth_tex.release(dev);
+    }
+
+    /// @brief Verifies that sampled descriptors allocated on temporal textures are preserved and propagated
+    ///        through import_texture to physical allocations and accessible via pass_execution_context.
+    TEST(temporal_texture_test, imported_temporal_descriptor_propagation)
+    {
+        // 1. Setup temporal texture with sampled usage
+        auto dev = mock_temporal_device{};
+        auto tex = temporal_texture{};
+
+        const auto desc = temporal_texture_desc{
+            .desc =
+                rg_texture_desc{
+                    .size = rg_texture_size::absolute(1024, 1024),
+                    .format = rhi::data_format::depth32_float,
+                    .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+                    .name = "SampledTemporalDepth",
+                },
+            .history_count = 1,
+        };
+        EXPECT_TRUE(tex.init(dev, desc, 1024, 1024));
+
+        const auto write_desc = tex.get_write_sampled_descriptor();
+        EXPECT_NE(write_desc.index, ~0U);
+
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1024, 1024};
+
+        struct sampled_pass_data
+        {
+            rg_texture_id sampled_tex{};
+        };
+
+        // 2. Act - Import write texture with its sampled descriptor and query it in execute callback
+        uint32_t recorded_descriptor_idx = invalid_descriptor_index;
+        rg.add_graphics_pass<sampled_pass_data>(
+            "SamplePass",
+            [&tex](pass_builder& builder, sampled_pass_data& data) {
+                const auto imported = builder.import_texture(tex.get_write_texture(), tex.get_write_view(),
+                                                             rhi::image_layout::general,
+                                                             tex.get_write_sampled_descriptor());
+                data.sampled_tex = builder.read(imported, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                                rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [&recorded_descriptor_idx](const sampled_pass_data& data, pass_execution_context& pass_ctx,
+                                       [[maybe_unused]] rhi::command_list& cmd) {
+                recorded_descriptor_idx = pass_ctx.get_texture_descriptor(data.sampled_tex);
+            });
+
+        // 3. Assert - Descriptor queried from pass_execution_context matches the allocated descriptor
+        const auto exec_res = rg.execute_sync(dev);
+        EXPECT_TRUE(exec_res.has_value());
+        EXPECT_EQ(recorded_descriptor_idx, write_desc.index);
+
+        tex.release(dev);
+    }
+
+    /// @brief Verifies that passes writing to temporal_texture attachments are automatically marked as sinks
+    ///        and are not eliminated by DAG dead-code culling even when unconsumed within the current frame.
+    TEST(temporal_texture_test, temporal_attachments_automatically_marked_as_sink)
+    {
+        // 1. Setup mock device, temporal color and depth textures, and render graph
+        auto dev = mock_temporal_device{};
+        auto color_tex = temporal_texture{};
+        auto depth_tex = temporal_texture{};
+
+        const auto color_desc = temporal_texture_desc{
+            .desc =
+                rg_texture_desc{
+                    .size = rg_texture_size::absolute(800, 600),
+                    .format = rhi::data_format::rgba8_unorm,
+                    .usage = rhi::texture_usage::color_attachment,
+                    .name = "TemporalColor",
+                },
+            .history_count = 1,
+        };
+        EXPECT_TRUE(color_tex.init(dev, color_desc, 800, 600));
+
+        const auto depth_desc = temporal_texture_desc{
+            .desc =
+                rg_texture_desc{
+                    .size = rg_texture_size::absolute(800, 600),
+                    .format = rhi::data_format::depth32_float,
+                    .usage = rhi::texture_usage::depth_stencil_attachment,
+                    .name = "TemporalDepth",
+                },
+            .history_count = 1,
+        };
+        EXPECT_TRUE(depth_tex.init(dev, depth_desc, 800, 600));
+
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 800, 600};
+
+        struct color_pass_data
+        {
+            rg_texture_id target{};
+        };
+
+        struct depth_pass_data
+        {
+            rg_texture_id target{};
+        };
+
+        // 2. Act - Bind passes using set_temporal_color_attachment and set_temporal_depth_stencil_attachment
+        //           WITHOUT explicitly calling mark_sink() or consuming their outputs downstream
+        rg.add_graphics_pass<color_pass_data>(
+            "TemporalColorProducer",
+            [&color_tex](pass_builder& builder, color_pass_data& data) {
+                data.target = builder.set_temporal_color_attachment(0, rg_temporal_color_attachment{
+                                                                           .texture = color_tex,
+                                                                           .load_op = rhi::load_op::clear,
+                                                                           .store_op = rhi::store_op::store,
+                                                                       });
+            },
+            []([[maybe_unused]] const color_pass_data& data, [[maybe_unused]] pass_execution_context& pass_ctx,
+               [[maybe_unused]] rhi::command_list& cmd) {});
+
+        rg.add_graphics_pass<depth_pass_data>(
+            "TemporalDepthProducer",
+            [&depth_tex](pass_builder& builder, depth_pass_data& data) {
+                data.target = builder.set_temporal_depth_stencil_attachment(rg_temporal_depth_stencil_attachment{
+                    .texture = depth_tex,
+                    .depth_load_op = rhi::load_op::clear,
+                    .depth_store_op = rhi::store_op::store,
+                });
+            },
+            []([[maybe_unused]] const depth_pass_data& data, [[maybe_unused]] pass_execution_context& pass_ctx,
+               [[maybe_unused]] rhi::command_list& cmd) {});
+
+        // 3. Assert - DAG compiler must preserve both passes in sorted_pass_indices
+        const auto compile_res = rg.compile();
+        ASSERT_TRUE(compile_res.has_value());
+        EXPECT_EQ(compile_res.value().sorted_pass_indices.size(), 2U);
+
+        const auto pass0_name = rg.get_compiler().get_pass(compile_res.value().sorted_pass_indices[0]).name;
+        const auto pass1_name = rg.get_compiler().get_pass(compile_res.value().sorted_pass_indices[1]).name;
+        EXPECT_EQ(pass0_name, "TemporalColorProducer");
+        EXPECT_EQ(pass1_name, "TemporalDepthProducer");
+
+        color_tex.release(dev);
+        depth_tex.release(dev);
+    }
 } // namespace tempest::render_graph

@@ -34,6 +34,8 @@ namespace tempest::render_graph
         const auto total_slots =
             tempest::min(tempest::max(_desc.history_count + 1U, 2U), static_cast<uint32_t>(max_temporal_slots));
 
+        const auto allocate_sampled = static_cast<bool>(req_desc.usage & rhi::texture_usage::sampled);
+
         for (uint32_t i = 0; i < total_slots; ++i)
         {
             const auto tex = dev.create_texture(req_desc);
@@ -46,6 +48,13 @@ namespace tempest::render_graph
                                                            });
             _textures.push_back(tex);
             _views.push_back(view);
+
+            if (allocate_sampled)
+            {
+                const auto sampled_desc = dev.allocate_descriptor(rhi::descriptor_type::sampled_image);
+                dev.write_sampled_image_descriptor(sampled_desc, view, rhi::image_layout::general);
+                _sampled_descriptors.push_back(sampled_desc);
+            }
         }
 
         return !_textures.empty();
@@ -61,6 +70,15 @@ namespace tempest::render_graph
 
     auto temporal_texture::release(rhi::device& dev) -> void
     {
+        for (size_t i = 0; i < _sampled_descriptors.size(); ++i)
+        {
+            if (_sampled_descriptors[i].index != ~0U)
+            {
+                dev.free_descriptor(rhi::descriptor_type::sampled_image, _sampled_descriptors[i]);
+            }
+        }
+        _sampled_descriptors.clear();
+
         for (size_t i = 0; i < _views.size(); ++i)
         {
             dev.destroy_texture_view(_views[i]);

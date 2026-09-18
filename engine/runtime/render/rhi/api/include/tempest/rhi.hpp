@@ -398,6 +398,8 @@ namespace tempest::rhi
         undefined,
         general,
         present,
+        depth_stencil_attachment_optimal,
+        depth_stencil_read_only_optimal,
     };
 
     enum class shader_stage : uint16_t

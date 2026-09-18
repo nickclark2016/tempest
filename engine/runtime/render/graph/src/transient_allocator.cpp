@@ -73,7 +73,7 @@ namespace tempest::render_graph
                 _active_textures[tex_id] = physical_texture_allocation{
                     .handle = reg_tex.imported_handle,
                     .default_view = reg_tex.imported_view,
-                    .sampled_descriptor = {},
+                    .sampled_descriptor = reg_tex.imported_sampled_descriptor,
                     .storage_descriptor = {},
                     .size = reg_tex.desc.size.evaluate(surface_width, surface_height),
                     .format = reg_tex.desc.format,

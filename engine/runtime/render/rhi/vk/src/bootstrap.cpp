@@ -846,6 +846,7 @@ namespace tempest::rhi::vk
             .runtimeDescriptorArray = VK_TRUE,
             .scalarBlockLayout = VK_TRUE,
             .uniformBufferStandardLayout = VK_TRUE,
+            .shaderSubgroupExtendedTypes = VK_TRUE,
             .separateDepthStencilLayouts = VK_TRUE,
             .hostQueryReset = VK_TRUE,
             .timelineSemaphore = VK_TRUE,

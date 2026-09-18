@@ -8,7 +8,8 @@ namespace tempest::render_system
                              render_graph::rg_texture_id hdr_color_tex, render_graph::rg_texture_id depth_tex,
                              render_graph::rg_texture_id shadow_atlas, uint32_t draw_count, uint32_t draw_offset,
                              render_graph::rg_buffer_id light_bitmask_buf,
-                             enum_mask<rhi::pipeline_statistic_flags> pipeline_stats) -> const pbr_masked_pass_data&
+                             enum_mask<rhi::pipeline_statistic_flags> pipeline_stats,
+                             uint64_t directional_shadow_address) -> const pbr_masked_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_masked_pipeline");
         if (!pipe_h.has_value())
@@ -92,8 +93,9 @@ namespace tempest::render_system
                 data.draw_count = draw_count;
                 data.draw_offset = draw_offset;
             },
-            [&pool, &shaders, pipe](const pbr_masked_pass_data& data, render_graph::pass_execution_context& ctx,
-                                    rhi::command_list& pass_cmd) {
+            [&pool, &shaders, pipe, directional_shadow_address](const pbr_masked_pass_data& data,
+                                                                render_graph::pass_execution_context& ctx,
+                                                                rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0)
                 {
                     return;
@@ -110,12 +112,14 @@ namespace tempest::render_system
 
                 const auto shadow_desc_idx = ctx.get_texture_descriptor(data.shadow_atlas);
                 const auto shadow_atlas_idx = (shadow_desc_idx != ~0U) ? static_cast<int32_t>(shadow_desc_idx) : -1;
+                const auto shadow_addr = (directional_shadow_address != 0) ? directional_shadow_address
+                                                                           : pool.get_directional_shadow_address();
 
                 const auto constants = pbr_masked_push_constants{
                     .scene_constants_address = pool.get_scene_constants_address(),
                     .objects_address = pool.get_object_buffer_address(),
                     .instance_indices_address = pool.get_instance_buffer_address(),
-                    .directional_shadow_address = pool.get_directional_shadow_address(),
+                    .directional_shadow_address = shadow_addr,
                     .light_bitmask_address = ctx.get_buffer_device_address(data.light_bitmask_buffer),
                     .linear_sampler_index = static_cast<int32_t>(pool.get_linear_sampler_descriptor().index),
                     .shadow_atlas_index = shadow_atlas_idx,
