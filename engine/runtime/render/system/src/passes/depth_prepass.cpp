@@ -25,7 +25,7 @@ namespace tempest::render_system
                     {
                         .polygon_mode = rhi::polygon_mode::fill,
                         .cull_mode = rhi::cull_mode::none,
-                        .front_face = rhi::vertex_winding_order::counter_clockwise,
+                        .front_face = rhi::vertex_winding_order::clockwise,
                     },
                 .depth_stencil_state =
                     {
@@ -53,7 +53,7 @@ namespace tempest::render_system
                     {
                         .polygon_mode = rhi::polygon_mode::fill,
                         .cull_mode = rhi::cull_mode::none,
-                        .front_face = rhi::vertex_winding_order::counter_clockwise,
+                        .front_face = rhi::vertex_winding_order::clockwise,
                     },
                 .depth_stencil_state =
                     {

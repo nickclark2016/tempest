@@ -34,7 +34,7 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 [shader("fragment")]
 [earlydepthstencil]
 [require(spvFragmentShaderPixelInterlockEXT)]
-void FSMain(VertexOutput input) {
+void FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
     Material* mat = (Material*)input.material_address;
     if (mat.type != MaterialType::BLEND && mat.type != MaterialType::TRANSMISSIVE) {
         discard;
@@ -52,7 +52,7 @@ void FSMain(VertexOutput input) {
     pd.geom_tangent = half3(input.tangent);
     pd.geom_bitangent = half3(input.bitangent);
     pd.geom_normal = half3(input.normal);
-    pd.front_face = dot(view_dir, input.normal) > 0.0;
+    pd.front_face = is_front_face;
     pd.ambient_occlusion = 1.0h;
 
     fetch_pixel_data(mat_state, pd);

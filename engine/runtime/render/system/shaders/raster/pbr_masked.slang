@@ -37,7 +37,7 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 
 [shader("fragment")]
 [earlydepthstencil]
-FragmentOutput FSMain(VertexOutput input) {
+FragmentOutput FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
     SceneGlobals* scene = (SceneGlobals*)push_constants.scene_constants_address;
     Material* mat = (Material*)input.material_address;
 
@@ -52,7 +52,7 @@ FragmentOutput FSMain(VertexOutput input) {
     pd.geom_normal = half3(input.normal);
 
     float3 wo = normalize(scene.camera.eye.xyz - input.world_position);
-    pd.front_face = dot(wo, input.normal) > 0.0;
+    pd.front_face = is_front_face;
     pd.ambient_occlusion = 1.0h;
 
     fetch_pixel_data<AlphaPolicy::Masked>(mat_state, pd);
