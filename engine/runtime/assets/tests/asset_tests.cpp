@@ -1608,6 +1608,173 @@ TEST(gltf_importer_tests, no_orphan_template_primitives_created)
     }
 }
 
+/// @brief Tests that glTF importing properly tags sRGB vs Linear color space for textures:
+/// baseColor and emissive textures are tagged as rgba8_srgb, whereas metallicRoughness and normal
+/// textures remain rgba8_unorm.
+TEST(gltf_importer_tests, texture_color_space_detection)
+{
+    // 1. Setup: Create binary buffer for mesh primitive geometry
+    const auto dir = tempest::filesystem::path("temp_test_gltf_color_space");
+    tempest::filesystem::create_directories(dir);
+
+    const auto bin_file_path = dir / "geometry.bin";
+    {
+        float verts[9] = {
+            0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F,
+        };
+        uint16_t indices[3] = {0, 1, 2};
+        auto bin_bytes = tempest::vector<tempest::byte>{};
+        auto append_bytes = [&](const void* ptr, size_t size) -> void {
+            const auto* b = reinterpret_cast<const tempest::byte*>(ptr);
+            bin_bytes.insert(bin_bytes.end(), b, b + size);
+        };
+        append_bytes(verts, sizeof(verts));
+        append_bytes(indices, sizeof(indices));
+        (void)tempest::write_file_from_bytes(bin_file_path, bin_bytes);
+    }
+
+    // Create 1x1 32-bit TGA images
+    const uint8_t tga_1x1[] = {
+        0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, // width = 1
+        1, 0, // height = 1
+        32, 8, // 32 bpp
+        255, 255, 255, 255 // BGRA
+    };
+    auto tga_bytes = tempest::vector<tempest::byte>{};
+    for (auto b : tga_1x1)
+    {
+        tga_bytes.push_back(static_cast<tempest::byte>(b));
+    }
+    (void)tempest::write_file_from_bytes(dir / "base_color.tga", tga_bytes);
+    (void)tempest::write_file_from_bytes(dir / "emissive.tga", tga_bytes);
+    (void)tempest::write_file_from_bytes(dir / "metallic_roughness.tga", tga_bytes);
+    (void)tempest::write_file_from_bytes(dir / "normal.tga", tga_bytes);
+
+    const auto gltf_path = dir / "test_scene.gltf";
+    test_write_file(gltf_path, R"({
+        "asset": { "version": "2.0" },
+        "buffers": [
+            { "byteLength": 42, "uri": "geometry.bin" }
+        ],
+        "bufferViews": [
+            { "buffer": 0, "byteOffset": 0, "byteLength": 36, "target": 34962 },
+            { "buffer": 0, "byteOffset": 36, "byteLength": 6, "target": 34963 }
+        ],
+        "accessors": [
+            { "bufferView": 0, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC3", "max": [1.0, 1.0, 0.0], "min": [0.0, 0.0, 0.0] },
+            { "bufferView": 1, "byteOffset": 0, "componentType": 5123, "count": 3, "type": "SCALAR", "max": [2], "min": [0] }
+        ],
+        "images": [
+            { "uri": "base_color.tga" },
+            { "uri": "emissive.tga" },
+            { "uri": "metallic_roughness.tga" },
+            { "uri": "normal.tga" }
+        ],
+        "textures": [
+            { "source": 0 },
+            { "source": 1 },
+            { "source": 2 },
+            { "source": 3 }
+        ],
+        "materials": [
+            {
+                "pbrMetallicRoughness": {
+                    "baseColorTexture": { "index": 0 },
+                    "metallicRoughnessTexture": { "index": 2 }
+                },
+                "emissiveTexture": { "index": 1 },
+                "normalTexture": { "index": 3 }
+            }
+        ],
+        "meshes": [
+            {
+                "primitives": [
+                    { "attributes": { "POSITION": 0 }, "indices": 1, "material": 0 }
+                ]
+            }
+        ],
+        "nodes": [
+            { "mesh": 0 }
+        ],
+        "scenes": [
+            { "nodes": [0] }
+        ],
+        "scene": 0
+    })");
+
+    auto mesh_reg = tempest::core::mesh_registry{};
+    auto tex_reg = tempest::core::texture_registry{};
+    auto mat_reg = tempest::core::material_registry{};
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    tempest::assets::register_default_importers(database, &mesh_reg, &tex_reg, &mat_reg);
+
+    auto events = tempest::event::event_registry{};
+    auto registry = tempest::ecs::basic_archetype_registry{events};
+
+    // 2. Act: Import the glTF file via asset_database
+    auto root_entity = database.load(gltf_path.generic_string().c_str(), registry);
+    EXPECT_TRUE(root_entity != tempest::ecs::tombstone);
+
+    // 3. Assert: Recursively find material component in hierarchy per ECS rules
+    auto find_material = [&](auto& self, tempest::ecs::entity e) -> tempest::optional<tempest::guid> {
+        if (const auto* mc = registry.try_get<tempest::core::material_component>(e))
+        {
+            return mc->material_id;
+        }
+        if (const auto* rel = registry.try_get<tempest::ecs::relationship_component<tempest::ecs::entity>>(e))
+        {
+            auto child = rel->first_child;
+            while (child != tempest::ecs::tombstone)
+            {
+                auto found = self(self, child);
+                if (found.has_value())
+                {
+                    return found;
+                }
+                const auto* child_rel = registry.try_get<tempest::ecs::relationship_component<tempest::ecs::entity>>(child);
+                child = child_rel ? child_rel->next_sibling : tempest::ecs::tombstone;
+            }
+        }
+        return tempest::nullopt;
+    };
+
+    auto mat_id = find_material(find_material, root_entity);
+    ASSERT_TRUE(mat_id.has_value());
+
+    auto mat_opt = mat_reg.find(*mat_id);
+    ASSERT_TRUE(mat_opt.has_value());
+    const auto& mat = mat_opt.value();
+
+    auto base_color_tex_id = mat.get_texture(tempest::core::material::base_color_texture_name);
+    ASSERT_TRUE(base_color_tex_id.has_value());
+    auto base_color_tex = tex_reg.get_texture(*base_color_tex_id);
+    ASSERT_TRUE(base_color_tex.has_value());
+    EXPECT_EQ(base_color_tex->format, tempest::core::texture_format::rgba8_srgb);
+
+    auto emissive_tex_id = mat.get_texture(tempest::core::material::emissive_texture_name);
+    ASSERT_TRUE(emissive_tex_id.has_value());
+    auto emissive_tex = tex_reg.get_texture(*emissive_tex_id);
+    ASSERT_TRUE(emissive_tex.has_value());
+    EXPECT_EQ(emissive_tex->format, tempest::core::texture_format::rgba8_srgb);
+
+    auto mr_tex_id = mat.get_texture(tempest::core::material::metallic_roughness_texture_name);
+    ASSERT_TRUE(mr_tex_id.has_value());
+    auto mr_tex = tex_reg.get_texture(*mr_tex_id);
+    ASSERT_TRUE(mr_tex.has_value());
+    EXPECT_EQ(mr_tex->format, tempest::core::texture_format::rgba8_unorm);
+
+    auto normal_tex_id = mat.get_texture(tempest::core::material::normal_texture_name);
+    ASSERT_TRUE(normal_tex_id.has_value());
+    auto normal_tex = tex_reg.get_texture(*normal_tex_id);
+    ASSERT_TRUE(normal_tex.has_value());
+    EXPECT_EQ(normal_tex->format, tempest::core::texture_format::rgba8_unorm);
+
+    // 4. Teardown
+    tempest::filesystem::remove_all(dir);
+}
+
 /// @brief Tests that meshes imported from glTF and saved to asset database retain byte-exact vertex and index data on
 /// reload.
 TEST(gltf_importer_tests, gltf_database_save_and_reload_mesh_integrity)

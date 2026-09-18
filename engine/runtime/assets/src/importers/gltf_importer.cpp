@@ -410,7 +410,7 @@ namespace tempest::assets
 
         auto process_texture(const image_payload& img, optional<json_value> sampler, core::texture_registry* tex_reg,
                              const flat_unordered_map<uint32_t, vector<byte>>& buffers, asset_database& asset_db,
-                             string_view source_path) -> guid
+                             string_view source_path, bool is_srgb) -> guid
         {
             auto sampler_state = core::sampler_state{};
 
@@ -477,7 +477,7 @@ namespace tempest::assets
             }
             else
             {
-                tex.format = core::texture_format::rgba8_unorm;
+                tex.format = is_srgb ? core::texture_format::rgba8_srgb : core::texture_format::rgba8_unorm;
                 auto* const data =
                     stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
                                           static_cast<int32_t>(image_data.size()), &width, &height, &components, 4);
@@ -1155,6 +1155,38 @@ namespace tempest::assets
                           core::texture_registry* texture_registry, asset_database& asset_db, string_view source_path)
         -> flat_unordered_map<uint64_t, guid>
     {
+        auto srgb_texture_indices = flat_unordered_map<uint64_t, bool>{};
+        auto materials = json_array{};
+        if (doc["materials"].get(materials))
+        {
+            for (const auto& mat : materials)
+            {
+                auto pbr = json_object{};
+                if (mat["pbrMetallicRoughness"].get(pbr))
+                {
+                    auto base_color_texture = json_object{};
+                    if (pbr["baseColorTexture"].get(base_color_texture))
+                    {
+                        uint64_t texture_index = 0;
+                        if (base_color_texture["index"].get(texture_index))
+                        {
+                            srgb_texture_indices[texture_index] = true;
+                        }
+                    }
+                }
+
+                auto emissive_texture = json_object{};
+                if (mat["emissiveTexture"].get(emissive_texture))
+                {
+                    uint64_t texture_index = 0;
+                    if (emissive_texture["index"].get(texture_index))
+                    {
+                        srgb_texture_indices[texture_index] = true;
+                    }
+                }
+            }
+        }
+
         auto texture_guids = flat_unordered_map<uint64_t, guid>{};
         auto textures = json_array{};
 
@@ -1177,8 +1209,9 @@ namespace tempest::assets
                     }
                 }
 
+                const auto is_srgb = srgb_texture_indices.contains(texture_id);
                 auto guid = process_texture(image_contents.find(image_id)->second, sampler, texture_registry,
-                                            buffer_contents, asset_db, source_path);
+                                            buffer_contents, asset_db, source_path, is_srgb);
                 texture_guids.insert({texture_id, guid});
                 ++texture_id;
             }

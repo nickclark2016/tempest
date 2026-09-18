@@ -1,5 +1,4 @@
 import "camera";
-import "colorspace";
 import "consts";
 import "lighting";
 
@@ -105,7 +104,6 @@ void fetch_diffuse<let Policy : AlphaPolicy = AlphaPolicy::Opaque>(const Materia
             }
         }
 
-        texture_color.rgb = iec_srgb_to_linear(texture_color.rgb);
         color = texture_color * texture_factor;
     } else if (Policy == AlphaPolicy::Masked) {
         if (mat_state.mat.type == MaterialType::MASK && texture_factor.a < mat_state.mat.alpha_cutoff) {
@@ -176,7 +174,6 @@ void apply_emissive(const MaterialState mat_state, inout half4 color, const half
     if (mat_state.mat.emissive_texture_id >= 0) {
         Texture2D emissive_texture = bindless_textures[(int) mat_state.mat.emissive_texture_id];
         float4 emissive_color = emissive_texture.Sample(mat_state.linear_sampler, uv);
-        emissive_color.rgb = iec_srgb_to_linear(emissive_color.rgb);
         emissive_color.rgb *= emissive_color.a;
         emissive.rgb *= half3(emissive_color.rgb);
     }
