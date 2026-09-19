@@ -1536,7 +1536,150 @@ namespace tempest::render_system::tests
             EXPECT_TRUE(batch.wait_batch_indices.empty());
         }
 
+        // Verify ShadowPass uses load_op::dont_care for depth attachment
+        auto found_shadow_pass = false;
+        for (const auto& pass : all_passes)
+        {
+            if (pass.name == "ShadowPass")
+            {
+                found_shadow_pass = true;
+                auto found_ds = false;
+                for (const auto& acc : pass.texture_accesses)
+                {
+                    if (acc.attachment == render_graph::attachment_type::depth_stencil)
+                    {
+                        found_ds = true;
+                        EXPECT_EQ(acc.load_op, rhi::load_op::dont_care);
+                        EXPECT_EQ(acc.store_op, rhi::store_op::store);
+                    }
+                }
+                EXPECT_TRUE(found_ds);
+            }
+        }
+        EXPECT_TRUE(found_shadow_pass);
+
         auto exec_res = graph.execute_sync(*dev);
+        EXPECT_TRUE(exec_res.has_value());
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that add_shadow_pass sets the depth attachment load_op to dont_care,
+    ///        and that execution cleanly dispatches vkCmdClearAttachments per active cascade scissor.
+    TEST(render_system_tests, shadow_pass_scissor_clear_and_dont_care_depth_attachment)
+    {
+        // 1. Setup: Test device, minimal registry, sun light with 4 cascades, and render graph
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto cam_sys = camera_system{registry, events};
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
+        auto graph = render_graph::render_graph{1280, 720};
+        auto allocator = shelf_allocator{8192, 8192, 4};
+
+        auto cam_ent = registry.create();
+        registry.assign(cam_ent, camera_component{
+                                     .aspect_ratio = 16.0F / 9.0F,
+                                     .vertical_fov = 1.0F,
+                                     .near_plane = 0.1F,
+                                 });
+        auto cam_tx = ecs::transform_component::identity();
+        cam_tx.position({0.0F, 0.0F, -5.0F});
+        registry.assign(cam_ent, cam_tx);
+
+        auto sun_ent = registry.create();
+        registry.assign(sun_ent, directional_light_component{
+                                     .color = {1.0F, 1.0F, 1.0F},
+                                     .intensity = 2.0F,
+                                 });
+        registry.assign(sun_ent, shadow_caster_component{
+                                     .resolution = 2048,
+                                     .num_cascades = 4,
+                                     .split_lambda = 0.5F,
+                                     .max_shadow_distance = 100.0F,
+                                     .normal_bias = 0.02F,
+                                     .depth_bias = 0.005F,
+                                     .priority = 0,
+                                 });
+        auto sun_tx = ecs::transform_component::identity();
+        sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
+        registry.assign(sun_ent, sun_tx);
+
+        auto shadow_atlas_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(8192, 8192),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "ShadowAtlasTarget",
+        });
+
+        add_frame_upload_pass(graph, pool);
+
+        // 2. Act: Add shadow pass (with 0 draw calls to verify scissor clears on 0-caster frames)
+        const auto shadow_res = add_shadow_pass(shadow_pass_params{
+            .graph = graph,
+            .pool = pool,
+            .shaders = shaders,
+            .shadow_atlas = shadow_atlas_tex,
+            .allocator = allocator,
+            .registry = registry,
+            .camera_sys = &cam_sys,
+            .opaque_draw_count = 0,
+            .opaque_draw_offset = 0,
+            .alpha_masked_draw_count = 0,
+            .alpha_masked_draw_offset = 0,
+        });
+
+        // 3. Assert: Verify depth attachment load op is dont_care
+        EXPECT_EQ(shadow_res.shadow_data.cascade_count, 4U);
+        EXPECT_TRUE(shadow_res.shadow_atlas.is_valid());
+
+        const auto all_passes = graph.get_compiler().get_passes();
+        auto found_shadow_pass = false;
+        for (const auto& pass : all_passes)
+        {
+            if (pass.name == "ShadowPass")
+            {
+                found_shadow_pass = true;
+                auto found_ds = false;
+                for (const auto& acc : pass.texture_accesses)
+                {
+                    if (acc.attachment == render_graph::attachment_type::depth_stencil)
+                    {
+                        found_ds = true;
+                        EXPECT_EQ(acc.load_op, rhi::load_op::dont_care);
+                        EXPECT_EQ(acc.store_op, rhi::store_op::store);
+                    }
+                }
+                EXPECT_TRUE(found_ds);
+            }
+        }
+        EXPECT_TRUE(found_shadow_pass);
+
+        // Mark sink on shadow atlas so pass is retained during compilation
+        struct shadow_sink_data
+        {
+            render_graph::rg_texture_id shadow;
+        };
+        graph.add_graphics_pass<shadow_sink_data>(
+            "ShadowSinkPass",
+            [s = shadow_res.shadow_atlas](render_graph::pass_builder& builder, shadow_sink_data& sink_data) -> void {
+                sink_data.shadow = builder.read(s, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                                rhi::image_layout::depth_stencil_read_only_optimal);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const shadow_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
+               [[maybe_unused]] rhi::command_list&) -> void {});
+
+        // 4. Act: Compile and execute render graph
+        auto exec_res = graph.execute_sync(*dev);
+
+        // 5. Assert: Execution succeeds cleanly (dispatched vkCmdClearAttachments for all 4 cascades)
         EXPECT_TRUE(exec_res.has_value());
 
         dev->wait_idle();
@@ -1801,8 +1944,8 @@ namespace tempest::render_system::tests
             const auto* const alloc =
                 rend->get_render_graph().get_allocator().get_texture(rend->get_directional_shadow_atlas_texture().id);
             ASSERT_NE(alloc, nullptr);
-            EXPECT_EQ(alloc->size.width, 16384U);
-            EXPECT_EQ(alloc->size.height, 16384U);
+            EXPECT_EQ(alloc->size.width, 8192U);
+            EXPECT_EQ(alloc->size.height, 8192U);
 
             const auto slot = rend->get_resource_pool().get_frame_slot();
             const auto* shadow_data = static_cast<const directional_shadow_data*>(
@@ -5326,10 +5469,10 @@ namespace tempest::render_system::tests
         dev->wait_idle();
     }
 
-    /// @brief Verifies that the directional shadow map is double-buffered via temporal_texture:
-    ///        Frame 0 falls back to current write target (cold start), while Frame 1 and subsequent
-    ///        frames engage history sampling with matched shadow data addresses.
-    TEST(render_system_tests, renderer_double_buffered_shadow_map_lifecycle)
+    /// @brief Verifies that directional shadow atlas uses a single persistent physical texture
+    ///        across frames (Frame 0, Frame 1, Frame 2) without double-buffering or slot rotation,
+    ///        and that ShadowPass is correctly scheduled and retained in the DAG.
+    TEST(render_system_tests, renderer_single_persistent_shadow_atlas_lifecycle)
     {
         // 1. Setup: Initialize test device, ECS registry with sun light and camera override
         auto fixture = create_test_device();
@@ -5407,40 +5550,37 @@ namespace tempest::render_system::tests
                 return false;
             };
 
-            // 2. Act: Prepare and render Frame 0 (Cold start)
+            // 2. Act: Prepare and render Frame 0 (Initial allocation)
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
-            const auto& temporal_atlas = rend->get_directional_shadow_temporal_atlas();
-            EXPECT_TRUE(temporal_atlas.is_allocated());
-            EXPECT_EQ(temporal_atlas.get_valid_history_count(), 0U);
-            EXPECT_FALSE(temporal_atlas.is_history_valid(1));
+            const auto atlas_tex_0 = rend->get_directional_shadow_atlas_physical_texture();
+            EXPECT_NE(atlas_tex_0.handle, 0ULL);
+            EXPECT_NE(rend->get_directional_shadow_atlas_view().handle, 0ULL);
+            EXPECT_NE(rend->get_directional_shadow_atlas_descriptor().index, ~0U);
             EXPECT_TRUE(has_shadow_pass(*rend));
 
             auto res0 = rend->render();
             EXPECT_TRUE(res0.has_value());
 
-            // After Frame 0 renders, temporal_atlas should have swapped, giving 1 valid history frame
-            EXPECT_EQ(temporal_atlas.get_valid_history_count(), 1U);
-            EXPECT_TRUE(temporal_atlas.is_history_valid(1));
-
-            // 3. Act: Prepare and render Frame 1 (History active - ensure ShadowPass is not culled)
+            // 3. Act: Prepare and render Frame 1 (Single persistent texture must be retained, no double-buffering)
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
-            EXPECT_TRUE(temporal_atlas.is_history_valid(1));
+            const auto atlas_tex_1 = rend->get_directional_shadow_atlas_physical_texture();
+            EXPECT_EQ(atlas_tex_1.handle, atlas_tex_0.handle);
             EXPECT_TRUE(has_shadow_pass(*rend));
 
             auto res1 = rend->render();
             EXPECT_TRUE(res1.has_value());
 
-            // 4. Act: Prepare and render Frame 2 (History active, slot rotated back)
+            // 4. Act: Prepare and render Frame 2 (Texture handle continues to remain identical)
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
-            EXPECT_TRUE(temporal_atlas.is_history_valid(1));
+            const auto atlas_tex_2 = rend->get_directional_shadow_atlas_physical_texture();
+            EXPECT_EQ(atlas_tex_2.handle, atlas_tex_0.handle);
             EXPECT_TRUE(has_shadow_pass(*rend));
 
             auto res2 = rend->render();
             EXPECT_TRUE(res2.has_value());
 
-            // 5. Assert: Temporal atlas history remains valid and advances
-            EXPECT_EQ(temporal_atlas.get_valid_history_count(), 1U);
-            EXPECT_TRUE(temporal_atlas.is_history_valid(1));
+            // 5. Assert: No textures retired when resolution is constant
+            EXPECT_EQ(rend->get_retired_texture_count(), 0U);
         }
 
         dev->wait_idle();
@@ -5512,12 +5652,9 @@ namespace tempest::render_system::tests
 
             // 2. Act: Prepare and render Frame 0 at 1024 resolution
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
-            const auto& temporal_atlas = rend->get_directional_shadow_temporal_atlas();
-            EXPECT_TRUE(temporal_atlas.is_allocated());
+            const auto old_tex = rend->get_directional_shadow_atlas_physical_texture();
+            EXPECT_NE(old_tex.handle, 0U);
             EXPECT_EQ(rend->get_retired_texture_count(), 0U);
-
-            const auto old_desc = temporal_atlas.get_desc();
-            const auto old_w0 = temporal_atlas.get_write_texture();
 
             auto res0 = rend->render();
             EXPECT_TRUE(res0.has_value());
@@ -5535,10 +5672,9 @@ namespace tempest::render_system::tests
 
             // 4. Assert: Old resources were extracted into _retired_textures rather than destroyed immediately
             EXPECT_EQ(rend->get_retired_texture_count(), 1U);
-            EXPECT_TRUE(temporal_atlas.is_allocated());
-            const auto new_desc = temporal_atlas.get_desc();
-            EXPECT_NE(new_desc.desc.size.absolute_width, old_desc.desc.size.absolute_width);
-            EXPECT_NE(temporal_atlas.get_write_texture().handle, old_w0.handle);
+            const auto new_tex = rend->get_directional_shadow_atlas_physical_texture();
+            EXPECT_NE(new_tex.handle, 0U);
+            EXPECT_NE(new_tex.handle, old_tex.handle);
 
             auto res1 = rend->render();
             EXPECT_TRUE(res1.has_value());

@@ -4,6 +4,7 @@
 #include <tempest/array.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/math_utils.hpp>
+#include <tempest/render_system/shadow_atlas_math.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/transformations.hpp>
 #include <tempest/vector.hpp>
@@ -149,6 +150,14 @@ namespace tempest::render_system
         const auto alpha = tan_half_fov * math::sqrt(1.0F + (aspect * aspect));
         const auto alpha_sq = alpha * alpha;
 
+        const auto plan = (params.allocator.get_atlas_width() > 0)
+                              ? calculate_directional_shadow_atlas_plan(sun.caster.resolution, num_cascades,
+                                                                        params.allocator.get_atlas_width(),
+                                                                        params.allocator.get_padding())
+                              : shadow_atlas_plan{};
+        const auto cascade_res =
+            (plan.effective_cascade_resolution > 0) ? plan.effective_cascade_resolution : sun.caster.resolution;
+
         auto rendered_cascades = vector<cascade_render_info>{};
         rendered_cascades.reserve(num_cascades);
 
@@ -175,7 +184,6 @@ namespace tempest::render_system
             const auto center_light = light_view_zero * math::vec4<float>{sphere_center_world.x, sphere_center_world.y,
                                                                           sphere_center_world.z, 1.0F};
 
-            const auto cascade_res = sun.caster.resolution;
             const auto world_units_per_texel = (2.0F * radius) / static_cast<float>(cascade_res);
             const auto snapped_x = math::floor(center_light.x / world_units_per_texel) * world_units_per_texel;
             const auto snapped_y = math::floor(center_light.y / world_units_per_texel) * world_units_per_texel;
@@ -307,33 +315,18 @@ namespace tempest::render_system
         const auto& pass_data = params.graph.add_graphics_pass<shadow_pass_data>(
             "ShadowPass",
             [&pool = params.pool, shadow_atlas_tex = params.shadow_atlas,
-             temporal_shadow_atlas = params.temporal_shadow_atlas,
              stats = params.pipeline_statistics](render_graph::pass_builder& builder, shadow_pass_data& data) -> void {
                 if (stats != rhi::pipeline_statistic_flags::none)
                 {
                     builder.enable_pipeline_statistics(stats);
                 }
 
-                if (temporal_shadow_atlas != nullptr)
-                {
-                    builder.mark_sink();
-                    data.shadow_atlas =
-                        builder.set_temporal_depth_stencil_attachment(render_graph::rg_temporal_depth_stencil_attachment{
-                            .texture = *temporal_shadow_atlas,
-                            .depth_load_op = rhi::load_op::clear,
-                            .depth_store_op = rhi::store_op::store,
-                            .clear_value = {.depth = 0.0F, .stencil = 0},
-                        });
-                }
-                else
-                {
-                    data.shadow_atlas = builder.set_depth_stencil_attachment(render_graph::rg_depth_stencil_attachment{
-                        .texture = shadow_atlas_tex,
-                        .depth_load_op = rhi::load_op::clear,
-                        .depth_store_op = rhi::store_op::store,
-                        .clear_value = {.depth = 0.0F, .stencil = 0},
-                    });
-                }
+                data.shadow_atlas = builder.set_depth_stencil_attachment(render_graph::rg_depth_stencil_attachment{
+                    .texture = shadow_atlas_tex,
+                    .depth_load_op = rhi::load_op::dont_care,
+                    .depth_store_op = rhi::store_op::store,
+                    .clear_value = {.depth = 0.0F, .stencil = 0},
+                });
 
                 auto obj_buf = builder.import_buffer(pool.get_object_buffer());
                 auto inst_buf = builder.import_buffer(pool.get_instance_buffer());
@@ -351,6 +344,12 @@ namespace tempest::render_system
              cascades_to_render = rendered_cascades]([[maybe_unused]] const shadow_pass_data& data,
                                                      [[maybe_unused]] render_graph::pass_execution_context& ctx,
                                                      rhi::command_list& pass_cmd) -> void {
+                for (const auto& cascade : cascades_to_render)
+                {
+                    pass_cmd.clear_depth_attachment(cascade.rect.x, cascade.rect.y, cascade.rect.width,
+                                                   cascade.rect.height, 0.0F);
+                }
+
                 if ((opaque_draw_count == 0 && alpha_masked_draw_count == 0) || cascades_to_render.empty())
                 {
                     return;

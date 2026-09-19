@@ -11,6 +11,89 @@
 
 namespace tempest::render_graph
 {
+    namespace
+    {
+        auto determine_batch_wait_stages(const queue_sync_batch& batch) -> enum_mask<rhi::pipeline_stage>
+        {
+            switch (batch.queue)
+            {
+            case queue_type::graphics:
+                return rhi::pipeline_stage::all_graphics;
+            case queue_type::async_compute:
+                return rhi::pipeline_stage::compute;
+            case queue_type::async_transfer:
+                return rhi::pipeline_stage::all_transfer;
+            }
+            return rhi::pipeline_stage::all_graphics;
+        }
+
+        auto determine_batch_signal_stages(queue_type queue) -> enum_mask<rhi::pipeline_stage>
+        {
+            switch (queue)
+            {
+            case queue_type::graphics:
+                return rhi::pipeline_stage::all_graphics;
+            case queue_type::async_compute:
+                return rhi::pipeline_stage::compute;
+            case queue_type::async_transfer:
+                return rhi::pipeline_stage::all_transfer;
+            }
+            return rhi::pipeline_stage::all_graphics;
+        }
+
+        struct presentation_sync_info
+        {
+            enum_mask<rhi::pipeline_stage> write_stages{rhi::pipeline_stage::attachment_output};
+            enum_mask<rhi::pipeline_stage> signal_stages{rhi::pipeline_stage::attachment_output};
+        };
+
+        auto determine_presentation_sync_info(const queue_sync_batch& batch, const frame_sync_options& frame_sync,
+                                              span<const pass_node> all_passes, const transient_allocator& allocator)
+            -> presentation_sync_info
+        {
+            auto detected_write_stages = optional<enum_mask<rhi::pipeline_stage>>{nullopt};
+
+            if (frame_sync.presented_texture.has_value())
+            {
+                const auto presented_handle = *frame_sync.presented_texture;
+                for (const auto pass_idx : batch.pass_indices)
+                {
+                    if (pass_idx < all_passes.size())
+                    {
+                        for (const auto& access : all_passes[pass_idx].texture_accesses)
+                        {
+                            const auto* alloc = allocator.get_texture(access.texture.id);
+                            if (alloc != nullptr && alloc->handle.handle == presented_handle.handle)
+                            {
+                                if (static_cast<bool>(access.access & rhi::resource_access::write))
+                                {
+                                    detected_write_stages = access.stages;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            const auto fallback_write_stage = (batch.queue == queue_type::async_compute)
+                                                  ? rhi::pipeline_stage::compute
+                                                  : (batch.queue == queue_type::async_transfer)
+                                                        ? rhi::pipeline_stage::all_transfer
+                                                        : rhi::pipeline_stage::attachment_output;
+
+            const auto effective_write_stages = detected_write_stages.value_or(fallback_write_stage);
+
+            const auto effective_signal_stages = frame_sync.signal_stages.has_value()
+                                                     ? enum_mask<rhi::pipeline_stage>{*frame_sync.signal_stages}
+                                                     : effective_write_stages;
+
+            return presentation_sync_info{
+                .write_stages = effective_write_stages,
+                .signal_stages = effective_signal_stages,
+            };
+        }
+    } // namespace
+
     render_graph_executor::render_graph_executor(job::job_system& jobs) noexcept : _jobs{&jobs}
     {
     }
@@ -590,24 +673,25 @@ namespace tempest::render_graph
 
             if (is_last_batch && frame_sync.signal_semaphore.has_value() && frame_sync.presented_texture.has_value())
             {
+                const auto pres_sync = determine_presentation_sync_info(batch, frame_sync, all_passes, allocator);
                 const auto tex_handle = *frame_sync.presented_texture;
                 const auto present_barrier = rhi::texture_barrier{
                     .texture = tex_handle,
                     .src =
                         {
-                            .stages = rhi::pipeline_stage::attachment_output,
+                            .stages = pres_sync.write_stages,
                             .access = rhi::resource_access::write,
                             .layout = rhi::image_layout::general,
                         },
                     .dst =
                         {
-                            .stages = rhi::pipeline_stage::bottom_of_pipe,
+                            .stages = pres_sync.signal_stages,
                             .access = rhi::resource_access::none,
                             .layout = rhi::image_layout::present,
                         },
                 };
                 cmd_epilogue.pipeline_barrier(span<const rhi::texture_barrier>{&present_barrier, 1}, {});
-                _barrier_solver.set_texture_state(tex_handle.handle, rhi::pipeline_stage::bottom_of_pipe,
+                _barrier_solver.set_texture_state(tex_handle.handle, pres_sync.signal_stages,
                                                   rhi::resource_access::none, rhi::image_layout::present,
                                                   queue_type::graphics);
             }
@@ -643,15 +727,7 @@ namespace tempest::render_graph
 
             for (const auto& [dep_queue, wait_val] : max_wait_per_queue)
             {
-                auto wait_stages = rhi::pipeline_stage::top_of_pipe;
-                if (batch.queue == queue_type::async_compute)
-                {
-                    wait_stages = rhi::pipeline_stage::compute;
-                }
-                else if (batch.queue == queue_type::async_transfer)
-                {
-                    wait_stages = rhi::pipeline_stage::all_transfer;
-                }
+                const auto wait_stages = determine_batch_wait_stages(batch);
 
                 auto sem_it = _queue_timeline_semaphores.find(dep_queue);
                 if (sem_it != _queue_timeline_semaphores.end() && sem_it->second.handle != 0)
@@ -720,29 +796,32 @@ namespace tempest::render_graph
             const auto batch_signal_val = ++_queue_timeline_values[batch.queue];
             batch_signal_values[batch_idx] = batch_signal_val;
 
+            const auto batch_signal_stages = determine_batch_signal_stages(batch.queue);
             signal_sync.push_back(rhi::device_sync_point{
                 .semaphore = queue_sem,
                 .value = batch_signal_val,
-                .stages = rhi::pipeline_stage::bottom_of_pipe,
+                .stages = batch_signal_stages,
             });
 
             // Frame render binary semaphore signal (on the final presenting batch)
             if (is_last_batch && frame_sync.signal_semaphore.has_value())
             {
+                const auto pres_sync = determine_presentation_sync_info(batch, frame_sync, all_passes, allocator);
                 signal_sync.push_back(rhi::device_sync_point{
                     .semaphore = *frame_sync.signal_semaphore,
                     .value = 0,
-                    .stages = frame_sync.signal_stages,
+                    .stages = pres_sync.signal_stages,
                 });
             }
 
             // Frame timeline semaphore signal (for host in-flight slot synchronization)
             if (is_last_batch && frame_sync.timeline_semaphore.has_value() && frame_sync.timeline_value > 0)
             {
+                const auto slot_signal_stages = determine_batch_signal_stages(batch.queue);
                 signal_sync.push_back(rhi::device_sync_point{
                     .semaphore = *frame_sync.timeline_semaphore,
                     .value = frame_sync.timeline_value,
-                    .stages = rhi::pipeline_stage::bottom_of_pipe,
+                    .stages = slot_signal_stages,
                 });
             }
 

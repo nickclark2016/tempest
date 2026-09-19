@@ -93,6 +93,16 @@ namespace tempest::render_graph
                              [[maybe_unused]] uint32_t height) -> void override
             {
             }
+            auto clear_depth_attachment([[maybe_unused]] int32_t x, [[maybe_unused]] int32_t y,
+                                        [[maybe_unused]] uint32_t width, [[maybe_unused]] uint32_t height,
+                                        [[maybe_unused]] float depth) -> void override
+            {
+            }
+            auto clear_stencil_attachment([[maybe_unused]] int32_t x, [[maybe_unused]] int32_t y,
+                                          [[maybe_unused]] uint32_t width, [[maybe_unused]] uint32_t height,
+                                          [[maybe_unused]] uint32_t stencil) -> void override
+            {
+            }
             auto set_depth_bias([[maybe_unused]] float constant_factor, [[maybe_unused]] float clamp,
                                 [[maybe_unused]] float slope_factor) -> void override
             {

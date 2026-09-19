@@ -605,5 +605,152 @@ namespace tempest::rhi::vk
         dev->destroy_texture(src_tex);
     }
 
+    /// @brief Verifies that clear_depth_attachment accurately resets depth values in a specified sub-rectangle
+    ///        within an active dynamic render pass without affecting outside regions.
+    TEST(execution_port_test, clear_depth_attachment_scissor)
+    {
+        // 1. Setup: Create device, graphics queue, depth texture, view, and readback buffer
+        auto env = create_test_env();
+        ASSERT_NE(env.dev, nullptr);
+        auto* dev = env.dev.get();
+        auto& graphics_port = static_cast<vk::execution_port&>(dev->get_graphics_execution_port());
+
+        constexpr auto width = 32U;
+        constexpr auto height = 32U;
+
+        const auto depth_tex = dev->create_texture(texture_desc{
+            .width = width,
+            .height = height,
+            .depth = 1,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .format = data_format::depth32_float,
+            .usage = texture_usage::depth_stencil_attachment | texture_usage::transfer_src,
+        });
+        ASSERT_NE(depth_tex.handle, 0);
+
+        const auto depth_view = dev->create_texture_view(depth_tex, texture_view_desc{});
+        ASSERT_NE(depth_view.handle, 0);
+
+        auto readback_buf = dev->create_buffer(buffer_desc{
+            .size = static_cast<uint64_t>(width) * height * sizeof(float),
+            .memory_usage = memory_usage::readback,
+            .usage = buffer_usage::transfer_dst,
+            .name = "DepthReadbackBuffer",
+        });
+        ASSERT_NE(readback_buf.handle, 0);
+
+        // 2. Act: Record pass with initial clear to 0.1F, then clear sub-rect [8, 8, 16, 16] to 0.85F
+        auto& cmd = graphics_port.acquire_command_list();
+        cmd.begin();
+
+        const auto to_attach = texture_barrier{
+            .texture = depth_tex,
+            .src =
+                {
+                    .stages = pipeline_stage::top_of_pipe,
+                    .access = resource_access::none,
+                    .layout = image_layout::undefined,
+                },
+            .dst =
+                {
+                    .stages = pipeline_stage::attachment_output,
+                    .access = resource_access::write,
+                    .layout = image_layout::depth_stencil_attachment_optimal,
+                },
+            .base_mip_level = 0,
+            .mip_level_count = 1,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+        };
+        cmd.pipeline_barrier(span<const texture_barrier>{&to_attach, 1}, {});
+
+        cmd.begin_render_pass(
+            {},
+            depth_stencil_attachment{
+                .view = depth_view,
+                .depth_load_op = load_op::clear,
+                .depth_store_op = store_op::store,
+                .clear_value = {.depth = 0.1F, .stencil = 0},
+            },
+            width, height);
+
+        // Clear sub-rect [8, 8, 16, 16] to 0.85F
+        cmd.clear_depth_attachment(8, 8, 16, 16, 0.85F);
+
+        cmd.end_render_pass();
+
+        const auto to_readback = texture_barrier{
+            .texture = depth_tex,
+            .src =
+                {
+                    .stages = pipeline_stage::attachment_output,
+                    .access = resource_access::write,
+                    .layout = image_layout::depth_stencil_attachment_optimal,
+                },
+            .dst =
+                {
+                    .stages = pipeline_stage::all_transfer,
+                    .access = resource_access::read,
+                    .layout = image_layout::general,
+                },
+            .base_mip_level = 0,
+            .mip_level_count = 1,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+        };
+        cmd.pipeline_barrier(span<const texture_barrier>{&to_readback, 1}, {});
+
+        const auto copy_reg = buffer_texture_copy_region{
+            .buffer_offset = 0,
+            .buffer_row_length = width,
+            .buffer_image_height = height,
+            .mip_level = 0,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+            .image_offset_x = 0,
+            .image_offset_y = 0,
+            .image_offset_z = 0,
+            .image_extent_width = width,
+            .image_extent_height = height,
+            .image_extent_depth = 1,
+        };
+        cmd.copy_texture_to_buffer(depth_tex, readback_buf, span<const buffer_texture_copy_region>{&copy_reg, 1});
+
+        cmd.end();
+
+        auto timeline_sem = dev->create_timeline_semaphore();
+        const auto* cmd_ptr = &cmd;
+        auto signal_sync = device_sync_point{
+            .semaphore = timeline_sem,
+            .value = 1,
+            .stages = pipeline_stage::all_transfer,
+        };
+
+        auto submit_result = graphics_port.submit(span<const rhi::command_list*>{&cmd_ptr, 1}, {},
+                                                  span<const device_sync_point>{&signal_sync, 1});
+        ASSERT_TRUE(submit_result.has_value());
+
+        dev->wait_for_sync(host_sync_point{.semaphore = timeline_sem, .value = 1});
+
+        // 3. Assert: Sub-rect pixels are 0.85F, outside pixels remain 0.1F
+        const auto* depths = static_cast<const float*>(readback_buf.cpu_address);
+        ASSERT_NE(depths, nullptr);
+
+        // Outside sub-rect: (0, 0)
+        EXPECT_NEAR(depths[0], 0.1F, 0.001F);
+        // Inside sub-rect: (12, 12) -> y=12, x=12 -> 12 * 32 + 12
+        EXPECT_NEAR(depths[12 * width + 12], 0.85F, 0.001F);
+        // Inside sub-rect: (8, 8)
+        EXPECT_NEAR(depths[8 * width + 8], 0.85F, 0.001F);
+        // Outside sub-rect: (31, 31)
+        EXPECT_NEAR(depths[31 * width + 31], 0.1F, 0.001F);
+
+        dev->destroy_semaphore(timeline_sem);
+        dev->destroy_buffer(readback_buf);
+        dev->destroy_texture_view(depth_view);
+        dev->destroy_texture(depth_tex);
+    }
+
     // NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 } // namespace tempest::rhi::vk

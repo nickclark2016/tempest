@@ -2,6 +2,7 @@
 #include <tempest/logger.hpp>
 #include <tempest/profiler/session.hpp>
 #include <tempest/render_graph/context.hpp>
+#include <tempest/render_graph/flight_texture.hpp>
 #include <tempest/render_graph/pass_builder.hpp>
 #include <tempest/render_graph/render_graph.hpp>
 #include <tempest/render_graph/temporal_texture.hpp>
@@ -308,6 +309,48 @@ namespace tempest::render_graph
     void pass_builder::clear_temporal_texture(temporal_texture& tex, rhi::clear_color_value clear_value)
     {
         _graph->add_clear_temporal_pass(tex, clear_value);
+    }
+
+    auto pass_builder::set_flight_color_attachment(uint32_t slot, const rg_flight_color_attachment& attachment)
+        -> rg_texture_id
+    {
+        const auto tex_h = attachment.texture.get_texture(attachment.flight_slot);
+        const auto view_h = attachment.texture.get_view(attachment.flight_slot);
+        const auto desc_h = attachment.texture.get_sampled_descriptor(attachment.flight_slot);
+        const auto imported_id =
+            import_texture(tex_h, view_h, rhi::image_layout::undefined, desc_h, attachment.texture.get_desc().desc);
+
+        mark_sink();
+
+        return set_color_attachment(slot, rg_color_attachment{
+                                              .texture = imported_id,
+                                              .load_op = attachment.load_op,
+                                              .store_op = attachment.store_op,
+                                              .clear_value = attachment.clear_value,
+                                              .subresource = attachment.subresource,
+                                          });
+    }
+
+    auto pass_builder::set_flight_depth_stencil_attachment(const rg_flight_depth_stencil_attachment& attachment)
+        -> rg_texture_id
+    {
+        const auto tex_h = attachment.texture.get_texture(attachment.flight_slot);
+        const auto view_h = attachment.texture.get_view(attachment.flight_slot);
+        const auto desc_h = attachment.texture.get_sampled_descriptor(attachment.flight_slot);
+        const auto imported_id =
+            import_texture(tex_h, view_h, rhi::image_layout::undefined, desc_h, attachment.texture.get_desc().desc);
+
+        mark_sink();
+
+        return set_depth_stencil_attachment(rg_depth_stencil_attachment{
+            .texture = imported_id,
+            .depth_load_op = attachment.depth_load_op,
+            .depth_store_op = attachment.depth_store_op,
+            .stencil_load_op = attachment.stencil_load_op,
+            .stencil_store_op = attachment.stencil_store_op,
+            .clear_value = attachment.clear_value,
+            .subresource = attachment.subresource,
+        });
     }
 
     auto pass_builder::read(rg_buffer_id buf, enum_mask<rhi::pipeline_stage> stages,

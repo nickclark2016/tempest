@@ -53,6 +53,7 @@ namespace tempest::render_system
         float cluster_far_plane{1000.0F};
         resource_pool_config pool_config{};
         enum_mask<rhi::pipeline_statistic_flags> pipeline_statistics{rhi::pipeline_statistic_flags::none};
+        uint32_t max_shadow_atlas_dimension{16384};
     };
 
     struct TEMPEST_API renderer_inputs
@@ -217,15 +218,19 @@ namespace tempest::render_system
             return _directional_shadow_atlas_target;
         }
 
-        [[nodiscard]] auto get_directional_shadow_temporal_atlas() noexcept -> render_graph::temporal_texture&
+        [[nodiscard]] auto get_directional_shadow_atlas_physical_texture() const noexcept -> rhi::texture_handle
         {
-            return _directional_shadow_temporal_atlas;
+            return _directional_shadow_atlas_texture;
         }
 
-        [[nodiscard]] auto get_directional_shadow_temporal_atlas() const noexcept
-            -> const render_graph::temporal_texture&
+        [[nodiscard]] auto get_directional_shadow_atlas_view() const noexcept -> rhi::texture_view_handle
         {
-            return _directional_shadow_temporal_atlas;
+            return _directional_shadow_atlas_view;
+        }
+
+        [[nodiscard]] auto get_directional_shadow_atlas_descriptor() const noexcept -> rhi::descriptor_handle
+        {
+            return _directional_shadow_atlas_descriptor;
         }
 
         [[nodiscard]] auto get_retired_texture_count() const noexcept -> size_t
@@ -399,8 +404,12 @@ namespace tempest::render_system
         non_null<job::job_system> _jobs;
         render_graph::render_graph _graph;
 
-        // Persistent Temporal Textures
-        render_graph::temporal_texture _directional_shadow_temporal_atlas{};
+        // Persistent Directional Shadow Atlas
+        rhi::texture_handle _directional_shadow_atlas_texture{};
+        rhi::texture_view_handle _directional_shadow_atlas_view{};
+        rhi::descriptor_handle _directional_shadow_atlas_descriptor{};
+        uint32_t _directional_shadow_atlas_width{0};
+        uint32_t _directional_shadow_atlas_height{0};
 
         // Render Targets (Transient in Render Graph)
         render_graph::rg_texture_id _directional_shadow_atlas_target{};

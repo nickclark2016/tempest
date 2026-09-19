@@ -314,6 +314,42 @@ namespace tempest::render_graph
         rhi::clear_depth_stencil_value clear_value{0.0F, 0};
         rg_subresource_range subresource{};
     };
+
+    /// \brief Maximum physical texture slots in an in-flight resource ring buffer.
+    inline constexpr size_t max_flight_slots = 4;
+
+    /// \brief Descriptor for creating a flight texture ring-buffered across frames in flight.
+    struct flight_texture_desc
+    {
+        rg_texture_desc desc;
+        uint32_t flight_slots = 2; ///< Number of physical texture slots in flight (e.g. 2 or 3).
+    };
+
+    class flight_texture;
+
+    /// \brief Color attachment description referencing a persistent flight texture at a specific slot.
+    struct rg_flight_color_attachment
+    {
+        flight_texture& texture;
+        uint32_t flight_slot{0};
+        rhi::load_op load_op = rhi::load_op::clear;
+        rhi::store_op store_op = rhi::store_op::store;
+        rhi::clear_color_value clear_value{0.0F, 0.0F, 0.0F, 1.0F};
+        rg_subresource_range subresource{};
+    };
+
+    /// \brief Depth/stencil attachment description referencing a persistent flight texture at a specific slot.
+    struct rg_flight_depth_stencil_attachment
+    {
+        flight_texture& texture;
+        uint32_t flight_slot{0};
+        rhi::load_op depth_load_op = rhi::load_op::clear;
+        rhi::store_op depth_store_op = rhi::store_op::store;
+        rhi::load_op stencil_load_op = rhi::load_op::dont_care;
+        rhi::store_op stencil_store_op = rhi::store_op::dont_care;
+        rhi::clear_depth_stencil_value clear_value{0.0F, 0};
+        rg_subresource_range subresource{};
+    };
 } // namespace tempest::render_graph
 
 namespace tempest

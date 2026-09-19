@@ -28,7 +28,6 @@ namespace tempest::render_system
         resource_pool& pool;
         shader_manager& shaders;
         render_graph::rg_texture_id shadow_atlas;
-        render_graph::temporal_texture* temporal_shadow_atlas{nullptr};
         shelf_allocator& allocator;
         const ecs::archetype_registry& registry;
         const camera_system* camera_sys{nullptr};

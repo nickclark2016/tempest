@@ -36,7 +36,7 @@ namespace tempest::render_graph
         optional<rhi::semaphore_handle> wait_semaphore{nullopt};
         rhi::pipeline_stage wait_stages{rhi::pipeline_stage::attachment_output};
         optional<rhi::semaphore_handle> signal_semaphore{nullopt};
-        rhi::pipeline_stage signal_stages{rhi::pipeline_stage::bottom_of_pipe};
+        optional<rhi::pipeline_stage> signal_stages{nullopt};
         optional<rhi::semaphore_handle> timeline_semaphore{nullopt};
         uint64_t timeline_value{0};
         optional<rhi::texture_handle> presented_texture{nullopt};

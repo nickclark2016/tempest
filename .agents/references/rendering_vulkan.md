@@ -63,3 +63,24 @@ When implementing programmable vertex pulling shaders with Slang and Vulkan Buff
 * **Sequential Naming on Creation & Reuse**:
   - Name newly allocated textures and buffers sequentially on the host/main thread upon initial creation (`dev.create_texture`, `dev.create_buffer`).
   - When the transient allocator reuses or aliases pooled physical resources for a registered resource with a different name, update the debug name sequentially during `transient_allocator::allocate()` on the main thread prior to dispatching pass recording tasks.
+
+---
+
+## 9. Shadow Atlas Optimization: Scissor Clears, ZBC & Single-Texture Allocation
+* **Scissor-Only Clears (`load_op::dont_care`)**:
+  - Large atlas attachments (such as shadow maps) must not use `load_op::clear`, which wastes gigabytes of memory bandwidth clearing unused or dormant tiles.
+  - Set `.depth_load_op = rhi::load_op::dont_care` on the render pass depth attachment.
+  - Issue explicit scissor clears (`pass_cmd.clear_depth_attachment` -> `vkCmdClearAttachments`) targeting only the bounding rect of each active cascade/tile viewport inside the render pass execution callback.
+* **Hardware Fast Depth Clear (ZBC) Layout Preservation**:
+  - Reading depth/shadow textures in `image_layout::general` can decompress depth metadata or disable hardware Fast Depth Clear / Zero Bandwidth Clear (ZBC).
+  - Always transition depth textures to `rhi::image_layout::depth_stencil_read_only_optimal` when read by downstream fragment passes (PBR opaque, masked, transparency resolve).
+  - Ensure the corresponding sampled image descriptor is written with `image_layout::depth_stencil_read_only_optimal`.
+* **Effective Cascade Resolution Clamping & Allocator Spacing**:
+  - When packing multiple cascades into an atlas with border padding ($P$), spacing between adjacent tiles is $2P$. Total span is $\text{grid\_dim} \times (\text{res} + 2P)$.
+  - For $4096$ cascades with $P=4$ in a 2x2 grid, total width is $2 \times (4096 + 8) = 8208\text{px}$, which exceeds 8192 and triggers power-of-two growth to 16384 (16K).
+  - Clamp cascade resolutions to the exact available dimension ($(\text{max\_dim} / \text{grid}) - 2P = 4088$ for 8K) rather than standard power-of-two increments.
+  - Both atlas sizing and the pass allocator/render loop (`shadow_pass.cpp`) must consume the **effective** clamped cascade resolution to avoid tile allocation failures.
+* **Single Persistent Texture Lifecycle vs. Double Buffering**:
+  - Resources written and read within the same frame cycle (intra-frame dependencies such as shadow atlases) must use a single persistent physical texture (`rhi::texture_handle`) imported into the graph rather than double-buffered temporal textures, eliminating 50% of VRAM overhead.
+  - Reserve double buffering (`temporal_texture`) exclusively for inter-frame temporal dependencies (e.g. TAA history, SSAO history).
+  - When persistent imported textures resize, route old handles through the deferred retirement queue (`enqueue_texture_retirement`) tied to timeline semaphores rather than destroying them immediately while in flight.

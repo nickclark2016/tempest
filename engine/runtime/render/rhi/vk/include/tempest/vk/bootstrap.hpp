@@ -220,6 +220,7 @@ namespace tempest::rhi::vk
         PFN_vkCmdBindPipeline fp_vkCmdBindPipeline = nullptr;
         PFN_vkCmdSetViewport fp_vkCmdSetViewport = nullptr;
         PFN_vkCmdSetScissor fp_vkCmdSetScissor = nullptr;
+        PFN_vkCmdClearAttachments fp_vkCmdClearAttachments = nullptr;
         PFN_vkCmdSetDepthBias fp_vkCmdSetDepthBias = nullptr;
         PFN_vkCmdSetStencilReference fp_vkCmdSetStencilReference = nullptr;
         PFN_vkCmdSetStencilCompareMask fp_vkCmdSetStencilCompareMask = nullptr;
@@ -662,6 +663,16 @@ namespace tempest::rhi::vk
             if (fp_vkCmdSetScissor != nullptr)
             {
                 fp_vkCmdSetScissor(commandBuffer, firstScissor, scissorCount, pScissors);
+            }
+        }
+
+        auto cmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount,
+                                 const VkClearAttachment* pAttachments, uint32_t rectCount,
+                                 const VkClearRect* pRects) const noexcept -> void
+        {
+            if (fp_vkCmdClearAttachments != nullptr)
+            {
+                fp_vkCmdClearAttachments(commandBuffer, attachmentCount, pAttachments, rectCount, pRects);
             }
         }
 

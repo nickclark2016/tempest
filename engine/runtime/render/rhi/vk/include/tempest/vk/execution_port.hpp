@@ -62,6 +62,10 @@ namespace tempest::rhi::vk
                           float min_depth, float max_depth) -> void override;
         auto set_scissor(int32_t x, int32_t y, uint32_t width, // NOLINT(readability-identifier-length)
                          uint32_t height) -> void override;
+        auto clear_depth_attachment(int32_t x, int32_t y, uint32_t width, // NOLINT(readability-identifier-length)
+                                    uint32_t height, float depth) -> void override;
+        auto clear_stencil_attachment(int32_t x, int32_t y, uint32_t width, // NOLINT(readability-identifier-length)
+                                      uint32_t height, uint32_t stencil) -> void override;
         auto set_depth_bias(float constant_factor, float clamp, float slope_factor) -> void override;
         auto set_stencil_reference(uint32_t reference) -> void override;
         auto set_stencil_compare_mask(uint32_t compare_mask) -> void override;

@@ -49,6 +49,9 @@ namespace tempest::render_graph
             -> rg_texture_id;
         void clear_temporal_texture(temporal_texture& tex, rhi::clear_color_value clear_value = {});
 
+        auto set_flight_color_attachment(uint32_t slot, const rg_flight_color_attachment& attachment) -> rg_texture_id;
+        auto set_flight_depth_stencil_attachment(const rg_flight_depth_stencil_attachment& attachment) -> rg_texture_id;
+
         auto read(rg_buffer_id buf, enum_mask<rhi::pipeline_stage> stages, enum_mask<rhi::resource_access> access,
                   uint64_t offset = 0, uint64_t size = buffer_access::whole_size) -> rg_buffer_id;
 

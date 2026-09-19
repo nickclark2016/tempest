@@ -716,6 +716,46 @@ namespace tempest::rhi::vk
         _dispatch_table->cmdSetScissor(_command_buffer, 0, 1, &scissor);
     }
 
+    auto command_list::clear_depth_attachment(int32_t min_x, int32_t min_y, uint32_t width, uint32_t height,
+                                              float depth) -> void
+    {
+        const auto clear_att = VkClearAttachment{
+            .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+            .colorAttachment = 0,
+            .clearValue = VkClearValue{.depthStencil = {.depth = depth, .stencil = 0}},
+        };
+        const auto clear_rect = VkClearRect{
+            .rect =
+                VkRect2D{
+                    .offset = {.x = min_x, .y = min_y},
+                    .extent = {.width = width, .height = height},
+                },
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        };
+        _dispatch_table->cmdClearAttachments(_command_buffer, 1, &clear_att, 1, &clear_rect);
+    }
+
+    auto command_list::clear_stencil_attachment(int32_t min_x, int32_t min_y, uint32_t width, uint32_t height,
+                                                uint32_t stencil) -> void
+    {
+        const auto clear_att = VkClearAttachment{
+            .aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT,
+            .colorAttachment = 0,
+            .clearValue = VkClearValue{.depthStencil = {.depth = 0.0F, .stencil = stencil}},
+        };
+        const auto clear_rect = VkClearRect{
+            .rect =
+                VkRect2D{
+                    .offset = {.x = min_x, .y = min_y},
+                    .extent = {.width = width, .height = height},
+                },
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        };
+        _dispatch_table->cmdClearAttachments(_command_buffer, 1, &clear_att, 1, &clear_rect);
+    }
+
     auto command_list::set_depth_bias(float constant_factor, float clamp, float slope_factor) -> void
     {
         _dispatch_table->cmdSetDepthBias(_command_buffer, constant_factor, clamp, slope_factor);

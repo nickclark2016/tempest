@@ -52,7 +52,7 @@ namespace tempest::render_system
             return 0;
         }
 
-        return tempest::bit_floor(available_res);
+        return available_res;
     }
 
     auto calculate_directional_shadow_atlas_plan(uint32_t cascade_res, uint32_t num_cascades, uint32_t max_atlas_dim,

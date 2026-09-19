@@ -231,6 +231,7 @@ namespace tempest::rhi::vk
         load_dev_proc(dev, get_device_proc_addr, "vkCmdBindPipeline", fp_vkCmdBindPipeline);
         load_dev_proc(dev, get_device_proc_addr, "vkCmdSetViewport", fp_vkCmdSetViewport);
         load_dev_proc(dev, get_device_proc_addr, "vkCmdSetScissor", fp_vkCmdSetScissor);
+        load_dev_proc(dev, get_device_proc_addr, "vkCmdClearAttachments", fp_vkCmdClearAttachments);
         load_dev_proc(dev, get_device_proc_addr, "vkCmdSetDepthBias", fp_vkCmdSetDepthBias);
         load_dev_proc(dev, get_device_proc_addr, "vkCmdSetStencilReference", fp_vkCmdSetStencilReference);
         load_dev_proc(dev, get_device_proc_addr, "vkCmdSetStencilCompareMask", fp_vkCmdSetStencilCompareMask);

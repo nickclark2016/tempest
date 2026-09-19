@@ -484,7 +484,6 @@ namespace tempest::rhi::examples
             .wait_semaphore = info.acquire_semaphore,
             .wait_stages = rhi::pipeline_stage::attachment_output,
             .signal_semaphore = info.render_semaphore,
-            .signal_stages = rhi::pipeline_stage::bottom_of_pipe,
             .timeline_semaphore = info.timeline_semaphore,
             .timeline_value = info.timeline_value,
             .presented_texture = info.swapchain_texture,

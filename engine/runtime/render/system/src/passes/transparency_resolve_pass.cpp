@@ -86,8 +86,9 @@ namespace tempest::render_system
 
                 if (shadow_atlas.id != 0)
                 {
-                    data.shadow_atlas = builder.read(shadow_atlas, rhi::pipeline_stage::fragment,
-                                                     rhi::resource_access::read, rhi::image_layout::general);
+                    data.shadow_atlas =
+                        builder.read(shadow_atlas, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                     rhi::image_layout::depth_stencil_read_only_optimal);
                 }
 
                 data.scene_constants = builder.import_buffer(pool.get_scene_constants_buffer());
