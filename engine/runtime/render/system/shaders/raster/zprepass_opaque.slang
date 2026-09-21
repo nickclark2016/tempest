@@ -20,22 +20,17 @@ struct VertexOutput {
 
 [shader("vertex")]
 VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID,
-                    uint start_instance : SV_StartInstanceLocation) {
-    uint* instance_buffer = (uint*)push_constants.instance_indices_address;
-    ObjectData* objects = (ObjectData*)push_constants.objects_address;
-    SceneGlobals* scene = (SceneGlobals*)push_constants.scene_constants_address;
+                    uint start_instance : SV_StartInstanceLocation) {           
+    let instance_buffer = (uint*)push_constants.instance_indices_address;
+    let iid = instance_buffer[instance_id + start_instance];
+    let objects = (ObjectData*)push_constants.objects_address;
+    let instance = &objects[iid];
 
-    uint iid = instance_buffer[instance_id + start_instance];
-    ObjectData* instance = &objects[iid];
+    let pos = pull_position(instance.mesh, vertex_id);
+    let world_pos = mul(WaveReadLaneFirst(instance.model_matrix), float4(pos, 1.0));
+    let scene = (SceneGlobals*)push_constants.scene_constants_address;
+    let view_pos = mul(scene.camera.view, world_pos);
+    let clip_pos = mul(scene.camera.projection, view_pos);
 
-    float3 pos = pull_position(instance.mesh, vertex_id);
-
-    float4 world_pos = mul(instance.model_matrix, float4(pos, 1.0));
-    float4 view_pos = mul(scene.camera.view, world_pos);
-    float4 clip_pos = mul(scene.camera.projection, view_pos);
-
-    VertexOutput output;
-    output.position = clip_pos;
-
-    return output;
+    return VertexOutput(clip_pos);
 }
