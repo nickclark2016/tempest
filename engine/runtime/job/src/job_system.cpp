@@ -4,8 +4,11 @@
 #include <tempest/array.hpp>
 #include <tempest/atomic.hpp>
 #include <tempest/deque.hpp>
+#include <tempest/job/idle_mask.hpp>
+#include <tempest/job/mpsc_mailbox.hpp>
 #include <tempest/job/work_stealing_deque.hpp>
 #include <tempest/mutex.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/thread.hpp>
 #include <tempest/vector.hpp>
 
@@ -87,7 +90,8 @@ namespace tempest::job
         optional<core_info> target_core{nullopt};
         array<work_stealing_deque<job_system::queue_item, max_deque_size>, static_cast<size_t>(task_priority::count)>
             deques{};
-        concurrent_queue<job_system::queue_item> injection_queue;
+        mpsc_mailbox<job_system::queue_item, mspc_mailbox_default_capacity> mailbox;
+        array<vector<job_system::queue_item>, static_cast<size_t>(task_priority::count)> private_overflow{};
         alignas(hardware_destructive_interference_size) atomic<uint32_t> park_state{0};
         uint32_t anti_starvation_counter = 0U;
         job_allocator allocator;
@@ -111,7 +115,7 @@ namespace tempest::job
         vector<unique_ptr<worker_state>> workers;
         vector<worker_thread_info> worker_threads;
         atomic<bool> stop_requested = false;
-        alignas(hardware_destructive_interference_size) atomic<uint64_t> idle_mask = 0ULL;
+        scalable_idle_mask<256> idle_mask{};
         atomic<size_t> next_injection_worker = 0U;
         atomic<int64_t> active_tasks = 0LL;
 
@@ -137,59 +141,88 @@ namespace tempest::job
 
         auto wake_idle_worker() -> void
         {
-            auto idle = idle_mask.load(memory_order::relaxed);
-            if (idle != 0)
+            const auto idle_worker = idle_mask.claim_first_idle(workers.size());
+            if (idle_worker.has_value())
             {
-                for (auto i = 0U; i < workers.size(); ++i)
+                auto expected_park = uint32_t{1};
+                if (workers[*idle_worker]->park_state.compare_exchange_strong(expected_park, 0,
+                                                                              memory_order::acq_rel))
                 {
-                    if ((idle & (1ULL << i)) != 0)
-                    {
-                        idle_mask.fetch_and(~(1ULL << i), memory_order::acq_rel);
-                        workers[i]->park_state.store(0, memory_order::release);
-                        futex_wake_one(&workers[i]->park_state);
-                        break;
-                    }
+                    futex_wake_one(&workers[*idle_worker]->park_state);
                 }
             }
         }
 
         auto schedule_external(const queue_item& item, core_class affinity) -> void
         {
-            auto target_idx = 0U;
-            if (affinity == core_class::performance)
+            if (workers.empty())
             {
-                auto p_count = perf_worker_count;
-                if (p_count > 0)
-                {
-                    auto next = next_injection_worker.fetch_add(1, memory_order::relaxed);
-                    target_idx = next % p_count;
-                }
+                return;
             }
-            else if (affinity == core_class::efficiency)
+
+            auto start_idx = uint32_t{0};
+            auto count = static_cast<uint32_t>(workers.size());
+
+            if (affinity == core_class::performance && perf_worker_count > 0)
             {
-                auto e_count = eff_worker_count;
-                auto p_count = perf_worker_count;
-                if (e_count > 0)
-                {
-                    auto next = next_injection_worker.fetch_add(1, memory_order::relaxed);
-                    target_idx = p_count + static_cast<uint32_t>(next % e_count);
-                }
-                else
-                {
-                    auto next = next_injection_worker.fetch_add(1, memory_order::relaxed);
-                    target_idx = static_cast<uint32_t>(next % workers.size());
-                }
+                start_idx = 0U;
+                count = perf_worker_count;
+            }
+            else if (affinity == core_class::efficiency && eff_worker_count > 0)
+            {
+                start_idx = perf_worker_count;
+                count = eff_worker_count;
+            }
+
+            const auto idle_target = idle_mask.find_idle(start_idx, count);
+            auto target_idx = uint32_t{0};
+
+            if (idle_target.has_value())
+            {
+                target_idx = static_cast<uint32_t>(*idle_target);
             }
             else
             {
-                auto next = next_injection_worker.fetch_add(1, memory_order::relaxed);
-                target_idx = static_cast<uint32_t>(next % workers.size());
+                const auto next = next_injection_worker.fetch_add(1, memory_order::relaxed);
+                target_idx = start_idx + static_cast<uint32_t>(next % count);
             }
 
-            workers[target_idx]->injection_queue.push(item);
-            idle_mask.fetch_and(~(1ULL << target_idx), memory_order::acq_rel);
-            workers[target_idx]->park_state.store(0, memory_order::release);
-            futex_wake_one(&workers[target_idx]->park_state);
+            while (true)
+            {
+                if (workers[target_idx]->mailbox.try_push(item) == push_result::success)
+                {
+                    break;
+                }
+
+                auto pushed = false;
+                for (auto probe_offset = 1U; probe_offset < count; ++probe_offset)
+                {
+                    const auto probe_idx = start_idx + ((target_idx - start_idx + probe_offset) % count);
+                    if (workers[probe_idx]->mailbox.try_push(item) == push_result::success)
+                    {
+                        target_idx = probe_idx;
+                        pushed = true;
+                        break;
+                    }
+                }
+
+                if (pushed)
+                {
+                    break;
+                }
+
+                cpu_pause();
+                this_thread::yield();
+            }
+
+            atomic_thread_fence(memory_order::seq_cst);
+            idle_mask.clear_idle(target_idx);
+
+            auto expected_park = uint32_t{1};
+            if (workers[target_idx]->park_state.compare_exchange_strong(expected_park, 0, memory_order::acq_rel))
+            {
+                futex_wake_one(&workers[target_idx]->park_state);
+            }
         }
     };
 
@@ -260,11 +293,6 @@ namespace tempest::job
                 }
             }
 
-            for (auto priority = 0U; priority < static_cast<size_t>(task_priority::count); ++priority)
-            {
-                state->deques[priority].set_spill_queue(&state->injection_queue);
-            }
-
             _impl->workers.push_back(tempest::move(state));
         }
 
@@ -288,11 +316,6 @@ namespace tempest::job
                 }
             }
 
-            for (auto priority = 0U; priority < static_cast<size_t>(task_priority::count); ++priority)
-            {
-                state->deques[priority].set_spill_queue(&state->injection_queue);
-            }
-
             _impl->workers.push_back(tempest::move(state));
         }
 
@@ -311,7 +334,35 @@ namespace tempest::job
                 auto pop_or_steal = [this](worker_state& work_state) -> optional<queue_item> {
                     const auto low_idx = static_cast<size_t>(task_priority::low);
 
-                    // 1. Anti-starvation check
+                    // 1. Bulk Ingest External Mailbox
+                    work_state.mailbox.drain([&work_state](queue_item drained_item) {
+                        auto priority_index = static_cast<size_t>(drained_item.priority);
+                        if (priority_index >= static_cast<size_t>(task_priority::count))
+                        {
+                            priority_index = static_cast<size_t>(task_priority::normal);
+                        }
+                        if (!work_state.deques[priority_index].try_push(drained_item))
+                        {
+                            work_state.private_overflow[priority_index].push_back(drained_item);
+                        }
+                    });
+
+                    // 2. Refill Chase-Lev Deques from private_overflow
+                    for (auto priority_index = 0U; priority_index < static_cast<size_t>(task_priority::count);
+                         ++priority_index)
+                    {
+                        while (!work_state.private_overflow[priority_index].empty())
+                        {
+                            const auto& overflow_item = work_state.private_overflow[priority_index].back();
+                            if (!work_state.deques[priority_index].try_push(overflow_item))
+                            {
+                                break;
+                            }
+                            work_state.private_overflow[priority_index].pop_back();
+                        }
+                    }
+
+                    // 3. Anti-starvation check
                     if (work_state.anti_starvation_counter >= _config.starvation_quantum)
                     {
                         auto item = work_state.deques[low_idx].pop();
@@ -322,13 +373,14 @@ namespace tempest::job
                         }
                     }
 
-                    // 2. Local deques in priority order
-                    for (auto priority = 0U; priority < static_cast<size_t>(task_priority::count); ++priority)
+                    // 4. Pop Local Deques
+                    for (auto priority_index = 0U; priority_index < static_cast<size_t>(task_priority::count);
+                         ++priority_index)
                     {
-                        auto item = work_state.deques[priority].pop();
+                        auto item = work_state.deques[priority_index].pop();
                         if (item.has_value())
                         {
-                            if (priority != low_idx)
+                            if (priority_index != low_idx)
                             {
                                 ++work_state.anti_starvation_counter;
                             }
@@ -340,14 +392,7 @@ namespace tempest::job
                         }
                     }
 
-                    // 3. Worker's own injection queue
-                    auto inj_item = work_state.injection_queue.pop();
-                    if (inj_item.has_value())
-                    {
-                        return inj_item;
-                    }
-
-                    // 4. Work stealing
+                    // 5. Work Stealing (Thieves)
                     if (!_config.enable_work_stealing || _impl->workers.size() <= 1)
                     {
                         return nullopt;
@@ -356,7 +401,8 @@ namespace tempest::job
                     if (work_state.type == core_class::performance)
                     {
                         // P-cores steal from P-cores first (critical to low)
-                        for (auto priority = 0U; priority < static_cast<size_t>(task_priority::count); ++priority)
+                        for (auto priority_index = 0U; priority_index < static_cast<size_t>(task_priority::count);
+                             ++priority_index)
                         {
                             for (auto worker_idx = 0U; worker_idx < _impl->workers.size(); ++worker_idx)
                             {
@@ -368,7 +414,7 @@ namespace tempest::job
                                 auto& victim = *_impl->workers[worker_idx];
                                 if (victim.type == core_class::performance)
                                 {
-                                    auto item = victim.deques[priority].steal();
+                                    auto item = victim.deques[priority_index].steal();
                                     if (item.has_value())
                                     {
                                         return item;
@@ -378,7 +424,8 @@ namespace tempest::job
                         }
 
                         // P-cores steal any-tasks from E-cores
-                        for (auto priority = 0U; priority < static_cast<size_t>(task_priority::count); ++priority)
+                        for (auto priority_index = 0U; priority_index < static_cast<size_t>(task_priority::count);
+                             ++priority_index)
                         {
                             for (auto worker_idx = 0U; worker_idx < _impl->workers.size(); ++worker_idx)
                             {
@@ -389,7 +436,7 @@ namespace tempest::job
                                 auto& victim = *_impl->workers[worker_idx];
                                 if (victim.type == core_class::efficiency)
                                 {
-                                    auto item = victim.deques[priority].steal_if(
+                                    auto item = victim.deques[priority_index].steal_if(
                                         [](const queue_item& item) { return item.affinity == core_class::any; });
                                     if (item.has_value())
                                     {
@@ -398,38 +445,12 @@ namespace tempest::job
                                 }
                             }
                         }
-
-                        // Check injection queues of other workers
-                        for (auto worker_idx = 0U; worker_idx < _impl->workers.size(); ++worker_idx)
-                        {
-                            if (worker_idx == work_state.worker_index)
-                            {
-                                continue;
-                            }
-                            auto& victim = *_impl->workers[worker_idx];
-                            if (victim.type == core_class::performance)
-                            {
-                                auto item = victim.injection_queue.pop();
-                                if (item.has_value())
-                                {
-                                    return item;
-                                }
-                            }
-                            else
-                            {
-                                auto item = victim.injection_queue.pop_if(
-                                    [](const queue_item& item) -> bool { return item.affinity == core_class::any; });
-                                if (item.has_value())
-                                {
-                                    return item;
-                                }
-                            }
-                        }
                     }
                     else // Efficiency core
                     {
                         // E-cores steal from E-cores first
-                        for (auto priority = 0U; priority < static_cast<size_t>(task_priority::count); ++priority)
+                        for (auto priority_index = 0U; priority_index < static_cast<size_t>(task_priority::count);
+                             ++priority_index)
                         {
                             for (auto worker_idx = 0U; worker_idx < _impl->workers.size(); ++worker_idx)
                             {
@@ -440,7 +461,7 @@ namespace tempest::job
                                 auto& victim = *_impl->workers[worker_idx];
                                 if (victim.type == core_class::efficiency)
                                 {
-                                    auto item = victim.deques[priority].steal();
+                                    auto item = victim.deques[priority_index].steal();
                                     if (item.has_value())
                                     {
                                         return item;
@@ -450,7 +471,8 @@ namespace tempest::job
                         }
 
                         // E-cores steal from P-cores when idle; FORBIDDEN from stealing performance tasks!
-                        for (auto priority = 0U; priority < static_cast<size_t>(task_priority::count); ++priority)
+                        for (auto priority_index = 0U; priority_index < static_cast<size_t>(task_priority::count);
+                             ++priority_index)
                         {
                             for (auto worker_idx = 0U; worker_idx < _impl->workers.size(); ++worker_idx)
                             {
@@ -461,31 +483,15 @@ namespace tempest::job
                                 auto& victim = *_impl->workers[worker_idx];
                                 if (victim.type == core_class::performance)
                                 {
-                                    auto item = victim.deques[priority].steal_if([](const queue_item& item) -> bool {
-                                        return item.affinity != core_class::performance;
-                                    });
+                                    auto item = victim.deques[priority_index].steal_if(
+                                        [](const queue_item& item) -> bool {
+                                            return item.affinity != core_class::performance;
+                                        });
                                     if (item.has_value())
                                     {
                                         return item;
                                     }
                                 }
-                            }
-                        }
-
-                        // Check injection queues of other workers
-                        for (auto worker_idx = 0U; worker_idx < _impl->workers.size(); ++worker_idx)
-                        {
-                            if (worker_idx == work_state.worker_index)
-                            {
-                                continue;
-                            }
-                            auto& victim = *_impl->workers[worker_idx];
-                            auto item = victim.injection_queue.pop_if([](const queue_item& item) -> bool {
-                                return item.affinity != core_class::performance;
-                            });
-                            if (item.has_value())
-                            {
-                                return item;
                             }
                         }
                     }
@@ -533,14 +539,15 @@ namespace tempest::job
                     }
 
                     // Phase 2: OS Park
-                    _impl->idle_mask.fetch_or(1ULL << worker->worker_index, memory_order::acq_rel);
+                    _impl->idle_mask.mark_idle(worker->worker_index);
                     worker->park_state.store(1, memory_order::release);
+                    atomic_thread_fence(memory_order::seq_cst);
 
-                    // Recheck work before parking
+                    // Mandatory Dekker double-check
                     item = pop_or_steal(*worker);
                     if (item.has_value())
                     {
-                        _impl->idle_mask.fetch_and(~(1ULL << worker->worker_index), memory_order::acq_rel);
+                        _impl->idle_mask.clear_idle(worker->worker_index);
                         worker->park_state.store(0, memory_order::release);
                         if (item->handle && !item->handle.done())
                         {
@@ -555,7 +562,7 @@ namespace tempest::job
                         futex_wait(&worker->park_state, 1);
                     }
 
-                    _impl->idle_mask.fetch_and(~(1ULL << worker->worker_index), memory_order::acq_rel);
+                    _impl->idle_mask.clear_idle(worker->worker_index);
                     worker->park_state.store(0, memory_order::release);
                 }
             });
@@ -648,7 +655,7 @@ namespace tempest::job
             prio_idx = static_cast<size_t>(task_priority::normal);
         }
 
-        auto item = queue_item{
+        const auto item = queue_item{
             .handle = handle,
             .priority = priority,
             .affinity = affinity,
@@ -658,29 +665,22 @@ namespace tempest::job
 
         if (_impl->is_single_stepped || _impl->workers.empty())
         {
-            auto guard = lock_guard{_impl->single_stepped_mutex};
+            const auto guard = lock_guard{_impl->single_stepped_mutex};
             _impl->single_stepped_queues[prio_idx].push_back(item);
             return;
         }
 
         if (ctx.worker_index < _impl->workers.size())
         {
-            auto* curr_worker = _impl->workers[ctx.worker_index].get();
-            auto compatible = (affinity == core_class::any) || (affinity == curr_worker->type);
-            if (compatible)
+            auto* const curr_worker = _impl->workers[ctx.worker_index].get();
+            const auto compatible = (affinity == core_class::any) || (affinity == curr_worker->type);
+            if (compatible && this_thread::get_id() == curr_worker->worker_thread.get_id())
             {
-                if (this_thread::get_id() == curr_worker->worker_thread.get_id())
+                if (!curr_worker->deques[prio_idx].try_push(item))
                 {
-                    curr_worker->deques[prio_idx].push(item);
-                    _impl->wake_idle_worker();
+                    curr_worker->private_overflow[prio_idx].push_back(item);
                 }
-                else
-                {
-                    curr_worker->injection_queue.push(item);
-                    _impl->idle_mask.fetch_and(~(1ULL << ctx.worker_index), memory_order::acq_rel);
-                    curr_worker->park_state.store(0, memory_order::release);
-                    futex_wake_one(&curr_worker->park_state);
-                }
+                _impl->wake_idle_worker();
                 return;
             }
         }
@@ -701,7 +701,7 @@ namespace tempest::job
             prio_idx = static_cast<size_t>(task_priority::normal);
         }
 
-        auto item = queue_item{
+        const auto item = queue_item{
             .handle = handle,
             .priority = priority,
             .affinity = affinity,
@@ -711,18 +711,21 @@ namespace tempest::job
 
         if (_impl->is_single_stepped || _impl->workers.empty())
         {
-            auto guard = lock_guard{_impl->single_stepped_mutex};
+            const auto guard = lock_guard{_impl->single_stepped_mutex};
             _impl->single_stepped_queues[prio_idx].push_back(item);
             return;
         }
 
-        auto* curr_worker = _impl->find_current_worker();
+        auto* const curr_worker = _impl->find_current_worker();
         if (curr_worker != nullptr && curr_worker->owner == this)
         {
-            auto compatible = (affinity == core_class::any) || (affinity == curr_worker->type);
+            const auto compatible = (affinity == core_class::any) || (affinity == curr_worker->type);
             if (compatible)
             {
-                curr_worker->deques[prio_idx].push(item);
+                if (!curr_worker->deques[prio_idx].try_push(item))
+                {
+                    curr_worker->private_overflow[prio_idx].push_back(item);
+                }
                 _impl->wake_idle_worker();
                 return;
             }

@@ -23,7 +23,7 @@ namespace tempest::job::tests
         // 2. Act: Push 5 items (10, 20, 30, 40, 50)
         for (auto val : {10, 20, 30, 40, 50})
         {
-            EXPECT_TRUE(deque.push(val));
+            EXPECT_TRUE(deque.try_push(val));
         }
 
         EXPECT_FALSE(deque.empty());
@@ -101,7 +101,7 @@ namespace tempest::job::tests
         for (auto i = 1; i <= total_items; ++i)
         {
             expected_checksum += i;
-            while (!deque.push(i))
+            while (!deque.try_push(i))
             {
                 this_thread::yield();
             }
@@ -136,44 +136,46 @@ namespace tempest::job::tests
     }
 
     // =========================================================================
-    // SECTION: Injection Queue Spillover on Deque Overflow
+    // SECTION: Bounded Capacity Saturation & Backpressure
     // =========================================================================
 
-    /// @brief Verifies that when a work_stealing_deque's circular buffer is full,
-    ///        push() transparently spills excess tasks into its associated concurrent_queue.
-    TEST(work_stealing_deque_test, spillover_to_injection_queue)
+    /// @brief Verifies that work_stealing_deque enforces a strict bounded capacity,
+    ///        rejecting pushes when saturated and resuming successful pushes once
+    ///        elements are removed via owner pop or thief steal.
+    TEST(work_stealing_deque_test, bounded_capacity_saturation)
     {
-        // 1. Setup: Deque with small capacity (64 slots) and dedicated injection queue
-        auto injection_queue = concurrent_queue<int>{};
-        auto deque = work_stealing_deque<int, 64>{injection_queue};
+        // 1. Setup: Construct a work-stealing deque with capacity 64
+        auto deque = work_stealing_deque<int, 64>{};
+        EXPECT_EQ(deque.capacity(), 64u);
+        EXPECT_EQ(deque.size(), 0u);
 
-        // 2. Act: Push 100 items (64 in circular buffer, 36 into injection queue)
-        for (auto i = 1; i <= 100; ++i)
+        // 2. Act & Assert: Push 64 items and verify each returns true
+        for (auto index = 0; index < 64; ++index)
         {
-            auto ok = deque.push(i);
-            EXPECT_TRUE(ok);
+            EXPECT_TRUE(deque.try_push(index));
         }
-
-        // 3. Assert: 64 in local deque, 36 in injection queue
         EXPECT_EQ(deque.size(), 64u);
-        EXPECT_EQ(injection_queue.size(), 36u);
 
-        // Pop from deque (LIFO order: 64 down to 1)
-        for (auto expected = 64; expected >= 1; --expected)
-        {
-            auto item = deque.pop();
-            ASSERT_TRUE(item.has_value());
-            EXPECT_EQ(*item, expected);
-        }
-        EXPECT_TRUE(deque.empty());
+        // Pushing the 65th item returns false due to saturation
+        EXPECT_FALSE(deque.try_push(64));
+        EXPECT_EQ(deque.size(), 64u);
 
-        // Pop from injection queue (FIFO order: 65 up to 100)
-        for (auto expected = 65; expected <= 100; ++expected)
-        {
-            auto item = injection_queue.pop();
-            ASSERT_TRUE(item.has_value());
-            EXPECT_EQ(*item, expected);
-        }
-        EXPECT_TRUE(injection_queue.empty());
+        // Owner pops an item; now try_push succeeds
+        const auto popped_item = deque.pop();
+        ASSERT_TRUE(popped_item.has_value());
+        EXPECT_EQ(*popped_item, 63);
+        EXPECT_EQ(deque.size(), 63u);
+        EXPECT_TRUE(deque.try_push(100));
+        EXPECT_EQ(deque.size(), 64u);
+        EXPECT_FALSE(deque.try_push(101));
+
+        // Thief steals an item; now try_push succeeds
+        const auto stolen_item = deque.steal();
+        ASSERT_TRUE(stolen_item.has_value());
+        EXPECT_EQ(*stolen_item, 0);
+        EXPECT_EQ(deque.size(), 63u);
+        EXPECT_TRUE(deque.try_push(200));
+        EXPECT_EQ(deque.size(), 64u);
+        EXPECT_FALSE(deque.try_push(201));
     }
 } // namespace tempest::job::tests
