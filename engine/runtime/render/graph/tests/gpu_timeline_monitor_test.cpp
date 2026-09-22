@@ -30,6 +30,24 @@ namespace
 
         mutable mutex sem_mutex{};
         flat_unordered_map<uint64_t, uint64_t> semaphore_values{};
+        mutable flat_unordered_map<uint64_t, size_t> semaphore_query_counts{};
+
+        [[nodiscard]] auto get_semaphore_query_count(rhi::semaphore_handle semaphore) const -> size_t
+        {
+            auto guard = lock_guard{sem_mutex};
+            auto iter = semaphore_query_counts.find(semaphore.handle);
+            if (iter != semaphore_query_counts.end())
+            {
+                return iter->second;
+            }
+            return 0;
+        }
+
+        auto reset_semaphore_query_count(rhi::semaphore_handle semaphore) -> void
+        {
+            auto guard = lock_guard{sem_mutex};
+            semaphore_query_counts[semaphore.handle] = 0;
+        }
 
         auto wait_idle() -> void override
         {
@@ -89,6 +107,7 @@ namespace
         {
             get_semaphore_value_call_count.fetch_add(1, memory_order::relaxed);
             auto guard = lock_guard{sem_mutex};
+            semaphore_query_counts[semaphore.handle]++;
             auto iter = semaphore_values.find(semaphore.handle);
             if (iter != semaphore_values.end())
             {
@@ -1027,11 +1046,22 @@ TEST(gpu_timeline_monitor_test, query_deduplication_single_semaphore_many_waiter
         }));
     }
 
-    this_thread::sleep_for(chrono::milliseconds(20));
+    // Wait deterministically until all 50 waiters have evaluated await_ready() for sem.
+    // Because milestone 1 has not been signaled yet, all 50 evaluate current_val == 0 < 1
+    // and proceed into await_suspend(), registering with the monitor.
+    const auto setup_deadline = chrono::steady_clock::now() + chrono::seconds(5);
+    while (dev.get_semaphore_query_count(sem) < waiter_count && chrono::steady_clock::now() < setup_deadline)
+    {
+        this_thread::sleep_for(chrono::milliseconds(1));
+    }
+    EXPECT_GE(dev.get_semaphore_query_count(sem), waiter_count);
     EXPECT_EQ(completed_count.load(memory_order::acquire), 0U);
 
-    // Reset query counter before completion tick
-    dev.get_semaphore_value_call_count.store(0, memory_order::release);
+    // Allow a short window for any remaining registration tasks to settle into the monitor loop
+    this_thread::sleep_for(chrono::milliseconds(10));
+
+    // Reset query counter for sem before completion tick
+    dev.reset_semaphore_query_count(sem);
 
     // Advance timeline semaphore to milestone 1 and wake
     dev.signal_semaphore(sem, 1);
@@ -1049,8 +1079,8 @@ TEST(gpu_timeline_monitor_test, query_deduplication_single_semaphore_many_waiter
     EXPECT_EQ(completed_count.load(memory_order::acquire), waiter_count);
 
     // Assert: Queries for the user semaphore were deduplicated per tick (far less than 50 queries)
-    const auto queries = dev.get_semaphore_value_call_count.load(memory_order::acquire);
-    EXPECT_LE(queries, 10U);
+    const auto queries = dev.get_semaphore_query_count(sem);
+    EXPECT_LE(queries, 5U);
 
     monitor.stop();
 }
