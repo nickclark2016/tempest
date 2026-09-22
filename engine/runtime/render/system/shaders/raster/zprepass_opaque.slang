@@ -19,6 +19,7 @@ struct VertexOutput {
 };
 
 [shader("vertex")]
+[require(spvGroupNonUniformBallot)]
 VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID,
                     uint start_instance : SV_StartInstanceLocation) {           
     let instance_buffer = (uint*)push_constants.instance_indices_address;

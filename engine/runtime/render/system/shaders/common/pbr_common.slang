@@ -32,6 +32,7 @@ float f0_to_index_of_refraction(float f0) {
     return (1.0 + sqrt_f0) / (1.0 - sqrt_f0);
 }
 
+[require(spvGroupNonUniformBallot)]
 VertexOutput compute_vertex(uint vertex_id, uint instance_id, uint64_t instance_buffer_address,
                             uint64_t objects_address, SceneGlobals* scene)
 {
@@ -116,6 +117,7 @@ float compute_smooth_distance_attenuation(float magnitude_squared, float radius)
     return (smooth * smooth) / max(magnitude_squared, 1e-4);
 }
 
+[require(spvGroupNonUniformBallot)]
 void evaluate_clustered_point_lights(
     const PixelData px,
     const BxDFParams params,

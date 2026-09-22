@@ -37,6 +37,7 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 
 [shader("fragment")]
 [earlydepthstencil]
+[require(spvGroupNonUniformBallot)]
 FragmentOutput FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
     PixelData pd;
     pd.uv = half2(input.uv);

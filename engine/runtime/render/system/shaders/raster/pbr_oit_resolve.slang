@@ -31,6 +31,7 @@ struct FragmentOutput {
 };
 
 [shader("vertex")]
+[require(spvGroupNonUniformBallot)]
 VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID,
                     uint start_instance : SV_StartInstanceLocation) {
     SceneGlobals* scene = (SceneGlobals*)push_constants.scene_constants_address;
@@ -39,7 +40,7 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 }
 
 [shader("fragment")]
-[earlydepthstencil]
+[require(spvGroupNonUniformBallot)]
 FragmentOutput FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
     Material* mat = (Material*)input.material_address;
     if (mat.type != MaterialType::BLEND && mat.type != MaterialType::TRANSMISSIVE) {
@@ -84,12 +85,8 @@ FragmentOutput FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
         discard;
     }
 
-    float4 b_even_q = float4(0.0);
-    float4 b_odd_q = float4(0.0);
-    if (push_constants.moments_storage_index >= 0) {
-        b_even_q = bindless_storage_float4_array[push_constants.moments_storage_index][uint3(pixel_coords, 0)];
-        b_odd_q = bindless_storage_float4_array[push_constants.moments_storage_index][uint3(pixel_coords, 1)];
-    }
+    let b_even_q = bindless_storage_float4_array[push_constants.moments_storage_index][uint3(pixel_coords, 0)];
+    let b_odd_q = bindless_storage_float4_array[push_constants.moments_storage_index][uint3(pixel_coords, 1)];
 
     float4 b_even, b_odd;
     offset_and_dequantize_moments(b_even, b_odd, b_even_q, b_odd_q);
