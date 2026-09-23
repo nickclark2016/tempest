@@ -1,8 +1,7 @@
 #include <tempest/algorithm.hpp>
 #include <tempest/bit.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/flat_unordered_map.hpp>
-#include <tempest/job/job_system.hpp>
-#include <tempest/job/when_all.hpp>
 #include <tempest/render_graph/executor.hpp>
 #include <tempest/render_graph/render_graph.hpp>
 #include <tempest/render_graph/temporal_texture.hpp>
@@ -92,54 +91,156 @@ namespace tempest::render_graph
                 .signal_stages = effective_signal_stages,
             };
         }
+
+        struct pass_query_allocation
+        {
+            uint32_t start_ts{0};
+            uint32_t end_ts{0};
+            optional<uint32_t> stat_idx{nullopt};
+        };
+
+        struct pass_recorder
+        {
+            non_null<rhi::execution_port> port;
+            non_null<const pass_node> pass;
+            const pass_sync_plan* plan{nullptr};
+            pass_query_allocation alloc{};
+            rhi::query_pool_handle ts_pool{};
+            rhi::query_pool_handle stat_pool{};
+            non_null<pass_execution_context> ctx;
+            non_null<const transient_allocator> trans_alloc;
+            non_null<const rhi::command_list*> out_cmd;
+            uint32_t thread_id{0};
+
+            void operator()() const
+            {
+                auto& pass_cmd = port->acquire_command_list(thread_id, rhi::command_list_lifetime::transient);
+                pass_cmd.begin();
+
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
+                pass_cmd.begin_debug_region(rhi::debug_label{.name = pass->name.c_str()});
+#endif
+
+                // 1. Issue pre-pass pipeline barriers FIRST before the start timestamp query
+                if (plan != nullptr)
+                {
+                    if (!plan->texture_barriers.empty() || !plan->buffer_barriers.empty())
+                    {
+                        pass_cmd.pipeline_barrier(plan->texture_barriers, plan->buffer_barriers);
+                    }
+                }
+
+                // 2. Pass start timestamp & begin stats query
+                if (ts_pool.handle != 0)
+                {
+                    pass_cmd.write_timestamp(ts_pool, alloc.start_ts, rhi::pipeline_stage::bottom_of_pipe);
+                }
+                if (alloc.stat_idx.has_value() && stat_pool.handle != 0)
+                {
+                    pass_cmd.begin_query(stat_pool, *alloc.stat_idx);
+                }
+
+                // 3. Detect color and depth-stencil attachments for dynamic rendering
+                auto color_attachments = vector<rhi::color_attachment>{};
+                auto depth_attachment = optional<rhi::depth_stencil_attachment>{nullopt};
+                auto render_width = uint32_t{0};
+                auto render_height = uint32_t{0};
+
+                for (const auto& access : pass->texture_accesses)
+                {
+                    if (access.attachment == attachment_type::color)
+                    {
+                        const auto* tex_alloc = trans_alloc->get_texture(access.texture.id);
+                        if (tex_alloc != nullptr)
+                        {
+                            color_attachments.push_back(rhi::color_attachment{
+                                .view = tex_alloc->default_view,
+                                .load_op = access.load_op,
+                                .store_op = access.store_op,
+                                .clear_value = access.clear_color,
+                            });
+                            render_width = tex_alloc->size.width;
+                            render_height = tex_alloc->size.height;
+                        }
+                    }
+                    else if (access.attachment == attachment_type::depth_stencil)
+                    {
+                        const auto* tex_alloc = trans_alloc->get_texture(access.texture.id);
+                        if (tex_alloc != nullptr)
+                        {
+                            depth_attachment = rhi::depth_stencil_attachment{
+                                .view = tex_alloc->default_view,
+                                .depth_load_op = access.load_op,
+                                .depth_store_op = access.store_op,
+                                .stencil_load_op = rhi::load_op::dont_care,
+                                .stencil_store_op = rhi::store_op::dont_care,
+                                .clear_value = access.clear_depth_stencil,
+                            };
+                            if (render_width == 0)
+                            {
+                                render_width = tex_alloc->size.width;
+                                render_height = tex_alloc->size.height;
+                            }
+                        }
+                    }
+                }
+
+                const auto is_render_pass = !color_attachments.empty() || depth_attachment.has_value();
+
+                if (is_render_pass)
+                {
+                    pass_cmd.begin_render_pass(color_attachments, depth_attachment, render_width, render_height);
+                    pass_cmd.set_viewport(0.0F, 0.0F, static_cast<float>(render_width),
+                                          static_cast<float>(render_height), 0.0F, 1.0F);
+                    pass_cmd.set_scissor(0, 0, render_width, render_height);
+
+                    if (pass->execute_fn)
+                    {
+                        pass->execute_fn(*ctx.get(), pass_cmd);
+                    }
+                    pass_cmd.end_render_pass();
+                }
+                else
+                {
+                    if (pass->execute_fn)
+                    {
+                        pass->execute_fn(*ctx.get(), pass_cmd);
+                    }
+                }
+
+                // 4. End stats query & write end timestamp
+                if (alloc.stat_idx.has_value() && stat_pool.handle != 0)
+                {
+                    pass_cmd.end_query(stat_pool, *alloc.stat_idx);
+                }
+                if (ts_pool.handle != 0)
+                {
+                    pass_cmd.write_timestamp(ts_pool, alloc.end_ts, rhi::pipeline_stage::bottom_of_pipe);
+                }
+
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
+                pass_cmd.end_debug_region();
+#endif
+
+                pass_cmd.end();
+                *out_cmd.get() = &pass_cmd;
+            }
+        };
     } // namespace
 
-    render_graph_executor::render_graph_executor(job::job_system& jobs) noexcept : _jobs{&jobs}
-    {
-    }
-
-    auto render_graph_executor::execute_sync(rhi::device& dev, render_graph& graph, const frame_sync_options& frame_sync)
+    auto render_graph_executor::execute(rhi::device& dev, render_graph& graph, const frame_sync_options& frame_sync)
         -> expected<void, execution_error>
     {
-        auto sync_opts = frame_sync;
-        if (sync_opts.profiler == nullptr && _jobs != nullptr)
-        {
-            sync_opts.profiler = &_jobs->get_profiler();
-        }
-        auto t = execute(dev, graph, sync_opts);
-        if (sync_opts.profiler != nullptr)
-        {
-            t.set_profiler(sync_opts.profiler);
-        }
-        t.resume();
-        _jobs->wait_idle();
-        while (!t.is_ready())
-        {
-            _jobs->step();
-        }
-        auto res = t.result();
-        if (!res.has_value())
-        {
-            return unexpected(execution_error::queue_submit_failed);
-        }
-        return res.value();
-    }
-
-    auto render_graph_executor::execute(rhi::device& dev, render_graph& graph, const frame_sync_options& frame_sync)
-        -> job::task<expected<void, execution_error>>
-    {
-        co_await job::set_task_name{"render_graph_executor::execute"};
-
         const auto compile_res = graph.compile();
         if (!compile_res.has_value())
         {
-            co_return unexpected(execution_error::compile_failed);
+            return unexpected(execution_error::compile_failed);
         }
 
         const auto& dag = compile_res.value();
         if (dag.sorted_pass_indices.empty())
         {
-            co_return expected<void, execution_error>{};
+            return expected<void, execution_error>{};
         }
 
         const auto flight_slot = frame_sync.flight_slot_index;
@@ -397,13 +498,6 @@ namespace tempest::render_graph
 
         auto ctx = pass_execution_context{&graph};
 
-        struct pass_query_allocation
-        {
-            uint32_t start_ts{0};
-            uint32_t end_ts{0};
-            optional<uint32_t> stat_idx{nullopt};
-        };
-
         struct batch_query_allocation
         {
             uint32_t ts_start{0};
@@ -499,11 +593,11 @@ namespace tempest::render_graph
             cmd_prologue.end();
             batch_commands.push_back(&cmd_prologue);
 
-            // B. Concurrent Pass Recording: Dispatched to worker coroutines
+            // B. Pass Recording
             const auto pass_count = batch.pass_indices.size();
             auto pass_commands = vector<const rhi::command_list*>(pass_count, nullptr);
-            auto pass_tasks = vector<job::task<void>>{};
-            pass_tasks.reserve(pass_count);
+            auto recorders = vector<pass_recorder>{};
+            recorders.reserve(pass_count);
 
             for (size_t i = 0; i < pass_count; ++i)
             {
@@ -518,145 +612,40 @@ namespace tempest::render_graph
                 const auto plan_it = plan_map.find(pass_idx);
                 const auto* plan = (plan_it != plan_map.end()) ? plan_it->second : nullptr;
 
-                auto record_task = [](
-                    rhi::execution_port& exec_port,
-                    job::job_system& job_sys,
-                    const pass_node& curr_pass,
-                    const pass_sync_plan* curr_plan,
-                    pass_query_allocation curr_alloc,
-                    rhi::query_pool_handle ts_pool,
-                    rhi::query_pool_handle stat_pool,
-                    pass_execution_context& pass_ctx,
-                    const transient_allocator& trans_alloc,
-                    const rhi::command_list** out_cmd) -> job::task<void>
-                {
-                    const auto opt_worker = job_sys.current_worker_index();
-                    const auto worker_idx = opt_worker.has_value() ? static_cast<uint32_t>(*opt_worker) : 0U;
-
-                    auto& pass_cmd = exec_port.acquire_command_list(worker_idx, rhi::command_list_lifetime::transient);
-                    pass_cmd.begin();
-
-#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
-                    pass_cmd.begin_debug_region(rhi::debug_label{.name = curr_pass.name.c_str()});
-#endif
-
-                    // 1. Issue pre-pass pipeline barriers FIRST before the start timestamp query
-                    if (curr_plan != nullptr)
-                    {
-                        if (!curr_plan->texture_barriers.empty() || !curr_plan->buffer_barriers.empty())
-                        {
-                            pass_cmd.pipeline_barrier(curr_plan->texture_barriers, curr_plan->buffer_barriers);
-                        }
-                    }
-
-                    // 2. Pass start timestamp & begin stats query
-                    if (ts_pool.handle != 0)
-                    {
-                        pass_cmd.write_timestamp(ts_pool, curr_alloc.start_ts, rhi::pipeline_stage::bottom_of_pipe);
-                    }
-                    if (curr_alloc.stat_idx.has_value() && stat_pool.handle != 0)
-                    {
-                        pass_cmd.begin_query(stat_pool, *curr_alloc.stat_idx);
-                    }
-
-                    // 3. Detect color and depth-stencil attachments for dynamic rendering
-                    auto color_attachments = vector<rhi::color_attachment>{};
-                    auto depth_attachment = optional<rhi::depth_stencil_attachment>{nullopt};
-                    uint32_t render_width = 0;
-                    uint32_t render_height = 0;
-
-                    for (const auto& access : curr_pass.texture_accesses)
-                    {
-                        if (access.attachment == attachment_type::color)
-                        {
-                            const auto* alloc = trans_alloc.get_texture(access.texture.id);
-                            if (alloc != nullptr)
-                            {
-                                color_attachments.push_back(rhi::color_attachment{
-                                    .view = alloc->default_view,
-                                    .load_op = access.load_op,
-                                    .store_op = access.store_op,
-                                    .clear_value = access.clear_color,
-                                });
-                                render_width = alloc->size.width;
-                                render_height = alloc->size.height;
-                            }
-                        }
-                        else if (access.attachment == attachment_type::depth_stencil)
-                        {
-                            const auto* alloc = trans_alloc.get_texture(access.texture.id);
-                            if (alloc != nullptr)
-                            {
-                                depth_attachment = rhi::depth_stencil_attachment{
-                                    .view = alloc->default_view,
-                                    .depth_load_op = access.load_op,
-                                    .depth_store_op = access.store_op,
-                                    .stencil_load_op = rhi::load_op::dont_care,
-                                    .stencil_store_op = rhi::store_op::dont_care,
-                                    .clear_value = access.clear_depth_stencil,
-                                };
-                                if (render_width == 0)
-                                {
-                                    render_width = alloc->size.width;
-                                    render_height = alloc->size.height;
-                                }
-                            }
-                        }
-                    }
-
-                    const auto is_render_pass = !color_attachments.empty() || depth_attachment.has_value();
-
-                    if (is_render_pass)
-                    {
-                        pass_cmd.begin_render_pass(color_attachments, depth_attachment, render_width, render_height);
-                        pass_cmd.set_viewport(0.0F, 0.0F, static_cast<float>(render_width),
-                                              static_cast<float>(render_height), 0.0F, 1.0F);
-                        pass_cmd.set_scissor(0, 0, render_width, render_height);
-
-                        if (curr_pass.execute_fn)
-                        {
-                            curr_pass.execute_fn(pass_ctx, pass_cmd);
-                        }
-                        pass_cmd.end_render_pass();
-                    }
-                    else
-                    {
-                        if (curr_pass.execute_fn)
-                        {
-                            curr_pass.execute_fn(pass_ctx, pass_cmd);
-                        }
-                    }
-
-                    // 4. End stats query & write end timestamp
-                    if (curr_alloc.stat_idx.has_value() && stat_pool.handle != 0)
-                    {
-                        pass_cmd.end_query(stat_pool, *curr_alloc.stat_idx);
-                    }
-                    if (ts_pool.handle != 0)
-                    {
-                        pass_cmd.write_timestamp(ts_pool, curr_alloc.end_ts, rhi::pipeline_stage::bottom_of_pipe);
-                    }
-
-#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
-                    pass_cmd.end_debug_region();
-#endif
-
-                    pass_cmd.end();
-                    *out_cmd = &pass_cmd;
-                    co_return;
-                };
-
-                pass_tasks.push_back(record_task(
-                    port, *_jobs, pass, plan, p_alloc,
-                    flight_state.timestamp_pool, q_state.pool,
-                    ctx, allocator,
-                    &pass_commands[i]).with_name(pass.name));
+                recorders.push_back(pass_recorder{
+                    .port = &port,
+                    .pass = &pass,
+                    .plan = plan,
+                    .alloc = p_alloc,
+                    .ts_pool = flight_state.timestamp_pool,
+                    .stat_pool = q_state.pool,
+                    .ctx = &ctx,
+                    .trans_alloc = &allocator,
+                    .out_cmd = &pass_commands[i],
+                    .thread_id = static_cast<uint32_t>(i + 1),
+                });
             }
 
-            if (!pass_tasks.empty())
+            auto pass_items = vector<pass_record_item>{};
+            pass_items.reserve(recorders.size());
+            for (auto& recorder : recorders)
             {
-                co_await job::when_all(*_jobs, tempest::move(pass_tasks), job::task_priority::high,
-                                       job::core_class::performance);
+                pass_items.push_back(pass_record_item{
+                    .record_fn = tempest::function_ref<void()>{recorder},
+                    .pass_name = recorder.pass->name,
+                });
+            }
+
+            if (frame_sync.pass_dispatcher.has_value() && pass_items.size() > 1)
+            {
+                (*frame_sync.pass_dispatcher)(span<const pass_record_item>{pass_items.data(), pass_items.size()});
+            }
+            else
+            {
+                for (const auto& item : pass_items)
+                {
+                    item.record_fn();
+                }
             }
 
             for (const auto* cmd_ptr : pass_commands)
@@ -834,7 +823,7 @@ namespace tempest::render_graph
 
             if (!submit_res.has_value())
             {
-                co_return unexpected(execution_error::queue_submit_failed);
+                return unexpected(execution_error::queue_submit_failed);
             }
 
             // Record pass query bindings into flight state
@@ -895,7 +884,7 @@ namespace tempest::render_graph
             }
         }
 
-        co_return expected<void, execution_error>{};
+        return expected<void, execution_error>{};
     }
 
     void render_graph_executor::release(rhi::device& dev)

@@ -5,6 +5,7 @@
 #include <tempest/archetype.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/asset_type_registry.hpp>
+#include <tempest/atomic.hpp>
 #include <tempest/event_registry.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/input.hpp>
@@ -13,6 +14,8 @@
 #include <tempest/profiler/profiler.hpp>
 #include <tempest/render_system/renderer.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/span.hpp>
+#include <tempest/thread.hpp>
 #include <tempest/vector.hpp>
 #include <tempest/window_manager.hpp>
 
@@ -231,7 +234,53 @@ namespace tempest
         virtual auto _update_fixed(chrono::duration<float> delta_time) -> void;
         virtual auto _update_variable(chrono::duration<float> delta_time) -> void;
         virtual auto _render_frame() -> void;
+
+        template <typename F>
+        auto _with_pass_dispatcher(F&& func) -> decltype(auto);
     };
+
+    template <typename F>
+    auto standalone_engine_context::_with_pass_dispatcher(F&& func) -> decltype(auto)
+    {
+        auto dispatch_passes = [this](span<const render_graph::pass_record_item> passes) {
+            if (passes.empty())
+            {
+                return;
+            }
+
+            if (_job_system == nullptr || passes.size() <= 1)
+            {
+                for (const auto& pass : passes)
+                {
+                    pass.record_fn();
+                }
+                return;
+            }
+
+            auto remaining = atomic<size_t>{passes.size()};
+            auto tasks = vector<job::task<void>>{};
+            tasks.reserve(passes.size());
+
+            for (const auto& pass : passes)
+            {
+                tasks.push_back(_job_system->async(job::task_priority::high, job::core_class::performance,
+                                                   [&pass, &remaining]() {
+                                                       pass.record_fn();
+                                                       remaining.fetch_sub(1, memory_order::acq_rel);
+                                                   }));
+            }
+
+            while (remaining.load(memory_order::acquire) > 0)
+            {
+                if (!_job_system->step())
+                {
+                    this_thread::yield();
+                }
+            }
+        };
+
+        return func(render_graph::pass_dispatcher_fn{dispatch_passes});
+    }
 } // namespace tempest
 
 #endif // tempest_tempest_engine_h

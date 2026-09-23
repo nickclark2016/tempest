@@ -1273,7 +1273,7 @@ namespace tempest::render_graph
         // 1. Setup device and executor
         auto dev = mock_device_with_ports{};
         auto ctx = test_context{};
-        auto executor = render_graph_executor{ctx.jobs};
+        auto executor = render_graph_executor{};
         constexpr auto frames_in_flight = 3U;
         constexpr auto num_frames = 15U;
 
@@ -1722,5 +1722,152 @@ namespace tempest::render_graph
         EXPECT_EQ(pbr_wait.semaphore.handle, compute_signal.semaphore.handle);
         EXPECT_EQ(pbr_wait.value, compute_signal.value);
         EXPECT_EQ(pbr_wait.stages, rhi::pipeline_stage::all_graphics);
+    }
+
+    // =========================================================================
+    // Pass Dispatcher & Synchronous Execution Tests (Milestone 1)
+    // =========================================================================
+
+    /// @brief Verifies that passes in a batch are recorded sequentially inline on the calling thread
+    /// when pass_dispatcher is nullopt in frame_sync_options.
+    TEST(executor_test, sequential_pass_recording_no_dispatcher)
+    {
+        // 1. Setup device and render graph with multiple independent passes
+        auto dev = mock_device_with_ports{};
+        auto rg = render_graph{1920, 1080};
+
+        struct pass_data
+        {
+            rg_texture_id tex;
+        };
+
+        auto pass_1_executed = false;
+        auto pass_2_executed = false;
+
+        rg.add_graphics_pass<pass_data>(
+            "Pass1",
+            [](pass_builder& builder, pass_data& data) {
+                auto target_tex = builder.create_texture(rg_texture_desc{.name = "Tex1"});
+                data.tex = builder.write(target_tex, rhi::pipeline_stage::attachment_output,
+                                         rhi::resource_access::write, rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [&pass_1_executed](const pass_data&, pass_execution_context&, rhi::command_list&) {
+                pass_1_executed = true;
+            });
+
+        rg.add_graphics_pass<pass_data>(
+            "Pass2",
+            [](pass_builder& builder, pass_data& data) {
+                auto target_tex = builder.create_texture(rg_texture_desc{.name = "Tex2"});
+                data.tex = builder.write(target_tex, rhi::pipeline_stage::attachment_output,
+                                         rhi::resource_access::write, rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [&pass_2_executed](const pass_data&, pass_execution_context&, rhi::command_list&) {
+                pass_2_executed = true;
+            });
+
+        // 2. Act: Execute with pass_dispatcher = nullopt
+        const auto sync_opts = frame_sync_options{
+            .pass_dispatcher = nullopt,
+        };
+        const auto exec_res = rg.execute_sync(dev, sync_opts);
+
+        // 3. Assert: Execution succeeds and both passes are executed inline
+        ASSERT_TRUE(exec_res.has_value());
+        EXPECT_TRUE(pass_1_executed);
+        EXPECT_TRUE(pass_2_executed);
+        EXPECT_EQ(dev.graphics_port.submit_calls, 1U);
+        EXPECT_EQ(dev.graphics_port.submitted_commands.size(), 4U);
+    }
+
+    /// @brief Verifies that pass_dispatcher is invoked with all pass recording items when multiple passes
+    /// are present in a batch, and invoking the record_fn items completes execution successfully.
+    TEST(executor_test, parallel_pass_dispatching_with_mock_dispatcher)
+    {
+        // 1. Setup device and render graph with 3 independent passes
+        auto dev = mock_device_with_ports{};
+        auto rg = render_graph{1920, 1080};
+
+        struct pass_data
+        {
+            rg_texture_id tex;
+        };
+
+        auto pass_1_executed = false;
+        auto pass_2_executed = false;
+        auto pass_3_executed = false;
+
+        rg.add_graphics_pass<pass_data>(
+            "ColorPass",
+            [](pass_builder& builder, pass_data& data) {
+                auto target_tex = builder.create_texture(rg_texture_desc{.name = "ColorTex"});
+                data.tex = builder.write(target_tex, rhi::pipeline_stage::attachment_output,
+                                         rhi::resource_access::write, rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [&pass_1_executed](const pass_data&, pass_execution_context&, rhi::command_list&) {
+                pass_1_executed = true;
+            });
+
+        rg.add_graphics_pass<pass_data>(
+            "NormalPass",
+            [](pass_builder& builder, pass_data& data) {
+                auto target_tex = builder.create_texture(rg_texture_desc{.name = "NormalTex"});
+                data.tex = builder.write(target_tex, rhi::pipeline_stage::attachment_output,
+                                         rhi::resource_access::write, rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [&pass_2_executed](const pass_data&, pass_execution_context&, rhi::command_list&) {
+                pass_2_executed = true;
+            });
+
+        rg.add_graphics_pass<pass_data>(
+            "DepthPass",
+            [](pass_builder& builder, pass_data& data) {
+                auto target_tex = builder.create_texture(rg_texture_desc{.name = "DepthTex"});
+                data.tex = builder.write(target_tex, rhi::pipeline_stage::attachment_output,
+                                         rhi::resource_access::write, rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [&pass_3_executed](const pass_data&, pass_execution_context&, rhi::command_list&) {
+                pass_3_executed = true;
+            });
+
+        auto dispatcher_called = false;
+        auto dispatched_pass_count = size_t{0};
+        auto dispatched_names = vector<string>{};
+
+        auto mock_dispatcher = [&dispatcher_called, &dispatched_pass_count,
+                                &dispatched_names](span<const pass_record_item> items) {
+            dispatcher_called = true;
+            dispatched_pass_count = items.size();
+            for (const auto& item : items)
+            {
+                dispatched_names.push_back(string{item.pass_name.data(), item.pass_name.size()});
+                item.record_fn();
+            }
+        };
+
+        // 2. Act: Execute with mock pass_dispatcher
+        const auto sync_opts = frame_sync_options{
+            .pass_dispatcher = pass_dispatcher_fn{mock_dispatcher},
+        };
+        const auto exec_res = rg.execute_sync(dev, sync_opts);
+
+        // 3. Assert: Dispatcher was called with 3 pass items, each pass was executed, and batch submitted
+        ASSERT_TRUE(exec_res.has_value());
+        EXPECT_TRUE(dispatcher_called);
+        EXPECT_EQ(dispatched_pass_count, 3U);
+        EXPECT_EQ(dispatched_names.size(), 3U);
+        EXPECT_EQ(dispatched_names[0], "ColorPass");
+        EXPECT_EQ(dispatched_names[1], "NormalPass");
+        EXPECT_EQ(dispatched_names[2], "DepthPass");
+        EXPECT_TRUE(pass_1_executed);
+        EXPECT_TRUE(pass_2_executed);
+        EXPECT_TRUE(pass_3_executed);
+        EXPECT_EQ(dev.graphics_port.submit_calls, 1U);
+        EXPECT_EQ(dev.graphics_port.submitted_commands.size(), 5U);
     }
 } // namespace tempest::render_graph

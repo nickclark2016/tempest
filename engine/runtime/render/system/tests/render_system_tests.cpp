@@ -25,6 +25,7 @@
 #include <tempest/render_system/renderer.hpp>
 #include <tempest/render_system/resource_pool.hpp>
 #include <tempest/render_system/shader_manager.hpp>
+#include <tempest/render_system/shadow_atlas_math.hpp>
 #include <tempest/render_system/shelf_allocator.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/transform_component.hpp>
@@ -1944,8 +1945,11 @@ namespace tempest::render_system::tests
             const auto* const alloc =
                 rend->get_render_graph().get_allocator().get_texture(rend->get_directional_shadow_atlas_texture().id);
             ASSERT_NE(alloc, nullptr);
-            EXPECT_EQ(alloc->size.width, 8192U);
-            EXPECT_EQ(alloc->size.height, 8192U);
+            const auto max_dim = tempest::min(dev->get_device_desc().limits.max_image_dimension_2d,
+                                              rend->get_config().max_shadow_atlas_dimension);
+            const auto expected_plan = calculate_directional_shadow_atlas_plan(4096, 4, max_dim, 4);
+            EXPECT_EQ(alloc->size.width, expected_plan.atlas_size.x);
+            EXPECT_EQ(alloc->size.height, expected_plan.atlas_size.y);
 
             const auto slot = rend->get_resource_pool().get_frame_slot();
             const auto* shadow_data = static_cast<const directional_shadow_data*>(
@@ -5690,6 +5694,119 @@ namespace tempest::render_system::tests
 
             // All GPU operations have retired through timeline sync
             EXPECT_EQ(rend->get_retired_texture_count(), 0U);
+        }
+
+        dev->wait_idle();
+    }
+
+    //=============================================================================
+    // Pass Dispatcher Integration Tests
+    //=============================================================================
+
+    /// @brief Verifies that renderer::render and renderer::render_frame properly forward a custom
+    /// pass_dispatcher to the underlying render graph executor for pass recording.
+    TEST(render_system_tests, renderer_pass_dispatcher_forwarding)
+    {
+        // 1. Setup: initialize RHI device, registries, and renderer
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // Setup camera and mesh entity
+            auto cam_ent = registry.create();
+            registry.assign(cam_ent, camera_component{
+                                         .aspect_ratio = 1280.0F / 720.0F,
+                                         .vertical_fov = 1.5707963F,
+                                         .near_plane = 0.01F,
+                                     });
+            auto cam_tx = ecs::transform_component::identity();
+            cam_tx.position({0.0F, 0.0F, -5.0F});
+            registry.assign(cam_ent, cam_tx);
+
+            // Setup sun light
+            auto sun_ent = registry.create();
+            registry.assign(sun_ent, directional_light_component{
+                                         .color = {1.0F, 1.0F, 1.0F},
+                                         .intensity = 2.0F,
+                                     });
+            registry.assign(sun_ent, ecs::transform_component::identity());
+
+            auto mesh_id = meshes.register_mesh(create_test_mesh());
+            auto mat = core::material{};
+            mat.set_vec4(core::material::base_color_factor_name, {0.8F, 0.2F, 0.2F, 1.0F});
+            mat.set_scalar(core::material::metallic_factor_name, 0.0F);
+            mat.set_scalar(core::material::roughness_factor_name, 0.5F);
+            auto mat_id = materials.register_material(tempest::move(mat));
+            auto geom_ent = registry.create();
+            registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
+            registry.assign(geom_ent, core::material_component{.material_id = mat_id});
+            registry.assign(geom_ent, ecs::transform_component::identity());
+
+            // 2. Act: Prepare frame and execute render() with custom pass dispatcher
+            rend->prepare_frame(1280, 720);
+
+            auto render_dispatched_count = size_t{0};
+            auto render_mock = [&render_dispatched_count](span<const render_graph::pass_record_item> items) {
+                render_dispatched_count = items.size();
+                for (const auto& item : items)
+                {
+                    item.record_fn();
+                }
+            };
+
+            auto sync_opts = render_graph::frame_sync_options{
+                .pass_dispatcher = render_graph::pass_dispatcher_fn{render_mock},
+            };
+            const auto render_res = rend->render(sync_opts);
+
+            // 3. Assert: render() completed successfully and invoked the custom pass dispatcher
+            EXPECT_TRUE(render_res.has_value());
+            EXPECT_GT(render_dispatched_count, 1U);
+
+            dev->wait_idle();
+
+            // 4. Act: Execute complete frame via render_frame() with custom pass dispatcher
+            auto frame_dispatched_count = size_t{0};
+            auto frame_mock = [&frame_dispatched_count](span<const render_graph::pass_record_item> items) {
+                frame_dispatched_count = items.size();
+                for (const auto& item : items)
+                {
+                    item.record_fn();
+                }
+            };
+
+            const auto frame_res = rend->render_frame(null_window_handle, nullopt, nullptr, nullopt,
+                                                      render_graph::pass_dispatcher_fn{frame_mock});
+
+            // 5. Assert: render_frame() completed successfully and forwarded the pass dispatcher
+            EXPECT_TRUE(frame_res.has_value());
+            EXPECT_GT(frame_dispatched_count, 1U);
         }
 
         dev->wait_idle();

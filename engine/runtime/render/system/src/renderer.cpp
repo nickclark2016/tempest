@@ -3,7 +3,6 @@
 #include <tempest/algorithm.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/format.hpp>
-#include <tempest/job/job_system.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/relationship_component.hpp>
@@ -100,20 +99,6 @@ namespace tempest::render_system
 
             return calculate_directional_shadow_atlas_plan(2048U, 0U, max_atlas_dim, shadow_padding);
         }
-
-        auto create_owned_jobs(job::job_system* jobs, logger& log, profiler::profiler_session& profiler)
-            -> unique_ptr<job::job_system>
-        {
-            if (jobs != nullptr)
-            {
-                return nullptr;
-            }
-            return make_unique<job::job_system>(log, profiler,
-                                                job::job_system_config{
-                                                    .performance_worker_count = 0U,
-                                                    .efficiency_worker_count = 0U,
-                                                });
-        }
     } // namespace
 
     auto renderer::builder::build(rhi::device& dev, logger& log) -> unique_ptr<renderer>
@@ -126,26 +111,16 @@ namespace tempest::render_system
             _inputs->camera_sys = owned_camera_sys.get();
         }
 
-        return make_unique<renderer>(dev, log, _cfg, *_inputs, tempest::move(owned_camera_sys),
-                                     _jobs != nullptr ? _jobs : _inputs->jobs);
-    }
-
-    auto renderer::builder::build(rhi::device& dev, logger& log, job::job_system& jobs) -> unique_ptr<renderer>
-    {
-        _jobs = &jobs;
-        return build(dev, log);
+        return make_unique<renderer>(dev, log, _cfg, *_inputs, tempest::move(owned_camera_sys));
     }
 
     renderer::renderer(rhi::device& dev, logger& log, renderer_config cfg, renderer_inputs inputs,
-                       unique_ptr<camera_system> camera_sys, job::job_system* jobs)
+                       unique_ptr<camera_system> camera_sys)
         : _device{&dev}, _log{&log}, _cfg{cfg}, _inputs{inputs}, _owned_camera_system{tempest::move(camera_sys)},
           _camera_system{(_inputs.camera_sys != nullptr) ? _inputs.camera_sys : _owned_camera_system.get()},
           _frames_in_flight{math::max(1U, cfg.pool_config.frames_in_flight)}, _pool{dev, cfg.pool_config},
           _shaders{dev, inputs.asset_db}, _fallback_profiler{false},
-          _owned_jobs{create_owned_jobs(jobs != nullptr ? jobs : inputs.jobs, log,
-                                        inputs.profiler != nullptr ? *inputs.profiler : _fallback_profiler)},
-          _jobs{_owned_jobs ? *_owned_jobs : *(jobs != nullptr ? jobs : inputs.jobs)},
-          _graph{*_jobs, cfg.render_width, cfg.render_height},
+          _graph{cfg.render_width, cfg.render_height},
           _shadow_debug_mode{cfg.shadow_debug}, _pipeline_statistics{cfg.pipeline_statistics}
     {
         _flight_slots.resize(_frames_in_flight);
@@ -230,8 +205,6 @@ namespace tempest::render_system
           _surfaces{tempest::move(other._surfaces)}, _active_surface_window{other._active_surface_window},
           _pool{tempest::move(other._pool)}, _shaders{tempest::move(other._shaders)},
           _fallback_profiler{false},
-          _owned_jobs{tempest::move(other._owned_jobs)},
-          _jobs{_owned_jobs ? *_owned_jobs : *other._jobs},
           _graph{tempest::move(other._graph)},
           _directional_shadow_atlas_texture{other._directional_shadow_atlas_texture},
           _directional_shadow_atlas_view{other._directional_shadow_atlas_view},
@@ -348,8 +321,6 @@ namespace tempest::render_system
             _active_surface_window = other._active_surface_window;
             _pool = tempest::move(other._pool);
             _shaders = tempest::move(other._shaders);
-            _owned_jobs = tempest::move(other._owned_jobs);
-            _jobs = _owned_jobs ? *_owned_jobs : *other._jobs;
             _graph = tempest::move(other._graph);
             _directional_shadow_atlas_texture = other._directional_shadow_atlas_texture;
             _directional_shadow_atlas_view = other._directional_shadow_atlas_view;
@@ -1570,73 +1541,13 @@ namespace tempest::render_system
             effective_sync.timeline_value = slot.timeline_value;
         }
 
-        const auto res = _graph.execute_sync(*_device, effective_sync);
+        const auto res = _graph.execute(*_device, effective_sync);
         if (res.has_value())
         {
             _frame_index++;
             _frame_begun = false;
         }
         return res;
-    }
-
-    auto renderer::render_async(const render_graph::frame_sync_options& sync)
-        -> job::task<expected<void, render_graph::execution_error>>
-    {
-        co_await job::set_task_name{"renderer::render_async"};
-        if (_device == nullptr)
-        {
-            co_return unexpected(render_graph::execution_error::compile_failed);
-        }
-
-        const auto slot_idx = get_current_flight_slot();
-        auto effective_sync = sync;
-        effective_sync.flight_slot_index = slot_idx;
-        effective_sync.frames_in_flight = _frames_in_flight;
-        if (!effective_sync.frame_index.has_value())
-        {
-            effective_sync.frame_index = _frame_index;
-        }
-        if (effective_sync.profiler == nullptr)
-        {
-            effective_sync.profiler = _inputs.profiler;
-        }
-
-        if (_active_surface_window.is_valid())
-        {
-            auto* surf = _find_surface(_active_surface_window);
-            if ((surf != nullptr) && surf->current_sc_image.has_value())
-            {
-                if (!effective_sync.wait_semaphore.has_value())
-                {
-                    effective_sync.wait_semaphore = surf->current_acquire_semaphore;
-                    effective_sync.wait_stages = rhi::pipeline_stage::attachment_output;
-                }
-                if (!effective_sync.signal_semaphore.has_value())
-                {
-                    effective_sync.signal_semaphore = surf->current_render_semaphore;
-                }
-                if (!effective_sync.presented_texture.has_value())
-                {
-                    effective_sync.presented_texture = surf->current_sc_image->texture;
-                }
-            }
-        }
-
-        if (!_flight_slots.empty() && !effective_sync.timeline_semaphore.has_value())
-        {
-            auto& slot = _flight_slots[slot_idx];
-            slot.timeline_value++;
-            effective_sync.timeline_semaphore = slot.timeline_sem;
-            effective_sync.timeline_value = slot.timeline_value;
-        }
-
-        const auto res = co_await _graph.execute(*_device, effective_sync);
-        if (res.has_value())
-        {
-            _frame_index++;
-            _frame_begun = false;
-        }
-        co_return res;
     }
 
     auto renderer::present(window_handle win) -> expected<void, rhi::swapchain_error>
@@ -1682,7 +1593,9 @@ namespace tempest::render_system
 
     auto renderer::render_frame(window_handle win, optional<render_camera> camera_override,
                                 ui_render_callback ui_callback,
-                                optional<uint64_t> frame_index) -> expected<void, render_graph::execution_error>
+                                optional<uint64_t> frame_index,
+                                optional<render_graph::pass_dispatcher_fn> pass_dispatcher)
+        -> expected<void, render_graph::execution_error>
     {
         [[maybe_unused]] const auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::render_frame"};
         auto target_win = win.is_valid() ? win : _active_surface_window;
@@ -1709,6 +1622,10 @@ namespace tempest::render_system
         if (frame_index.has_value())
         {
             sync_opts.frame_index = *frame_index;
+        }
+        if (pass_dispatcher.has_value())
+        {
+            sync_opts.pass_dispatcher = pass_dispatcher;
         }
         const auto render_res = render(sync_opts);
         if (!render_res.has_value())

@@ -480,14 +480,17 @@ namespace tempest::editor
                     ? tempest::nullopt
                     : tempest::optional<render_system::render_camera>(_editor_camera.get_render_camera());
 
-            [[maybe_unused]] auto result = _renderer->render_frame(
-                win.handle, camera_override, [this](rhi::command_list& cmd, uint32_t w, uint32_t h) {
-                    if (_ui_ctx)
-                    {
-                        _ui_ctx->render_ui_commands(cmd, w, h);
-                    }
-                },
-                active_frame_index);
+            _with_pass_dispatcher([&](render_graph::pass_dispatcher_fn pass_dispatcher) {
+                [[maybe_unused]] auto result = _renderer->render_frame(
+                    win.handle, camera_override,
+                    [this](rhi::command_list& cmd, uint32_t w, uint32_t h) {
+                        if (_ui_ctx)
+                        {
+                            _ui_ctx->render_ui_commands(cmd, w, h);
+                        }
+                    },
+                    active_frame_index, pass_dispatcher);
+            });
 
             const auto frame_end = tempest::chrono::steady_clock::now();
             const auto frame_dur = tempest::chrono::duration_cast<tempest::chrono::duration<float, tempest::milli>>(

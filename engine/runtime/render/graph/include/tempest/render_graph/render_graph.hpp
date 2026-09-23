@@ -15,13 +15,18 @@
 #include <tempest/string_view.hpp>
 #include <tempest/vector.hpp>
 
+namespace tempest::job
+{
+    class job_system;
+}
+
 namespace tempest::render_graph
 {
     class TEMPEST_API render_graph
     {
       public:
-        render_graph(job::job_system& jobs, uint32_t surface_width, uint32_t surface_height) noexcept;
         render_graph(uint32_t surface_width, uint32_t surface_height) noexcept;
+        render_graph(job::job_system& jobs, uint32_t surface_width, uint32_t surface_height) noexcept;
         ~render_graph() = default;
 
         render_graph(const render_graph&) = delete;
@@ -76,7 +81,7 @@ namespace tempest::render_graph
         auto compile() -> expected<compiled_dag, dag_compile_error>;
 
         auto execute(rhi::device& dev, const frame_sync_options& frame_sync = {})
-            -> job::task<expected<void, execution_error>>;
+            -> expected<void, execution_error>;
 
         auto execute_sync(rhi::device& dev, const frame_sync_options& frame_sync = {})
             -> expected<void, execution_error>;
@@ -191,7 +196,6 @@ namespace tempest::render_graph
             return *data_ptr;
         }
 
-        non_null<job::job_system> _jobs;
         dag_compiler _compiler;
         transient_allocator _allocator;
         render_graph_executor _executor;

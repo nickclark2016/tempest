@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 
+#include <tempest/atomic.hpp>
 #include <tempest/input.hpp>
 #include <tempest/tempest.hpp>
+#include <tempest/thread.hpp>
 #include <tempest/window_manager.hpp>
 
 namespace tempest::tests
@@ -165,5 +167,62 @@ namespace tempest::tests
 
         EXPECT_EQ(ctx.get_render_surface(null_window_handle), nullptr);
         EXPECT_EQ(ctx.get_raw_surface(null_window_handle).handle, 0);
+    }
+
+    // ------------------------------------------------------------------------
+    // Engine Concurrency & Background Task Isolation Tests
+    // ------------------------------------------------------------------------
+
+    /// @brief Verifies that frame rendering using targeted countdown latch synchronization
+    ///        does not stall, starve, or abort active multi-frame background tasks (e.g. continuous physics simulation).
+    TEST(engine_context_test, render_frame_with_concurrent_background_task_isolation)
+    {
+        // 1. Setup: create testable subclass allowing direct invocation of _render_frame()
+        class testable_engine_context final : public standalone_engine_context
+        {
+          public:
+            auto render_frame_for_test() -> void
+            {
+                _render_frame();
+            }
+        };
+
+        auto ctx = testable_engine_context{};
+        const auto desc = window_desc{
+            .width = 640,
+            .height = 480,
+            .title = "Concurrency Test Window",
+        };
+        auto reg_info = ctx.register_window(desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        // 2. Setup: spawn a continuous multi-frame background task (simulating physics simulation)
+        auto stop_background = atomic<bool>{false};
+        auto background_ticks = atomic<uint32_t>{0};
+        auto& jobs = ctx.get_job_system();
+        auto bg_task = jobs.async(job::task_priority::normal, job::core_class::any, [&]() {
+            while (!stop_background.load(memory_order::acquire))
+            {
+                background_ticks.fetch_add(1, memory_order::acq_rel);
+                this_thread::yield();
+            }
+        });
+
+        // 3. Act: execute multiple frames of rendering while background task runs concurrently
+        constexpr auto test_frame_count = 5U;
+        for (auto frame_index = 0U; frame_index < test_frame_count; ++frame_index)
+        {
+            ctx.render_frame_for_test();
+        }
+
+        // 4. Assert: verify background task continued making forward progress without starvation
+        EXPECT_GT(background_ticks.load(memory_order::acquire), 0U);
+
+        // 5. Cleanup: signal background task to terminate cleanly
+        stop_background.store(true, memory_order::release);
+        while (!bg_task.is_ready())
+        {
+            jobs.step();
+        }
     }
 } // namespace tempest::tests

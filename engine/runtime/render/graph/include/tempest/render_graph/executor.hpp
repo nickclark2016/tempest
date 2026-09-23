@@ -5,8 +5,9 @@
 #include <tempest/array.hpp>
 #include <tempest/expected.hpp>
 #include <tempest/flat_unordered_map.hpp>
-#include <tempest/job/task.hpp>
+#include <tempest/functional.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/profiler/profiler.hpp>
 #include <tempest/render_graph/barrier_solver.hpp>
 #include <tempest/render_graph/dag.hpp>
@@ -14,12 +15,8 @@
 #include <tempest/render_graph/types.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/span.hpp>
+#include <tempest/string_view.hpp>
 #include <tempest/vector.hpp>
-
-namespace tempest::job
-{
-    class job_system;
-}
 
 namespace tempest::render_graph
 {
@@ -30,6 +27,14 @@ namespace tempest::render_graph
         compile_failed,
         queue_submit_failed,
     };
+
+    struct pass_record_item
+    {
+        tempest::function_ref<void()> record_fn;
+        string_view pass_name;
+    };
+
+    using pass_dispatcher_fn = tempest::function_ref<void(span<const pass_record_item>)>;
 
     struct frame_sync_options
     {
@@ -44,6 +49,7 @@ namespace tempest::render_graph
         uint32_t frames_in_flight{2};
         optional<uint64_t> frame_index{nullopt};
         profiler::profiler_session* profiler{nullptr};
+        optional<pass_dispatcher_fn> pass_dispatcher{nullopt};
     };
 
     struct queue_stats_state
@@ -84,7 +90,7 @@ namespace tempest::render_graph
     class TEMPEST_API render_graph_executor
     {
       public:
-        explicit render_graph_executor(job::job_system& jobs) noexcept;
+        render_graph_executor() noexcept = default;
         ~render_graph_executor() = default;
 
         render_graph_executor(const render_graph_executor&) = delete;
@@ -92,13 +98,16 @@ namespace tempest::render_graph
         render_graph_executor(render_graph_executor&&) noexcept = default;
         render_graph_executor& operator=(render_graph_executor&&) noexcept = default;
 
-        /// \brief Execute the render graph on the target device with optional frame sync primitives as a coroutine.
+        /// \brief Execute the render graph on the target device with optional frame sync primitives.
         auto execute(rhi::device& dev, render_graph& graph, const frame_sync_options& frame_sync = {})
-            -> job::task<expected<void, execution_error>>;
-
-        /// \brief Synchronously execute the render graph by driving coroutine completion.
-        auto execute_sync(rhi::device& dev, render_graph& graph, const frame_sync_options& frame_sync = {})
             -> expected<void, execution_error>;
+
+        /// \brief Synchronously execute the render graph.
+        auto execute_sync(rhi::device& dev, render_graph& graph, const frame_sync_options& frame_sync = {})
+            -> expected<void, execution_error>
+        {
+            return execute(dev, graph, frame_sync);
+        }
 
         /// \brief Clean up allocated sync primitives and query pools on shutdown.
         void release(rhi::device& dev);
@@ -116,7 +125,6 @@ namespace tempest::render_graph
       private:
         auto get_execution_port(rhi::device& dev, queue_type queue) -> rhi::execution_port&;
 
-        non_null<job::job_system> _jobs;
         barrier_solver _barrier_solver;
         flat_unordered_map<queue_type, rhi::semaphore_handle> _queue_timeline_semaphores{};
         flat_unordered_map<queue_type, uint64_t> _queue_timeline_values{};

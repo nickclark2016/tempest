@@ -104,7 +104,6 @@ namespace tempest
                 .asset_db = &_asset_database,
                 .profiler = &_profiler_session,
             });
-            builder.set_job_system(*_job_system);
             _renderer = builder.build(*_device, _logger);
         }
     }
@@ -503,9 +502,12 @@ namespace tempest
             return;
         }
 
-        for (auto& win : _windows)
-        {
-            [[maybe_unused]] auto result = _renderer->render_frame(win.handle);
-        }
+        _with_pass_dispatcher([this](render_graph::pass_dispatcher_fn pass_dispatcher) {
+            for (auto& win : _windows)
+            {
+                [[maybe_unused]] auto result =
+                    _renderer->render_frame(win.handle, nullopt, nullptr, nullopt, pass_dispatcher);
+            }
+        });
     }
 } // namespace tempest

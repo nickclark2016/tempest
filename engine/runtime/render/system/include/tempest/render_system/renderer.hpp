@@ -25,11 +25,6 @@
 
 #include <tempest/profiler/profiler.hpp>
 
-namespace tempest::job
-{
-    class job_system;
-}
-
 namespace tempest::render_system
 {
     static constexpr auto full_pipeline_statistics = rhi::pipeline_statistic_flags::input_assembly_vertices |
@@ -65,7 +60,6 @@ namespace tempest::render_system
         const core::material_registry* materials{nullptr};
         non_null<assets::asset_database> asset_db;
         profiler::profiler_session* profiler{nullptr};
-        job::job_system* jobs{nullptr};
     };
 
     class TEMPEST_API renderer
@@ -88,23 +82,15 @@ namespace tempest::render_system
                 return *this;
             }
 
-            builder& set_job_system(job::job_system& jobs)
-            {
-                _jobs = &jobs;
-                return *this;
-            }
-
             [[nodiscard]] auto build(rhi::device& dev, logger& log) -> unique_ptr<renderer>;
-            [[nodiscard]] auto build(rhi::device& dev, logger& log, job::job_system& jobs) -> unique_ptr<renderer>;
 
           private:
             renderer_config _cfg{};
             optional<renderer_inputs> _inputs{};
-            job::job_system* _jobs{nullptr};
         };
 
         renderer(rhi::device& dev, logger& log, renderer_config cfg, renderer_inputs inputs,
-                 unique_ptr<camera_system> camera_sys = nullptr, job::job_system* jobs = nullptr);
+                 unique_ptr<camera_system> camera_sys = nullptr);
         ~renderer();
 
         renderer(const renderer&) = delete;
@@ -153,17 +139,15 @@ namespace tempest::render_system
         /// @brief Executes the compiled Render Graph DAG on the GPU.
         auto render(const render_graph::frame_sync_options& sync = {}) -> expected<void, render_graph::execution_error>;
 
-        /// @brief Asynchronously executes the compiled Render Graph DAG on the GPU as a coroutine.
-        auto render_async(const render_graph::frame_sync_options& sync = {})
-            -> job::task<expected<void, render_graph::execution_error>>;
-
         /// @brief Presents the acquired swapchain image for the specified window surface.
         auto present(window_handle win = null_window_handle) -> expected<void, rhi::swapchain_error>;
 
         /// @brief Complete frame execution: begins frame, prepares DAG, renders, and presents to window surface.
         auto render_frame(window_handle win = null_window_handle, optional<render_camera> camera_override = nullopt,
                           ui_render_callback ui_callback = nullptr,
-                          optional<uint64_t> frame_index = nullopt) -> expected<void, render_graph::execution_error>;
+                          optional<uint64_t> frame_index = nullopt,
+                          optional<render_graph::pass_dispatcher_fn> pass_dispatcher = nullopt)
+            -> expected<void, render_graph::execution_error>;
 
         /// @brief Resizes default render target configuration.
         void resize(uint32_t width, uint32_t height);
@@ -400,8 +384,6 @@ namespace tempest::render_system
         resource_pool _pool;
         shader_manager _shaders;
         profiler::profiler_session _fallback_profiler{false};
-        unique_ptr<job::job_system> _owned_jobs{};
-        non_null<job::job_system> _jobs;
         render_graph::render_graph _graph;
 
         // Persistent Directional Shadow Atlas
