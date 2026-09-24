@@ -93,21 +93,34 @@ namespace tempest::math
     template <typename T>
     inline constexpr quat<T> operator*(const quat<T>& lhs, const quat<T>& rhs)
     {
-        // w0 * w1 - x0 * x1 - y0 * y1 - z0 * z1
-        // w0 * x1 + x0 * w1 + y0 * z1 - z0 * y1
-        // w0 * y1 - x0 * z1 + y0 * w1 + z0 * x1
-        // w0 * z1 + x0 * y1 - y0 * x1 + z0 * w1
-
-        return quat(lhs.w * rhs.w - lhs.x * rhs.x - lhs.y * rhs.y - lhs.z * rhs.z,
-                    lhs.w * rhs.x + lhs.x * rhs.w + lhs.y * rhs.z - lhs.z * rhs.y,
+        return quat(lhs.w * rhs.x + lhs.x * rhs.w + lhs.y * rhs.z - lhs.z * rhs.y,
                     lhs.w * rhs.y - lhs.x * rhs.z + lhs.y * rhs.w + lhs.z * rhs.x,
-                    lhs.w * rhs.z + lhs.x * rhs.y - lhs.y * rhs.x + lhs.z * rhs.w);
+                    lhs.w * rhs.z + lhs.x * rhs.y - lhs.y * rhs.x + lhs.z * rhs.w,
+                    lhs.w * rhs.w - lhs.x * rhs.x - lhs.y * rhs.y - lhs.z * rhs.z);
     }
 
     template <typename T>
     inline constexpr quat<T> operator*(const T lhs, const quat<T>& rhs)
     {
-        return quat(lhs * rhs.w, lhs * rhs.x, lhs * rhs.y, lhs * rhs.z);
+        return quat(lhs * rhs.x, lhs * rhs.y, lhs * rhs.z, lhs * rhs.w);
+    }
+
+    template <typename T>
+    inline constexpr quat<T> operator*(const quat<T>& lhs, const T rhs)
+    {
+        return quat(lhs.x * rhs, lhs.y * rhs, lhs.z * rhs, lhs.w * rhs);
+    }
+
+    template <typename T>
+    inline constexpr quat<T> operator+(const quat<T>& lhs, const quat<T>& rhs)
+    {
+        return quat(lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w);
+    }
+
+    template <typename T>
+    inline constexpr quat<T> operator-(const quat<T>& lhs, const quat<T>& rhs)
+    {
+        return quat(lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z, lhs.w - rhs.w);
     }
 
     template <typename T>
@@ -137,7 +150,7 @@ namespace tempest::math
     template <typename T>
     inline constexpr quat<T> operator-(const quat<T>& q)
     {
-        return quat(-q.w, -q.x, -q.y, -q.z);
+        return quat(-q.x, -q.y, -q.z, -q.w);
     }
 
     template <typename T>
@@ -195,6 +208,50 @@ namespace tempest::math
         const T y = yaw(q);
         const T z = roll(q);
         return vec3(x, y, z);
+    }
+
+    template <typename T>
+    inline constexpr T dot(const quat<T>& lhs, const quat<T>& rhs) noexcept
+    {
+        return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w;
+    }
+
+    template <typename T>
+    inline constexpr quat<T> slerp(const quat<T>& start, const quat<T>& end, T alpha) noexcept
+    {
+        auto cos_theta = dot(start, end);
+        auto target = end;
+
+        // If the dot product is negative, slerp won't take the shorter path.
+        // Invert one quaternion to reverse the rotation direction.
+        if (cos_theta < static_cast<T>(0))
+        {
+            target = -target;
+            cos_theta = -cos_theta;
+        }
+
+        // If cos_theta is very close to 1, linear interpolation (nlerp) avoids division by zero.
+        if (cos_theta > static_cast<T>(1) - static_cast<T>(1e-4))
+        {
+            const auto result = quat<T>(
+                math::lerp(start.x, target.x, alpha),
+                math::lerp(start.y, target.y, alpha),
+                math::lerp(start.z, target.z, alpha),
+                math::lerp(start.w, target.w, alpha));
+            return normalize(result);
+        }
+
+        const auto clamped_cos = clamp(cos_theta, static_cast<T>(-1), static_cast<T>(1));
+        const auto theta = math::acos(clamped_cos);
+        const auto sin_theta = math::sin(theta);
+        const auto scale_start = math::sin((static_cast<T>(1) - alpha) * theta) / sin_theta;
+        const auto scale_target = math::sin(alpha * theta) / sin_theta;
+
+        return quat<T>(
+            scale_start * start.x + scale_target * target.x,
+            scale_start * start.y + scale_target * target.y,
+            scale_start * start.z + scale_target * target.z,
+            scale_start * start.w + scale_target * target.w);
     }
 
     using fquat = quat<float>;

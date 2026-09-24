@@ -12,6 +12,7 @@ This directory contains architectural and mathematical design documents for the 
 * **[Decoupled Viewport Dimensions](proposals/decoupled_viewport_dimensions.md)**: Details decoupling 3D offscreen scene render target dimensions from swapchain window dimensions to optimize fillrate, VRAM, and dynamic docking resize in editor workflows.
 * **[Multi-Window Presentation Lifecycle](proposals/multi_window_presentation.md)**: Details batch multi-surface rendering, frame flight synchronization, and presentation across multiple top-level OS windows.
 * **[Coroutine-Native Job System](proposals/coroutine_job_system.md)**: Details an asynchronous C++20 coroutine job system with topology pinning (P/E cores), coroutine-aware sync, channels, zero-exception expected handling, cross-thread profiler awareness, non-blocking GPU sync points, and concurrent render command recording.
+* **[Networked Physics, Client Prediction & Procedural World](proposals/networked_physics_world_generation.md)**: Details a server-authoritative multiplayer physics pipeline (Jolt), input ring-buffer client prediction and reconciliation, remote entity dead reckoning, and a shared deterministic macro/micro procedural world generation model.
 
 ### PBR & Render Pipeline Performance Overhaul
 

@@ -402,10 +402,10 @@ namespace tempest::math
         return (value - low) / (high - low);
     }
 
-    template <typename T>
-    constexpr auto lerp(const T low, const T high, const T t) noexcept -> T
+    template <typename T, typename Factor = T>
+    constexpr auto lerp(const T& low, const T& high, const Factor t) noexcept -> T
     {
-        return low + t * (high - low);
+        return low + (high - low) * t;
     }
 
     template <typename T>

@@ -16,7 +16,7 @@ namespace tempest::ecs
         {
             transform_component tx;
             tx._position = math::vec3<float>(0.0f);
-            tx._rotation = math::vec3<float>(0.0f);
+            tx._rotation = math::quat<float>(0.0f, 0.0f, 0.0f, 1.0f);
             tx._scale = math::vec3<float>(1.0f);
             tx._transform = math::mat4<float>(1.0f);
 
@@ -36,12 +36,23 @@ namespace tempest::ecs
 
         math::vec3<float> rotation() const noexcept
         {
-            return _rotation;
+            return math::euler(_rotation);
         }
 
         void rotation(math::vec3<float> r)
         {
-            _rotation = r;
+            _rotation = math::quat<float>(r);
+            _build_transform();
+        }
+
+        math::quat<float> rotation_quat() const noexcept
+        {
+            return _rotation;
+        }
+
+        void rotation(math::quat<float> q)
+        {
+            _rotation = q;
             _build_transform();
         }
 
@@ -61,9 +72,16 @@ namespace tempest::ecs
             return _transform;
         }
 
+        void set(math::vec3<float> position, math::quat<float> rotation)
+        {
+            _position = position;
+            _rotation = rotation;
+            _build_transform();
+        }
+
       private:
         math::vec3<float> _position;
-        math::vec3<float> _rotation;
+        math::quat<float> _rotation;
         math::vec3<float> _scale;
         math::mat4<float> _transform;
 

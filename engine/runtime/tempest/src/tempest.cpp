@@ -5,8 +5,8 @@
 #include <tempest/logger.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/render_system/renderer.hpp>
-#include <tempest/rhi.hpp>
 #include <tempest/tempest.hpp>
+#include <tempest/transform_history_system.hpp>
 
 #include <clocale>
 #include <cstdlib>
@@ -38,9 +38,10 @@ namespace tempest
         }
     } // namespace
 
-    standalone_engine_context::standalone_engine_context()
+    standalone_engine_context::standalone_engine_context(const engine_config& config)
         : _log_sinks(make_default_log_sinks()), _logger(make_default_logger(_log_sinks)),
-          _entity_registry(_event_registry), _asset_database(&_asset_type_reg)
+          _entity_registry(_event_registry), _asset_database(&_asset_type_reg),
+          _config{config}, _accumulator{config.fixed_timestep, config.max_frame_delta}
     {
         if (::setlocale(LC_ALL, "en_US.UTF-8") == nullptr)
         {
@@ -56,27 +57,30 @@ namespace tempest
         assets::mount_default_shader_roots(_asset_database);
         _asset_database.scan_and_index();
 
-        auto ctx_desc = rhi::context_desc{
-            .application_name = "Tempest Engine",
-            .version_major = 1,
-            .version_minor = 0,
-            .version_patch = 0,
-#if defined(TEMPEST_CONFIG_RELEASE) && !defined(TEMPEST_DEBUG_SHADERS)
-            .enable_api_validation = false,
-#else
-            .enable_api_validation = true,
-#endif
-            .api = rhi::graphics_api::vulkan,
-        };
-
-        auto ctx_res = rhi::create_context(ctx_desc, _logger);
-        if (ctx_res.has_value())
+        if (!_config.headless)
         {
-            _rhi_context = tempest::move(ctx_res).value();
-            auto devices = _rhi_context->enumerate_devices();
-            if (!devices.empty())
+            auto ctx_desc = rhi::context_desc{
+                .application_name = "Tempest Engine",
+                .version_major = 1,
+                .version_minor = 0,
+                .version_patch = 0,
+#if defined(TEMPEST_CONFIG_RELEASE) && !defined(TEMPEST_DEBUG_SHADERS)
+                .enable_api_validation = false,
+#else
+                .enable_api_validation = true,
+#endif
+                .api = rhi::graphics_api::vulkan,
+            };
+
+            auto ctx_res = rhi::create_context(ctx_desc, _logger);
+            if (ctx_res.has_value())
             {
-                _device = _rhi_context->create_device(devices[0].device_uuid);
+                _rhi_context = tempest::move(ctx_res).value();
+                auto devices = _rhi_context->enumerate_devices();
+                if (!devices.empty())
+                {
+                    _device = _rhi_context->create_device(devices[0].device_uuid);
+                }
             }
         }
 
@@ -85,7 +89,7 @@ namespace tempest
             .topology = job::discover_cpu_topology(),
         });
 
-        if (_device)
+        if (_device && !_config.headless)
         {
             constexpr uint32_t default_render_width = 1920;
             constexpr uint32_t default_render_height = 1080;
@@ -234,6 +238,12 @@ namespace tempest
         _on_variable_update_callbacks.push_back(tempest::move(callback));
     }
 
+    auto standalone_engine_context::register_on_interpolate_callback(
+        function<void(engine_context&, float)> callback) -> void
+    {
+        _on_interpolate_callbacks.push_back(tempest::move(callback));
+    }
+
     auto standalone_engine_context::request_close(bool close) -> void
     {
         _should_close = close;
@@ -260,42 +270,61 @@ namespace tempest
         }
         _logger.trace("Finished initialization callbacks");
 
-        constexpr double target_frames_per_second = 60.0;
-        auto simulated_time = chrono::duration<double>(0.0);
-        auto delta_time = chrono::duration<double>(1.0 / target_frames_per_second);
-
+        _accumulator.reset();
         auto current_time = chrono::steady_clock::now();
-        auto accumulator = chrono::duration<double>(0.0);
         _last_frame_time = current_time;
 
         _logger.trace("Starting main loop");
         while (!_should_close)
         {
-            auto frame_start_time = chrono::steady_clock::now();
-            auto delta = chrono::duration_cast<chrono::duration<float>>(frame_start_time - _last_frame_time);
+            const auto frame_start_time = chrono::steady_clock::now();
+            const auto delta = chrono::duration_cast<chrono::duration<float>>(frame_start_time - current_time);
+            current_time = frame_start_time;
+
             _delta_frame_time = delta;
             _last_frame_time = frame_start_time;
 
-            auto new_time = chrono::steady_clock::now();
-            auto frame_time = new_time - current_time;
-            current_time = new_time;
+            _accumulator.accumulate(delta.count());
 
-            accumulator += frame_time;
-
-            while (accumulator >= delta_time)
+            while (_accumulator.has_pending_ticks())
             {
-                _update_fixed(chrono::duration_cast<chrono::duration<float>>(delta_time));
+                ecs::step_transform_history(_entity_registry);
+                _update_fixed(chrono::duration<float>(_accumulator.fixed_delta()));
                 if (_should_close)
                 {
                     goto exit_main_loop;
                 }
-
-                simulated_time += delta_time;
-                accumulator -= delta_time;
+                _accumulator.consume_tick();
             }
 
             _update_variable(_delta_frame_time);
-            _render_frame();
+
+            if (!_config.headless)
+            {
+                const auto alpha = _accumulator.alpha();
+                ecs::interpolate_transform_history(_entity_registry, alpha);
+
+                for (auto&& interpolate_cb : _on_interpolate_callbacks)
+                {
+                    interpolate_cb(*this, alpha);
+                }
+
+                _render_frame();
+            }
+            else
+            {
+                const auto frame_elapsed =
+                    chrono::duration_cast<chrono::duration<float>>(chrono::steady_clock::now() - frame_start_time).count();
+                const auto remaining = _accumulator.fixed_delta() - _accumulator.accumulated_time() - frame_elapsed;
+                if (remaining > 0.001F)
+                {
+                    this_thread::sleep_for(chrono::duration<float>(remaining));
+                }
+                else
+                {
+                    this_thread::yield();
+                }
+            }
         }
 
     exit_main_loop:
@@ -473,7 +502,7 @@ namespace tempest
             }
         }
 
-        if (_windows.empty())
+        if (!_config.headless && _windows.empty())
         {
             _should_close = true;
             return;

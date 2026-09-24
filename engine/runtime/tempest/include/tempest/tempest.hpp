@@ -20,9 +20,18 @@
 #include <tempest/window_manager.hpp>
 
 #include <tempest/chrono.hpp>
+#include <tempest/fixed_timestep_accumulator.hpp>
 
 namespace tempest
 {
+    /// \brief Configuration options for initializing standalone_engine_context.
+    struct TEMPEST_API engine_config
+    {
+        bool headless{false};
+        float fixed_timestep{1.0F / 60.0F};
+        float max_frame_delta{0.1F};
+    };
+
     /// \brief The engine context is the main interface for interacting with the engine.
     /// It provides access to the core systems of the engine and allows for registration of windows and execution
     /// callbacks.
@@ -61,6 +70,10 @@ namespace tempest
         /// \brief Registers a callback to be executed on variable update.
         virtual auto register_on_variable_update_callback(
             function<void(engine_context&, chrono::duration<float>)> callback) -> void = 0;
+
+        /// \brief Registers a callback to be executed before rendering to interpolate state.
+        virtual auto register_on_interpolate_callback(
+            function<void(engine_context&, float)> callback) -> void = 0;
 
         /// \brief Runs the engine, executing the main loop and processing events.
         virtual auto run() -> void = 0;
@@ -118,7 +131,7 @@ namespace tempest
             rhi::raw_surface_handle raw_surface{};
         };
 
-        standalone_engine_context();
+        explicit standalone_engine_context(const engine_config& config = {});
         standalone_engine_context(const standalone_engine_context&) = delete;
         standalone_engine_context(standalone_engine_context&&) noexcept = delete;
         ~standalone_engine_context() override;
@@ -133,8 +146,25 @@ namespace tempest
             -> void override;
         auto register_on_variable_update_callback(function<void(engine_context&, chrono::duration<float>)> callback)
             -> void override;
+        auto register_on_interpolate_callback(function<void(engine_context&, float)> callback)
+            -> void override;
 
         auto run() -> void override;
+
+        [[nodiscard]] auto get_config() const noexcept -> const engine_config&
+        {
+            return _config;
+        }
+
+        [[nodiscard]] auto get_accumulator() const noexcept -> const fixed_timestep_accumulator&
+        {
+            return _accumulator;
+        }
+
+        [[nodiscard]] auto get_accumulator() noexcept -> fixed_timestep_accumulator&
+        {
+            return _accumulator;
+        }
 
         [[nodiscard]] auto get_entities() -> ecs::archetype_registry& override;
         [[nodiscard]] auto get_entities() const -> const ecs::archetype_registry& override;
@@ -224,6 +254,10 @@ namespace tempest
         vector<function<void(engine_context&)>> _on_close_callbacks;
         vector<function<void(engine_context&, chrono::duration<float>)>> _on_fixed_update_callbacks;
         vector<function<void(engine_context&, chrono::duration<float>)>> _on_variable_update_callbacks;
+        vector<function<void(engine_context&, float)>> _on_interpolate_callbacks;
+
+        engine_config _config{};
+        fixed_timestep_accumulator _accumulator{};
 
         chrono::steady_clock::time_point _last_frame_time;
         chrono::duration<float> _delta_frame_time{0.0F};
@@ -258,16 +292,21 @@ namespace tempest
             }
 
             auto remaining = atomic<size_t>{passes.size()};
-            auto tasks = vector<job::task<void>>{};
-            tasks.reserve(passes.size());
+
+            auto launch_pass = [](job::job_allocator&, // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
+                                  job::job_system&,    // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
+                                  function_ref<void()> record_fn,
+                                  atomic<size_t>* rem) -> job::detail::detached_task {
+                record_fn();
+                rem->fetch_sub(1, memory_order::acq_rel);
+                co_return;
+            };
 
             for (const auto& pass : passes)
             {
-                tasks.push_back(_job_system->async(job::task_priority::high, job::core_class::performance,
-                                                   [&pass, &remaining]() {
-                                                       pass.record_fn();
-                                                       remaining.fetch_sub(1, memory_order::acq_rel);
-                                                   }));
+                auto task = launch_pass(_job_system->get_dispatch_allocator(), *_job_system,
+                                        pass.record_fn, &remaining);
+                _job_system->schedule(task.handle, job::task_priority::high, job::core_class::performance);
             }
 
             while (remaining.load(memory_order::acquire) > 0)

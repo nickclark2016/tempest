@@ -1029,7 +1029,37 @@ namespace tempest::render_system
         }
 
         // 2. Automatically update dynamic lights from entity registry
-        if (_lights_dirty_count > 0 && _inputs.entity_registry != nullptr)
+        auto needs_light_update = (_lights_dirty_count > 0);
+        if (!needs_light_update && _inputs.entity_registry != nullptr && !_point_light_entities.empty())
+        {
+            if (_cached_lights.size() != _point_light_entities.size())
+            {
+                needs_light_update = true;
+                _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+            }
+            else
+            {
+                for (size_t i = 0; i < _point_light_entities.size(); ++i)
+                {
+                    const auto entity = _point_light_entities[i];
+                    if (_inputs.entity_registry->try_get<ecs::transform_component>(entity) != nullptr)
+                    {
+                        const auto world_mat = compute_world_matrix(*_inputs.entity_registry, entity);
+                        const auto world_pos = math::vec3<float>{world_mat[3][0], world_mat[3][1], world_mat[3][2]};
+                        if (world_pos.x != _cached_lights[i].position_falloff.x ||
+                            world_pos.y != _cached_lights[i].position_falloff.y ||
+                            world_pos.z != _cached_lights[i].position_falloff.z)
+                        {
+                            needs_light_update = true;
+                            _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (needs_light_update && _inputs.entity_registry != nullptr)
         {
             _cached_lights.clear();
             _cached_lights.reserve(_point_light_entities.size());
