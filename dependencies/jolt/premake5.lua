@@ -7,8 +7,10 @@ project 'jolt'
     objdir '%{intermediates}'
 
     files {
-        'include/**',
-        'src/**',
+        'include/**.h',
+        'include/**.inl',
+        'src/**.cpp',
+        'src/**.h',
     }
 
     includedirs {
