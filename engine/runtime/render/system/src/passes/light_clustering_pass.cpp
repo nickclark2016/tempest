@@ -57,6 +57,7 @@ namespace tempest::render_system
     auto add_light_clustering_pass(render_graph::render_graph& graph, [[maybe_unused]] resource_pool& pool,
                                    shader_manager& shaders, render_graph::rg_buffer_id cluster_bounds_buf,
                                    const render_camera& cam, uint32_t screen_width, uint32_t screen_height,
+                                   float near_plane, float far_plane,
                                    uint32_t cluster_count_x, uint32_t cluster_count_y, uint32_t cluster_count_z,
                                    enum_mask<rhi::pipeline_statistic_flags> pipeline_stats)
         -> const light_clustering_pass_data&
@@ -83,7 +84,7 @@ namespace tempest::render_system
 
         const auto create_info = cluster_grid_create_info{
             .inv_projection = cam.inv_proj,
-            .screen_bounds = {static_cast<float>(screen_width), static_cast<float>(screen_height), 0.1F, 1000.0F},
+            .screen_bounds = {static_cast<float>(screen_width), static_cast<float>(screen_height), near_plane, far_plane},
             .workgroup_count_tile_size_px = grid_dims,
         };
 

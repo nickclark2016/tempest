@@ -729,6 +729,143 @@ namespace tempest::render_system::tests
         dev->destroy_buffer(readback_buf);
     }
 
+    /// @brief Tests that cluster grid generation correctly handles dynamic near/far planes,
+    /// verifies view-space bounding box symmetry across all 4 frustum quadrants, and ensures
+    /// non-standard aspect ratios cover the full viewport symmetrically without gaps.
+    TEST(render_system_tests, light_clustering_quadrants_and_dynamic_near_plane)
+    {
+        // 1. Setup test device and rendering context
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
+
+        // Test non-standard 16:10 aspect ratio (1920x1200) with dynamic near plane = 0.05F
+        const auto screen_width = 1920U;
+        const auto screen_height = 1200U;
+        const auto test_near = 0.05F;
+        const auto test_far = 500.0F;
+
+        auto graph = render_graph::render_graph{screen_width, screen_height};
+
+        const auto aspect = static_cast<float>(screen_width) / static_cast<float>(screen_height);
+        const auto proj = math::perspective(aspect, 1.0F, test_near, test_far);
+        const auto inv_proj = math::inverse(proj);
+
+        const auto cam = render_camera{
+            .proj = proj,
+            .inv_proj = inv_proj,
+            .view = math::mat4<float>{1.0F},
+            .inv_view = math::mat4<float>{1.0F},
+            .eye_position = {0.0F, 0.0F, 0.0F, 1.0F},
+        };
+
+        const auto grid_dims = compute_cluster_grid_dimensions(screen_width, screen_height);
+        const auto cx = grid_dims.x;
+        const auto cy = grid_dims.y;
+        const auto cz = grid_dims.z;
+        const auto total_clusters = cx * cy * cz;
+
+        auto cluster_bounds_buf = graph.create_buffer(render_graph::rg_buffer_desc{
+            .size = total_clusters * sizeof(cluster_bounds),
+            .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address |
+                     rhi::buffer_usage::transfer_src,
+            .name = "ClusterBoundsBuffer_QuadrantsTest",
+        });
+
+        // 2. Act: add clustering pass with explicit near and far planes
+        const auto& cluster_data = add_light_clustering_pass(graph, pool, shaders, cluster_bounds_buf, cam,
+                                                             screen_width, screen_height, test_near, test_far);
+
+        struct dummy_sink_data
+        {
+            render_graph::rg_buffer_id buf;
+        };
+        graph.add_compute_pass<dummy_sink_data>(
+            "ClusterBoundsSink",
+            [buf_id = cluster_data.cluster_bounds_buffer](render_graph::pass_builder& builder,
+                                                          dummy_sink_data& data) -> void {
+                data.buf = builder.read(buf_id, rhi::pipeline_stage::compute, rhi::resource_access::read);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const dummy_sink_data& data, [[maybe_unused]] render_graph::pass_execution_context& ctx,
+               [[maybe_unused]] rhi::command_list& cmd) -> void {});
+
+        auto res = graph.execute_sync(*dev);
+        EXPECT_TRUE(res.has_value());
+        dev->wait_idle();
+
+        // 3. Assert: read back cluster bounds and verify depth range and quadrant symmetry
+        auto cluster_readback = dev->create_buffer(rhi::buffer_desc{
+            .size = total_clusters * sizeof(cluster_bounds),
+            .memory_usage = rhi::memory_usage::readback,
+            .usage = rhi::buffer_usage::transfer_dst,
+            .name = "ClusterReadbackBuffer_QuadrantsTest",
+        });
+
+        const auto* cluster_alloc = graph.get_physical_buffer(cluster_bounds_buf.id);
+        ASSERT_NE(cluster_alloc, nullptr);
+        if (cluster_alloc != nullptr)
+        {
+            auto& port = dev->get_graphics_execution_port();
+            auto& cmd = port.acquire_command_list();
+            cmd.begin();
+            const auto copy_region = rhi::buffer_copy_region{
+                .src_offset = 0,
+                .dst_offset = 0,
+                .size = total_clusters * sizeof(cluster_bounds),
+            };
+            cmd.copy_buffer(cluster_alloc->handle, cluster_readback,
+                            span<const rhi::buffer_copy_region>{&copy_region, 1});
+            cmd.end();
+            auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+            [[maybe_unused]] auto submit_res =
+                port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+            dev->wait_idle();
+
+            const auto* cb = static_cast<const cluster_bounds*>(cluster_readback.cpu_address);
+            ASSERT_NE(cb, nullptr);
+
+            // Verify depth range reflects dynamic near plane (test_near = 0.05F)
+            // Cluster slice 0's max_corner.z must be at -test_near (-0.05F)
+            EXPECT_NEAR(cb[0].max_corner.z, -test_near, 1e-3F);
+            EXPECT_LT(cb[0].min_corner.z, cb[0].max_corner.z);
+
+            // Verify 4 frustum corners on slice 0:
+            // Top-left: wx = 0, wy = 0
+            const auto idx_tl = 0U;
+            // Top-right: wx = cx - 1, wy = 0
+            const auto idx_tr = cx - 1U;
+            // Bottom-left: wx = 0, wy = cy - 1
+            const auto idx_bl = (cy - 1U) * cx;
+            // Bottom-right: wx = cx - 1, wy = cy - 1
+            const auto idx_br = (cx - 1U) + (cy - 1U) * cx;
+
+            // Quadrant checks
+            // Top-left (X < 0, Y > 0)
+            EXPECT_LT(cb[idx_tl].min_corner.x, 0.0F);
+            EXPECT_GT(cb[idx_tl].max_corner.y, 0.0F);
+            // Top-right (X > 0, Y > 0)
+            EXPECT_GT(cb[idx_tr].max_corner.x, 0.0F);
+            EXPECT_GT(cb[idx_tr].max_corner.y, 0.0F);
+            // Bottom-left (X < 0, Y < 0)
+            EXPECT_LT(cb[idx_bl].min_corner.x, 0.0F);
+            EXPECT_LT(cb[idx_bl].min_corner.y, 0.0F);
+            // Bottom-right (X > 0, Y < 0)
+            EXPECT_GT(cb[idx_br].max_corner.x, 0.0F);
+            EXPECT_LT(cb[idx_br].min_corner.y, 0.0F);
+
+            // Bilateral symmetry checks (left vs right, top vs bottom)
+            EXPECT_NEAR(cb[idx_tl].min_corner.x, -cb[idx_tr].max_corner.x, 1e-4F);
+            EXPECT_NEAR(cb[idx_tl].max_corner.y, -cb[idx_bl].min_corner.y, 1e-4F);
+            EXPECT_NEAR(cb[idx_tr].max_corner.y, -cb[idx_br].min_corner.y, 1e-4F);
+        }
+
+        dev->destroy_buffer(cluster_readback);
+    }
+
     TEST(render_system_tests, clustered_lighting_and_culling_execution)
     {
         auto fixture = create_test_device();

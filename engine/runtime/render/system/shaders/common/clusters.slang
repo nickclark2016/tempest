@@ -55,10 +55,9 @@ Optional<uint> get_cluster_index(float3 view_pos, float2 screen_coord, SceneGlob
     }
 
     uint4 cluster_counts_tile_size = scene.cluster_counts_tile_size;
-    uint tile_size_px = cluster_counts_tile_size.w;
 
-    uint tile_x = min(uint(screen_coord.x / float(tile_size_px)), cluster_counts_tile_size.x - 1);
-    uint tile_y = min(uint(screen_coord.y / float(tile_size_px)), cluster_counts_tile_size.y - 1);
+    uint tile_x = min(uint(screen_coord.x * scene.inv_screen_size.x * float(cluster_counts_tile_size.x)), cluster_counts_tile_size.x - 1);
+    uint tile_y = min(uint(screen_coord.y * scene.inv_screen_size.y * float(cluster_counts_tile_size.y)), cluster_counts_tile_size.y - 1);
     uint tile_z = compute_cluster_z_index(view_pos.z, z_near, z_far, cluster_counts_tile_size.z);
 
     return tile_x + tile_y * cluster_counts_tile_size.x + tile_z * cluster_counts_tile_size.x * cluster_counts_tile_size.y;

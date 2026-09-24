@@ -1397,6 +1397,7 @@ namespace tempest::render_system
 
         const auto& cluster_data =
             add_light_clustering_pass(_graph, _pool, _shaders, _cluster_bounds_target, active_cam, width, height,
+                                      valid_near, far_plane,
                                       grid_dims.x, grid_dims.y, grid_dims.z, cs_stats);
 
         auto lights_buf = _graph.import_buffer(_pool.get_lights_buffer());

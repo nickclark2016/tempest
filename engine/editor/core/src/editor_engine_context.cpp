@@ -10,6 +10,7 @@
 #include <tempest/span.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
+#include <tempest/transform_history_system.hpp>
 #include <tempest/ui.hpp>
 #include <tempest/vector.hpp>
 
@@ -407,6 +408,8 @@ namespace tempest::editor
             {
                 while (accumulator >= delta_time)
                 {
+                    ecs::step_transform_history(_entity_registry);
+
                     for (auto&& callback : _on_fixed_update_callbacks)
                     {
                         callback(*this, tempest::chrono::duration_cast<tempest::chrono::duration<float>>(delta_time));
@@ -423,6 +426,14 @@ namespace tempest::editor
                 for (auto&& callback : _on_variable_update_callbacks)
                 {
                     callback(*this, _delta_frame_time);
+                }
+
+                const auto alpha = static_cast<float>(accumulator.count() / delta_time.count());
+                ecs::interpolate_transform_history(_entity_registry, alpha);
+
+                for (auto&& interpolate_cb : _on_interpolate_callbacks)
+                {
+                    interpolate_cb(*this, alpha);
                 }
             }
             else

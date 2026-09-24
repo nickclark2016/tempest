@@ -11,6 +11,7 @@
 #include <tempest/render_system/camera_system.hpp>
 #include <tempest/render_system/render_components.hpp>
 #include <tempest/transform_component.hpp>
+#include <tempest/transform_history_component.hpp>
 #include <tempest/ui.hpp>
 #include <tempest/vk/context.hpp>
 #include <tempest/window_manager.hpp>
@@ -442,5 +443,63 @@ namespace tempest::editor::tests
         rend.resize(800, 600);
         EXPECT_EQ(rend.get_config().render_width, 800U);
         EXPECT_EQ(rend.get_config().render_height, 600U);
+    }
+
+    /// @brief Verifies that in play mode, fixed update callbacks update transform_history_component
+    /// and that transform_component is properly synchronized via step and interpolate history.
+    TEST(editor_window_test, play_mode_steps_and_interpolates_transform_history)
+    {
+        // 1. Setup engine context and entity with transform and transform_history
+        auto engine_ctx = editor_engine_context{};
+        const auto desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Play Mode Transform History Test",
+            .fullscreen = false,
+            .resizable = true,
+        };
+
+        auto reg_info = engine_ctx.register_window(desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto& reg = engine_ctx.get_entities();
+        auto ent = reg.create();
+
+        const auto initial_pos = math::vec3<float>{1.0F, 2.0F, 3.0F};
+        auto hist = ecs::transform_history_component::create(initial_pos);
+        auto tx = ecs::transform_component::identity();
+        tx.position(initial_pos);
+
+        reg.assign(ent, hist);
+        reg.assign(ent, tx);
+
+        engine_ctx.set_simulation_state(simulation_state::play);
+
+        // 2. Act: register fixed update that moves the entity, and request close after ticks run
+        bool fixed_updated = false;
+        engine_ctx.register_on_fixed_update_callback([&](engine_context& ctx, chrono::duration<float> dt) {
+            fixed_updated = true;
+            auto& entities = ctx.get_entities();
+            entities.each([delta = dt.count()](ecs::transform_history_component& h) {
+                h.current_position.x += 10.0F * delta;
+            });
+        });
+
+        int frame_count = 0;
+        engine_ctx.register_on_editor_update_callback([&](engine_context& ctx) {
+            ++frame_count;
+            if (frame_count >= 3 && fixed_updated)
+            {
+                ctx.request_close();
+            }
+        });
+
+        engine_ctx.run();
+
+        // 3. Assert: transform_component was updated by interpolate_transform_history
+        ASSERT_TRUE(fixed_updated);
+        const auto* updated_tx = reg.try_get<ecs::transform_component>(ent);
+        ASSERT_NE(updated_tx, nullptr);
+        EXPECT_GT(updated_tx->position().x, initial_pos.x);
     }
 } // namespace tempest::editor::tests
