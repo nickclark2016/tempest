@@ -2,6 +2,7 @@ scoped.group('Vendor', function()
     include 'glfw'
     include 'googletest'
     include 'imgui'
+    include 'jolt'
     include 'miniz'
     include 'yyjson'
     include 'stb'
