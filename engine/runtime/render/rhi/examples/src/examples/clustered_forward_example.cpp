@@ -151,7 +151,7 @@ namespace tempest::rhi::examples
                                              .vertical_fov = 1.04719755F, // 60 degrees
                                              .near_plane = 0.1F,
                                          });
-        auto cam_tx = ecs::transform_component::identity();
+        auto cam_tx = ecs::transform_component{};
         cam_tx.position({0.0F, 1.8F, -4.0F});
         cam_tx.rotation({0.0F, 0.0F, 0.0F});
         _registry.assign(_camera_entity, cam_tx);
@@ -171,7 +171,7 @@ namespace tempest::rhi::examples
                                   .depth_bias = 0.005F,
                                   .debug_mode = render_system::shadow_debug_mode::none,
                               });
-        auto sun_tx = ecs::transform_component::identity();
+        auto sun_tx = ecs::transform_component{};
         sun_tx.rotation({math::as_radians(70.0F), math::as_radians(25.0F), 0.0F});
         _registry.assign(sun, sun_tx);
 
@@ -189,7 +189,7 @@ namespace tempest::rhi::examples
                 _root_entity = prefab_root;
                 if (!_registry.has<ecs::transform_component>(_root_entity))
                 {
-                    _registry.assign(_root_entity, ecs::transform_component::identity());
+                    _registry.assign(_root_entity, ecs::transform_component{});
                 }
             }
         }
@@ -209,7 +209,7 @@ namespace tempest::rhi::examples
             auto ground_ent = _registry.create();
             _registry.assign(ground_ent, core::mesh_component{.mesh_id = ground_mesh_id});
             _registry.assign(ground_ent, core::material_component{.material_id = ground_mat_id});
-            _registry.assign(ground_ent, ecs::transform_component::identity());
+            _registry.assign(ground_ent, ecs::transform_component{});
 
             // Ceiling Plane
             auto ceiling_mat = core::material{};
@@ -221,7 +221,7 @@ namespace tempest::rhi::examples
             auto ceiling_ent = _registry.create();
             _registry.assign(ceiling_ent, core::mesh_component{.mesh_id = ground_mesh_id});
             _registry.assign(ceiling_ent, core::material_component{.material_id = ceiling_mat_id});
-            auto ceiling_tx = ecs::transform_component::identity();
+            auto ceiling_tx = ecs::transform_component{};
             ceiling_tx.position({0.0F, 8.5F, 0.0F});
             ceiling_tx.rotation({math::as_radians(180.0F), 0.0F, 0.0F});
             _registry.assign(ceiling_ent, ceiling_tx);
@@ -252,14 +252,14 @@ namespace tempest::rhi::examples
             auto left_mez = _registry.create();
             _registry.assign(left_mez, core::mesh_component{.mesh_id = mez_mesh_id});
             _registry.assign(left_mez, core::material_component{.material_id = mez_mat_id});
-            auto left_mez_tx = ecs::transform_component::identity();
+            auto left_mez_tx = ecs::transform_component{};
             left_mez_tx.position({0.0F, 4.2F, -3.2F});
             _registry.assign(left_mez, left_mez_tx);
 
             auto right_mez = _registry.create();
             _registry.assign(right_mez, core::mesh_component{.mesh_id = mez_mesh_id});
             _registry.assign(right_mez, core::material_component{.material_id = mez_mat_id});
-            auto right_mez_tx = ecs::transform_component::identity();
+            auto right_mez_tx = ecs::transform_component{};
             right_mez_tx.position({0.0F, 4.2F, 3.2F});
             _registry.assign(right_mez, right_mez_tx);
 
@@ -279,7 +279,7 @@ namespace tempest::rhi::examples
                     auto p_ent = _registry.create();
                     _registry.assign(p_ent, core::mesh_component{.mesh_id = pillar_mesh_id});
                     _registry.assign(p_ent, core::material_component{.material_id = pillar_mat_id});
-                    auto p_tx = ecs::transform_component::identity();
+                    auto p_tx = ecs::transform_component{};
                     p_tx.position({x_pos, 2.1F, side_z});
                     _registry.assign(p_ent, p_tx);
 
@@ -287,7 +287,7 @@ namespace tempest::rhi::examples
                     auto up_ent = _registry.create();
                     _registry.assign(up_ent, core::mesh_component{.mesh_id = upper_pillar_mesh_id});
                     _registry.assign(up_ent, core::material_component{.material_id = pillar_mat_id});
-                    auto up_tx = ecs::transform_component::identity();
+                    auto up_tx = ecs::transform_component{};
                     up_tx.position({x_pos, 6.1F, side_z});
                     _registry.assign(up_ent, up_tx);
 
@@ -297,7 +297,7 @@ namespace tempest::rhi::examples
                         auto arch_ent = _registry.create();
                         _registry.assign(arch_ent, core::mesh_component{.mesh_id = arch_mesh_id});
                         _registry.assign(arch_ent, core::material_component{.material_id = mez_mat_id});
-                        auto arch_tx = ecs::transform_component::identity();
+                        auto arch_tx = ecs::transform_component{};
                         arch_tx.position({x_pos + 0.9F, 4.2F, side_z});
                         _registry.assign(arch_ent, arch_tx);
                     }
@@ -313,7 +313,7 @@ namespace tempest::rhi::examples
                 auto wall_ent = _registry.create();
                 _registry.assign(wall_ent, core::mesh_component{.mesh_id = wall_mesh_id});
                 _registry.assign(wall_ent, core::material_component{.material_id = mez_mat_id});
-                auto wall_tx = ecs::transform_component::identity();
+                auto wall_tx = ecs::transform_component{};
                 wall_tx.position({x_wall, 4.25F, 0.0F});
                 _registry.assign(wall_ent, wall_tx);
             }
@@ -377,7 +377,7 @@ namespace tempest::rhi::examples
                                             .range = range,
                                         });
 
-            auto tx = ecs::transform_component::identity();
+            auto tx = ecs::transform_component{};
             tx.position({0.0F, 1.8F, 0.0F});
             _registry.assign(light_ent, tx);
 

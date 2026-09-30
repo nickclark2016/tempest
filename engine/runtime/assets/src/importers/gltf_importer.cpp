@@ -1395,10 +1395,10 @@ namespace tempest::assets
 
             if (!math::decompose(transform_matrix, translation_vec, rotation_quat, scale_vec))
             {
-                return ecs::transform_component::identity();
+                return ecs::transform_component{};
             }
 
-            auto transform = ecs::transform_component::identity();
+            auto transform = ecs::transform_component{};
             transform.position(translation_vec);
             transform.rotation(math::euler(rotation_quat));
             transform.scale(scale_vec);
@@ -1469,7 +1469,7 @@ namespace tempest::assets
                         {
                             auto child_mesh_ent = registry.create<core::mesh_component, ecs::transform_component>();
                             registry.replace(child_mesh_ent, core::mesh_component{.mesh_id = prim.mesh_id});
-                            registry.replace(child_mesh_ent, ecs::transform_component::identity());
+                            registry.replace(child_mesh_ent, ecs::transform_component{});
 
                             if (prim.material_id.has_value())
                             {
@@ -1495,7 +1495,7 @@ namespace tempest::assets
                     auto transform_opt = extract_transformation_matrix(*node_obj, node_id);
                     auto transform = transform_opt
                                          .or_else([&]() -> optional<ecs::transform_component> {
-                                             auto transform = ecs::transform_component::identity();
+                                             auto transform = ecs::transform_component{};
                                              transform.position(extract_translation(*node_obj));
                                              transform.rotation(extract_rotation(*node_obj));
                                              transform.scale(extract_scale(*node_obj));
@@ -1507,7 +1507,7 @@ namespace tempest::assets
                 }
                 else
                 {
-                    registry.assign(parent_ent, ecs::transform_component::identity());
+                    registry.assign(parent_ent, ecs::transform_component{});
                 }
                 registry.assign(parent_ent, prefab_tag);
 
@@ -1593,7 +1593,7 @@ namespace tempest::assets
                 else if (!registry.has<ecs::transform_component>(child))
                 {
                     // If there is no parent transform, apply a default transform to the child
-                    const auto default_tx = ecs::transform_component::identity();
+                    const auto default_tx = ecs::transform_component{};
                     registry.assign(child, default_tx);
                 }
 

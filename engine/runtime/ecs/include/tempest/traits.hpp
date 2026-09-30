@@ -9,6 +9,14 @@
 
 namespace tempest::ecs
 {
+    /// \brief Concept defining requirements for an ECS component: must be trivially copyable
+    /// and trivially destructible, guaranteeing safe byte relocation and trivial destruction.
+    template <typename T>
+    concept component = is_trivially_copyable_v<T> && is_trivially_destructible_v<T>;
+
+    template <typename T>
+    inline constexpr bool is_component_v = component<T>;
+
     namespace detail
     {
         template <typename>

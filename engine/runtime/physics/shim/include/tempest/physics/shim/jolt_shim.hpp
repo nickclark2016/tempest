@@ -58,6 +58,14 @@ namespace jolt::shim
         moving = 1,
     };
 
+    enum class ground_state : uint8_t
+    {
+        on_ground = 0,
+        on_steep_ground = 1,
+        not_supported = 2,
+        in_air = 3,
+    };
+
     struct raycast_query
     {
         vec3 origin;
@@ -103,6 +111,162 @@ namespace jolt::shim
         log_fn warn = nullptr;
         log_fn error = nullptr;
         void* log_user_data = nullptr;
+    };
+
+    // Character Controller Defaults (matching JPH::CharacterVirtualSettings & JPH::CharacterBaseSettings)
+
+    /// \brief Default world-space up direction vector (0, 1, 0). Matches JPH::CharacterBaseSettings::mUp.
+    inline constexpr vec3 default_character_up{.x=0.0F, .y=1.0F, .z=0.0F};
+
+    /// \brief Default character mass in kilograms (80 kg). Kinematic characters use this mass to exert
+    /// downward force on dynamic bodies they stand on or push against. Sourced from Tempest character specification.
+    inline constexpr float default_character_mass = 80.0F;
+
+    /// \brief Default maximum force in Newtons (100 N) that a character can exert when pushing dynamic rigid bodies.
+    /// Matches JPH::CharacterVirtualSettings::mMaxStrength.
+    inline constexpr float default_character_max_strength = 100.0F;
+
+    /// \brief Default maximum slope angle in radians (~0.872665 rad = 50 degrees) that the character can climb.
+    /// Normal angles exceeding this threshold transition ground state to on_steep_ground. Matches JPH::CharacterBaseSettings::mMaxSlopeAngle.
+    inline constexpr float default_character_max_slope_angle = 0.872665F;
+
+    /// \brief Default local-space shape offset vector (0, 0, 0). Matches JPH::CharacterVirtualSettings::mShapeOffset.
+    inline constexpr vec3 default_character_shape_offset{.x=0.0F, .y=0.0F, .z=0.0F};
+
+    /// \brief Artificial padding margin in meters (0.02 m = 2 cm) around character shape to avoid snagging on vertices/edges during sweeps.
+    /// Matches JPH::CharacterVirtualSettings::mCharacterPadding.
+    inline constexpr float default_character_padding = 0.02F;
+
+    /// \brief Fraction of penetration resolved per simulation tick (1.0 = 100% instant resolution).
+    /// Matches JPH::CharacterVirtualSettings::mPenetrationRecoverySpeed.
+    inline constexpr float default_character_penetration_recovery_speed = 1.0F;
+
+    /// \brief Lookahead distance in meters (0.1 m = 10 cm) outside hull to detect predictive contacts for sliding plane calculation.
+    /// Matches JPH::CharacterVirtualSettings::mPredictiveContactDistance.
+    inline constexpr float default_character_predictive_contact_distance = 0.1F;
+
+    /// \brief Flag indicating whether extra edge removal filtering is applied to prevent catching on coplanar triangle mesh seams (false).
+    /// Matches JPH::CharacterBaseSettings::mEnhancedInternalEdgeRemoval.
+    inline constexpr bool default_character_enhanced_internal_edge_removal = false;
+
+    /// \brief Maximum collision iterations per update step to resolve corner wedging and multi-plane deflections (5).
+    /// Matches JPH::CharacterVirtualSettings::mMaxCollisionIterations.
+    inline constexpr uint32_t default_character_max_collision_iterations = 5;
+
+    /// \brief Maximum constraint solver iterations when sliding against multiple contacting surfaces (15).
+    /// Matches JPH::CharacterVirtualSettings::mMaxConstraintIterations.
+    inline constexpr uint32_t default_character_max_constraint_iterations = 15;
+
+    /// \brief Minimum distance penetration threshold in meters (0.001 m = 1 mm) before solver applies position correction.
+    /// Matches JPH::CharacterVirtualSettings::mCollisionTolerance.
+    inline constexpr float default_character_collision_tolerance = 1.0e-3F;
+
+    /// \brief Object layer assigned to the character's optional inner rigid body (moving).
+    inline constexpr object_layer default_character_inner_body_layer = object_layer::moving;
+
+    // Extended Update & Stair Stepping Defaults (matching JPH::CharacterVirtual::ExtendedUpdateSettings)
+
+    /// \brief Maximum downward probe displacement in meters (0.5 m down) to snap the character to the floor when walking down slopes or ledges.
+    /// Matches JPH::CharacterVirtual::ExtendedUpdateSettings::mStickToFloorStepDown.
+    inline constexpr vec3 default_stick_to_floor_step_down{0.0F, -0.5F, 0.0F};
+
+    /// \brief Maximum vertical step height displacement in meters (0.4 m up) for automatic stair navigation.
+    /// Matches JPH::CharacterVirtual::ExtendedUpdateSettings::mWalkStairsStepUp.
+    inline constexpr vec3 default_walk_stairs_step_up{0.0F, 0.4F, 0.0F};
+
+    /// \brief Minimum horizontal forward distance in meters (0.02 m) required after stepping up to validate stair landing.
+    /// Matches JPH::CharacterVirtual::ExtendedUpdateSettings::mWalkStairsMinStepForward.
+    inline constexpr float default_walk_stairs_min_step_forward = 0.02F;
+
+    /// \brief Lookahead test distance in meters (0.15 m) to probe stair landing and avoid catching on riser edges at small delta times.
+    /// Matches JPH::CharacterVirtual::ExtendedUpdateSettings::mWalkStairsStepForwardTest.
+    inline constexpr float default_walk_stairs_step_forward_test = 0.15F;
+
+    /// \brief Cosine of the maximum contact normal angle in horizontal plane (cos(75 deg) ~= 0.258819) where forward contact adjustment applies.
+    /// Matches JPH::CharacterVirtual::ExtendedUpdateSettings::mWalkStairsCosAngleForwardContact.
+    inline constexpr float default_walk_stairs_cos_angle_forward_contact = 0.258819F;
+
+    /// \brief Extra downward translation in meters added when stepping down at the end of a stair step. Defaults to zero.
+    /// Matches JPH::CharacterVirtual::ExtendedUpdateSettings::mWalkStairsStepDownExtra.
+    inline constexpr vec3 default_walk_stairs_step_down_extra{0.0F, 0.0F, 0.0F};
+
+    struct extended_update_settings
+    {
+        vec3 stick_to_floor_step_down = default_stick_to_floor_step_down;
+        vec3 walk_stairs_step_up = default_walk_stairs_step_up;
+        float walk_stairs_min_step_forward = default_walk_stairs_min_step_forward;
+        float walk_stairs_step_forward_test = default_walk_stairs_step_forward_test;
+        float walk_stairs_cos_angle_forward_contact = default_walk_stairs_cos_angle_forward_contact;
+        vec3 walk_stairs_step_down_extra = default_walk_stairs_step_down_extra;
+    };
+
+    class character_virtual;
+
+    struct character_contact_callbacks
+    {
+        void (*on_contact_added)(character_virtual* character, body_id body, vec3 position, vec3 normal, void* user_data) = nullptr;
+        void (*on_contact_solve)(character_virtual* character, body_id body, vec3 position, vec3 normal, vec3 velocity, vec3* io_new_velocity, void* user_data) = nullptr;
+        void* user_data = nullptr;
+    };
+
+    struct character_virtual_desc
+    {
+        shape_handle shape = nullptr;
+        vec3 position{0.0F, 0.0F, 0.0F};
+        quat rotation{0.0F, 0.0F, 0.0F, 1.0F};
+        vec3 up = default_character_up;
+        float mass = default_character_mass;
+        float max_strength = default_character_max_strength;
+        float max_slope_angle = default_character_max_slope_angle;
+        vec3 shape_offset = default_character_shape_offset;
+        float character_padding = default_character_padding;
+        float penetration_recovery_speed = default_character_penetration_recovery_speed;
+        float predictive_contact_distance = default_character_predictive_contact_distance;
+        bool enhanced_internal_edge_removal = default_character_enhanced_internal_edge_removal;
+        uint32_t max_collision_iterations = default_character_max_collision_iterations;
+        uint32_t max_constraint_iterations = default_character_max_constraint_iterations;
+        float collision_tolerance = default_character_collision_tolerance;
+        shape_handle inner_body_shape = nullptr;
+        object_layer inner_body_layer = default_character_inner_body_layer;
+        character_contact_callbacks callbacks{};
+    };
+
+    class JOLT_SHIM_API character_virtual
+    {
+    public:
+        character_virtual() = default;
+        character_virtual(const character_virtual&) = delete;
+        character_virtual(character_virtual&&) noexcept = delete;
+        virtual ~character_virtual() = default;
+
+        auto operator=(const character_virtual&) -> character_virtual& = delete;
+        auto operator=(character_virtual&&) noexcept -> character_virtual& = delete;
+
+        virtual void update(float delta_time, vec3 gravity) = 0;
+        virtual void extended_update(float delta_time, vec3 gravity, const extended_update_settings& settings) = 0;
+        [[nodiscard]] virtual auto walk_stairs(float delta_time, vec3 step_up, vec3 step_forward, vec3 step_forward_test, vec3 step_down_extra) -> bool = 0;
+        [[nodiscard]] virtual auto stick_to_floor(vec3 step_down) -> bool = 0;
+        [[nodiscard]] virtual auto can_walk_stairs(vec3 linear_velocity) const -> bool = 0;
+        [[nodiscard]] virtual auto cancel_velocity_towards_steep_slopes(vec3 desired_velocity) const -> vec3 = 0;
+
+        [[nodiscard]] virtual auto get_position() const -> vec3 = 0;
+        virtual void set_position(vec3 position) = 0;
+        [[nodiscard]] virtual auto get_rotation() const -> quat = 0;
+        virtual void set_rotation(quat rotation) = 0;
+        [[nodiscard]] virtual auto get_linear_velocity() const -> vec3 = 0;
+        virtual void set_linear_velocity(vec3 velocity) = 0;
+
+        [[nodiscard]] virtual auto get_ground_state() const -> ground_state = 0;
+        [[nodiscard]] virtual auto is_supported() const -> bool = 0;
+        [[nodiscard]] virtual auto get_ground_position() const -> vec3 = 0;
+        [[nodiscard]] virtual auto get_ground_normal() const -> vec3 = 0;
+        [[nodiscard]] virtual auto get_ground_velocity() const -> vec3 = 0;
+        [[nodiscard]] virtual auto get_ground_body_id() const -> body_id = 0;
+
+        [[nodiscard]] virtual auto get_mass() const -> float = 0;
+        virtual void set_mass(float mass) = 0;
+        [[nodiscard]] virtual auto get_max_slope_angle() const -> float = 0;
+        virtual void set_max_slope_angle(float max_slope_angle) = 0;
     };
 
     class JOLT_SHIM_API physics_system
@@ -208,6 +372,17 @@ namespace jolt::shim
         /// \brief Advances the physics simulation by the specified delta time.
         /// \param delta_time Simulation time step in seconds.
         virtual void step(float delta_time) = 0;
+
+        // Characters
+        /// \brief Creates a virtual character for kinematic character movement.
+        /// \param description Construction settings for the character.
+        /// \return Pointer to the created character virtual interface, or nullptr on failure.
+        /// \note The returned character MUST be destroyed via destroy_character_virtual().
+        [[nodiscard]] virtual auto create_character_virtual(const character_virtual_desc& description) -> character_virtual* = 0;
+
+        /// \brief Destroys a virtual character previously created by create_character_virtual().
+        /// \param character Pointer to the character virtual instance to destroy.
+        virtual void destroy_character_virtual(character_virtual* character) = 0;
     };
 
     /// \brief Creates an instance of the Jolt physics system.

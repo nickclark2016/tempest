@@ -303,7 +303,7 @@ auto main(int argc, char** argv) -> int
 
     // Instantiate the loaded prefab and apply the CLI transform
     const auto asset_entity = entity_registry.duplicate(prefab);
-    auto asset_tx = tempest::ecs::transform_component::identity();
+    auto asset_tx = tempest::ecs::transform_component{};
     asset_tx.position({args.pos_x, args.pos_y, args.pos_z});
     asset_tx.rotation({
         tempest::math::as_radians(args.rot_x),
@@ -399,7 +399,7 @@ auto main(int argc, char** argv) -> int
         .near_plane = 0.01F,
     };
     entity_registry.assign(camera, camera_data);
-    auto camera_tx = tempest::ecs::transform_component::identity();
+    auto camera_tx = tempest::ecs::transform_component{};
     camera_tx.position({args.cam_pos_x, args.cam_pos_y, args.cam_pos_z});
     camera_tx.rotation({
         tempest::math::as_radians(args.cam_rot_x),
@@ -420,7 +420,7 @@ auto main(int argc, char** argv) -> int
                                                .blend_fraction = 0.1f,
                                                .cascade_count = 4,
                                            });
-    auto sun_tx = tempest::ecs::transform_component::identity();
+    auto sun_tx = tempest::ecs::transform_component{};
     sun_tx.rotation({tempest::math::as_radians(90.0F), 0.0F, 0.0F});
     entity_registry.assign_or_replace(sun, sun_tx);
     entity_registry.name(sun, "Sun");

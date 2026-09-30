@@ -32,7 +32,7 @@ namespace tempest::editor
 
             if (changed)
             {
-                auto new_transform = ecs::transform_component::identity();
+                auto new_transform = ecs::transform_component{};
                 new_transform.position(new_position);
                 new_transform.rotation(new_rotation);
                 new_transform.scale(new_scale);
@@ -45,7 +45,7 @@ namespace tempest::editor
     auto transform_component_view_provider::create_default(ecs::archetype_registry* registry, ecs::entity target)
         -> void
     {
-        registry->assign(target, ecs::transform_component::identity());
+        registry->assign(target, ecs::transform_component{});
     }
 
     auto camera_component_view_provider::draw(ecs::archetype_registry* registry, ecs::entity target) -> void

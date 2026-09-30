@@ -2,6 +2,7 @@
 #include <cassert>
 #include <memory>
 #include <thread>
+#include <utility>
 
 #include <tempest/physics/shim/jolt_shim.hpp>
 
@@ -16,6 +17,7 @@
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
@@ -151,11 +153,11 @@ namespace jolt::shim
         };
 
         explicit tempest_jolt_job_system(const create_desc& desc)
-            : mDispatch(desc.dispatch_callback), mDispatcherUserData(desc.dispatcher_user_data),
-              mMaxConcurrency(static_cast<int>(desc.max_concurrency))
+            : _dispatch(desc.dispatch_callback), _dispatch_user_data(desc.dispatcher_user_data),
+              _max_concurrency(static_cast<int>(desc.max_concurrency))
         {
             JobSystemWithBarrier::Init(desc.max_barriers);
-            mJobs.Init(desc.max_jobs, desc.max_jobs);
+            _jobs.Init(desc.max_jobs, desc.max_jobs);
         }
 
         tempest_jolt_job_system(const tempest_jolt_job_system&) = delete;
@@ -167,7 +169,7 @@ namespace jolt::shim
 
         [[nodiscard]] auto GetMaxConcurrency() const -> int override
         {
-            return mMaxConcurrency;
+            return _max_concurrency;
         }
 
         [[nodiscard]] auto CreateJob(const char* inName, JPH::ColorArg inColor, const JobFunction& inJobFunction,
@@ -176,7 +178,7 @@ namespace jolt::shim
             auto index = JPH::FixedSizeFreeList<Job>::cInvalidObjectIndex;
             for (;;)
             {
-                index = mJobs.ConstructObject(inName, inColor, this, inJobFunction, inNumDependencies);
+                index = _jobs.ConstructObject(inName, inColor, this, inJobFunction, inNumDependencies);
                 if (index != JPH::FixedSizeFreeList<Job>::cInvalidObjectIndex)
                 {
                     break;
@@ -184,7 +186,7 @@ namespace jolt::shim
                 std::this_thread::yield();
             }
 
-            auto* const job = &mJobs.Get(index);
+            auto* const job = &_jobs.Get(index);
             auto handle = JobHandle(job);
             if (inNumDependencies == 0)
             {
@@ -195,20 +197,20 @@ namespace jolt::shim
 
         auto FreeJob(Job* inJob) -> void override
         {
-            mJobs.DestructObject(inJob);
+            _jobs.DestructObject(inJob);
         }
 
       protected:
         auto QueueJob(Job* inJob) -> void override
         {
             inJob->AddRef();
-            mDispatch(
+            _dispatch(
                 [](void* job_context) -> void {
                     auto* const job = static_cast<Job*>(job_context);
                     job->Execute();
                     job->Release();
                 },
-                inJob, mDispatcherUserData);
+                inJob, _dispatch_user_data);
         }
 
         auto QueueJobs(Job** inJobs, uint32_t inNumJobs) -> void override
@@ -220,21 +222,328 @@ namespace jolt::shim
         }
 
       private:
-        job_dispatch_fn mDispatch{nullptr};
-        void* mDispatcherUserData{nullptr};
-        int mMaxConcurrency{static_cast<int>(default_max_concurrency)};
-        JPH::FixedSizeFreeList<Job> mJobs;
+        job_dispatch_fn _dispatch = nullptr;
+        void* _dispatch_user_data = nullptr;
+        int _max_concurrency = static_cast<int>(default_max_concurrency);
+        JPH::FixedSizeFreeList<Job> _jobs;
+    };
+
+    class character_virtual_impl final : public character_virtual, private JPH::CharacterContactListener
+    {
+      public:
+        character_virtual_impl(JPH::Ref<JPH::CharacterVirtual> character, JPH::PhysicsSystem* physics_system,
+                               JPH::TempAllocator* temp_allocator, float max_slope_angle,
+                               character_contact_callbacks callbacks)
+            : _character(std::move(character)), _physics_system(physics_system), _temp_allocator(temp_allocator),
+              _max_slope_angle(max_slope_angle), _callbacks(callbacks)
+        {
+            if (_callbacks.on_contact_added != nullptr || _callbacks.on_contact_solve != nullptr)
+            {
+                _character->SetListener(this);
+            }
+        }
+
+        character_virtual_impl(const character_virtual_impl&) = delete;
+        character_virtual_impl(character_virtual_impl&&) noexcept = delete;
+        ~character_virtual_impl() override
+        {
+            if (_character != nullptr)
+            {
+                _character->SetListener(nullptr);
+            }
+        }
+
+        auto operator=(const character_virtual_impl&) -> character_virtual_impl& = delete;
+        auto operator=(character_virtual_impl&&) noexcept -> character_virtual_impl& = delete;
+
+        void update(float delta_time, vec3 gravity) override
+        {
+            const auto bp_filter =
+                _physics_system->GetDefaultBroadPhaseLayerFilter(static_cast<JPH::ObjectLayer>(object_layer::moving));
+            const auto obj_filter =
+                _physics_system->GetDefaultLayerFilter(static_cast<JPH::ObjectLayer>(object_layer::moving));
+            const auto body_filter = JPH::BodyFilter{};
+            const auto shape_filter = JPH::ShapeFilter{};
+
+            _character->Update(delta_time, JPH::Vec3(gravity.x, gravity.y, gravity.z), bp_filter, obj_filter,
+                                body_filter, shape_filter, *_temp_allocator);
+        }
+
+        void extended_update(float delta_time, vec3 gravity, const extended_update_settings& settings) override
+        {
+            const auto bp_filter =
+                _physics_system->GetDefaultBroadPhaseLayerFilter(static_cast<JPH::ObjectLayer>(object_layer::moving));
+            const auto obj_filter =
+                _physics_system->GetDefaultLayerFilter(static_cast<JPH::ObjectLayer>(object_layer::moving));
+            const auto body_filter = JPH::BodyFilter{};
+            const auto shape_filter = JPH::ShapeFilter{};
+
+            auto jolt_settings = JPH::CharacterVirtual::ExtendedUpdateSettings{};
+            jolt_settings.mStickToFloorStepDown =
+                JPH::Vec3(settings.stick_to_floor_step_down.x, settings.stick_to_floor_step_down.y,
+                          settings.stick_to_floor_step_down.z);
+            jolt_settings.mWalkStairsStepUp = JPH::Vec3(settings.walk_stairs_step_up.x, settings.walk_stairs_step_up.y,
+                                                        settings.walk_stairs_step_up.z);
+            jolt_settings.mWalkStairsMinStepForward = settings.walk_stairs_min_step_forward;
+            jolt_settings.mWalkStairsStepForwardTest = settings.walk_stairs_step_forward_test;
+            jolt_settings.mWalkStairsCosAngleForwardContact = settings.walk_stairs_cos_angle_forward_contact;
+            jolt_settings.mWalkStairsStepDownExtra =
+                JPH::Vec3(settings.walk_stairs_step_down_extra.x, settings.walk_stairs_step_down_extra.y,
+                          settings.walk_stairs_step_down_extra.z);
+
+            _character->ExtendedUpdate(delta_time, JPH::Vec3(gravity.x, gravity.y, gravity.z), jolt_settings,
+                                        bp_filter, obj_filter, body_filter, shape_filter, *_temp_allocator);
+        }
+
+        [[nodiscard]] auto walk_stairs(float delta_time, vec3 step_up, vec3 step_forward, vec3 step_forward_test,
+                                       vec3 step_down_extra) -> bool override
+        {
+            const auto bp_filter =
+                _physics_system->GetDefaultBroadPhaseLayerFilter(static_cast<JPH::ObjectLayer>(object_layer::moving));
+            const auto obj_filter =
+                _physics_system->GetDefaultLayerFilter(static_cast<JPH::ObjectLayer>(object_layer::moving));
+            const auto body_filter = JPH::BodyFilter{};
+            const auto shape_filter = JPH::ShapeFilter{};
+
+            return _character->WalkStairs(delta_time, JPH::Vec3(step_up.x, step_up.y, step_up.z),
+                                           JPH::Vec3(step_forward.x, step_forward.y, step_forward.z),
+                                           JPH::Vec3(step_forward_test.x, step_forward_test.y, step_forward_test.z),
+                                           JPH::Vec3(step_down_extra.x, step_down_extra.y, step_down_extra.z),
+                                           bp_filter, obj_filter, body_filter, shape_filter, *_temp_allocator);
+        }
+
+        [[nodiscard]] auto stick_to_floor(vec3 step_down) -> bool override
+        {
+            const auto bp_filter =
+                _physics_system->GetDefaultBroadPhaseLayerFilter(static_cast<JPH::ObjectLayer>(object_layer::moving));
+            const auto obj_filter =
+                _physics_system->GetDefaultLayerFilter(static_cast<JPH::ObjectLayer>(object_layer::moving));
+            const auto body_filter = JPH::BodyFilter{};
+            const auto shape_filter = JPH::ShapeFilter{};
+
+            return _character->StickToFloor(JPH::Vec3(step_down.x, step_down.y, step_down.z), bp_filter, obj_filter,
+                                             body_filter, shape_filter, *_temp_allocator);
+        }
+
+        [[nodiscard]] auto can_walk_stairs(vec3 linear_velocity) const -> bool override
+        {
+            return _character->CanWalkStairs(JPH::Vec3(linear_velocity.x, linear_velocity.y, linear_velocity.z));
+        }
+
+        [[nodiscard]] auto cancel_velocity_towards_steep_slopes(vec3 desired_velocity) const -> vec3 override
+        {
+            const auto adjusted = _character->CancelVelocityTowardsSteepSlopes(
+                JPH::Vec3(desired_velocity.x, desired_velocity.y, desired_velocity.z));
+            return vec3{
+                .x = adjusted.GetX(),
+                .y = adjusted.GetY(),
+                .z = adjusted.GetZ(),
+            };
+        }
+
+        [[nodiscard]] auto get_position() const -> vec3 override
+        {
+            const auto pos = _character->GetPosition();
+            return vec3{
+                .x = pos.GetX(),
+                .y = pos.GetY(),
+                .z = pos.GetZ(),
+            };
+        }
+
+        auto set_position(vec3 position) -> void override
+        {
+            _character->SetPosition(JPH::RVec3(position.x, position.y, position.z));
+        }
+
+        [[nodiscard]] auto get_rotation() const -> quat override
+        {
+            const auto rot = _character->GetRotation();
+            return quat{
+                .x = rot.GetX(),
+                .y = rot.GetY(),
+                .z = rot.GetZ(),
+                .w = rot.GetW(),
+            };
+        }
+
+        auto set_rotation(quat rotation) -> void override
+        {
+            _character->SetRotation(JPH::Quat(rotation.x, rotation.y, rotation.z, rotation.w));
+        }
+
+        [[nodiscard]] auto get_linear_velocity() const -> vec3 override
+        {
+            const auto vel = _character->GetLinearVelocity();
+            return vec3{
+                .x = vel.GetX(),
+                .y = vel.GetY(),
+                .z = vel.GetZ(),
+            };
+        }
+
+        auto set_linear_velocity(vec3 velocity) -> void override
+        {
+            _character->SetLinearVelocity(JPH::Vec3(velocity.x, velocity.y, velocity.z));
+        }
+
+        [[nodiscard]] auto get_ground_state() const -> ground_state override
+        {
+            switch (_character->GetGroundState())
+            {
+            case JPH::CharacterBase::EGroundState::OnGround:
+                return ground_state::on_ground;
+            case JPH::CharacterBase::EGroundState::OnSteepGround:
+                return ground_state::on_steep_ground;
+            case JPH::CharacterBase::EGroundState::NotSupported:
+                return ground_state::not_supported;
+            case JPH::CharacterBase::EGroundState::InAir:
+            default:
+                return ground_state::in_air;
+            }
+        }
+
+        [[nodiscard]] auto is_supported() const -> bool override
+        {
+            return _character->IsSupported();
+        }
+
+        [[nodiscard]] auto get_ground_position() const -> vec3 override
+        {
+            const auto pos = _character->GetGroundPosition();
+            return vec3{
+                .x = pos.GetX(),
+                .y = pos.GetY(),
+                .z = pos.GetZ(),
+            };
+        }
+
+        [[nodiscard]] auto get_ground_normal() const -> vec3 override
+        {
+            const auto norm = _character->GetGroundNormal();
+            return vec3{
+                .x = norm.GetX(),
+                .y = norm.GetY(),
+                .z = norm.GetZ(),
+            };
+        }
+
+        [[nodiscard]] auto get_ground_velocity() const -> vec3 override
+        {
+            const auto vel = _character->GetGroundVelocity();
+            return vec3{
+                .x = vel.GetX(),
+                .y = vel.GetY(),
+                .z = vel.GetZ(),
+            };
+        }
+
+        [[nodiscard]] auto get_ground_body_id() const -> body_id override
+        {
+            const auto body = _character->GetGroundBodyID();
+            if (body.IsInvalid())
+            {
+                return invalid_body_id;
+            }
+            return body.GetIndexAndSequenceNumber();
+        }
+
+        [[nodiscard]] auto get_mass() const -> float override
+        {
+            return _character->GetMass();
+        }
+
+        auto set_mass(float mass) -> void override
+        {
+            _character->SetMass(mass);
+        }
+
+        [[nodiscard]] auto get_max_slope_angle() const -> float override
+        {
+            return _max_slope_angle;
+        }
+
+        auto set_max_slope_angle(float max_slope_angle) -> void override
+        {
+            _max_slope_angle = max_slope_angle;
+            _character->SetMaxSlopeAngle(max_slope_angle);
+        }
+
+      private:
+        auto OnContactAdded([[maybe_unused]] const JPH::CharacterVirtual* inCharacter,
+                            const JPH::CharacterContact& inContact,
+                            [[maybe_unused]] JPH::CharacterContactSettings& ioSettings) -> void override
+        {
+            if (_callbacks.on_contact_added != nullptr)
+            {
+                const auto target_body =
+                    inContact.mBodyB.IsInvalid() ? invalid_body_id : inContact.mBodyB.GetIndexAndSequenceNumber();
+                const auto pos = vec3{
+                    .x = inContact.mPosition.GetX(),
+                    .y = inContact.mPosition.GetY(),
+                    .z = inContact.mPosition.GetZ(),
+                };
+                const auto norm = vec3{
+                    .x = inContact.mContactNormal.GetX(),
+                    .y = inContact.mContactNormal.GetY(),
+                    .z = inContact.mContactNormal.GetZ(),
+                };
+                _callbacks.on_contact_added(this, target_body, pos, norm, _callbacks.user_data);
+            }
+        }
+
+        auto OnContactSolve([[maybe_unused]] const JPH::CharacterVirtual* inCharacter, const JPH::BodyID& inBodyID2,
+                            [[maybe_unused]] const JPH::SubShapeID& inSubShapeID2, JPH::RVec3Arg inContactPosition,
+                            JPH::Vec3Arg inContactNormal, JPH::Vec3Arg inContactVelocity,
+                            [[maybe_unused]] const JPH::PhysicsMaterial* inContactMaterial,
+                            [[maybe_unused]] JPH::Vec3Arg inCharacterVelocity, JPH::Vec3& ioNewCharacterVelocity)
+            -> void override
+        {
+            if (_callbacks.on_contact_solve != nullptr)
+            {
+                const auto target_body =
+                    inBodyID2.IsInvalid() ? invalid_body_id : inBodyID2.GetIndexAndSequenceNumber();
+                const auto pos = vec3{
+                    .x = inContactPosition.GetX(),
+                    .y = inContactPosition.GetY(),
+                    .z = inContactPosition.GetZ(),
+                };
+                const auto norm = vec3{
+                    .x = inContactNormal.GetX(),
+                    .y = inContactNormal.GetY(),
+                    .z = inContactNormal.GetZ(),
+                };
+                const auto vel = vec3{
+                    .x = inContactVelocity.GetX(),
+                    .y = inContactVelocity.GetY(),
+                    .z = inContactVelocity.GetZ(),
+                };
+                auto new_velocity = vec3{
+                    .x = ioNewCharacterVelocity.GetX(),
+                    .y = ioNewCharacterVelocity.GetY(),
+                    .z = ioNewCharacterVelocity.GetZ(),
+                };
+                _callbacks.on_contact_solve(this, target_body, pos, norm, vel, &new_velocity, _callbacks.user_data);
+                ioNewCharacterVelocity = JPH::Vec3(new_velocity.x, new_velocity.y, new_velocity.z);
+            }
+        }
+
+        JPH::Ref<JPH::CharacterVirtual> _character;
+        JPH::PhysicsSystem* _physics_system = nullptr;
+        JPH::TempAllocator* _temp_allocator = nullptr;
+        float _max_slope_angle = default_character_max_slope_angle;
+        character_contact_callbacks _callbacks = {};
     };
 
     class physics_system_impl final : public physics_system
     {
       public:
         explicit physics_system_impl(const init_desc& description)
-            : warn(description.warn), error(description.error), log_user_data(description.log_user_data),
-              collision_steps(description.collision_steps)
+            : _warn(description.warn), _error(description.error), _log_user_data(description.log_user_data),
+              _collision_steps(description.collision_steps)
         {
-            temp_allocator = std::make_unique<JPH::TempAllocatorImpl>(description.temp_allocator_size_bytes);
-            job_system = std::make_unique<tempest_jolt_job_system>(tempest_jolt_job_system::create_desc{
+            _temp_allocator = std::make_unique<JPH::TempAllocatorImpl>(description.temp_allocator_size_bytes);
+            _job_system = std::make_unique<tempest_jolt_job_system>(tempest_jolt_job_system::create_desc{
                 .max_jobs = JPH::cMaxPhysicsJobs,
                 .max_barriers = JPH::cMaxPhysicsBarriers,
                 .dispatch_callback = description.job_dispatch,
@@ -242,9 +551,9 @@ namespace jolt::shim
                 .max_concurrency = description.max_concurrency,
             });
 
-            physics_system.Init(description.max_bodies, default_body_mutex_count, description.max_body_pairs,
-                                description.max_contact_constraints, bp_layer_interface, obj_vs_bp_filter,
-                                obj_pair_filter);
+            _physics_system.Init(description.max_bodies, default_body_mutex_count, description.max_body_pairs,
+                                description.max_contact_constraints, _bp_layer_interface, _obj_vs_bp_filter,
+                                _obj_pair_filter);
         }
 
         physics_system_impl(const physics_system_impl&) = delete;
@@ -279,19 +588,24 @@ namespace jolt::shim
         [[nodiscard]] auto cast_ray(const raycast_query& query) -> raycast_hit override;
         auto step(float delta_time) -> void override;
 
+        // Characters
+        [[nodiscard]] auto create_character_virtual(const character_virtual_desc& description)
+            -> character_virtual* override;
+        auto destroy_character_virtual(character_virtual* character) -> void override;
+
       private:
-        bp_layer_interface_impl bp_layer_interface;
-        object_vs_broad_phase_layer_filter_impl obj_vs_bp_filter;
-        object_layer_pair_filter_impl obj_pair_filter;
+        bp_layer_interface_impl _bp_layer_interface;
+        object_vs_broad_phase_layer_filter_impl _obj_vs_bp_filter;
+        object_layer_pair_filter_impl _obj_pair_filter;
 
-        std::unique_ptr<JPH::TempAllocator> temp_allocator;
-        std::unique_ptr<tempest_jolt_job_system> job_system;
-        JPH::PhysicsSystem physics_system;
+        std::unique_ptr<JPH::TempAllocator> _temp_allocator;
+        std::unique_ptr<tempest_jolt_job_system> _job_system;
+        JPH::PhysicsSystem _physics_system;
 
-        log_fn warn{nullptr};
-        log_fn error{nullptr};
-        void* log_user_data{nullptr};
-        uint32_t collision_steps{default_collision_steps};
+        log_fn _warn = nullptr;
+        log_fn _error = nullptr;
+        void* _log_user_data = nullptr;
+        uint32_t _collision_steps = default_collision_steps;
     };
 
     auto physics_system_impl::create_box_shape(vec3 half_extents) -> shape_handle
@@ -304,9 +618,9 @@ namespace jolt::shim
             shape->AddRef();
             return reinterpret_cast<shape_handle>(shape.GetPtr());
         }
-        if (error != nullptr)
+        if (_error != nullptr)
         {
-            error(result.GetError().c_str(), log_user_data);
+            _error(result.GetError().c_str(), _log_user_data);
         }
         return nullptr;
     }
@@ -321,9 +635,9 @@ namespace jolt::shim
             shape->AddRef();
             return reinterpret_cast<shape_handle>(shape.GetPtr());
         }
-        if (error != nullptr)
+        if (_error != nullptr)
         {
-            error(result.GetError().c_str(), log_user_data);
+            _error(result.GetError().c_str(), _log_user_data);
         }
         return nullptr;
     }
@@ -338,9 +652,9 @@ namespace jolt::shim
             shape->AddRef();
             return reinterpret_cast<shape_handle>(shape.GetPtr());
         }
-        if (error != nullptr)
+        if (_error != nullptr)
         {
-            error(result.GetError().c_str(), log_user_data);
+            _error(result.GetError().c_str(), _log_user_data);
         }
         return nullptr;
     }
@@ -350,9 +664,9 @@ namespace jolt::shim
     {
         if (heights == nullptr || sample_count < min_heightfield_sample_count)
         {
-            if (error != nullptr)
+            if (_error != nullptr)
             {
-                error("Invalid heightfield parameters", log_user_data);
+                _error("Invalid heightfield parameters", _log_user_data);
             }
             return nullptr;
         }
@@ -366,9 +680,9 @@ namespace jolt::shim
             shape->AddRef();
             return reinterpret_cast<shape_handle>(shape.GetPtr());
         }
-        if (error != nullptr)
+        if (_error != nullptr)
         {
-            error(result.GetError().c_str(), log_user_data);
+            _error(result.GetError().c_str(), _log_user_data);
         }
         return nullptr;
     }
@@ -408,12 +722,12 @@ namespace jolt::shim
             JPH::Quat(description.rotation.x, description.rotation.y, description.rotation.z, description.rotation.w),
             motion, static_cast<JPH::ObjectLayer>(description.layer));
 
-        auto* const created_body = physics_system.GetBodyInterface().CreateBody(body_settings);
+        auto* const created_body = _physics_system.GetBodyInterface().CreateBody(body_settings);
         if (created_body == nullptr)
         {
-            if (error != nullptr)
+            if (_error != nullptr)
             {
-                error("Failed to create Jolt body", log_user_data);
+                _error("Failed to create Jolt body", _log_user_data);
             }
             return invalid_body_id;
         }
@@ -426,7 +740,7 @@ namespace jolt::shim
         {
             return;
         }
-        physics_system.GetBodyInterface().DestroyBody(JPH::BodyID(target_body_id));
+        _physics_system.GetBodyInterface().DestroyBody(JPH::BodyID(target_body_id));
     }
 
     auto physics_system_impl::add_body(body_id target_body_id, bool activate) -> void
@@ -435,7 +749,7 @@ namespace jolt::shim
         {
             return;
         }
-        physics_system.GetBodyInterface().AddBody(
+        _physics_system.GetBodyInterface().AddBody(
             JPH::BodyID(target_body_id), activate ? JPH::EActivation::Activate : JPH::EActivation::DontActivate);
     }
 
@@ -445,7 +759,7 @@ namespace jolt::shim
         {
             return;
         }
-        physics_system.GetBodyInterface().RemoveBody(JPH::BodyID(target_body_id));
+        _physics_system.GetBodyInterface().RemoveBody(JPH::BodyID(target_body_id));
     }
 
     auto physics_system_impl::get_body_position(body_id target_body_id) const -> vec3
@@ -454,7 +768,7 @@ namespace jolt::shim
         {
             return {};
         }
-        const auto body_position = physics_system.GetBodyInterface().GetPosition(JPH::BodyID(target_body_id));
+        const auto body_position = _physics_system.GetBodyInterface().GetPosition(JPH::BodyID(target_body_id));
         return vec3{
             .x = body_position.GetX(),
             .y = body_position.GetY(),
@@ -468,7 +782,7 @@ namespace jolt::shim
         {
             return;
         }
-        physics_system.GetBodyInterface().SetPosition(
+        _physics_system.GetBodyInterface().SetPosition(
             JPH::BodyID(target_body_id), JPH::RVec3(position.x, position.y, position.z), JPH::EActivation::Activate);
     }
 
@@ -478,7 +792,7 @@ namespace jolt::shim
         {
             return {};
         }
-        const auto body_rotation = physics_system.GetBodyInterface().GetRotation(JPH::BodyID(target_body_id));
+        const auto body_rotation = _physics_system.GetBodyInterface().GetRotation(JPH::BodyID(target_body_id));
         return quat{body_rotation.GetX(), body_rotation.GetY(), body_rotation.GetZ(), body_rotation.GetW()};
     }
 
@@ -488,7 +802,7 @@ namespace jolt::shim
         {
             return;
         }
-        physics_system.GetBodyInterface().SetRotation(JPH::BodyID(target_body_id),
+        _physics_system.GetBodyInterface().SetRotation(JPH::BodyID(target_body_id),
                                                       JPH::Quat(rotation.x, rotation.y, rotation.z, rotation.w),
                                                       JPH::EActivation::Activate);
     }
@@ -499,7 +813,7 @@ namespace jolt::shim
         {
             return {};
         }
-        const auto body_velocity = physics_system.GetBodyInterface().GetLinearVelocity(JPH::BodyID(target_body_id));
+        const auto body_velocity = _physics_system.GetBodyInterface().GetLinearVelocity(JPH::BodyID(target_body_id));
         return vec3{
             .x = body_velocity.GetX(),
             .y = body_velocity.GetY(),
@@ -513,7 +827,7 @@ namespace jolt::shim
         {
             return;
         }
-        physics_system.GetBodyInterface().SetLinearVelocity(JPH::BodyID(target_body_id),
+        _physics_system.GetBodyInterface().SetLinearVelocity(JPH::BodyID(target_body_id),
                                                             JPH::Vec3(velocity.x, velocity.y, velocity.z));
     }
 
@@ -529,7 +843,7 @@ namespace jolt::shim
                                     query.direction.z * query.max_distance)};
 
         auto hit_result = JPH::RayCastResult{};
-        if (physics_system.GetNarrowPhaseQuery().CastRay(ray, hit_result))
+        if (_physics_system.GetNarrowPhaseQuery().CastRay(ray, hit_result))
         {
             result.has_hit = true;
             result.distance = hit_result.mFraction * query.max_distance;
@@ -542,7 +856,7 @@ namespace jolt::shim
                 .z = hit_position.GetZ(),
             };
 
-            const auto lock = JPH::BodyLockRead(physics_system.GetBodyLockInterface(), hit_result.mBodyID);
+            const auto lock = JPH::BodyLockRead(_physics_system.GetBodyLockInterface(), hit_result.mBodyID);
             if (lock.Succeeded())
             {
                 const JPH::Body& body = lock.GetBody();
@@ -560,7 +874,55 @@ namespace jolt::shim
 
     auto physics_system_impl::step(float delta_time) -> void
     {
-        physics_system.Update(delta_time, static_cast<int>(collision_steps), temp_allocator.get(), job_system.get());
+        _physics_system.Update(delta_time, static_cast<int>(_collision_steps), _temp_allocator.get(), _job_system.get());
+    }
+
+    auto physics_system_impl::create_character_virtual(const character_virtual_desc& description) -> character_virtual*
+    {
+        if (description.shape == nullptr)
+        {
+            if (_error != nullptr)
+            {
+                _error("Shape handle cannot be null when creating character virtual", _log_user_data);
+            }
+            return nullptr;
+        }
+
+        auto settings = JPH::CharacterVirtualSettings();
+        settings.mUp = JPH::Vec3(description.up.x, description.up.y, description.up.z);
+        settings.mMaxSlopeAngle = description.max_slope_angle;
+        settings.mEnhancedInternalEdgeRemoval = description.enhanced_internal_edge_removal;
+        settings.mShape = reinterpret_cast<const JPH::Shape*>(description.shape);
+        settings.mMass = description.mass;
+        settings.mMaxStrength = description.max_strength;
+        settings.mShapeOffset =
+            JPH::Vec3(description.shape_offset.x, description.shape_offset.y, description.shape_offset.z);
+        settings.mCharacterPadding = description.character_padding;
+        settings.mPenetrationRecoverySpeed = description.penetration_recovery_speed;
+        settings.mPredictiveContactDistance = description.predictive_contact_distance;
+        settings.mMaxCollisionIterations = description.max_collision_iterations;
+        settings.mMaxConstraintIterations = description.max_constraint_iterations;
+        settings.mCollisionTolerance = description.collision_tolerance;
+
+        if (description.inner_body_shape != nullptr)
+        {
+            settings.mInnerBodyShape = reinterpret_cast<const JPH::Shape*>(description.inner_body_shape);
+            settings.mInnerBodyLayer = static_cast<JPH::ObjectLayer>(description.inner_body_layer);
+        }
+
+        auto jolt_character = JPH::Ref<JPH::CharacterVirtual>(new JPH::CharacterVirtual(
+            &settings, JPH::RVec3(description.position.x, description.position.y, description.position.z),
+            JPH::Quat(description.rotation.x, description.rotation.y, description.rotation.z, description.rotation.w),
+            &_physics_system));
+
+        // NOLINTNEXTLINE
+        return new character_virtual_impl(std::move(jolt_character), &_physics_system, _temp_allocator.get(),
+                                          description.max_slope_angle, description.callbacks);
+    }
+
+    auto physics_system_impl::destroy_character_virtual(character_virtual* character) -> void
+    {
+        delete character; // NOLINT
     }
 
     JOLT_SHIM_API auto create_physics_system(const init_desc& description) -> physics_system*

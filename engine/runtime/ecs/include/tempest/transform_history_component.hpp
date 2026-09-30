@@ -2,6 +2,7 @@
 #define tempest_ecs_transform_history_component_hpp
 
 #include <tempest/quat.hpp>
+#include <tempest/traits.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/vec3.hpp>
 
@@ -31,7 +32,7 @@ namespace tempest::ecs
         }
     };
 
-    static_assert(is_trivial_v<transform_history_component>);
+    static_assert(component<transform_history_component>);
 } // namespace tempest::ecs
 
 #endif // tempest_ecs_transform_history_component_hpp

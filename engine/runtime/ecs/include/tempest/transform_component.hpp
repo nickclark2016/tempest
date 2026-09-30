@@ -3,6 +3,7 @@
 
 #include <tempest/api.hpp>
 #include <tempest/mat4.hpp>
+#include <tempest/traits.hpp>
 #include <tempest/transformations.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/vec3.hpp>
@@ -12,67 +13,56 @@ namespace tempest::ecs
     class TEMPEST_API transform_component
     {
       public:
-        static constexpr transform_component identity() noexcept
-        {
-            transform_component tx;
-            tx._position = math::vec3<float>(0.0f);
-            tx._rotation = math::quat<float>(0.0f, 0.0f, 0.0f, 1.0f);
-            tx._scale = math::vec3<float>(1.0f);
-            tx._transform = math::mat4<float>(1.0f);
-
-            return tx;
-        }
-
-        math::vec3<float> position() const noexcept
+        [[nodiscard]] auto position() const noexcept -> math::vec3<float>
         {
             return _position;
         }
 
-        void position(math::vec3<float> t)
+        auto position(math::vec3<float> pos) -> void
         {
-            _position = t;
+            _position = pos;
             _build_transform();
         }
 
-        math::vec3<float> rotation() const noexcept
+        [[nodiscard]] auto rotation() const noexcept -> math::vec3<float>
         {
             return math::euler(_rotation);
         }
 
-        void rotation(math::vec3<float> r)
+        auto rotation(math::vec3<float> rot) -> void
         {
-            _rotation = math::quat<float>(r);
+            _rotation = math::quat<float>(rot);
             _build_transform();
         }
 
-        math::quat<float> rotation_quat() const noexcept
+        [[nodiscard]] auto rotation_quat() const noexcept -> math::quat<float>
         {
             return _rotation;
         }
 
-        void rotation(math::quat<float> q)
+        auto rotation(math::quat<float> rot) -> void
         {
-            _rotation = q;
+            _rotation = rot;
             _build_transform();
         }
 
-        math::vec3<float> scale() const noexcept
+        [[nodiscard]] auto scale() const noexcept -> math::vec3<float>
         {
             return _scale;
         }
 
-        void scale(math::vec3<float> s)
+        auto scale(math::vec3<float> sca) -> void
         {
-            _scale = s;
+            _scale = sca;
             _build_transform();
         }
 
-        math::mat4<float> matrix() const noexcept
+        [[nodiscard]] auto matrix() const noexcept -> math::mat4<float>
         {
             return _transform;
         }
 
-        void set(math::vec3<float> position, math::quat<float> rotation)
+        auto set(math::vec3<float> position, math::quat<float> rotation) -> void
         {
             _position = position;
             _rotation = rotation;
@@ -80,10 +70,10 @@ namespace tempest::ecs
         }
 
       private:
-        math::vec3<float> _position;
-        math::quat<float> _rotation;
-        math::vec3<float> _scale;
-        math::mat4<float> _transform;
+        math::vec3<float> _position = math::vec3<float>(0.0F);
+        math::quat<float> _rotation = math::quat<float>(0.0F, 0.0F, 0.0F, 1.0F);
+        math::vec3<float> _scale = math::vec3<float>(1.0F);
+        math::mat4<float> _transform = math::mat4<float>(1.0F);
 
         void _build_transform()
         {
@@ -91,8 +81,7 @@ namespace tempest::ecs
         }
     };
 
-    static_assert(is_trivial_v<transform_component>);
-    static_assert(is_trivial_v<math::mat4<float>>);
+    static_assert(component<transform_component>);
 } // namespace tempest::ecs
 
 #endif // tempest_ecs_transform_component_hpp

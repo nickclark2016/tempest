@@ -159,10 +159,10 @@ namespace tempest::assets
 
         auto register_importer(unique_ptr<asset_importer> importer, string_view extension) -> void;
 
-        /// Register a trivial ECS component type for entity hierarchy serialization.
+        /// Register an ECS component type for entity hierarchy serialization.
         /// The component is serialized/deserialized via memcpy.
         template <typename T>
-            requires is_trivial_v<T>
+            requires ecs::component<T>
         auto register_component() -> void;
 
         [[nodiscard]] auto register_asset_metadata(asset_metadata meta) -> guid;
@@ -217,7 +217,7 @@ namespace tempest::assets
     };
 
     template <typename T>
-        requires is_trivial_v<T>
+        requires ecs::component<T>
     void asset_database::register_component()
     {
         const auto hash = core::type_hash<T>::value();

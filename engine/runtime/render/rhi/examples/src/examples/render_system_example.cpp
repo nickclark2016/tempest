@@ -145,7 +145,7 @@ namespace tempest::rhi::examples
                                              .vertical_fov = 1.04719755F, // 60 degrees
                                              .near_plane = near_plane,
                                          });
-        auto cam_tx = ecs::transform_component::identity();
+        auto cam_tx = ecs::transform_component{};
         if (_model == scene_model::chess)
         {
             cam_tx.position({0.0F, 0.35F, -0.55F});
@@ -176,7 +176,7 @@ namespace tempest::rhi::examples
                                   .depth_bias = depth_bias,
                                   .debug_mode = render_system::shadow_debug_mode::none,
                               });
-        auto sun_tx = ecs::transform_component::identity();
+        auto sun_tx = ecs::transform_component{};
         if (_model == scene_model::chess)
         {
             sun_tx.rotation({math::as_radians(65.0F), math::as_radians(25.0F), 0.0F});
@@ -203,7 +203,7 @@ namespace tempest::rhi::examples
                 _root_entity = prefab_root;
                 if (!_registry.has<ecs::transform_component>(_root_entity))
                 {
-                    _registry.assign(_root_entity, ecs::transform_component::identity());
+                    _registry.assign(_root_entity, ecs::transform_component{});
                 }
             }
         }
@@ -220,7 +220,7 @@ namespace tempest::rhi::examples
             auto ground_ent = _registry.create();
             _registry.assign(ground_ent, core::mesh_component{.mesh_id = ground_mesh_id});
             _registry.assign(ground_ent, core::material_component{.material_id = ground_mat_id});
-            _registry.assign(ground_ent, ecs::transform_component::identity());
+            _registry.assign(ground_ent, ecs::transform_component{});
 
             // Create Array of Multi-Material Cubes
             auto cube_mesh_id = _meshes.register_mesh(create_cube_mesh());
@@ -243,7 +243,7 @@ namespace tempest::rhi::examples
                     _registry.assign(cube_ent, core::mesh_component{.mesh_id = cube_mesh_id});
                     _registry.assign(cube_ent, core::material_component{.material_id = cube_mat_id});
 
-                    auto tx = ecs::transform_component::identity();
+                    auto tx = ecs::transform_component{};
                     tx.position({static_cast<float>(i) * 2.5F, 1.0F, static_cast<float>(j) * 2.5F});
                     tx.scale({0.8F, 0.8F, 0.8F});
                     _registry.assign(cube_ent, tx);

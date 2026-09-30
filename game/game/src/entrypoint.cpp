@@ -19,9 +19,8 @@ namespace
         auto m = tempest::core::mesh{};
 
         auto add_face = [&](tempest::math::vec3<float> normal, tempest::math::vec3<float> tangent,
-                            tempest::math::vec3<float> v0, tempest::math::vec3<float> v1,
-                            tempest::math::vec3<float> v2, tempest::math::vec3<float> v3,
-                            tempest::math::vec4<float> color) -> void {
+                            tempest::math::vec3<float> v0, tempest::math::vec3<float> v1, tempest::math::vec3<float> v2,
+                            tempest::math::vec3<float> v3, tempest::math::vec4<float> color) -> void {
             const auto base_idx = static_cast<tempest::uint32_t>(m.vertices.size());
             m.vertices.push_back(tempest::core::vertex{.position = v0,
                                                        .uv = {0.0F, 0.0F},
@@ -111,7 +110,7 @@ extern "C"
                 .near_plane = 0.05F,
             };
             registry.assign(camera, camera_data);
-            auto camera_tx = tempest::ecs::transform_component::identity();
+            auto camera_tx = tempest::ecs::transform_component{};
             camera_tx.position({0.0F, 0.6F, -1.8F});
             camera_tx.rotation({tempest::math::as_radians(-10.0F), 0.0F, 0.0F});
             registry.assign(camera, camera_tx);
@@ -124,7 +123,7 @@ extern "C"
                 asset_database.load("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", registry);
 
             const auto sponza_instance = engine_ctx.load_entity(sponza_prefab);
-            auto sponza_transform = tempest::ecs::transform_component::identity();
+            auto sponza_transform = tempest::ecs::transform_component{};
             sponza_transform.scale({0.125F});
             registry.assign_or_replace(sponza_instance, sponza_transform);
             registry.name(sponza_instance, "Sponza");
@@ -145,7 +144,7 @@ extern "C"
                 .depth_bias = 0.005F,
             };
 
-            auto sun_tx = tempest::ecs::transform_component::identity();
+            auto sun_tx = tempest::ecs::transform_component{};
             sun_tx.rotation({tempest::math::as_radians(85.0F), tempest::math::as_radians(10.0F), 0.0F});
 
             registry.assign_or_replace(sun, sun_shadows);
@@ -169,7 +168,7 @@ extern "C"
 
             const auto initial_position = tempest::math::vec3<float>{-2.5F, 0.35F, 0.0F};
             auto cube_hist = tempest::ecs::transform_history_component::create(initial_position);
-            auto cube_tx = tempest::ecs::transform_component::identity();
+            auto cube_tx = tempest::ecs::transform_component{};
             cube_tx.position(initial_position);
 
             auto cube_light = tempest::render_system::point_light_component{
@@ -197,30 +196,29 @@ extern "C"
 
         ctx->register_on_fixed_update_callback([](auto& engine_ctx, auto delta_time) -> void {
             auto& reg = engine_ctx.get_entities();
-            reg.each([dt = delta_time.count()](tempest::ecs::transform_history_component& hist,
-                                               patrol_component& patrol) {
-                // 1. Move horizontally along wide track across courtyard
-                hist.current_position.x += patrol.direction * patrol.speed * dt;
-                if (hist.current_position.x >= patrol.max_x)
-                {
-                    hist.current_position.x = patrol.max_x;
-                    patrol.direction = -1.0F;
-                }
-                else if (hist.current_position.x <= patrol.min_x)
-                {
-                    hist.current_position.x = patrol.min_x;
-                    patrol.direction = 1.0F;
-                }
+            reg.each(
+                [dt = delta_time.count()](tempest::ecs::transform_history_component& hist, patrol_component& patrol) {
+                    // 1. Move horizontally along wide track across courtyard
+                    hist.current_position.x += patrol.direction * patrol.speed * dt;
+                    if (hist.current_position.x >= patrol.max_x)
+                    {
+                        hist.current_position.x = patrol.max_x;
+                        patrol.direction = -1.0F;
+                    }
+                    else if (hist.current_position.x <= patrol.min_x)
+                    {
+                        hist.current_position.x = patrol.min_x;
+                        patrol.direction = 1.0F;
+                    }
 
-                // 2. Continuous rotation via incremental delta quaternion composition
-                const auto delta_rot = tempest::math::quat<float>(
-                    tempest::math::vec3<float>{
+                    // 2. Continuous rotation via incremental delta quaternion composition
+                    const auto delta_rot = tempest::math::quat<float>(tempest::math::vec3<float>{
                         tempest::math::as_radians(patrol.pitch_speed * dt),
                         tempest::math::as_radians(patrol.yaw_speed * dt),
                         0.0F,
                     });
-                hist.current_rotation = tempest::math::normalize(hist.current_rotation * delta_rot);
-            });
+                    hist.current_rotation = tempest::math::normalize(hist.current_rotation * delta_rot);
+                });
         });
     }
 
