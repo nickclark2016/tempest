@@ -155,7 +155,7 @@ namespace tempest::editor::tests
             auto reg = ecs::archetype_registry{events};
 
             auto ent = reg.create();
-            reg.assign(ent, ecs::transform_component::identity());
+            reg.assign(ent, ecs::transform_component{});
             reg.assign(ent, render_system::camera_component{
                                 .aspect_ratio = 16.0F / 9.0F,
                                 .vertical_fov = math::as_radians(60.0F),
@@ -280,7 +280,7 @@ namespace tempest::editor::tests
 
             auto ent = reg.create();
             reg.name(ent, "Test Entity");
-            reg.assign(ent, ecs::transform_component::identity());
+            reg.assign(ent, ecs::transform_component{});
 
             auto view_window = entity_view_window{reg};
             view_window.target = ent;
@@ -383,7 +383,7 @@ namespace tempest::editor::tests
         // 2. Add Game Camera Entity
         auto game_cam = engine_ctx.get_entities().create();
         engine_ctx.get_entities().name(game_cam, "Player Camera");
-        engine_ctx.get_entities().assign(game_cam, ecs::transform_component::identity());
+        engine_ctx.get_entities().assign(game_cam, ecs::transform_component{});
         engine_ctx.get_entities().assign(game_cam, render_system::camera_component{
                                                        .aspect_ratio = 1.0F,
                                                        .vertical_fov = math::as_radians(60.0F),
@@ -467,7 +467,7 @@ namespace tempest::editor::tests
 
         const auto initial_pos = math::vec3<float>{1.0F, 2.0F, 3.0F};
         auto hist = ecs::transform_history_component::create(initial_pos);
-        auto tx = ecs::transform_component::identity();
+        auto tx = ecs::transform_component{};
         tx.position(initial_pos);
 
         reg.assign(ent, hist);

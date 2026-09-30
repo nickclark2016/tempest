@@ -23,11 +23,11 @@ using tempest::math::vec4;
 // Section: Component Invariants & Initialization
 // ============================================================================
 
-/// @brief Tests that transform_component::identity() initializes to identity transform.
+/// @brief Tests that transform_component{} initializes to identity transform.
 TEST(transform_component_test, identity_invariants)
 {
     // 1. Setup & Act
-    const auto tx = transform_component::identity();
+    const auto tx = transform_component{};
 
     // 2. Assert
     EXPECT_FLOAT_EQ(tx.position().x, 0.0F);
@@ -61,7 +61,7 @@ TEST(transform_component_test, identity_invariants)
 TEST(transform_component_test, mutators_update_cached_matrix)
 {
     // 1. Setup
-    auto tx = transform_component::identity();
+    auto tx = transform_component{};
     const auto new_pos = vec3<float>{5.0F, 10.0F, -15.0F};
     const auto new_rot = vec3<float>{as_radians(30.0F), as_radians(45.0F), 0.0F};
     const auto new_scale = vec3<float>{2.0F, 2.0F, 2.0F};
@@ -96,12 +96,12 @@ TEST(transform_component_test, hierarchy_world_matrix_computation)
     auto registry = archetype_registry{events};
 
     const auto parent_ent = registry.create();
-    auto parent_tx = transform_component::identity();
+    auto parent_tx = transform_component{};
     parent_tx.position(vec3<float>{10.0F, 0.0F, 0.0F});
     registry.assign(parent_ent, parent_tx);
 
     const auto child_ent = registry.create();
-    auto child_tx = transform_component::identity();
+    auto child_tx = transform_component{};
     child_tx.position(vec3<float>{0.0F, 5.0F, 0.0F});
     registry.assign(child_ent, child_tx);
 

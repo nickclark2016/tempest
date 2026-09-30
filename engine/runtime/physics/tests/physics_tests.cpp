@@ -159,7 +159,7 @@ namespace tempest::physics::tests
         const auto initial_position = math::vec3<float>{0.0F, 1.0F, 0.0F};
         controller.id = world.spawn_character(controller, initial_position);
 
-        auto initial_transform = ecs::transform_component::identity();
+        auto initial_transform = ecs::transform_component{};
         initial_transform.position(initial_position);
 
         registry.replace(entity, controller);
@@ -218,7 +218,7 @@ namespace tempest::physics::tests
         const auto initial_position = math::vec3<float>{0.0F, 1.0F, 0.0F};
         controller.id = world.spawn_character(controller, initial_position);
 
-        auto initial_transform = ecs::transform_component::identity();
+        auto initial_transform = ecs::transform_component{};
         initial_transform.position(initial_position);
 
         registry.replace(entity, controller);
@@ -309,7 +309,7 @@ namespace tempest::physics::tests
         const auto initial_position = math::vec3<float>{0.0F, 0.9F, -1.0F};
         controller.id = world.spawn_character(controller, initial_position);
 
-        auto initial_transform = ecs::transform_component::identity();
+        auto initial_transform = ecs::transform_component{};
         initial_transform.position(initial_position);
 
         registry.replace(entity, controller);

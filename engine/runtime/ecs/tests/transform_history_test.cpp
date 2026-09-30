@@ -179,7 +179,7 @@ TEST(transform_history_test, interpolate_synchronizes_transform_component)
         .current_position = vec3<float>{10.0F, 0.0F, 0.0F},
         .current_rotation = fquat{0.0F, 0.0F, 0.0F, 1.0F},
     };
-    auto tx = transform_component::identity();
+    auto tx = transform_component{};
 
     registry.assign(entity, history);
     registry.assign(entity, tx);

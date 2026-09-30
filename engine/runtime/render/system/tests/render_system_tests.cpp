@@ -156,7 +156,7 @@ namespace tempest::render_system::tests
 
         auto cam1 = registry.create();
         registry.assign(cam1, camera_component{.aspect_ratio = 16.0F / 9.0F, .vertical_fov = 1.0F, .near_plane = 0.1F});
-        registry.assign(cam1, ecs::transform_component::identity());
+        registry.assign(cam1, ecs::transform_component{});
 
         auto active_entity = cam_sys.get_active_camera_entity();
         ASSERT_TRUE(active_entity.has_value());
@@ -175,11 +175,11 @@ namespace tempest::render_system::tests
 
         auto cam1 = registry.create();
         registry.assign(cam1, camera_component{.aspect_ratio = 16.0F / 9.0F, .vertical_fov = 1.0F, .near_plane = 0.1F});
-        registry.assign(cam1, ecs::transform_component::identity());
+        registry.assign(cam1, ecs::transform_component{});
 
         auto cam2 = registry.create();
         registry.assign(cam2, camera_component{.aspect_ratio = 4.0F / 3.0F, .vertical_fov = 0.8F, .near_plane = 0.5F});
-        registry.assign(cam2, ecs::transform_component::identity());
+        registry.assign(cam2, ecs::transform_component{});
 
         // Default fallback picks cam1
         auto active_entity = cam_sys.get_active_camera_entity();
@@ -217,7 +217,7 @@ namespace tempest::render_system::tests
                                           .near_plane = 0.1F,
                                           .is_active = false,
                                       });
-        registry.assign(cam_inactive, ecs::transform_component::identity());
+        registry.assign(cam_inactive, ecs::transform_component{});
 
         // Offscreen render texture camera
         auto cam_tex = registry.create();
@@ -228,7 +228,7 @@ namespace tempest::render_system::tests
                                      .target = camera_target_type::render_texture,
                                      .is_active = true,
                                  });
-        registry.assign(cam_tex, ecs::transform_component::identity());
+        registry.assign(cam_tex, ecs::transform_component{});
 
         // Viewport camera
         auto cam_viewport = registry.create();
@@ -239,7 +239,7 @@ namespace tempest::render_system::tests
                                           .target = camera_target_type::viewport,
                                           .is_active = true,
                                       });
-        registry.assign(cam_viewport, ecs::transform_component::identity());
+        registry.assign(cam_viewport, ecs::transform_component{});
 
         auto active_entity = cam_sys.get_active_camera_entity();
         ASSERT_TRUE(active_entity.has_value());
@@ -285,7 +285,7 @@ namespace tempest::render_system::tests
                                          .vertical_fov = 1.5707963F,
                                          .near_plane = 0.01F,
                                      });
-            auto cam_tx = ecs::transform_component::identity();
+            auto cam_tx = ecs::transform_component{};
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
 
@@ -295,7 +295,7 @@ namespace tempest::render_system::tests
                                          .color = {1.0F, 1.0F, 1.0F},
                                          .intensity = 2.0F,
                                      });
-            registry.assign(sun_ent, ecs::transform_component::identity());
+            registry.assign(sun_ent, ecs::transform_component{});
 
             // 3. Setup Renderable Geometry Entity
             auto mesh_id = meshes.register_mesh(create_test_mesh());
@@ -308,7 +308,7 @@ namespace tempest::render_system::tests
             auto geom_ent = registry.create();
             registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(geom_ent, core::material_component{.material_id = mat_id});
-            registry.assign(geom_ent, ecs::transform_component::identity());
+            registry.assign(geom_ent, ecs::transform_component{});
 
             // 4. Prepare Frame
             rend->prepare_frame(1280, 720);
@@ -420,7 +420,7 @@ namespace tempest::render_system::tests
                                      .vertical_fov = 1.2F,
                                      .near_plane = 0.01F,
                                  });
-            auto cam_tx = ecs::transform_component::identity();
+            auto cam_tx = ecs::transform_component{};
             cam_tx.position({0.0F, 5.0F, -2.0F});
             registry.assign(cam, cam_tx);
 
@@ -430,7 +430,7 @@ namespace tempest::render_system::tests
                                      .color = {1.0F, 0.98F, 0.92F},
                                      .intensity = 7.0F,
                                  });
-            auto sun_tx = ecs::transform_component::identity();
+            auto sun_tx = ecs::transform_component{};
             sun_tx.rotation({math::as_radians(60.0F), math::as_radians(40.0F), 0.0F});
             registry.assign(sun, sun_tx);
 
@@ -454,7 +454,7 @@ namespace tempest::render_system::tests
                 auto ent = registry.create();
                 registry.assign(ent, core::mesh_component{.mesh_id = mesh_id});
                 registry.assign(ent, core::material_component{.material_id = mat_id});
-                registry.assign(ent, ecs::transform_component::identity());
+                registry.assign(ent, ecs::transform_component{});
             }
 
             rend->prepare_frame(1280, 720);
@@ -1177,31 +1177,31 @@ namespace tempest::render_system::tests
             auto ent0 = registry.create();
             registry.assign(ent0, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(ent0, core::material_component{.material_id = mat_opaque_1_id});
-            registry.assign(ent0, ecs::transform_component::identity());
+            registry.assign(ent0, ecs::transform_component{});
 
             // ent1: BLEND (transparent)
             auto ent1 = registry.create();
             registry.assign(ent1, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(ent1, core::material_component{.material_id = mat_blend_id});
-            registry.assign(ent1, ecs::transform_component::identity());
+            registry.assign(ent1, ecs::transform_component{});
 
             // ent2: MASK (shadow contributor)
             auto ent2 = registry.create();
             registry.assign(ent2, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(ent2, core::material_component{.material_id = mat_mask_id});
-            registry.assign(ent2, ecs::transform_component::identity());
+            registry.assign(ent2, ecs::transform_component{});
 
             // ent3: TRANSMISSIVE (transparent)
             auto ent3 = registry.create();
             registry.assign(ent3, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(ent3, core::material_component{.material_id = mat_trans_id});
-            registry.assign(ent3, ecs::transform_component::identity());
+            registry.assign(ent3, ecs::transform_component{});
 
             // ent4: OPAQUE (shadow contributor)
             auto ent4 = registry.create();
             registry.assign(ent4, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(ent4, core::material_component{.material_id = mat_opaque_2_id});
-            registry.assign(ent4, ecs::transform_component::identity());
+            registry.assign(ent4, ecs::transform_component{});
 
             rend->prepare_frame(1280, 720);
 
@@ -1478,7 +1478,7 @@ namespace tempest::render_system::tests
                                      .vertical_fov = 1.0F,
                                      .near_plane = 0.1F,
                                  });
-        auto cam_tx = ecs::transform_component::identity();
+        auto cam_tx = ecs::transform_component{};
         cam_tx.position({0.0F, 2.0F, -10.0F});
         registry.assign(cam_ent, cam_tx);
 
@@ -1497,7 +1497,7 @@ namespace tempest::render_system::tests
                                      .depth_bias = 0.008F,
                                      .priority = 0,
                                  });
-        auto sun_tx = ecs::transform_component::identity();
+        auto sun_tx = ecs::transform_component{};
         sun_tx.rotation({math::as_radians(45.0F), math::as_radians(30.0F), 0.0F});
         registry.assign(sun_ent, sun_tx);
 
@@ -1562,7 +1562,7 @@ namespace tempest::render_system::tests
                                      .vertical_fov = 1.0F,
                                      .near_plane = 0.1F,
                                  });
-        auto cam_tx = ecs::transform_component::identity();
+        auto cam_tx = ecs::transform_component{};
         cam_tx.position({0.0F, 0.0F, -5.0F});
         registry.assign(cam_ent, cam_tx);
 
@@ -1581,7 +1581,7 @@ namespace tempest::render_system::tests
                                      .depth_bias = 0.005F,
                                      .priority = 0,
                                  });
-        auto sun_tx = ecs::transform_component::identity();
+        auto sun_tx = ecs::transform_component{};
         sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
         registry.assign(sun_ent, sun_tx);
 
@@ -1598,7 +1598,7 @@ namespace tempest::render_system::tests
         auto geom_ent = registry.create();
         registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
         registry.assign(geom_ent, core::material_component{.material_id = mat_id});
-        registry.assign(geom_ent, ecs::transform_component::identity());
+        registry.assign(geom_ent, ecs::transform_component{});
 
         pool.load_materials(span<const guid>{&mat_id, 1}, materials, graph);
         pool.load_meshes(span<const guid>{&mesh_id, 1}, meshes, graph);
@@ -1725,7 +1725,7 @@ namespace tempest::render_system::tests
                                      .vertical_fov = 1.0F,
                                      .near_plane = 0.1F,
                                  });
-        auto cam_tx = ecs::transform_component::identity();
+        auto cam_tx = ecs::transform_component{};
         cam_tx.position({0.0F, 0.0F, -5.0F});
         registry.assign(cam_ent, cam_tx);
 
@@ -1743,7 +1743,7 @@ namespace tempest::render_system::tests
                                      .depth_bias = 0.005F,
                                      .priority = 0,
                                  });
-        auto sun_tx = ecs::transform_component::identity();
+        auto sun_tx = ecs::transform_component{};
         sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
         registry.assign(sun_ent, sun_tx);
 
@@ -1848,7 +1848,7 @@ namespace tempest::render_system::tests
                                      .near_plane = 0.1F,
                                      .is_active = true,
                                  });
-        registry.assign(cam_ent, ecs::transform_component::identity());
+        registry.assign(cam_ent, ecs::transform_component{});
 
         auto sun_ent = registry.create();
         registry.assign(sun_ent, directional_light_component{
@@ -1864,7 +1864,7 @@ namespace tempest::render_system::tests
                                      .depth_bias = 0.005F,
                                      .priority = 0,
                                  });
-        auto sun_tx = ecs::transform_component::identity();
+        auto sun_tx = ecs::transform_component{};
         sun_tx.rotation({math::as_radians(45.0F), math::as_radians(30.0F), 0.0F});
         registry.assign(sun_ent, sun_tx);
 
@@ -2001,7 +2001,7 @@ namespace tempest::render_system::tests
                                          .vertical_fov = 1.0F,
                                          .near_plane = 0.1F,
                                      });
-            registry.assign(cam_ent, ecs::transform_component::identity());
+            registry.assign(cam_ent, ecs::transform_component{});
 
             auto sun_ent = registry.create();
             registry.assign(sun_ent, directional_light_component{
@@ -2012,7 +2012,7 @@ namespace tempest::render_system::tests
                                          .resolution = 2048,
                                          .num_cascades = 4,
                                      });
-            registry.assign(sun_ent, ecs::transform_component::identity());
+            registry.assign(sun_ent, ecs::transform_component{});
 
             rend->prepare_frame(1280, 720);
 
@@ -2058,7 +2058,7 @@ namespace tempest::render_system::tests
                                          .vertical_fov = 1.0F,
                                          .near_plane = 0.1F,
                                      });
-            registry.assign(cam_ent, ecs::transform_component::identity());
+            registry.assign(cam_ent, ecs::transform_component{});
 
             auto sun_ent = registry.create();
             registry.assign(sun_ent, directional_light_component{
@@ -2069,7 +2069,7 @@ namespace tempest::render_system::tests
                                          .resolution = 4096,
                                          .num_cascades = 4,
                                      });
-            registry.assign(sun_ent, ecs::transform_component::identity());
+            registry.assign(sun_ent, ecs::transform_component{});
 
             rend->prepare_frame(1280, 720);
 
@@ -2245,7 +2245,7 @@ namespace tempest::render_system::tests
                                          .vertical_fov = 1.5707963F,
                                          .near_plane = 0.01F,
                                      });
-            auto cam_tx = ecs::transform_component::identity();
+            auto cam_tx = ecs::transform_component{};
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
 
@@ -2265,7 +2265,7 @@ namespace tempest::render_system::tests
                                          .priority = 0,
                                          .debug_mode = shadow_debug_mode::cascades,
                                      });
-            auto sun_tx = ecs::transform_component::identity();
+            auto sun_tx = ecs::transform_component{};
             sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
             registry.assign(sun_ent, sun_tx);
 
@@ -2280,7 +2280,7 @@ namespace tempest::render_system::tests
             auto geom_ent = registry.create();
             registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(geom_ent, core::material_component{.material_id = mat_id});
-            registry.assign(geom_ent, ecs::transform_component::identity());
+            registry.assign(geom_ent, ecs::transform_component{});
 
             // 4. Prepare Frame with Cascades debug mode
             rend->prepare_frame(1280, 720);
@@ -3994,7 +3994,7 @@ namespace tempest::render_system::tests
                                      .vertical_fov = 1.04719755F,
                                      .near_plane = 0.01F,
                                  });
-        auto cam_tx = ecs::transform_component::identity();
+        auto cam_tx = ecs::transform_component{};
         cam_tx.position({0.0F, 0.0F, -4.0F});
         registry.assign(cam_ent, cam_tx);
 
@@ -4010,7 +4010,7 @@ namespace tempest::render_system::tests
                                      .split_lambda = 0.5F,
                                      .max_shadow_distance = 20.0F,
                                  });
-        auto sun_tx = ecs::transform_component::identity();
+        auto sun_tx = ecs::transform_component{};
         sun_tx.rotation({math::as_radians(70.0F), math::as_radians(15.0F), 0.0F});
         registry.assign(sun_ent, sun_tx);
 
@@ -4049,7 +4049,7 @@ namespace tempest::render_system::tests
         auto ent_opaque = registry.create();
         registry.assign(ent_opaque, core::mesh_component{.mesh_id = mesh_id});
         registry.assign(ent_opaque, core::material_component{.material_id = mat_opaque_id});
-        auto tx_opaque = ecs::transform_component::identity();
+        auto tx_opaque = ecs::transform_component{};
         tx_opaque.position({0.0F, 0.0F, 1.0F});
         registry.assign(ent_opaque, tx_opaque);
 
@@ -4057,7 +4057,7 @@ namespace tempest::render_system::tests
         auto ent_trans = registry.create();
         registry.assign(ent_trans, core::mesh_component{.mesh_id = mesh_id});
         registry.assign(ent_trans, core::material_component{.material_id = mat_trans_id});
-        auto tx_trans = ecs::transform_component::identity();
+        auto tx_trans = ecs::transform_component{};
         tx_trans.position({0.0F, 0.0F, 0.5F});
         registry.assign(ent_trans, tx_trans);
 
@@ -4065,7 +4065,7 @@ namespace tempest::render_system::tests
         auto ent_blend = registry.create();
         registry.assign(ent_blend, core::mesh_component{.mesh_id = mesh_id});
         registry.assign(ent_blend, core::material_component{.material_id = mat_blend_id});
-        auto tx_blend = ecs::transform_component::identity();
+        auto tx_blend = ecs::transform_component{};
         tx_blend.position({0.0F, 0.0F, 0.0F});
         registry.assign(ent_blend, tx_blend);
 
@@ -4177,7 +4177,7 @@ namespace tempest::render_system::tests
                                      .vertical_fov = 1.04719755F,
                                      .near_plane = 0.01F,
                                  });
-        auto cam_tx = ecs::transform_component::identity();
+        auto cam_tx = ecs::transform_component{};
         cam_tx.position({0.0F, 0.35F, -0.55F});
         cam_tx.rotation({math::as_radians(28.0F), 0.0F, 0.0F});
         registry.assign(cam_ent, cam_tx);
@@ -4196,7 +4196,7 @@ namespace tempest::render_system::tests
                                      .normal_bias = 0.005F,
                                      .depth_bias = 0.001F,
                                  });
-        auto sun_tx = ecs::transform_component::identity();
+        auto sun_tx = ecs::transform_component{};
         sun_tx.rotation({math::as_radians(65.0F), math::as_radians(25.0F), 0.0F});
         registry.assign(sun_ent, sun_tx);
 
@@ -4353,7 +4353,7 @@ namespace tempest::render_system::tests
                                        .intensity = 4.0F,
                                        .range = 10.0F,
                                    });
-        auto pre_tx = ecs::transform_component::identity();
+        auto pre_tx = ecs::transform_component{};
         pre_tx.position({1.0F, 2.0F, 3.0F});
         registry.assign(pre_light, pre_tx);
 
@@ -4395,7 +4395,7 @@ namespace tempest::render_system::tests
                                         .intensity = 8.0F,
                                         .range = 20.0F,
                                     });
-            auto tx2 = ecs::transform_component::identity();
+            auto tx2 = ecs::transform_component{};
             tx2.position({-5.0F, 0.0F, 10.0F});
             registry.assign(light2, tx2);
 
@@ -4484,7 +4484,7 @@ namespace tempest::render_system::tests
                                          .vertical_fov = 1.5707963F,
                                          .near_plane = 0.01F,
                                      });
-            auto cam_tx = ecs::transform_component::identity();
+            auto cam_tx = ecs::transform_component{};
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
 
@@ -4495,7 +4495,7 @@ namespace tempest::render_system::tests
                                            .intensity = 20.0F,
                                            .range = 10.0F,
                                        });
-            auto light_tx = ecs::transform_component::identity();
+            auto light_tx = ecs::transform_component{};
             light_tx.position({0.0F, 0.0F, -2.0F});
             registry.assign(light_ent, light_tx);
 
@@ -4510,7 +4510,7 @@ namespace tempest::render_system::tests
             auto geom_ent = registry.create();
             registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(geom_ent, core::material_component{.material_id = mat_id});
-            registry.assign(geom_ent, ecs::transform_component::identity());
+            registry.assign(geom_ent, ecs::transform_component{});
 
             // 4. Prepare Frame
             rend->prepare_frame(1280, 720);
@@ -4618,7 +4618,7 @@ namespace tempest::render_system::tests
                                          .vertical_fov = 1.5707963F,
                                          .near_plane = 0.01F,
                                      });
-            auto cam_tx = ecs::transform_component::identity();
+            auto cam_tx = ecs::transform_component{};
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
 
@@ -4629,7 +4629,7 @@ namespace tempest::render_system::tests
                                            .intensity = 25.0F,
                                            .range = 10.0F,
                                        });
-            auto light_tx = ecs::transform_component::identity();
+            auto light_tx = ecs::transform_component{};
             light_tx.position({0.0F, 0.0F, -2.0F});
             registry.assign(light_ent, light_tx);
 
@@ -4645,7 +4645,7 @@ namespace tempest::render_system::tests
             auto geom_ent = registry.create();
             registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(geom_ent, core::material_component{.material_id = mat_id});
-            registry.assign(geom_ent, ecs::transform_component::identity());
+            registry.assign(geom_ent, ecs::transform_component{});
 
             // 4. Prepare Frame
             rend->prepare_frame(1280, 720);
@@ -4743,7 +4743,7 @@ namespace tempest::render_system::tests
         auto pre_ent = registry.create();
         registry.assign(pre_ent, core::mesh_component{.mesh_id = mesh_id});
         registry.assign(pre_ent, core::material_component{.material_id = mat_opaque_id});
-        registry.assign(pre_ent, ecs::transform_component::identity());
+        registry.assign(pre_ent, ecs::transform_component{});
 
         auto builder = renderer::builder{};
         builder.set_config(renderer_config{
@@ -4774,7 +4774,7 @@ namespace tempest::render_system::tests
             auto ent2 = registry.create();
             registry.assign(ent2, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(ent2, core::material_component{.material_id = mat_blend_id});
-            registry.assign(ent2, ecs::transform_component::identity());
+            registry.assign(ent2, ecs::transform_component{});
 
             EXPECT_EQ(rend->get_tracked_renderable_count(), 2U);
 
@@ -4833,7 +4833,7 @@ namespace tempest::render_system::tests
         auto ent = registry.create();
         registry.assign(ent, core::mesh_component{.mesh_id = mesh_id});
         registry.assign(ent, core::material_component{.material_id = mat_id});
-        registry.assign(ent, ecs::transform_component::identity());
+        registry.assign(ent, ecs::transform_component{});
 
         auto builder = renderer::builder{};
         builder.set_config(renderer_config{
@@ -4915,7 +4915,7 @@ namespace tempest::render_system::tests
             auto geom_ent = registry.create();
             registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(geom_ent, core::material_component{.material_id = mat_id});
-            registry.assign(geom_ent, ecs::transform_component::identity());
+            registry.assign(geom_ent, ecs::transform_component{});
 
             // 2. Build Direct render_camera Override
             const auto proj = math::perspective(16.0F / 9.0F, math::as_radians(75.0F), 0.05F);
@@ -4996,7 +4996,7 @@ namespace tempest::render_system::tests
                                          .split_lambda = 0.5F,
                                          .max_shadow_distance = 100.0F,
                                      });
-            auto sun_tx = ecs::transform_component::identity();
+            auto sun_tx = ecs::transform_component{};
             sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
             registry.assign(sun_ent, sun_tx);
 
@@ -5113,7 +5113,7 @@ namespace tempest::render_system::tests
                                              .vertical_fov = 1.0F,
                                              .near_plane = 0.1F,
                                          });
-            auto ecs_tx = ecs::transform_component::identity();
+            auto ecs_tx = ecs::transform_component{};
             ecs_tx.position({0.0F, 100.0F, 0.0F});
             registry.assign(ecs_cam_ent, ecs_tx);
 
@@ -5203,7 +5203,7 @@ namespace tempest::render_system::tests
                                          .split_lambda = 0.5F,
                                          .max_shadow_distance = 100.0F,
                                      });
-            auto sun_tx = ecs::transform_component::identity();
+            auto sun_tx = ecs::transform_component{};
             sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
             registry.assign(sun_ent, sun_tx);
 
@@ -5658,7 +5658,7 @@ namespace tempest::render_system::tests
                                          .split_lambda = 0.5F,
                                          .max_shadow_distance = 100.0F,
                                      });
-            auto sun_tx = ecs::transform_component::identity();
+            auto sun_tx = ecs::transform_component{};
             sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
             registry.assign(sun_ent, sun_tx);
 
@@ -5775,7 +5775,7 @@ namespace tempest::render_system::tests
                                          .split_lambda = 0.5F,
                                          .max_shadow_distance = 100.0F,
                                      });
-            auto sun_tx = ecs::transform_component::identity();
+            auto sun_tx = ecs::transform_component{};
             sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
             registry.assign(sun_ent, sun_tx);
 
@@ -5882,7 +5882,7 @@ namespace tempest::render_system::tests
                                          .vertical_fov = 1.5707963F,
                                          .near_plane = 0.01F,
                                      });
-            auto cam_tx = ecs::transform_component::identity();
+            auto cam_tx = ecs::transform_component{};
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
 
@@ -5892,7 +5892,7 @@ namespace tempest::render_system::tests
                                          .color = {1.0F, 1.0F, 1.0F},
                                          .intensity = 2.0F,
                                      });
-            registry.assign(sun_ent, ecs::transform_component::identity());
+            registry.assign(sun_ent, ecs::transform_component{});
 
             auto mesh_id = meshes.register_mesh(create_test_mesh());
             auto mat = core::material{};
@@ -5903,7 +5903,7 @@ namespace tempest::render_system::tests
             auto geom_ent = registry.create();
             registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(geom_ent, core::material_component{.material_id = mat_id});
-            registry.assign(geom_ent, ecs::transform_component::identity());
+            registry.assign(geom_ent, ecs::transform_component{});
 
             // 2. Act: Prepare frame and execute render() with custom pass dispatcher
             rend->prepare_frame(1280, 720);
