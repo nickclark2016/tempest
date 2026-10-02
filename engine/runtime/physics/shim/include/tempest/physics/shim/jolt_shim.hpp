@@ -89,6 +89,7 @@ namespace jolt::shim
         quat rotation{};
         motion_type motion = motion_type::static_motion;
         object_layer layer = object_layer::non_moving;
+        float mass = 0.0F;
     };
 
     using job_execute_fn = void (*)(void* job_context);
@@ -362,6 +363,16 @@ namespace jolt::shim
         /// \param target_body_id Identifier of the body.
         /// \param velocity New linear velocity in meters per second.
         virtual void set_body_linear_velocity(body_id target_body_id, vec3 velocity) = 0;
+
+        /// \brief Queries the angular velocity vector of a body.
+        /// \param target_body_id Identifier of the body.
+        /// \return Current angular velocity in radians per second.
+        [[nodiscard]] virtual auto get_body_angular_velocity(body_id target_body_id) const -> vec3 = 0;
+
+        /// \brief Sets the angular velocity vector of a body.
+        /// \param target_body_id Identifier of the body.
+        /// \param velocity New angular velocity in radians per second.
+        virtual void set_body_angular_velocity(body_id target_body_id, vec3 velocity) = 0;
 
         // Queries & Stepping
         /// \brief Casts a ray into the physics world and retrieves the closest intersection.

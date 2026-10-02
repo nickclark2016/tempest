@@ -583,6 +583,8 @@ namespace jolt::shim
         auto set_body_rotation(body_id target_body_id, quat rotation) -> void override;
         [[nodiscard]] auto get_body_linear_velocity(body_id target_body_id) const -> vec3 override;
         auto set_body_linear_velocity(body_id target_body_id, vec3 velocity) -> void override;
+        [[nodiscard]] auto get_body_angular_velocity(body_id target_body_id) const -> vec3 override;
+        auto set_body_angular_velocity(body_id target_body_id, vec3 velocity) -> void override;
 
         // Queries & Stepping
         [[nodiscard]] auto cast_ray(const raycast_query& query) -> raycast_hit override;
@@ -716,11 +718,17 @@ namespace jolt::shim
             break;
         }
 
-        const auto body_settings = JPH::BodyCreationSettings(
+        auto body_settings = JPH::BodyCreationSettings(
             reinterpret_cast<const JPH::Shape*>(description.shape),
             JPH::RVec3(description.position.x, description.position.y, description.position.z),
             JPH::Quat(description.rotation.x, description.rotation.y, description.rotation.z, description.rotation.w),
             motion, static_cast<JPH::ObjectLayer>(description.layer));
+
+        if (description.mass > 0.0F)
+        {
+            body_settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+            body_settings.mMassPropertiesOverride.mMass = description.mass;
+        }
 
         auto* const created_body = _physics_system.GetBodyInterface().CreateBody(body_settings);
         if (created_body == nullptr)
@@ -829,6 +837,30 @@ namespace jolt::shim
         }
         _physics_system.GetBodyInterface().SetLinearVelocity(JPH::BodyID(target_body_id),
                                                             JPH::Vec3(velocity.x, velocity.y, velocity.z));
+    }
+
+    auto physics_system_impl::get_body_angular_velocity(body_id target_body_id) const -> vec3
+    {
+        if (target_body_id == invalid_body_id)
+        {
+            return vec3{};
+        }
+        const auto ang_vel = _physics_system.GetBodyInterface().GetAngularVelocity(JPH::BodyID(target_body_id));
+        return vec3{
+            .x = ang_vel.GetX(),
+            .y = ang_vel.GetY(),
+            .z = ang_vel.GetZ(),
+        };
+    }
+
+    auto physics_system_impl::set_body_angular_velocity(body_id target_body_id, vec3 velocity) -> void
+    {
+        if (target_body_id == invalid_body_id)
+        {
+            return;
+        }
+        _physics_system.GetBodyInterface().SetAngularVelocity(JPH::BodyID(target_body_id),
+                                                              JPH::Vec3(velocity.x, velocity.y, velocity.z));
     }
 
     auto physics_system_impl::cast_ray(const raycast_query& query) -> raycast_hit

@@ -3,6 +3,7 @@
 #include <tempest/physics/character_controller_component.hpp>
 #include <tempest/physics/character_controller_system.hpp>
 #include <tempest/physics/character_movement_intent.hpp>
+#include <tempest/physics/velocity_component.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/transform_history_component.hpp>
 
@@ -116,10 +117,15 @@ namespace tempest::physics
             const auto new_ground_state = character->get_ground_state();
             const auto new_ground_normal = character->get_ground_normal();
 
-            controller.linear_velocity = math::vec3<float>{new_velocity.x, new_velocity.y, new_velocity.z};
             controller.current_ground_state = new_ground_state;
             controller.is_grounded = (new_ground_state == jolt::shim::ground_state::on_ground);
             controller.ground_normal = math::vec3<float>{new_ground_normal.x, new_ground_normal.y, new_ground_normal.z};
+
+            if (auto* velocity = registry.try_get<velocity_component>(self.entity))
+            {
+                auto* const mutable_velocity = const_cast<velocity_component*>(velocity);
+                mutable_velocity->linear = math::vec3<float>{new_velocity.x, new_velocity.y, new_velocity.z};
+            }
 
             // 9. Update transform_component with new position and rotation.
             const auto final_position = math::vec3<float>{new_position.x, new_position.y, new_position.z};

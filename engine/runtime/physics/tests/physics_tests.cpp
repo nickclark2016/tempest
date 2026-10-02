@@ -11,6 +11,7 @@
 #include <tempest/physics/character_controller_system.hpp>
 #include <tempest/physics/character_movement_intent.hpp>
 #include <tempest/physics/physics_world.hpp>
+#include <tempest/physics/velocity_component.hpp>
 #include <tempest/profiler/session.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/transform_component.hpp>
@@ -149,7 +150,7 @@ namespace tempest::physics::tests
 
         const auto floor_body = create_static_box(system, jolt::shim::vec3{50.0F, 1.0F, 50.0F}, jolt::shim::vec3{0.0F, -1.0F, 0.0F});
 
-        const auto entity = registry.create<character_controller_component, character_movement_intent, ecs::transform_component, ecs::transform_history_component>();
+        const auto entity = registry.create<character_controller_component, velocity_component, character_movement_intent, ecs::transform_component, ecs::transform_history_component>();
         auto controller = character_controller_component{
             .character_height = 1.8F,
             .character_radius = 0.4F,
@@ -163,6 +164,7 @@ namespace tempest::physics::tests
         initial_transform.position(initial_position);
 
         registry.replace(entity, controller);
+        registry.replace(entity, velocity_component{});
         registry.replace(entity, character_movement_intent{
             .wish_direction = math::vec3<float>{0.0F, 0.0F, 1.0F},
             .jump_requested = false,
@@ -183,11 +185,11 @@ namespace tempest::physics::tests
         // 3. Assert: Entity position moved forward along +Z axis and synced to transform & history
         const auto& updated_transform = registry.get<ecs::transform_component>(entity);
         const auto& updated_history = registry.get<ecs::transform_history_component>(entity);
-        const auto& updated_controller = registry.get<character_controller_component>(entity);
+        const auto& updated_velocity = registry.get<velocity_component>(entity);
 
         EXPECT_GT(updated_transform.position().z, 0.5F);
         EXPECT_FLOAT_EQ(updated_transform.position().z, updated_history.current_position.z);
-        EXPECT_GT(updated_controller.linear_velocity.z, 0.0F);
+        EXPECT_GT(updated_velocity.linear.z, 0.0F);
 
         // Teardown
         system->remove_body(floor_body);
@@ -209,7 +211,7 @@ namespace tempest::physics::tests
 
         const auto floor_body = create_static_box(system, jolt::shim::vec3{20.0F, 1.0F, 20.0F}, jolt::shim::vec3{0.0F, -1.0F, 0.0F});
 
-        const auto entity = registry.create<character_controller_component, character_movement_intent, ecs::transform_component>();
+        const auto entity = registry.create<character_controller_component, velocity_component, character_movement_intent, ecs::transform_component>();
         auto controller = character_controller_component{
             .character_height = 1.8F,
             .character_radius = 0.4F,
@@ -222,6 +224,7 @@ namespace tempest::physics::tests
         initial_transform.position(initial_position);
 
         registry.replace(entity, controller);
+        registry.replace(entity, velocity_component{});
         registry.replace(entity, character_movement_intent{
             .wish_direction = math::vec3<float>{0.0F, 0.0F, 0.0F},
             .jump_requested = false,
@@ -253,8 +256,8 @@ namespace tempest::physics::tests
         world.step(delta_time);
 
         // 3. Assert: Upward velocity applied matching sqrt(2 * g * jump_height)
-        const auto& jumping_controller = registry.get<character_controller_component>(entity);
-        EXPECT_GT(jumping_controller.linear_velocity.y, 4.0F);
+        const auto& jumping_velocity = registry.get<velocity_component>(entity);
+        EXPECT_GT(jumping_velocity.linear.y, 4.0F);
 
         // Advance a few ticks into air
         registry.replace(entity, character_movement_intent{
@@ -297,7 +300,7 @@ namespace tempest::physics::tests
         // Step: width 4m (half 2m), height 0.25m (half 0.125m, center y = 0.125m), depth 2m (half 1m, center z = 1.0m)
         const auto step_body = create_static_box(system, jolt::shim::vec3{2.0F, 0.125F, 1.0F}, jolt::shim::vec3{0.0F, 0.125F, 1.0F});
 
-        const auto entity = registry.create<character_controller_component, character_movement_intent, ecs::transform_component>();
+        const auto entity = registry.create<character_controller_component, velocity_component, character_movement_intent, ecs::transform_component>();
         auto controller = character_controller_component{
             .character_height = 1.8F,
             .character_radius = 0.4F,
@@ -313,6 +316,7 @@ namespace tempest::physics::tests
         initial_transform.position(initial_position);
 
         registry.replace(entity, controller);
+        registry.replace(entity, velocity_component{});
         registry.replace(entity, character_movement_intent{
             .wish_direction = math::vec3<float>{0.0F, 0.0F, 1.0F},
             .jump_requested = false,

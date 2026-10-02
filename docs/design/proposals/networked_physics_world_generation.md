@@ -117,10 +117,14 @@ gantt
   - Configure collision layers: `NonMoving` (Static), `Moving` (Dynamic), `Character`, `Debris`.
 - **Micro 1.3: Character Controller (`Jolt::CharacterVirtual`)**
   - Implement `character_controller_component` wrapping `Jolt::CharacterVirtual`.
+  - Extract linear and angular velocity into a standalone `velocity_component` shared across all moving actors.
   - Handle capsule collision, slope angle limits ($45^\circ\text{–}60^\circ$), stair stepping, ground adhesion, and gravity.
   - Map WASD and jump inputs into character velocity vectors.
 - **Micro 1.4: Physics State Snapshotting & Static Geometry Tests**
-  - Provide serialization functions to extract and restore `character_controller_state` (position, linear velocity, ground state).
+  - Establish `actor_motion_snapshot` $(p, q, v, \omega)$ as universal base motion state for dynamic bodies, characters, and projectiles.
+  - Implement composite `character_snapshot` combining motion snapshot with locomotion metadata (`is_grounded`, `ground_state`, `ground_normal`).
+  - Provide `restore_character_snapshot` accepting `physics_world*` (synchronously rewinding Jolt CharacterVirtual in shim) and `transform_history_component*` (resetting historical render poses to avoid streaks).
+  - Provide `capture_body_snapshot` and `restore_body_snapshot` for Jolt rigid bodies using mass and angular velocity accessors.
   - Construct test levels with planes, ramps, steps, and dynamic boxes.
   - Automated tests: Verify fixed-tick simulation repeatability, character step-climbing, and collision box raycasts.
 
@@ -139,13 +143,13 @@ gantt
   - Add debug network simulator injecting artificial latency (e.g. 100ms), jitter (e.g. $\pm 20\text{ms}$), and packet loss (e.g. $5\%$).
 - **Micro 2.3: Input Ring Buffer & Client Prediction**
   - Client serializes `user_cmd`: `(tick_id, move_vector, look_yaw, buttons)`.
-  - Client predicts physics immediately on input, storing `(tick_id, user_cmd, predicted_state)` in a fixed 128-entry circular buffer.
+  - Client predicts physics immediately on input, storing `(tick_id, user_cmd, predicted_state)` in a fixed 128-entry circular buffer using `character_snapshot.motion`.
   - Client streams `user_cmd` stream to server.
 - **Micro 2.4: Server Authority, Reconciliation & Visual Smoothing**
-  - Server validates client inputs against authoritative Jolt world and broadcasts `server_state`: `(server_tick, last_processed_client_tick, position, velocity, ground_state)`.
+  - Server validates client inputs against authoritative Jolt world and broadcasts `server_state` with `character_snapshot`.
   - Client reconciliation: Compare predicted position for `last_processed_client_tick` against server state:
     $$\Delta = ||\mathbf{p}_{\text{pred}} - \mathbf{p}_{\text{auth}}||$$
-    - If $\Delta > \epsilon$ (e.g. $2\text{cm}$): Restore state to $\mathbf{p}_{\text{auth}}$, discard older inputs, and resimulate Jolt forward to current tick using remaining unacknowledged inputs.
+    - If $\Delta > \epsilon$ (e.g. $2\text{cm}$): Restore state synchronously to $\mathbf{p}_{\text{auth}}$ via `restore_character_snapshot(&world, &history)`, discard older inputs, and resimulate Jolt forward to current tick using remaining unacknowledged inputs.
     - Apply visual error decay vector $\mathbf{e}_{\text{vis}}$ that smoothly decays to zero over $100\text{ms}$ to prevent visual snapping.
   - Automated tests: Mock network client moves forward for 100 ticks under 150ms ping; assert zero rubber-banding after steady-state prediction.
 
@@ -189,15 +193,14 @@ gantt
   - Generate micro-erosion and high-frequency displacement asynchronously on worker fibers without dropping frame rates.
 - **Micro 4.3: Remote Player Replication & Dead Reckoning**
   - Server broadcasts positions and velocities of other players in the same interest sector.
-  - Client instantiates remote proxy entities:
+  - Client instantiates remote proxy entities querying `velocity_component` directly for Dead Reckoning:
     - Extrapolate remote player positions between packets:
       $$\mathbf{p}(t) = \mathbf{p}_0 + \mathbf{v}_0 \Delta t + \frac{1}{2} \mathbf{a}_0 \Delta t^2$$
     - When new packet arrives, blend using Hermite cubic spline to eliminate positional pops.
-- **Micro 4.4: Dynamic Terrain Modification Delta Layer**
-  - Implement sparse delta storage (e.g. local voxel/height edits from explosions or digging).
-  - Server replicates deltas; client applies deltas on top of deterministic base:
-    $$\text{FinalChunk} = \text{BaseGenerator}(\text{Seed}) \oplus \text{Deltas}$$
-  - Dynamic Jolt shape patching when deltas are applied.
+- **Micro 4.4: Placed Dynamic Interactive Entities & Spatial Sleep**
+  - Synchronize dynamic rigid bodies (crates, barricades) using `actor_motion_snapshot` via `capture_body_snapshot` and `restore_body_snapshot`.
+  - Put resting rigid bodies to sleep to eliminate network updates until awakened by contact.
+  - Optional extension: Dynamic terrain modification delta layer.
 
 ---
 

@@ -65,7 +65,6 @@ namespace tempest::physics
         character_id id = invalid_character_id;
         bool is_grounded = false;
         jolt::shim::ground_state current_ground_state = jolt::shim::ground_state::in_air;
-        math::vec3<float> linear_velocity{0.0F, 0.0F, 0.0F};
         math::vec3<float> ground_normal{0.0F, 1.0F, 0.0F};
     };
 
