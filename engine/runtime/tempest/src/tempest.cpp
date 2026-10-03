@@ -39,9 +39,10 @@ namespace tempest
     } // namespace
 
     standalone_engine_context::standalone_engine_context(const engine_config& config)
-        : _log_sinks(make_default_log_sinks()), _logger(make_default_logger(_log_sinks)),
+        : client_context(config.fixed_timestep, config.max_frame_delta),
+          _log_sinks(make_default_log_sinks()), _logger(make_default_logger(_log_sinks)),
           _entity_registry(_event_registry), _asset_database(&_asset_type_reg),
-          _config{config}, _accumulator{config.fixed_timestep, config.max_frame_delta}
+          _config{config}
     {
         if (::setlocale(LC_ALL, "en_US.UTF-8") == nullptr)
         {
@@ -216,65 +217,79 @@ namespace tempest
         };
     }
 
-    auto standalone_engine_context::register_on_initialize_callback(function<void(engine_context&)> callback) -> void
+    engine_context::engine_context() = default;
+
+    engine_context::engine_context(float fixed_timestep, float max_frame_delta)
+        : _accumulator{fixed_timestep, max_frame_delta}
+    {
+    }
+
+    auto engine_context::register_on_initialize_callback(function<void(engine_context&)> callback) -> void
     {
         _on_initialize_callbacks.push_back(tempest::move(callback));
     }
 
-    auto standalone_engine_context::register_on_close_callback(function<void(engine_context&)> callback) -> void
+    auto engine_context::register_on_close_callback(function<void(engine_context&)> callback) -> void
     {
         _on_close_callbacks.push_back(tempest::move(callback));
     }
 
-    auto standalone_engine_context::register_on_fixed_update_callback(
+    auto engine_context::register_on_fixed_update_callback(
         function<void(engine_context&, chrono::duration<float>)> callback) -> void
     {
         _on_fixed_update_callbacks.push_back(tempest::move(callback));
     }
 
-    auto standalone_engine_context::register_on_variable_update_callback(
+    auto engine_context::register_on_variable_update_callback(
         function<void(engine_context&, chrono::duration<float>)> callback) -> void
     {
         _on_variable_update_callbacks.push_back(tempest::move(callback));
     }
 
-    auto standalone_engine_context::register_on_interpolate_callback(
-        function<void(engine_context&, float)> callback) -> void
-    {
-        _on_interpolate_callbacks.push_back(tempest::move(callback));
-    }
-
-    auto standalone_engine_context::request_close(bool close) -> void
+    auto engine_context::request_close(bool close) -> void
     {
         _should_close = close;
     }
 
-    auto standalone_engine_context::should_close() const -> bool
+    auto engine_context::should_close() const -> bool
     {
         return _should_close;
     }
 
-    auto standalone_engine_context::load_entity(ecs::entity src) -> ecs::entity
+    auto engine_context::_update_fixed(chrono::duration<float> delta_time) -> void
     {
-        return _entity_registry.duplicate(src);
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{get_profiler_session(), "engine::update_fixed"};
+        for (auto&& callback : _on_fixed_update_callbacks)
+        {
+            callback(*this, delta_time);
+        }
     }
 
-    auto standalone_engine_context::run() -> void
+    auto engine_context::_update_variable(chrono::duration<float> delta_time) -> void
     {
-        _logger.trace("Starting engine");
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{get_profiler_session(), "engine::update_variable"};
+        for (auto&& callback : _on_variable_update_callbacks)
+        {
+            callback(*this, delta_time);
+        }
+    }
 
-        _logger.trace("Running initialization callbacks");
+    auto engine_context::run() -> void
+    {
+        get_logger().trace("Starting engine context");
+
+        get_logger().trace("Running initialization callbacks");
         for (auto&& init_cb : _on_initialize_callbacks)
         {
             init_cb(*this);
         }
-        _logger.trace("Finished initialization callbacks");
+        get_logger().trace("Finished initialization callbacks");
 
         _accumulator.reset();
         auto current_time = chrono::steady_clock::now();
         _last_frame_time = current_time;
 
-        _logger.trace("Starting main loop");
+        get_logger().trace("Starting main loop");
         while (!_should_close)
         {
             const auto frame_start_time = chrono::steady_clock::now();
@@ -284,63 +299,155 @@ namespace tempest
             _delta_frame_time = delta;
             _last_frame_time = frame_start_time;
 
-            _accumulator.accumulate(delta.count());
-
-            while (_accumulator.has_pending_ticks())
+            // 1. External & Window / Network Event Polling
+            on_poll_events();
+            if (_should_close)
             {
-                ecs::step_transform_history(_entity_registry);
-                _update_fixed(chrono::duration<float>(_accumulator.fixed_delta()));
-                if (_should_close)
-                {
-                    goto exit_main_loop;
-                }
-                _accumulator.consume_tick();
+                break;
             }
 
-            _update_variable(_delta_frame_time);
-
-            if (!_config.headless)
+            // 2. Fixed Timestep Simulation
+            _accumulator.accumulate(delta.count());
+            if (should_step_simulation())
             {
-                const auto alpha = _accumulator.alpha();
-                ecs::interpolate_transform_history(_entity_registry, alpha);
-
-                for (auto&& interpolate_cb : _on_interpolate_callbacks)
+                while (_accumulator.has_pending_ticks())
                 {
-                    interpolate_cb(*this, alpha);
+                    ecs::step_transform_history(get_entities());
+                    _update_fixed(chrono::duration<float>(_accumulator.fixed_delta()));
+                    if (_should_close)
+                    {
+                        break;
+                    }
+                    _accumulator.consume_tick();
                 }
-
-                _render_frame();
             }
             else
             {
-                const auto frame_elapsed =
-                    chrono::duration_cast<chrono::duration<float>>(chrono::steady_clock::now() - frame_start_time).count();
-                const auto remaining = _accumulator.fixed_delta() - _accumulator.accumulated_time() - frame_elapsed;
-                if (remaining > 0.001F)
+                // Discard accumulated ticks when paused
+                while (_accumulator.has_pending_ticks())
                 {
-                    this_thread::sleep_for(chrono::duration<float>(remaining));
-                }
-                else
-                {
-                    this_thread::yield();
+                    _accumulator.consume_tick();
                 }
             }
+
+            if (_should_close)
+            {
+                break;
+            }
+
+            // 3. Variable Timestep Update
+            _update_variable(_delta_frame_time);
+
+            // 4. Render / Presentation Phase
+            const auto alpha = _accumulator.alpha();
+            on_render_frame(alpha);
+
+            // 5. Frame Pacing / Sleep Budget
+            const auto frame_elapsed =
+                chrono::duration_cast<chrono::duration<float>>(chrono::steady_clock::now() - frame_start_time);
+            on_pace_frame(frame_elapsed);
+
+            // 6. Frame End / Profiling & Telemetry
+            on_frame_end();
         }
 
-    exit_main_loop:
-        _logger.trace("Exiting main loop");
+        get_logger().trace("Exiting main loop");
 
-        if (_device)
-        {
-            _device->wait_idle();
-        }
-
-        _logger.trace("Running close callbacks");
+        get_logger().trace("Running close callbacks");
         for (auto&& close_cb : _on_close_callbacks)
         {
             close_cb(*this);
         }
-        _logger.trace("Finished close callbacks");
+        get_logger().trace("Finished close callbacks");
+    }
+
+    auto standalone_engine_context::register_on_interpolate_callback(
+        function<void(engine_context&, float)> callback) -> void
+    {
+        _on_interpolate_callbacks.push_back(tempest::move(callback));
+    }
+
+    auto standalone_engine_context::load_entity(ecs::entity src) -> ecs::entity
+    {
+        return _entity_registry.duplicate(src);
+    }
+
+    auto standalone_engine_context::on_poll_events() -> void
+    {
+        for (auto& win : _windows)
+        {
+            auto& mouse = _window_manager.get_mouse(win.handle);
+            mouse.reset_mouse_deltas();
+            mouse.set_disabled(_window_manager.is_cursor_disabled(win.handle));
+        }
+
+        _window_manager.poll_events();
+
+        for (auto* it = _windows.begin(); it != _windows.end();)
+        {
+            if (_window_manager.should_close(it->handle))
+            {
+                if (_renderer)
+                {
+                    _renderer->unregister_surface(it->handle);
+                }
+                if (_device && it->raw_surface.handle != 0)
+                {
+                    _device->destroy_raw_surface(it->raw_surface);
+                }
+                _window_manager.destroy_window(it->handle);
+                it = _windows.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        if (!_config.headless && _windows.empty())
+        {
+            _should_close = true;
+        }
+    }
+
+    auto standalone_engine_context::should_step_simulation() -> bool
+    {
+        return true;
+    }
+
+    auto standalone_engine_context::on_render_frame(float alpha) -> void
+    {
+        if (!_config.headless)
+        {
+            ecs::interpolate_transform_history(_entity_registry, alpha);
+
+            for (auto&& interpolate_cb : _on_interpolate_callbacks)
+            {
+                interpolate_cb(*this, alpha);
+            }
+
+            _render_frame();
+        }
+    }
+
+    auto standalone_engine_context::on_pace_frame(chrono::duration<float> frame_elapsed) -> void
+    {
+        if (_config.headless)
+        {
+            const auto remaining = _accumulator.fixed_delta() - _accumulator.accumulated_time() - frame_elapsed.count();
+            if (remaining > 0.001F)
+            {
+                this_thread::sleep_for(chrono::duration<float>(remaining));
+            }
+            else
+            {
+                this_thread::yield();
+            }
+        }
+    }
+
+    auto standalone_engine_context::on_frame_end() -> void
+    {
     }
 
     auto standalone_engine_context::get_entities() -> ecs::archetype_registry&
@@ -467,60 +574,6 @@ namespace tempest
             }
         }
         return {};
-    }
-
-    auto standalone_engine_context::_update_fixed(chrono::duration<float> delta_time) -> void
-    {
-        [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "engine::update_fixed"};
-        for (auto& win : _windows)
-        {
-            auto& mouse = _window_manager.get_mouse(win.handle);
-            mouse.reset_mouse_deltas();
-            mouse.set_disabled(_window_manager.is_cursor_disabled(win.handle));
-        }
-
-        _window_manager.poll_events();
-
-        for (auto* it = _windows.begin(); it != _windows.end();)
-        {
-            if (_window_manager.should_close(it->handle))
-            {
-                if (_renderer)
-                {
-                    _renderer->unregister_surface(it->handle);
-                }
-                if (_device && it->raw_surface.handle != 0)
-                {
-                    _device->destroy_raw_surface(it->raw_surface);
-                }
-                _window_manager.destroy_window(it->handle);
-                it = _windows.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
-
-        if (!_config.headless && _windows.empty())
-        {
-            _should_close = true;
-            return;
-        }
-
-        for (auto&& callback : _on_fixed_update_callbacks)
-        {
-            callback(*this, delta_time);
-        }
-    }
-
-    auto standalone_engine_context::_update_variable(chrono::duration<float> delta_time) -> void
-    {
-        [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "engine::update_variable"};
-        for (auto&& callback : _on_variable_update_callbacks)
-        {
-            callback(*this, delta_time);
-        }
     }
 
     auto standalone_engine_context::_render_frame() -> void

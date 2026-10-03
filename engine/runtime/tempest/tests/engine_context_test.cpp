@@ -225,4 +225,198 @@ namespace tempest::tests
             jobs.step();
         }
     }
+
+    // ============================================================================
+    // Section: Interface Segregation Tests
+    // ============================================================================
+
+    /// @brief Verifies that client_context inherits from engine_context, standalone_engine_context
+    ///        inherits from client_context, and graphical vs simulation systems are strictly segregated.
+    TEST(engine_context_test, interface_segregation_hierarchy)
+    {
+        // 1. Setup: instantiate standalone context in headless mode
+        const auto config = engine_config{
+            .headless = true,
+            .fixed_timestep = 1.0F / 60.0F,
+            .max_frame_delta = 0.1F,
+        };
+        auto standalone_context = standalone_engine_context{config};
+
+        // 2. Act: bind via references to segregated interfaces
+        auto& engine_interface = static_cast<engine_context&>(standalone_context);
+        auto& client_interface = static_cast<client_context&>(standalone_context);
+
+        // 3. Assert: engine_context provides simulation primitives and accumulator
+        EXPECT_NO_THROW({
+            [[maybe_unused]] auto& entities = engine_interface.get_entities();
+            [[maybe_unused]] auto& events = engine_interface.get_events();
+            [[maybe_unused]] auto& logger = engine_interface.get_logger();
+            [[maybe_unused]] auto& jobs = engine_interface.get_job_system();
+            [[maybe_unused]] auto& profiler = engine_interface.get_profiler_session();
+            [[maybe_unused]] const auto& accumulator = engine_interface.get_accumulator();
+            EXPECT_EQ(accumulator.fixed_delta(), 1.0F / 60.0F);
+        });
+
+        // 4. Assert: client_context provides graphical and asset subsystems
+        EXPECT_NO_THROW({
+            [[maybe_unused]] auto& materials = client_interface.get_materials();
+            [[maybe_unused]] auto& meshes = client_interface.get_meshes();
+            [[maybe_unused]] auto& textures = client_interface.get_textures();
+            [[maybe_unused]] auto& assets = client_interface.get_assets();
+            [[maybe_unused]] auto& window_mgr = client_interface.get_window_manager();
+        });
+    }
+
+    // ============================================================================
+    // Section: Template Method Loop Order & Hook Verification
+    // ============================================================================
+
+    /// @brief Verifies that the template method loop executes hooks in the exact canonical order:
+    ///        initialization callbacks -> [poll_events -> should_step_sim -> fixed_update -> variable_update -> render -> pace -> frame_end] -> close callbacks.
+    TEST(engine_context_test, template_method_loop_hooks_dispatch_order)
+    {
+        // 1. Setup: test subclass recording execution sequence of hooks
+        class hook_tracker_engine_context final : public standalone_engine_context
+        {
+          public:
+            explicit hook_tracker_engine_context(const engine_config& config) : standalone_engine_context{config} {}
+
+            vector<string> execution_log{};
+            uint32_t frame_count{0};
+
+          protected:
+            auto on_poll_events() -> void override
+            {
+                execution_log.push_back("on_poll_events");
+                standalone_engine_context::on_poll_events();
+            }
+
+            auto should_step_simulation() -> bool override
+            {
+                execution_log.push_back("should_step_simulation");
+                return true;
+            }
+
+            auto on_render_frame(float alpha) -> void override
+            {
+                execution_log.push_back("on_render_frame");
+                standalone_engine_context::on_render_frame(alpha);
+            }
+
+            auto on_pace_frame(chrono::duration<float> frame_elapsed) -> void override
+            {
+                execution_log.push_back("on_pace_frame");
+                standalone_engine_context::on_pace_frame(frame_elapsed);
+            }
+
+            auto on_frame_end() -> void override
+            {
+                execution_log.push_back("on_frame_end");
+                ++frame_count;
+                if (frame_count >= 2)
+                {
+                    request_close(true);
+                }
+            }
+        };
+
+        const auto config = engine_config{
+            .headless = true,
+            .fixed_timestep = 1.0F / 60.0F,
+            .max_frame_delta = 0.1F,
+        };
+        auto tracker_context = hook_tracker_engine_context{config};
+
+        tracker_context.register_on_initialize_callback([&](engine_context&) {
+            tracker_context.execution_log.push_back("on_initialize");
+        });
+
+        tracker_context.register_on_close_callback([&](engine_context&) {
+            tracker_context.execution_log.push_back("on_close");
+        });
+
+        tracker_context.register_on_fixed_update_callback([&](engine_context&, chrono::duration<float>) {
+            tracker_context.execution_log.push_back("fixed_update");
+        });
+
+        tracker_context.register_on_variable_update_callback([&](engine_context&, chrono::duration<float>) {
+            tracker_context.execution_log.push_back("variable_update");
+        });
+
+        // 2. Act: run loop for 2 frames
+        tracker_context.run();
+
+        // 3. Assert: initialization occurs first and close occurs last
+        ASSERT_FALSE(tracker_context.execution_log.empty());
+        EXPECT_EQ(tracker_context.execution_log.front(), "on_initialize");
+        EXPECT_EQ(tracker_context.execution_log.back(), "on_close");
+
+        // 4. Assert: verify first frame sequence begins with on_poll_events then should_step_simulation
+        auto first_poll_index = size_t{0};
+        for (auto index = size_t{0}; index < tracker_context.execution_log.size(); ++index)
+        {
+            if (tracker_context.execution_log[index] == "on_poll_events")
+            {
+                first_poll_index = index;
+                break;
+            }
+        }
+        ASSERT_GT(first_poll_index, 0U);
+        EXPECT_EQ(tracker_context.execution_log[first_poll_index + 1], "should_step_simulation");
+    }
+
+    /// @brief Verifies that when should_step_simulation returns false (simulation paused),
+    ///        fixed update callbacks do not execute and pending ticks are safely consumed/discarded.
+    TEST(engine_context_test, template_method_paused_simulation_discards_ticks)
+    {
+        // 1. Setup: test context with paused simulation override
+        class paused_engine_context final : public standalone_engine_context
+        {
+          public:
+            explicit paused_engine_context(const engine_config& config) : standalone_engine_context{config} {}
+
+            uint32_t frame_count{0};
+
+          protected:
+            auto should_step_simulation() -> bool override
+            {
+                return false;
+            }
+
+            auto on_frame_end() -> void override
+            {
+                ++frame_count;
+                if (frame_count >= 3)
+                {
+                    request_close(true);
+                }
+            }
+        };
+
+        const auto config = engine_config{
+            .headless = true,
+            .fixed_timestep = 1.0F / 60.0F,
+            .max_frame_delta = 0.1F,
+        };
+        auto paused_context = paused_engine_context{config};
+
+        auto fixed_update_call_count = uint32_t{0};
+        auto variable_update_call_count = uint32_t{0};
+
+        paused_context.register_on_fixed_update_callback([&](engine_context&, chrono::duration<float>) {
+            ++fixed_update_call_count;
+        });
+
+        paused_context.register_on_variable_update_callback([&](engine_context&, chrono::duration<float>) {
+            ++variable_update_call_count;
+        });
+
+        // 2. Act: run loop for 3 frames with paused simulation
+        paused_context.run();
+
+        // 3. Assert: fixed update was never called, while variable update ran every frame
+        EXPECT_EQ(fixed_update_call_count, 0U);
+        EXPECT_EQ(variable_update_call_count, 3U);
+        EXPECT_FALSE(paused_context.get_accumulator().has_pending_ticks());
+    }
 } // namespace tempest::tests

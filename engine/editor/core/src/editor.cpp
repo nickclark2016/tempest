@@ -250,7 +250,7 @@ namespace tempest::editor
             _engine_ctx->get_editor_camera().set_aspect_ratio(current_aspect);
 
             // If a game camera exists, sync its aspect ratio too (only on delta to prevent event spam)
-            auto& cam_sys = engine_ctx.get_renderer().get_camera_system();
+            auto& cam_sys = _engine_ctx->get_renderer().get_camera_system();
             auto active_cam_opt = cam_sys.get_active_camera_entity();
             if (active_cam_opt.has_value())
             {

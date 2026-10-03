@@ -26,7 +26,7 @@ namespace
 
         const auto& game_shared_library = *game_shared_library_result;
         const auto on_load_result =
-            game_shared_library.get_function_handle<void, engine_context*, span<string_view>>("on_load");
+            game_shared_library.get_function_handle<void, client_context*, span<string_view>>("on_load");
         const auto on_unload_result = game_shared_library.get_function_handle<void>("on_unload");
 
         if (!on_load_result || !on_unload_result)

@@ -87,18 +87,18 @@ namespace
 
 extern "C"
 {
-    GAME_API void on_load(tempest::engine_context* ctx, [[maybe_unused]] tempest::span<tempest::string_view> args)
+    GAME_API void on_load(tempest::client_context* ctx, [[maybe_unused]] tempest::span<tempest::string_view> args)
     {
         auto& logger = ctx->get_logger();
         logger.info("Game loaded successfully!");
 
-        ctx->register_on_close_callback([](auto& engine_ctx) -> void {
+        ctx->register_on_close_callback([ctx](auto& engine_ctx) -> void {
             auto& log = engine_ctx.get_logger();
             log.info("Game is closing...");
-            [[maybe_unused]] auto saved = engine_ctx.get_assets().save();
+            [[maybe_unused]] auto saved = ctx->get_assets().save();
         });
 
-        ctx->register_on_initialize_callback([](auto& engine_ctx) -> void {
+        ctx->register_on_initialize_callback([ctx](auto& engine_ctx) -> void {
             // Create a camera
             auto& registry = engine_ctx.get_entities();
 
@@ -116,7 +116,7 @@ extern "C"
             registry.assign(camera, camera_tx);
 
             // Load Sponza
-            auto& asset_database = engine_ctx.get_assets();
+            auto& asset_database = ctx->get_assets();
             asset_database.open("game.tassetdb");
 
             const auto sponza_prefab =
@@ -153,14 +153,14 @@ extern "C"
             registry.name(sun, "Sun");
 
             // Register procedural cube mesh and material
-            const auto cube_mesh_id = engine_ctx.get_meshes().register_mesh(create_cube_mesh(0.18F));
+            const auto cube_mesh_id = ctx->get_meshes().register_mesh(create_cube_mesh(0.18F));
 
             auto cube_mat = tempest::core::material{};
             cube_mat.set_vec4(tempest::core::material::base_color_factor_name, {0.95F, 0.6F, 0.15F, 1.0F});
             cube_mat.set_vec3(tempest::core::material::emissive_factor_name, {0.5F, 0.25F, 0.05F});
             cube_mat.set_scalar(tempest::core::material::metallic_factor_name, 0.1F);
             cube_mat.set_scalar(tempest::core::material::roughness_factor_name, 0.35F);
-            const auto cube_mat_id = engine_ctx.get_materials().register_material(tempest::move(cube_mat));
+            const auto cube_mat_id = ctx->get_materials().register_material(tempest::move(cube_mat));
 
             // Moving test entity with transform_history_component and renderable components
             auto test_cube = registry.create();

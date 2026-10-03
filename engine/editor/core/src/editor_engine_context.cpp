@@ -335,133 +335,34 @@ namespace tempest::editor
         }
     }
 
-    auto editor_engine_context::run() -> void
+    auto editor_engine_context::should_step_simulation() -> bool
     {
-        _logger.trace("Starting editor engine");
+        return _sim_state == simulation_state::play;
+    }
 
-        _logger.trace("Running initialization callbacks");
-        for (auto&& init_cb : _on_initialize_callbacks)
+    auto editor_engine_context::on_render_frame(float alpha) -> void
+    {
+        if (_sim_state == simulation_state::play)
         {
-            init_cb(*this);
-        }
-        _logger.trace("Finished initialization callbacks");
+            ecs::interpolate_transform_history(_entity_registry, alpha);
 
-        auto simulated_time = tempest::chrono::duration<double>(0.0);
-        auto delta_time = tempest::chrono::duration<double>(1.0 / 60.0);
-
-        auto current_time = tempest::chrono::steady_clock::now();
-        auto accumulator = tempest::chrono::duration<double>(0.0);
-        _last_frame_time = current_time;
-
-        _logger.trace("Starting editor main loop");
-        while (!_should_close)
-        {
-            auto frame_start_time = tempest::chrono::steady_clock::now();
-            auto delta =
-                tempest::chrono::duration_cast<tempest::chrono::duration<float>>(frame_start_time - _last_frame_time);
-            _delta_frame_time = delta;
-            _last_frame_time = frame_start_time;
-
-            auto new_time = tempest::chrono::steady_clock::now();
-            auto frame_time = new_time - current_time;
-            current_time = new_time;
-
-            accumulator += frame_time;
-
-            for (auto& win : _windows)
+            for (auto&& interpolate_cb : _on_interpolate_callbacks)
             {
-                auto& mouse = _window_manager.get_mouse(win.handle);
-                mouse.reset_mouse_deltas();
-                mouse.set_disabled(_window_manager.is_cursor_disabled(win.handle));
+                interpolate_cb(*this, alpha);
             }
-
-            _window_manager.poll_events();
-
-            for (auto it = _windows.begin(); it != _windows.end();)
-            {
-                if (_window_manager.should_close(it->handle))
-                {
-                    if (_renderer)
-                    {
-                        _renderer->unregister_surface(it->handle);
-                    }
-                    if (_device && it->raw_surface.handle != 0)
-                    {
-                        _device->destroy_raw_surface(it->raw_surface);
-                    }
-                    _window_manager.destroy_window(it->handle);
-                    it = _windows.erase(it);
-                }
-                else
-                {
-                    ++it;
-                }
-            }
-
-            if (_windows.empty())
-            {
-                _should_close = true;
-                break;
-            }
-
-            if (_sim_state == simulation_state::play)
-            {
-                while (accumulator >= delta_time)
-                {
-                    ecs::step_transform_history(_entity_registry);
-
-                    for (auto&& callback : _on_fixed_update_callbacks)
-                    {
-                        callback(*this, tempest::chrono::duration_cast<tempest::chrono::duration<float>>(delta_time));
-                    }
-                    if (_should_close)
-                    {
-                        break;
-                    }
-
-                    simulated_time += delta_time;
-                    accumulator -= delta_time;
-                }
-
-                for (auto&& callback : _on_variable_update_callbacks)
-                {
-                    callback(*this, _delta_frame_time);
-                }
-
-                const auto alpha = static_cast<float>(accumulator.count() / delta_time.count());
-                ecs::interpolate_transform_history(_entity_registry, alpha);
-
-                for (auto&& interpolate_cb : _on_interpolate_callbacks)
-                {
-                    interpolate_cb(*this, alpha);
-                }
-            }
-            else
-            {
-                accumulator = tempest::chrono::duration<double>(0.0);
-            }
-
-            for (auto&& on_update : _editor_callbacks.on_update)
-            {
-                on_update(*this);
-            }
-
-            _render_editor_frame();
         }
 
-        _logger.trace("Exiting editor main loop");
-
-        if (_device)
+        for (auto&& on_update : _editor_callbacks.on_update)
         {
-            _device->wait_idle();
+            on_update(*this);
         }
 
-        _logger.trace("Running editor close callbacks");
-        for (auto&& close_cb : _on_close_callbacks)
-        {
-            close_cb(*this);
-        }
-        _logger.trace("Finished editor close callbacks");
+        _render_editor_frame();
+    }
+
+    auto editor_engine_context::on_frame_end() -> void
+    {
+        collect_and_broadcast_telemetry();
     }
 
     auto editor_engine_context::_render_editor_frame() -> void
@@ -508,7 +409,5 @@ namespace tempest::editor
                 frame_end - frame_start);
             _last_cpu_time_ms = frame_dur.count();
         }
-
-        collect_and_broadcast_telemetry();
     }
 } // namespace tempest::editor

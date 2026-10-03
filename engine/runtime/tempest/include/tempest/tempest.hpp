@@ -35,7 +35,92 @@ namespace tempest
     /// \brief The engine context is the main interface for interacting with the engine.
     /// It provides access to the core systems of the engine and allows for registration of windows and execution
     /// callbacks.
+    /// \brief The engine context is the main interface for interacting with the engine core and simulation systems.
+    /// It provides access to entities, events, logging, jobs, profiler, and runs the master template method loop.
     class TEMPEST_API engine_context
+    {
+      public:
+        engine_context();
+        engine_context(float fixed_timestep, float max_frame_delta);
+        engine_context(const engine_context&) = delete;
+        engine_context(engine_context&&) noexcept = delete;
+        virtual ~engine_context() = default;
+
+        auto operator=(const engine_context&) -> engine_context& = delete;
+        auto operator=(engine_context&&) noexcept -> engine_context& = delete;
+
+        /// \brief Registers a callback to be executed when the engine is initialized.
+        virtual auto register_on_initialize_callback(function<void(engine_context&)> callback) -> void;
+
+        /// \brief Registers a callback to be executed when the engine is closed.
+        virtual auto register_on_close_callback(function<void(engine_context&)> callback) -> void;
+
+        /// \brief Registers a callback to be executed on fixed update.
+        virtual auto register_on_fixed_update_callback(
+            function<void(engine_context&, chrono::duration<float>)> callback) -> void;
+
+        /// \brief Registers a callback to be executed on variable update.
+        virtual auto register_on_variable_update_callback(
+            function<void(engine_context&, chrono::duration<float>)> callback) -> void;
+
+        /// \brief Runs the engine, executing the main loop and processing events.
+        auto run() -> void;
+
+        [[nodiscard]] virtual auto get_entities() -> ecs::archetype_registry& = 0;
+        [[nodiscard]] virtual auto get_entities() const -> const ecs::archetype_registry& = 0;
+
+        [[nodiscard]] virtual auto get_events() -> event::event_registry& = 0;
+        [[nodiscard]] virtual auto get_events() const -> const event::event_registry& = 0;
+
+        [[nodiscard]] virtual auto get_job_system() -> job::job_system& = 0;
+        [[nodiscard]] virtual auto get_job_system() const -> const job::job_system& = 0;
+
+        virtual auto request_close(bool close = true) -> void;
+        [[nodiscard]] virtual auto should_close() const -> bool;
+
+        [[nodiscard]] virtual auto load_entity(ecs::entity src) -> ecs::entity = 0;
+
+        [[nodiscard]] virtual auto get_logger() -> logger& = 0;
+        [[nodiscard]] virtual auto get_logger() const -> const logger& = 0;
+
+        [[nodiscard]] virtual auto get_profiler_session() -> profiler::profiler_session& = 0;
+        [[nodiscard]] virtual auto get_profiler_session() const -> const profiler::profiler_session& = 0;
+
+        [[nodiscard]] auto get_accumulator() const noexcept -> const fixed_timestep_accumulator&
+        {
+            return _accumulator;
+        }
+
+        [[nodiscard]] auto get_accumulator() noexcept -> fixed_timestep_accumulator&
+        {
+            return _accumulator;
+        }
+
+      protected:
+        virtual auto on_poll_events() -> void {}
+        [[nodiscard]] virtual auto should_step_simulation() -> bool { return true; }
+        virtual auto on_render_frame([[maybe_unused]] float alpha) -> void {}
+        virtual auto on_pace_frame([[maybe_unused]] chrono::duration<float> frame_elapsed) -> void {}
+        virtual auto on_frame_end() -> void {}
+
+        virtual auto _update_fixed(chrono::duration<float> delta_time) -> void;
+        virtual auto _update_variable(chrono::duration<float> delta_time) -> void;
+
+        // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes)
+        vector<function<void(engine_context&)>> _on_initialize_callbacks;
+        vector<function<void(engine_context&)>> _on_close_callbacks;
+        vector<function<void(engine_context&, chrono::duration<float>)>> _on_fixed_update_callbacks;
+        vector<function<void(engine_context&, chrono::duration<float>)>> _on_variable_update_callbacks;
+
+        fixed_timestep_accumulator _accumulator{};
+        chrono::steady_clock::time_point _last_frame_time{};
+        chrono::duration<float> _delta_frame_time{0.0F};
+        bool _should_close{false};
+        // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
+    };
+
+    /// \brief Context interface providing access to presentation, rendering, and asset registries.
+    class TEMPEST_API client_context : public engine_context
     {
       public:
         /// \brief Information about a registered window, containing its handle and input group.
@@ -45,44 +130,25 @@ namespace tempest
             core::input_group inputs{};
         };
 
-        engine_context() = default;
-        engine_context(const engine_context&) = delete;
-        engine_context(engine_context&&) noexcept = delete;
-        virtual ~engine_context() = default;
+        client_context() = default;
+        client_context(float fixed_timestep, float max_frame_delta)
+            : engine_context(fixed_timestep, max_frame_delta)
+        {
+        }
+        client_context(const client_context&) = delete;
+        client_context(client_context&&) noexcept = delete;
+        ~client_context() override = default;
 
-        auto operator=(const engine_context&) -> engine_context& = delete;
-        auto operator=(engine_context&&) noexcept -> engine_context& = delete;
+        auto operator=(const client_context&) -> client_context& = delete;
+        auto operator=(client_context&&) noexcept -> client_context& = delete;
 
         /// \brief Registers a window with the engine, creating the necessary render surface and input routing.
         virtual auto register_window(window_desc desc, bool install_swapchain_blit = true)
             -> window_registration_info = 0;
 
-        /// \brief Registers a callback to be executed when the engine is initialized.
-        virtual auto register_on_initialize_callback(function<void(engine_context&)> callback) -> void = 0;
-
-        /// \brief Registers a callback to be executed when the engine is closed.
-        virtual auto register_on_close_callback(function<void(engine_context&)> callback) -> void = 0;
-
-        /// \brief Registers a callback to be executed on fixed update.
-        virtual auto register_on_fixed_update_callback(
-            function<void(engine_context&, chrono::duration<float>)> callback) -> void = 0;
-
-        /// \brief Registers a callback to be executed on variable update.
-        virtual auto register_on_variable_update_callback(
-            function<void(engine_context&, chrono::duration<float>)> callback) -> void = 0;
-
         /// \brief Registers a callback to be executed before rendering to interpolate state.
         virtual auto register_on_interpolate_callback(
             function<void(engine_context&, float)> callback) -> void = 0;
-
-        /// \brief Runs the engine, executing the main loop and processing events.
-        virtual auto run() -> void = 0;
-
-        [[nodiscard]] virtual auto get_entities() -> ecs::archetype_registry& = 0;
-        [[nodiscard]] virtual auto get_entities() const -> const ecs::archetype_registry& = 0;
-
-        [[nodiscard]] virtual auto get_events() -> event::event_registry& = 0;
-        [[nodiscard]] virtual auto get_events() const -> const event::event_registry& = 0;
 
         [[nodiscard]] virtual auto get_materials() -> core::material_registry& = 0;
         [[nodiscard]] virtual auto get_materials() const -> const core::material_registry& = 0;
@@ -93,9 +159,6 @@ namespace tempest
 
         [[nodiscard]] virtual auto get_assets() -> assets::asset_database& = 0;
         [[nodiscard]] virtual auto get_assets() const -> const assets::asset_database& = 0;
-
-        [[nodiscard]] virtual auto get_job_system() -> job::job_system& = 0;
-        [[nodiscard]] virtual auto get_job_system() const -> const job::job_system& = 0;
 
         [[nodiscard]] virtual auto get_renderer() -> render_system::renderer& = 0;
         [[nodiscard]] virtual auto get_renderer() const -> const render_system::renderer& = 0;
@@ -109,20 +172,9 @@ namespace tempest
         [[nodiscard]] virtual auto get_render_surface(window_handle win) -> rhi::render_surface* = 0;
         [[nodiscard]] virtual auto get_render_surface(window_handle win) const -> const rhi::render_surface* = 0;
         [[nodiscard]] virtual auto get_raw_surface(window_handle win) const -> rhi::raw_surface_handle = 0;
-
-        virtual auto request_close(bool close = true) -> void = 0;
-        [[nodiscard]] virtual auto should_close() const -> bool = 0;
-
-        [[nodiscard]] virtual auto load_entity(ecs::entity src) -> ecs::entity = 0;
-
-        [[nodiscard]] virtual auto get_logger() -> logger& = 0;
-        [[nodiscard]] virtual auto get_logger() const -> const logger& = 0;
-
-        [[nodiscard]] virtual auto get_profiler_session() -> profiler::profiler_session& = 0;
-        [[nodiscard]] virtual auto get_profiler_session() const -> const profiler::profiler_session& = 0;
     };
 
-    class TEMPEST_API standalone_engine_context : public engine_context
+    class TEMPEST_API standalone_engine_context : public client_context
     {
       public:
         struct TEMPEST_API window_context
@@ -140,30 +192,12 @@ namespace tempest
         auto operator=(standalone_engine_context&&) noexcept -> standalone_engine_context& = delete;
 
         auto register_window(window_desc desc, bool install_swapchain_blit = true) -> window_registration_info override;
-        auto register_on_initialize_callback(function<void(engine_context&)> callback) -> void override;
-        auto register_on_close_callback(function<void(engine_context&)> callback) -> void override;
-        auto register_on_fixed_update_callback(function<void(engine_context&, chrono::duration<float>)> callback)
-            -> void override;
-        auto register_on_variable_update_callback(function<void(engine_context&, chrono::duration<float>)> callback)
-            -> void override;
         auto register_on_interpolate_callback(function<void(engine_context&, float)> callback)
             -> void override;
-
-        auto run() -> void override;
 
         [[nodiscard]] auto get_config() const noexcept -> const engine_config&
         {
             return _config;
-        }
-
-        [[nodiscard]] auto get_accumulator() const noexcept -> const fixed_timestep_accumulator&
-        {
-            return _accumulator;
-        }
-
-        [[nodiscard]] auto get_accumulator() noexcept -> fixed_timestep_accumulator&
-        {
-            return _accumulator;
         }
 
         [[nodiscard]] auto get_entities() -> ecs::archetype_registry& override;
@@ -204,9 +238,6 @@ namespace tempest
         [[nodiscard]] auto get_render_surface(window_handle win) const -> const rhi::render_surface* override;
         [[nodiscard]] auto get_raw_surface(window_handle win) const -> rhi::raw_surface_handle override;
 
-        auto request_close(bool close = true) -> void override;
-        [[nodiscard]] auto should_close() const -> bool override;
-
         auto load_entity(ecs::entity src) -> ecs::entity override;
 
         [[nodiscard]] auto get_logger() -> logger& override
@@ -230,6 +261,14 @@ namespace tempest
         }
 
       protected:
+        auto on_poll_events() -> void override;
+        [[nodiscard]] auto should_step_simulation() -> bool override;
+        auto on_render_frame(float alpha) -> void override;
+        auto on_pace_frame(chrono::duration<float> frame_elapsed) -> void override;
+        auto on_frame_end() -> void override;
+
+        virtual auto _render_frame() -> void;
+
         // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes)
         vector<unique_ptr<log_sink>> _log_sinks;
         logger _logger;
@@ -250,24 +289,10 @@ namespace tempest
         unique_ptr<render_system::renderer> _renderer;
 
         vector<window_context> _windows;
-        vector<function<void(engine_context&)>> _on_initialize_callbacks;
-        vector<function<void(engine_context&)>> _on_close_callbacks;
-        vector<function<void(engine_context&, chrono::duration<float>)>> _on_fixed_update_callbacks;
-        vector<function<void(engine_context&, chrono::duration<float>)>> _on_variable_update_callbacks;
         vector<function<void(engine_context&, float)>> _on_interpolate_callbacks;
 
         engine_config _config{};
-        fixed_timestep_accumulator _accumulator{};
-
-        chrono::steady_clock::time_point _last_frame_time;
-        chrono::duration<float> _delta_frame_time{0.0F};
-
-        bool _should_close{false};
         // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
-
-        virtual auto _update_fixed(chrono::duration<float> delta_time) -> void;
-        virtual auto _update_variable(chrono::duration<float> delta_time) -> void;
-        virtual auto _render_frame() -> void;
 
         template <typename F>
         auto _with_pass_dispatcher(F&& func) -> decltype(auto);

@@ -14,7 +14,7 @@ namespace tempest::editor
 {
     class ui_context;
 
-    enum class simulation_state
+    enum class simulation_state : uint8_t
     {
         stopped,
         pause,
@@ -163,7 +163,10 @@ namespace tempest::editor
 
         auto collect_and_broadcast_telemetry() -> void;
 
-        auto run() -> void override;
+      protected:
+        auto should_step_simulation() -> bool override;
+        auto on_render_frame(float alpha) -> void override;
+        auto on_frame_end() -> void override;
 
       private:
         simulation_state _sim_state = simulation_state::stopped;
