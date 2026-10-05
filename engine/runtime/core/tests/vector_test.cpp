@@ -296,6 +296,210 @@ TEST(vector, insert)
     }
 }
 
+/// @brief Verifies that self-referential vector::insert (inserting an existing element from the vector)
+/// does not cause use-after-free, dangling references, or moved-from value corruption, both when
+/// capacity is exceeded (triggering reallocation) and when capacity is pre-reserved.
+TEST(vector, vector_insert_self_referential)
+{
+    // =========================================================================
+    // Case 1: Trivial Type (int) with Reallocation Triggered (Capacity Exceeded)
+    // =========================================================================
+    {
+        // 1. Setup: Vector initialized with exact capacity matching size
+        auto vec = vector<int>{tempest::init_list, 10, 20, 30};
+        vec.shrink_to_fit();
+        EXPECT_EQ(vec.size(), 3);
+        EXPECT_EQ(vec.capacity(), 3);
+
+        // 2. Act: Insert vec[0] into vec.begin() + 1 when size == capacity
+        const auto it_first = vec.insert(vec.begin() + 1, vec[0]);
+
+        // 3. Assert: Value is intact, capacity grew, and elements are in expected order
+        EXPECT_EQ(vec.size(), 4);
+        EXPECT_GE(vec.capacity(), 4);
+        EXPECT_EQ(*it_first, 10);
+        EXPECT_EQ(vec[0], 10);
+        EXPECT_EQ(vec[1], 10);
+        EXPECT_EQ(vec[2], 20);
+        EXPECT_EQ(vec[3], 30);
+
+        // Act: Shrink to fit then insert vec.back() into vec.begin() + 1 triggering another reallocation
+        vec.shrink_to_fit();
+        EXPECT_EQ(vec.capacity(), 4);
+        const auto it_back = vec.insert(vec.begin() + 1, vec.back());
+
+        // Assert: Value (30) correctly inserted without dangling read
+        EXPECT_EQ(vec.size(), 5);
+        EXPECT_GE(vec.capacity(), 5);
+        EXPECT_EQ(*it_back, 30);
+        EXPECT_EQ(vec[0], 10);
+        EXPECT_EQ(vec[1], 30);
+        EXPECT_EQ(vec[2], 10);
+        EXPECT_EQ(vec[3], 20);
+        EXPECT_EQ(vec[4], 30);
+    }
+
+    // =========================================================================
+    // Case 2: Trivial Type (int) with Pre-Reserved Capacity (No Reallocation)
+    // =========================================================================
+    {
+        // 1. Setup: Vector with pre-reserved excess capacity
+        auto vec = vector<int>{};
+        vec.reserve(16);
+        vec.push_back(10);
+        vec.push_back(20);
+        vec.push_back(30);
+        EXPECT_EQ(vec.size(), 3);
+        EXPECT_GE(vec.capacity(), 16);
+
+        // 2. Act: Insert vec[0] into vec.begin() + 1 with sufficient capacity
+        const auto it_first = vec.insert(vec.begin() + 1, vec[0]);
+
+        // 3. Assert: All elements shifted and inserted correctly without moving-from source element
+        EXPECT_EQ(vec.size(), 4);
+        EXPECT_EQ(*it_first, 10);
+        EXPECT_EQ(vec[0], 10);
+        EXPECT_EQ(vec[1], 10);
+        EXPECT_EQ(vec[2], 20);
+        EXPECT_EQ(vec[3], 30);
+
+        // Act: Insert vec.back() into vec.begin() + 1
+        const auto it_back = vec.insert(vec.begin() + 1, vec.back());
+
+        // Assert: All elements intact
+        EXPECT_EQ(vec.size(), 5);
+        EXPECT_EQ(*it_back, 30);
+        EXPECT_EQ(vec[0], 10);
+        EXPECT_EQ(vec[1], 30);
+        EXPECT_EQ(vec[2], 10);
+        EXPECT_EQ(vec[3], 20);
+        EXPECT_EQ(vec[4], 30);
+    }
+
+    // =========================================================================
+    // Case 3: Non-Trivial Copy/Move Type with Reallocation & Pre-Reserved
+    // =========================================================================
+    {
+        struct non_trivial_item
+        {
+            int value{0};
+            bool moved_from{false};
+
+            non_trivial_item() = default;
+            explicit non_trivial_item(int val) : value{val} {}
+
+            non_trivial_item(const non_trivial_item& other)
+                : value{other.value}, moved_from{other.moved_from}
+            {
+            }
+
+            non_trivial_item(non_trivial_item&& other) noexcept
+                : value{other.value}, moved_from{false}
+            {
+                other.moved_from = true;
+                other.value = -1;
+            }
+
+            auto operator=(const non_trivial_item& other) -> non_trivial_item&
+            {
+                if (this != &other)
+                {
+                    value = other.value;
+                    moved_from = other.moved_from;
+                }
+                return *this;
+            }
+
+            auto operator=(non_trivial_item&& other) noexcept -> non_trivial_item&
+            {
+                if (this != &other)
+                {
+                    value = other.value;
+                    moved_from = false;
+                    other.moved_from = true;
+                    other.value = -1;
+                }
+                return *this;
+            }
+        };
+
+        // Subcase A: Reallocation triggered
+        {
+            auto vec = vector<non_trivial_item>{};
+            vec.push_back(non_trivial_item{100});
+            vec.push_back(non_trivial_item{200});
+            vec.push_back(non_trivial_item{300});
+            vec.shrink_to_fit();
+            EXPECT_EQ(vec.size(), 3);
+            EXPECT_EQ(vec.capacity(), 3);
+
+            // Insert vec[0] into vec.begin() + 1
+            const auto it_first = vec.insert(vec.begin() + 1, vec[0]);
+            EXPECT_EQ(vec.size(), 4);
+            EXPECT_EQ(it_first->value, 100);
+            EXPECT_FALSE(it_first->moved_from);
+            EXPECT_EQ(vec[0].value, 100);
+            EXPECT_FALSE(vec[0].moved_from);
+            EXPECT_EQ(vec[1].value, 100);
+            EXPECT_FALSE(vec[1].moved_from);
+            EXPECT_EQ(vec[2].value, 200);
+            EXPECT_FALSE(vec[2].moved_from);
+            EXPECT_EQ(vec[3].value, 300);
+            EXPECT_FALSE(vec[3].moved_from);
+
+            // Insert vec.back() into vec.begin() + 1 with reallocation
+            vec.shrink_to_fit();
+            const auto it_back = vec.insert(vec.begin() + 1, vec.back());
+            EXPECT_EQ(vec.size(), 5);
+            EXPECT_EQ(it_back->value, 300);
+            EXPECT_FALSE(it_back->moved_from);
+            EXPECT_EQ(vec[0].value, 100);
+            EXPECT_EQ(vec[1].value, 300);
+            EXPECT_EQ(vec[2].value, 100);
+            EXPECT_EQ(vec[3].value, 200);
+            EXPECT_EQ(vec[4].value, 300);
+            for (const auto& item : vec)
+            {
+                EXPECT_FALSE(item.moved_from);
+            }
+        }
+
+        // Subcase B: Pre-reserved capacity (no reallocation)
+        {
+            auto vec = vector<non_trivial_item>{};
+            vec.reserve(16);
+            vec.push_back(non_trivial_item{100});
+            vec.push_back(non_trivial_item{200});
+            vec.push_back(non_trivial_item{300});
+
+            // Insert vec[0] into vec.begin() + 1
+            const auto it_first = vec.insert(vec.begin() + 1, vec[0]);
+            EXPECT_EQ(vec.size(), 4);
+            EXPECT_EQ(it_first->value, 100);
+            EXPECT_FALSE(it_first->moved_from);
+            EXPECT_EQ(vec[0].value, 100);
+            EXPECT_EQ(vec[1].value, 100);
+            EXPECT_EQ(vec[2].value, 200);
+            EXPECT_EQ(vec[3].value, 300);
+
+            // Insert vec.back() into vec.begin() + 1
+            const auto it_back = vec.insert(vec.begin() + 1, vec.back());
+            EXPECT_EQ(vec.size(), 5);
+            EXPECT_EQ(it_back->value, 300);
+            EXPECT_FALSE(it_back->moved_from);
+            EXPECT_EQ(vec[0].value, 100);
+            EXPECT_EQ(vec[1].value, 300);
+            EXPECT_EQ(vec[2].value, 100);
+            EXPECT_EQ(vec[3].value, 200);
+            EXPECT_EQ(vec[4].value, 300);
+            for (const auto& item : vec)
+            {
+                EXPECT_FALSE(item.moved_from);
+            }
+        }
+    }
+}
+
 TEST(vector, erase)
 {
     vector<int> v(10, 42);

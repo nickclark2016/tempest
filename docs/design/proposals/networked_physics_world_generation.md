@@ -139,8 +139,10 @@ gantt
   - Initialize Logger, Job System, ECS, and Physics without creating Vulkan instances, window handles, or swapchains.
 - **Micro 2.2: Transport Protocol & Message Framing**
   - Implement UDP socket abstraction in `engine/runtime/network` supporting non-blocking I/O.
-  - Implement packet framing: protocol version, sequence numbers, packet type flags, and payload bitstreams.
+  - Implement packet framing: 28-byte AAD-ready header with protocol version, 64-bit session ID, sequence numbers, sliding 32-bit ACK bitfield, and extended packet types.
+  - Incorporate sequence wrapping logic (`sequence_greater_than`) and chunk-relative 16-20 bit spatial quantization.
   - Add debug network simulator injecting artificial latency (e.g. 100ms), jitter (e.g. $\pm 20\text{ms}$), and packet loss (e.g. $5\%$).
+  - Full production distributed architecture detailed in [production_networking_architecture_roadmap.md](production_networking_architecture_roadmap.md).
 - **Micro 2.3: Input Ring Buffer & Client Prediction**
   - Client serializes `user_cmd`: `(tick_id, move_vector, look_yaw, buttons)`.
   - Client predicts physics immediately on input, storing `(tick_id, user_cmd, predicted_state)` in a fixed 128-entry circular buffer using `character_snapshot.motion`.

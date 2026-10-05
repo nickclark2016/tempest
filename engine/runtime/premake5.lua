@@ -6,6 +6,7 @@ scoped.group('Runtime', function()
     include 'event/premake5.lua'
     include 'job/premake5.lua'
     include 'logger/premake5.lua'
+    include 'network/premake5.lua'
     include 'physics/premake5.lua'
     include 'profiler/premake5.lua'
     include 'render/premake5.lua'

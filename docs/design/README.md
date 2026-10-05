@@ -13,6 +13,7 @@ This directory contains architectural and mathematical design documents for the 
 * **[Multi-Window Presentation Lifecycle](proposals/multi_window_presentation.md)**: Details batch multi-surface rendering, frame flight synchronization, and presentation across multiple top-level OS windows.
 * **[Coroutine-Native Job System](proposals/coroutine_job_system.md)**: Details an asynchronous C++20 coroutine job system with topology pinning (P/E cores), coroutine-aware sync, channels, zero-exception expected handling, cross-thread profiler awareness, non-blocking GPU sync points, and concurrent render command recording.
 * **[Networked Physics, Client Prediction & Procedural World](proposals/networked_physics_world_generation.md)**: Details a server-authoritative multiplayer physics pipeline (Jolt), input ring-buffer client prediction and reconciliation, remote entity dead reckoning, and a shared deterministic macro/micro procedural world generation model.
+* **[Production Multiplayer Architecture Roadmap](proposals/production_networking_architecture_roadmap.md)**: Details the transition from single-server prediction to a production-grade distributed MMO/open-world network stack: chunk-relative coordinates, edge gateways, multi-server spatial meshing, token-based authentication, and ChaCha20-Poly1305 AEAD wire security.
 
 ### PBR & Render Pipeline Performance Overhaul
 

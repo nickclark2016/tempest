@@ -13,7 +13,7 @@ namespace tempest
 
     constexpr auto isinf(floating_point auto x) noexcept -> bool
     {
-        return x == numeric_limits<decltype(x)>::infinity();
+        return x == numeric_limits<decltype(x)>::infinity() || x == -numeric_limits<decltype(x)>::infinity();
     }
 
     constexpr auto isfinite(floating_point auto x) noexcept -> bool

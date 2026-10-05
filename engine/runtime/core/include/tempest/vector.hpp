@@ -639,50 +639,81 @@ namespace tempest
     constexpr auto vector<T, Allocator>::insert(const_iterator pos, const T& value) -> vector<T, Allocator>::iterator
         requires is_copy_constructible_v<T>
     {
-        auto index = pos - begin();
-        reserve(_compute_next_capacity(size() + 1));
-
-        ptrdiff_t end_index = end() - begin();
-
-        // Move construct first element, then move the rest
-        if (!empty())
-        {
-            allocator_traits<Allocator>::construct(_alloc, _end, tempest::move(_data[end_index - 1]));
-        }
-
-        for (auto it = end(); it != begin() + index; --it)
-        {
-            *it = tempest::move(*(it - 1));
-        }
-
-        allocator_traits<Allocator>::construct(_alloc, _data + index, value);
-        ++_end;
-
-        return begin() + index;
+        const auto index = pos - begin();
+        auto value_copy = value;
+        return insert(begin() + index, tempest::move(value_copy));
     }
 
     template <typename T, typename Allocator>
     constexpr auto vector<T, Allocator>::insert(const_iterator pos, T&& value) -> vector<T, Allocator>::iterator
     {
-        auto index = pos - begin();
-        reserve(_compute_next_capacity(size() + 1));
+        const auto index = pos - begin();
+        auto moved_value = tempest::move(value);
 
-        ptrdiff_t end_index = size();
-        ptrdiff_t start_index = index;
-
-        // Move construct first element, then move the rest
-        if (!empty())
+        if (size() + 1 > capacity())
         {
-            allocator_traits<Allocator>::construct(_alloc, _end, tempest::move(_data[end_index - 1]));
+            const auto new_cap = _compute_next_capacity(size() + 1);
+            auto new_data = allocator_traits<Allocator>::allocate(_alloc, new_cap);
+            auto new_end = new_data;
+
+            if constexpr (is_trivially_copyable_v<T>)
+            {
+                if (index > 0)
+                {
+                    tempest::memcpy(new_data, _data, index * sizeof(T));
+                }
+                allocator_traits<Allocator>::construct(_alloc, new_data + index, tempest::move(moved_value));
+                if (size() > index)
+                {
+                    tempest::memcpy(new_data + index + 1, _data + index, (size() - index) * sizeof(T));
+                }
+                new_end = new_data + size() + 1;
+            }
+            else
+            {
+                for (auto it = begin(); it != begin() + index; ++it)
+                {
+                    allocator_traits<Allocator>::construct(_alloc, new_end++, tempest::move(*it));
+                }
+                allocator_traits<Allocator>::construct(_alloc, new_end++, tempest::move(moved_value));
+                for (auto it = begin() + index; it != end(); ++it)
+                {
+                    allocator_traits<Allocator>::construct(_alloc, new_end++, tempest::move(*it));
+                }
+            }
+
+            if (_data != nullptr)
+            {
+                const auto old_cap = capacity();
+                clear();
+                allocator_traits<Allocator>::deallocate(_alloc, _data, old_cap);
+            }
+
+            _data = new_data;
+            _end = new_end;
+            _capacity_end = _data + new_cap;
+
+            return begin() + index;
         }
+
+        if (index == size())
+        {
+            allocator_traits<Allocator>::construct(_alloc, _end++, tempest::move(moved_value));
+            return begin() + index;
+        }
+
+        const auto end_index = size();
+        const auto start_index = index;
+
+        allocator_traits<Allocator>::construct(_alloc, _end, tempest::move(_data[end_index - 1]));
+        ++_end;
 
         for (auto idx = end_index - 1; idx > start_index; --idx)
         {
             _data[idx] = tempest::move(_data[idx - 1]);
         }
 
-        allocator_traits<Allocator>::construct(_alloc, _data + index, tempest::move(value));
-        ++_end;
+        _data[start_index] = tempest::move(moved_value);
 
         return begin() + index;
     }
