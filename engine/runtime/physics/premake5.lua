@@ -30,7 +30,7 @@ scoped.project('physics', function()
     warnings 'Extra'
 
 
-    scoped.usage("PUBLIC", function()
+    scoped.usage("PRIVATE", function()
         uses {
             'jolt-shim',
             'core',
@@ -50,6 +50,8 @@ scoped.project('physics', function()
         uses {
             'physics:includedirs',
             'jolt-shim',
+            'core:includedirs',
+            'ecs:includedirs',
         }
 
         dependson {

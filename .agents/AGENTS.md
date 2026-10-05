@@ -106,10 +106,30 @@ Whenever modifying the job system, thread pool, work queues, coroutines, or sync
 - When asked for next tasks, inspect `docs/design/proposals/` and prioritize by subsystem relevance.
 
 ### 7. Build & Test Commands Reference
-- **Premake**: `premake5 ninja --cc=clang --shared-engine --shell=posix --rhi-vulkan`
-- **Build with Ninja on Windows**: Ninja build files contain POSIX shell pre/post-build steps (`sh -c 'mkdir -p ...'`). On Windows, always invoke Ninja via Git Bash with a login shell:
+
+#### Workflow Cadence
+- **Fast Inner-Loop Iteration**: Always use **Ninja + Clang** for rapid incremental builds and test runs during active development.
+- **Milestone & Completion Verification**: When completing milestones, verifying code reviews, or preparing to commit, verify across **Ninja + Clang**, **VS 2022 (MSVC `v143`)**, and **VS 2026 (`v145`)**.
+
+#### Premake Generation
+- **Ninja + Clang**: `premake5 ninja --cc=clang --shared-engine --shell=posix --rhi-vulkan`
+- **Visual Studio 2022 (`v143`)**: `premake5 vs2022 --shared-engine --rhi-vulkan` *(Do NOT pass `--cc` or `--shell` to VS actions)*
+- **Visual Studio 2026 (`v145`)**: `premake5 vs2026 --shared-engine --rhi-vulkan` *(Do NOT pass `--cc` or `--shell` to VS actions)*
+
+#### Building Targets
+- **Ninja on Windows**: Ninja build files contain POSIX shell pre/post-build steps (`sh -c 'mkdir -p ...'`). Always invoke Ninja via Git Bash with a login shell:
   `& "C:\Program Files\Git\bin\bash.exe" -l -c "ninja -C build/ninja <target>"`
   *(Do NOT use plain `ninja` from PowerShell, and do NOT invoke WSL `bash.exe` which lacks Windows LLVM/Clang in PATH).*
-- **Native Commands**: Run `git` commands (`git status`, `git diff`), test executables, and premake directly in PowerShell without Git Bash.
-- **Run Tests**: `bin/Debug/windows-clang/render-graph-tests.exe` (or `rhi-vk-tests.exe`)
-- **Commit Messages**: Single line under 80 characters.
+- **Visual Studio (MSBuild)**: Build the specific target project directly rather than passing `/t:<target>` to `Tempest.sln` (which fails on dependencies with `MSB4057`):
+  `msbuild build/vs2022/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
+  *(Or `build/vs2026/<target>.vcxproj` for VS 2026).*
+
+#### Running Test Executables
+- **Clang Outputs**: `bin/Debug/windows-clang/<target>.exe`
+- **MSVC Outputs (VS 2022)**: `bin/Debug/windows-msc-v143/<target>.exe`
+- **MSVC Outputs (VS 2026)**: `bin/Debug/windows-msc-v145/<target>.exe`
+- Run test executables and `git` commands directly in PowerShell without Git Bash.
+
+#### Commit Messages
+- Single line under 80 characters.
+
