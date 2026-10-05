@@ -52,6 +52,9 @@ jobs:
           if [ -f "$binDir/serialization-tests" ]; then "$binDir/serialization-tests" --gtest_brief=1; fi
           if [ -f "$binDir/assets-tests" ]; then "$binDir/assets-tests" --gtest_brief=1; fi
           if [ -f "$binDir/render-graph-tests" ]; then "$binDir/render-graph-tests" --gtest_brief=1; fi
+          if [ -f "$binDir/network-tests" ]; then "$binDir/network-tests" --gtest_brief=1; fi
+          if [ -f "$binDir/physics-tests" ]; then "$binDir/physics-tests" --gtest_brief=1; fi
+          if [ -f "$binDir/jolt-shim-tests" ]; then "$binDir/jolt-shim-tests" --gtest_brief=1; fi
 
   cpp-windows-build:
     name: Build Windows ${{ matrix.generator }} (${{ matrix.config }})
@@ -59,26 +62,15 @@ jobs:
 
     strategy:
       matrix:
-        os: [ windows-2022 ]
         config: [ Debug, Release, RelWithDebugInfo ]
-        generator: [ vs2022 ]
+        generator: [ vs2022, vs2026 ]
         include:
           - generator: vs2022
+            os: windows-2022
             sln_file: build/vs2022/Tempest.sln
             out_dir: windows-msc-v143
           - generator: vs2026
             os: windows-latest
-            config: Debug
-            sln_file: build/vs2026/Tempest.slnx
-            out_dir: windows-msc-v145
-          - generator: vs2026
-            os: windows-latest
-            config: Release
-            sln_file: build/vs2026/Tempest.slnx
-            out_dir: windows-msc-v145
-          - generator: vs2026
-            os: windows-latest
-            config: RelWithDebugInfo
             sln_file: build/vs2026/Tempest.slnx
             out_dir: windows-msc-v145
 
@@ -115,3 +107,6 @@ jobs:
           if (Test-Path "$binDir/serialization-tests.exe") { & "$binDir/serialization-tests.exe" --gtest_brief=1 }
           if (Test-Path "$binDir/assets-tests.exe") { & "$binDir/assets-tests.exe" --gtest_brief=1 }
           if (Test-Path "$binDir/render-graph-tests.exe") { & "$binDir/render-graph-tests.exe" --gtest_brief=1 }
+          if (Test-Path "$binDir/network-tests.exe") { & "$binDir/network-tests.exe" --gtest_brief=1 }
+          if (Test-Path "$binDir/physics-tests.exe") { & "$binDir/physics-tests.exe" --gtest_brief=1 }
+          if (Test-Path "$binDir/jolt-shim-tests.exe") { & "$binDir/jolt-shim-tests.exe" --gtest_brief=1 }
