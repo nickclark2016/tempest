@@ -37,6 +37,7 @@ scoped.project('physics', function()
             'ecs',
             'logger',
             'job',
+            'network:includedirs',
         }
     end)
 
@@ -52,6 +53,7 @@ scoped.project('physics', function()
             'jolt-shim',
             'core:includedirs',
             'ecs:includedirs',
+            'network:includedirs',
         }
 
         dependson {
@@ -85,6 +87,7 @@ scoped.group('Tests', function()
         uses {
             'physics',
             'tempest',
+            'network',
             'ecs',
             'core',
             'job',

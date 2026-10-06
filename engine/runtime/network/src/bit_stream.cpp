@@ -435,4 +435,11 @@ namespace tempest::network
         }
         return math::fquat{0.0F, 0.0F, 0.0F, 1.0F};
     }
+
+    auto bit_reader::seek_bits(size_t bit_position) noexcept -> void
+    {
+        _bit_position = bit_position;
+        _overflowed = (_bit_position > (_data.size() * 8));
+    }
 } // namespace tempest::network
+

@@ -116,6 +116,7 @@ namespace tempest::network
         {
             return _bit_position;
         }
+        auto seek_bits(size_t bit_position) noexcept -> void;
 
       private:
         span<const byte> _data;

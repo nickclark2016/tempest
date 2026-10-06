@@ -27,6 +27,7 @@ Deep-dive specifications, post-mortem rationales, and extended code recipes are 
 ### 2. Variable Declarations & Naming
 - **AAA (Almost Always Auto)**: Use `auto` for local variable declarations with explicit initialization (e.g. `auto found = tempest::optional<ecs::entity>();`). Avoid uninitialized or explicitly typed declarations.
 - **Prefer `const` Locals**: Prefer `const auto` for local variables whenever they are not mutated.
+- **Prefer Copy-Initialization (`=`)**: Prefer copy-initialization syntax (`auto foo = value;` or `type foo = value;`) over direct brace initialization (`type foo{value};`). Direct brace initialization remains standard in constructor member initializer lists (`: _member{value}`) and aggregate literal instantiations.
 - **Descriptive Variable Names**: Use descriptive variable names; never use single-letter variable names (e.g. use `frame_index` or `entity` rather than `f` or `e`).
 - **Template Argument Deduction**: Use template argument deduction for function calls rather than specifying explicit template arguments when types are inferable (e.g. `registry->assign(target, active_camera_component{});`).
 - **Unused Entities**: Use standard `[[maybe_unused]]` on unused parameters or variables; never use `(void)` casts.
@@ -34,6 +35,7 @@ Deep-dive specifications, post-mortem rationales, and extended code recipes are 
 ### 3. Struct & Class Member Guidelines
 - **No References as Members**: Never use C++ references (`T&`) as class or struct members. References make types non-assignable/non-movable and obscure lifetime.
 - **Non-Nullable Struct Pointers**: Structs and classes containing pointers that must not be null must use `tempest::non_null<T>` (from `<tempest/checked.hpp>`) rather than raw pointers or references.
+- **Named `static constexpr` Defaults**: Avoid hardcoding literal default values directly inline for class/struct member variables. Instead, define an explicit named `static constexpr` constant within the class/struct and copy-assign the member default from it (e.g. `static constexpr uint16_t default_port = 7777; uint16_t port = default_port;`).
 - **`explicit` Constructors**: Only mark constructors `explicit` when exactly one argument is required and it is not a copy/move constructor. Never mark multi-parameter constructors requiring two or more arguments `explicit`.
 
 ### 4. Global Architectural Invariants
@@ -87,25 +89,38 @@ When executing multi-milestone plans or tasks with sync gates:
 - After completing a milestone's code changes and verifying its automated tests, **immediately stop calling tools** to yield the turn and report test results.
 - **Never proceed to subsequent milestones** until the user explicitly reviews the current milestone and gives approval to proceed.
 
-### 3. Test Case & Section Documentation
+### 3. Subagent Delegation, Dual/Triple-Toolchain Verification & Audit Gates
+When delegating work to subagents or executing multi-component milestones:
+- **Sequential Subagent Execution**: Subagents for interdependent components must run sequentially so each subagent builds upon verified, stable code.
+- **Multi-Toolchain Build & Test Gate**: At the completion of every subagent task and milestone, verify that all three supported toolchains compile cleanly with 0 warnings and execute their test suites:
+  1. **Ninja + Clang**: `& "C:\Program Files\Git\bin\bash.exe" -l -c "ninja -C build/ninja <target>"`
+  2. **Visual Studio 2022 (MSVC `v143`)**: `msbuild build/vs2022/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
+  3. **Visual Studio 2026 (MSVC `v145`)**: `msbuild build/vs2026/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
+- **Parent Agent Audit Gate (Senior Reviewer Role)**: The parent agent must NEVER passively merge or rubber-stamp a subagent's changes simply because tests pass. The parent agent must explicitly inspect the subagent's diff and audit for:
+  1. *Subagent Shortcuts & Compiler Hacks*: Watch for `const_cast` on immutable/storage pointers, unvalidated bounds, unchecked optional dereferences, or swallowed error codes introduced to force compilation.
+  2. *Engine Idioms & Invariants*: Enforce proper ECS mutator APIs (`assign_or_replace`), copy-initialization syntax (`=`), named default constants, and strict prohibition of `std::` symbols.
+  3. *Performance & Security Regressions*: Check integer overflow/underflow bounds on circular buffers and bitstreams, zero heap allocations in inner loops, and cache-friendly layout.
+- **Fix & Iterate Before Proceeding**: If any bug, architectural violation, or code smell is discovered during the audit, the parent agent must prioritize, fix it, and re-verify builds/tests before starting the next milestone or subagent.
+
+### 4. Test Case & Section Documentation
 Whenever adding or updating test cases:
 - Add descriptive documentation comments (e.g. `/// @brief ...`) above every test function detailing the exact behavior, invariant, or edge case under test.
 - Use clear inline comments and numbered steps (`// 1. Setup ...`, `// 2. Act ...`, `// 3. Assert ...`) to demarcate test sections and expectations.
 - Group related test cases within files using structured section banners.
 
-### 4. ThreadSanitizer (TSan) for Concurrency Changes
+### 5. ThreadSanitizer (TSan) for Concurrency Changes
 Whenever modifying the job system, thread pool, work queues, coroutines, or sync primitives:
 - **Mandatory TSan Verification**: Compile and run test suites with ThreadSanitizer enabled via `premake5 ... --use-tsan`.
 - **Target Restriction**: Only run on non-GPU test targets (`job-tests`, `profiler-tests`, `render-graph-tests`, `core-tests`, `ecs-tests`, `event-tests`, `serialization-tests`, `assets-tests`). Do not run GPU hardware driver tests (`rhi-vk-tests`) under TSan.
 
-### 5. Embedded Web Assets Build Integration
+### 6. Embedded Web Assets Build Integration
 - Web assets (`index.html`, `app.js`, `styles.css`) are embedded into `web_assets.cpp` via Premake custom actions driven by Ninja build rules. `premake5.lua` must only invoke `embed_web_assets()` during generation if `web_assets.cpp` is missing.
 
-### 6. Architecture Proposals & Backlog Tracking
+### 7. Architecture Proposals & Backlog Tracking
 - Document deferred ideas and architectural improvements in `docs/design/proposals/<name>.md` and index them in `docs/design/README.md`.
 - When asked for next tasks, inspect `docs/design/proposals/` and prioritize by subsystem relevance.
 
-### 7. Build & Test Commands Reference
+### 8. Build & Test Commands Reference
 
 #### Workflow Cadence
 - **Fast Inner-Loop Iteration**: Always use **Ninja + Clang** for rapid incremental builds and test runs during active development.
