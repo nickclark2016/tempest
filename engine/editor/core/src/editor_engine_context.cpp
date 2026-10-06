@@ -309,7 +309,8 @@ namespace tempest::editor
             }
         }
 
-        const auto frame_ms = _delta_frame_time.count() > 0.0f ? (_delta_frame_time.count() * 1000.0f) : 16.67f;
+        const auto delta_sec = static_cast<float>(_delta_frame_time.count());
+        const auto frame_ms = delta_sec > 0.0F ? (delta_sec * 1000.0F) : 16.67F;
         const auto fps = frame_ms > 0.0F ? (1000.0F / frame_ms) : 60.0F;
 
         // Record current frame CPU metrics; GPU metrics for current_frame_index remain in flight

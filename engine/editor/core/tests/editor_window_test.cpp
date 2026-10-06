@@ -477,10 +477,10 @@ namespace tempest::editor::tests
 
         // 2. Act: register fixed update that moves the entity, and request close after ticks run
         bool fixed_updated = false;
-        engine_ctx.register_on_fixed_update_callback([&](engine_context& ctx, chrono::duration<float> dt) {
+        engine_ctx.register_on_fixed_update_callback([&](engine_context& ctx, chrono::duration<double> dt) {
             fixed_updated = true;
             auto& entities = ctx.get_entities();
-            entities.each([delta = dt.count()](ecs::transform_history_component& h) {
+            entities.each([delta = static_cast<float>(dt.count())](ecs::transform_history_component& h) {
                 h.current_position.x += 10.0F * delta;
             });
         });

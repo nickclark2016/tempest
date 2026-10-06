@@ -197,7 +197,7 @@ extern "C"
         ctx->register_on_fixed_update_callback([](auto& engine_ctx, auto delta_time) -> void {
             auto& reg = engine_ctx.get_entities();
             reg.each(
-                [dt = delta_time.count()](tempest::ecs::transform_history_component& hist, patrol_component& patrol) {
+                [dt = static_cast<float>(delta_time.count())](tempest::ecs::transform_history_component& hist, patrol_component& patrol) {
                     // 1. Move horizontally along wide track across courtyard
                     hist.current_position.x += patrol.direction * patrol.speed * dt;
                     if (hist.current_position.x >= patrol.max_x)

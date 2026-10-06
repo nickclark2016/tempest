@@ -293,7 +293,8 @@ namespace tempest
         while (!_should_close)
         {
             const auto frame_start_time = chrono::steady_clock::now();
-            const auto delta = chrono::duration_cast<chrono::duration<double>>(frame_start_time - current_time);
+            const auto delta_ns = frame_start_time - current_time;
+            const auto delta = chrono::duration_cast<chrono::duration<double>>(delta_ns);
             current_time = frame_start_time;
 
             _delta_frame_time = delta;
@@ -307,7 +308,7 @@ namespace tempest
             }
 
             // 2. Fixed Timestep Simulation
-            _accumulator.accumulate(delta);
+            _accumulator.accumulate(delta_ns);
             if (should_step_simulation())
             {
                 while (_accumulator.has_pending_ticks())
@@ -434,8 +435,9 @@ namespace tempest
     {
         if (_config.headless)
         {
-            const auto remaining = _accumulator.fixed_delta() - _accumulator.accumulated_time() - frame_elapsed;
-            if (remaining.count() > 0.001)
+            const auto frame_elapsed_ns = chrono::duration_cast<chrono::nanoseconds>(frame_elapsed);
+            const auto remaining = _accumulator.fixed_delta_ns() - _accumulator.accumulated_time() - frame_elapsed_ns;
+            if (remaining > chrono::milliseconds{1})
             {
                 this_thread::sleep_for(remaining);
             }

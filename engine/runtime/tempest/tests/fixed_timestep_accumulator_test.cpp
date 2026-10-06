@@ -101,13 +101,34 @@ TEST(fixed_timestep_accumulator_test, time_scaling_and_pause)
     auto paused_ticks = 0U;
     accumulator.step(tempest::chrono::duration<double>{0.1}, [&paused_ticks]([[maybe_unused]] auto) { ++paused_ticks; });
     EXPECT_EQ(paused_ticks, 0U);
-    EXPECT_DOUBLE_EQ(accumulator.accumulated_time().count(), 0.0);
+    EXPECT_EQ(accumulator.accumulated_time(), tempest::chrono::nanoseconds::zero());
 
     // 3. Act - Double speed (scale = 2.0)
     accumulator.set_time_scale(2.0);
     auto fast_ticks = 0U;
     accumulator.step(fixed_dt, [&fast_ticks]([[maybe_unused]] auto) { ++fast_ticks; });
     EXPECT_EQ(fast_ticks, 2U);
+}
+
+/// @brief Tests integral nanosecond precision accumulation without floating-point drift.
+TEST(fixed_timestep_accumulator_test, integral_nanoseconds_accumulation_exactness)
+{
+    // 1. Setup - 16.666667ms fixed tick (~60Hz)
+    constexpr auto fixed_ns = tempest::chrono::nanoseconds{16'666'667};
+    auto accumulator = fixed_timestep_accumulator{fixed_ns, tempest::chrono::nanoseconds{100'000'000}};
+
+    // 2. Act - Accumulate exactly 3 ticks in nanoseconds
+    accumulator.accumulate(fixed_ns * 3);
+
+    // 3. Assert - Exactly 3 ticks executed, 0 remaining
+    auto tick_count = 0U;
+    while (accumulator.has_pending_ticks())
+    {
+        accumulator.consume_tick();
+        ++tick_count;
+    }
+    EXPECT_EQ(tick_count, 3U);
+    EXPECT_EQ(accumulator.accumulated_time(), tempest::chrono::nanoseconds::zero());
 }
 
 // ============================================================================
