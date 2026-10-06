@@ -2,6 +2,7 @@
 #define tempest_engine_fixed_timestep_accumulator_hpp
 
 #include <tempest/algorithm.hpp>
+#include <tempest/chrono.hpp>
 #include <tempest/int.hpp>
 
 namespace tempest
@@ -9,25 +10,37 @@ namespace tempest
     class fixed_timestep_accumulator
     {
       public:
-        static constexpr float default_fixed_delta = 1.0F / 60.0F;
-        static constexpr float default_max_frame_delta = 0.1F;
+        static constexpr chrono::duration<double> default_fixed_delta = chrono::duration<double>{1.0 / 60.0};
+        static constexpr chrono::duration<double> default_max_frame_delta = chrono::duration<double>{0.1};
+        static constexpr double default_time_scale = 1.0;
 
-        explicit fixed_timestep_accumulator(float fixed_delta = default_fixed_delta,
-                                            float max_frame_delta = default_max_frame_delta) noexcept
+        explicit fixed_timestep_accumulator(chrono::duration<double> fixed_delta = default_fixed_delta,
+                                            chrono::duration<double> max_frame_delta = default_max_frame_delta) noexcept
             : _fixed_delta(fixed_delta), _max_frame_delta(max_frame_delta)
         {
         }
 
-        auto accumulate(float delta_seconds) noexcept -> void
+        explicit fixed_timestep_accumulator(float fixed_delta, float max_frame_delta = 0.1F) noexcept
+            : _fixed_delta(chrono::duration<double>{static_cast<double>(fixed_delta)}),
+              _max_frame_delta(chrono::duration<double>{static_cast<double>(max_frame_delta)})
         {
-            if (_time_scale <= 0.0F || delta_seconds <= 0.0F)
+        }
+
+        auto accumulate(chrono::duration<double> delta) noexcept -> void
+        {
+            if (_time_scale <= 0.0 || delta.count() <= 0.0)
             {
                 return;
             }
 
-            const auto scaled_delta = delta_seconds * _time_scale;
-            const auto clamped_delta = tempest::min(scaled_delta, _max_frame_delta);
+            const auto scaled_delta = delta * _time_scale;
+            const auto clamped_delta = (scaled_delta < _max_frame_delta) ? scaled_delta : _max_frame_delta;
             _accumulated_time += clamped_delta;
+        }
+
+        auto accumulate(float delta_seconds) noexcept -> void
+        {
+            accumulate(chrono::duration<double>{static_cast<double>(delta_seconds)});
         }
 
         [[nodiscard]] auto has_pending_ticks() const noexcept -> bool
@@ -46,62 +59,85 @@ namespace tempest
 
         [[nodiscard]] auto alpha() const noexcept -> float
         {
-            if (_fixed_delta <= 0.0F)
+            if (_fixed_delta.count() <= 0.0)
             {
                 return 0.0F;
             }
 
-            const auto raw_alpha = _accumulated_time / _fixed_delta;
+            const auto raw_alpha = static_cast<float>(_accumulated_time.count() / _fixed_delta.count());
             return tempest::clamp(raw_alpha, 0.0F, 1.0F);
         }
 
         auto reset() noexcept -> void
         {
-            _accumulated_time = 0.0F;
+            _accumulated_time = chrono::duration<double>::zero();
+        }
+
+        template <typename TickFn>
+        auto step(chrono::duration<double> delta, TickFn&& tick_fn) -> void
+        {
+            accumulate(delta);
+            while (has_pending_ticks())
+            {
+                if constexpr (requires { tick_fn(_fixed_delta); })
+                {
+                    tick_fn(_fixed_delta);
+                }
+                else
+                {
+                    tick_fn(static_cast<float>(_fixed_delta.count()));
+                }
+                consume_tick();
+            }
         }
 
         template <typename TickFn>
         auto step(float delta_seconds, TickFn&& tick_fn) -> void
         {
-            accumulate(delta_seconds);
-            while (has_pending_ticks())
-            {
-                tick_fn(_fixed_delta);
-                consume_tick();
-            }
+            step(chrono::duration<double>{static_cast<double>(delta_seconds)}, tempest::forward<TickFn>(tick_fn));
         }
 
-        [[nodiscard]] auto fixed_delta() const noexcept -> float
+        [[nodiscard]] auto fixed_delta() const noexcept -> chrono::duration<double>
         {
             return _fixed_delta;
         }
 
-        auto set_fixed_delta(float fixed_delta) noexcept -> void
+        auto set_fixed_delta(chrono::duration<double> fixed_delta) noexcept -> void
         {
             _fixed_delta = fixed_delta;
         }
 
-        [[nodiscard]] auto max_frame_delta() const noexcept -> float
+        auto set_fixed_delta(float fixed_delta) noexcept -> void
+        {
+            _fixed_delta = chrono::duration<double>{static_cast<double>(fixed_delta)};
+        }
+
+        [[nodiscard]] auto max_frame_delta() const noexcept -> chrono::duration<double>
         {
             return _max_frame_delta;
         }
 
-        auto set_max_frame_delta(float max_delta) noexcept -> void
+        auto set_max_frame_delta(chrono::duration<double> max_delta) noexcept -> void
         {
             _max_frame_delta = max_delta;
         }
 
-        [[nodiscard]] auto time_scale() const noexcept -> float
+        auto set_max_frame_delta(float max_delta) noexcept -> void
+        {
+            _max_frame_delta = chrono::duration<double>{static_cast<double>(max_delta)};
+        }
+
+        [[nodiscard]] auto time_scale() const noexcept -> double
         {
             return _time_scale;
         }
 
-        auto set_time_scale(float scale) noexcept -> void
+        auto set_time_scale(double scale) noexcept -> void
         {
             _time_scale = scale;
         }
 
-        [[nodiscard]] auto accumulated_time() const noexcept -> float
+        [[nodiscard]] auto accumulated_time() const noexcept -> chrono::duration<double>
         {
             return _accumulated_time;
         }
@@ -112,10 +148,10 @@ namespace tempest
         }
 
       private:
-        float _fixed_delta = default_fixed_delta;
-        float _max_frame_delta = default_max_frame_delta;
-        float _time_scale = 1.0F;
-        float _accumulated_time = 0.0F;
+        chrono::duration<double> _fixed_delta = default_fixed_delta;
+        chrono::duration<double> _max_frame_delta = default_max_frame_delta;
+        double _time_scale = default_time_scale;
+        chrono::duration<double> _accumulated_time = chrono::duration<double>::zero();
         uint64_t _total_ticks = 0;
     };
 } // namespace tempest

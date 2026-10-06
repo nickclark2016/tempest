@@ -24,7 +24,7 @@ namespace tempest::physics
                                 ecs::archetype_registry& registry,
                                 ecs::entity player_entity,
                                 const network::user_cmd& cmd,
-                                float delta_time,
+                                chrono::duration<double> delta_time,
                                 character_prediction_buffer& buffer,
                                 math::vec3<float> gravity) -> const character_snapshot&
     {

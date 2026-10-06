@@ -235,13 +235,13 @@ namespace tempest
     }
 
     auto engine_context::register_on_fixed_update_callback(
-        function<void(engine_context&, chrono::duration<float>)> callback) -> void
+        function<void(engine_context&, chrono::duration<double>)> callback) -> void
     {
         _on_fixed_update_callbacks.push_back(tempest::move(callback));
     }
 
     auto engine_context::register_on_variable_update_callback(
-        function<void(engine_context&, chrono::duration<float>)> callback) -> void
+        function<void(engine_context&, chrono::duration<double>)> callback) -> void
     {
         _on_variable_update_callbacks.push_back(tempest::move(callback));
     }
@@ -256,7 +256,7 @@ namespace tempest
         return _should_close;
     }
 
-    auto engine_context::_update_fixed(chrono::duration<float> delta_time) -> void
+    auto engine_context::_update_fixed(chrono::duration<double> delta_time) -> void
     {
         [[maybe_unused]] const auto zone = profiler::scoped_zone{get_profiler_session(), "engine::update_fixed"};
         for (auto&& callback : _on_fixed_update_callbacks)
@@ -265,7 +265,7 @@ namespace tempest
         }
     }
 
-    auto engine_context::_update_variable(chrono::duration<float> delta_time) -> void
+    auto engine_context::_update_variable(chrono::duration<double> delta_time) -> void
     {
         [[maybe_unused]] const auto zone = profiler::scoped_zone{get_profiler_session(), "engine::update_variable"};
         for (auto&& callback : _on_variable_update_callbacks)
@@ -293,7 +293,7 @@ namespace tempest
         while (!_should_close)
         {
             const auto frame_start_time = chrono::steady_clock::now();
-            const auto delta = chrono::duration_cast<chrono::duration<float>>(frame_start_time - current_time);
+            const auto delta = chrono::duration_cast<chrono::duration<double>>(frame_start_time - current_time);
             current_time = frame_start_time;
 
             _delta_frame_time = delta;
@@ -307,13 +307,13 @@ namespace tempest
             }
 
             // 2. Fixed Timestep Simulation
-            _accumulator.accumulate(delta.count());
+            _accumulator.accumulate(delta);
             if (should_step_simulation())
             {
                 while (_accumulator.has_pending_ticks())
                 {
                     ecs::step_transform_history(get_entities());
-                    _update_fixed(chrono::duration<float>(_accumulator.fixed_delta()));
+                    _update_fixed(_accumulator.fixed_delta());
                     if (_should_close)
                     {
                         break;
@@ -344,7 +344,7 @@ namespace tempest
 
             // 5. Frame Pacing / Sleep Budget
             const auto frame_elapsed =
-                chrono::duration_cast<chrono::duration<float>>(chrono::steady_clock::now() - frame_start_time);
+                chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - frame_start_time);
             on_pace_frame(frame_elapsed);
 
             // 6. Frame End / Profiling & Telemetry
@@ -430,14 +430,14 @@ namespace tempest
         }
     }
 
-    auto standalone_engine_context::on_pace_frame(chrono::duration<float> frame_elapsed) -> void
+    auto standalone_engine_context::on_pace_frame(chrono::duration<double> frame_elapsed) -> void
     {
         if (_config.headless)
         {
-            const auto remaining = _accumulator.fixed_delta() - _accumulator.accumulated_time() - frame_elapsed.count();
-            if (remaining > 0.001F)
+            const auto remaining = _accumulator.fixed_delta() - _accumulator.accumulated_time() - frame_elapsed;
+            if (remaining.count() > 0.001)
             {
-                this_thread::sleep_for(chrono::duration<float>(remaining));
+                this_thread::sleep_for(remaining);
             }
             else
             {

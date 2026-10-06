@@ -39,10 +39,23 @@ namespace tempest::physics
                                             ecs::archetype_registry& registry,
                                             ecs::entity player_entity,
                                             const network::user_cmd& cmd,
-                                            float delta_time,
+                                            chrono::duration<double> delta_time,
                                             character_prediction_buffer& buffer,
                                             math::vec3<float> gravity = math::vec3<float>{0.0F, -9.81F, 0.0F})
         -> const character_snapshot&;
+
+    inline auto step_client_prediction(physics_world& world,
+                                       ecs::archetype_registry& registry,
+                                       ecs::entity player_entity,
+                                       const network::user_cmd& cmd,
+                                       float delta_time,
+                                       character_prediction_buffer& buffer,
+                                       math::vec3<float> gravity = math::vec3<float>{0.0F, -9.81F, 0.0F})
+        -> const character_snapshot&
+    {
+        return step_client_prediction(world, registry, player_entity, cmd,
+                                      chrono::duration<double>{static_cast<double>(delta_time)}, buffer, gravity);
+    }
 } // namespace tempest::physics
 
 #endif // TEMPEST_PHYSICS_CHARACTER_PREDICTION_HPP

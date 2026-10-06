@@ -15,11 +15,18 @@ using tempest::standalone_engine_context;
 TEST(fixed_timestep_accumulator_test, variable_dt_exact_tick_count)
 {
     // 1. Setup
-    constexpr auto fixed_dt = 1.0F / 60.0F;
-    auto accumulator = fixed_timestep_accumulator{fixed_dt, 0.1F};
+    constexpr auto fixed_dt = tempest::chrono::duration<double>{1.0 / 60.0};
+    auto accumulator = fixed_timestep_accumulator{fixed_dt, tempest::chrono::duration<double>{0.1}};
 
-    const auto frame_deltas = {0.008F, 0.016F, 0.033F, 0.016666F, 0.004F, 0.020F};
-    auto total_time = 0.0F;
+    const auto frame_deltas = {
+        tempest::chrono::duration<double>{0.008},
+        tempest::chrono::duration<double>{0.016},
+        tempest::chrono::duration<double>{0.033},
+        tempest::chrono::duration<double>{0.016666},
+        tempest::chrono::duration<double>{0.004},
+        tempest::chrono::duration<double>{0.020},
+    };
+    auto total_time = 0.0;
     auto executed_ticks = 0U;
 
     // 2. Act - Run 100 frames with cycling delta times
@@ -27,15 +34,15 @@ TEST(fixed_timestep_accumulator_test, variable_dt_exact_tick_count)
     {
         for (const auto delta_time : frame_deltas)
         {
-            total_time += delta_time;
-            accumulator.step(delta_time, [&executed_ticks]([[maybe_unused]] float step_dt) {
+            total_time += delta_time.count();
+            accumulator.step(delta_time, [&executed_ticks]([[maybe_unused]] auto step_dt) {
                 ++executed_ticks;
             });
         }
     }
 
     // 3. Assert - Ticks must equal floor(total_time / fixed_dt)
-    const auto expected_ticks = static_cast<uint32_t>(total_time / fixed_dt);
+    const auto expected_ticks = static_cast<uint32_t>(total_time / fixed_dt.count());
     EXPECT_EQ(executed_ticks, expected_ticks);
     EXPECT_EQ(accumulator.total_ticks(), expected_ticks);
 }
@@ -44,18 +51,18 @@ TEST(fixed_timestep_accumulator_test, variable_dt_exact_tick_count)
 TEST(fixed_timestep_accumulator_test, hitch_clamping_prevents_spiral_of_death)
 {
     // 1. Setup - 60 Hz simulation with 100ms max clamp
-    constexpr auto fixed_dt = 1.0F / 60.0F;
-    constexpr auto max_clamp = 0.1F;
+    constexpr auto fixed_dt = tempest::chrono::duration<double>{1.0 / 60.0};
+    constexpr auto max_clamp = tempest::chrono::duration<double>{0.1};
     auto accumulator = fixed_timestep_accumulator{fixed_dt, max_clamp};
 
     // 2. Act - Simulate a single 500ms hitch
     auto ticks_during_hitch = 0U;
-    accumulator.step(0.5F, [&ticks_during_hitch]([[maybe_unused]] float step_dt) {
+    accumulator.step(tempest::chrono::duration<double>{0.5}, [&ticks_during_hitch]([[maybe_unused]] auto step_dt) {
         ++ticks_during_hitch;
     });
 
     // 3. Assert - 100ms clamp / (1/60s) = 6 ticks max, not 30 ticks
-    const auto max_possible_ticks = static_cast<uint32_t>(max_clamp / fixed_dt);
+    const auto max_possible_ticks = static_cast<uint32_t>(max_clamp.count() / fixed_dt.count());
     EXPECT_EQ(ticks_during_hitch, max_possible_ticks);
     EXPECT_EQ(ticks_during_hitch, 6U);
 }
@@ -64,14 +71,14 @@ TEST(fixed_timestep_accumulator_test, hitch_clamping_prevents_spiral_of_death)
 TEST(fixed_timestep_accumulator_test, alpha_bounds_and_monotonicity)
 {
     // 1. Setup
-    constexpr auto fixed_dt = 1.0F / 60.0F;
-    auto accumulator = fixed_timestep_accumulator{fixed_dt, 0.1F};
+    constexpr auto fixed_dt = tempest::chrono::duration<double>{1.0 / 60.0};
+    auto accumulator = fixed_timestep_accumulator{fixed_dt, tempest::chrono::duration<double>{0.1}};
 
     // 2. Act & Assert - Sub-tick increments must produce strictly increasing alpha
     auto previous_alpha = -1.0F;
     for (auto sub_step = 0; sub_step < 10; ++sub_step)
     {
-        accumulator.accumulate(fixed_dt * 0.08F);
+        accumulator.accumulate(fixed_dt * 0.08);
         const auto alpha = accumulator.alpha();
 
         EXPECT_GE(alpha, 0.0F);
@@ -86,20 +93,20 @@ TEST(fixed_timestep_accumulator_test, alpha_bounds_and_monotonicity)
 TEST(fixed_timestep_accumulator_test, time_scaling_and_pause)
 {
     // 1. Setup
-    constexpr auto fixed_dt = 1.0F / 60.0F;
-    auto accumulator = fixed_timestep_accumulator{fixed_dt, 0.5F};
+    constexpr auto fixed_dt = tempest::chrono::duration<double>{1.0 / 60.0};
+    auto accumulator = fixed_timestep_accumulator{fixed_dt, tempest::chrono::duration<double>{0.5}};
 
     // 2. Act - Paused (scale = 0)
-    accumulator.set_time_scale(0.0F);
+    accumulator.set_time_scale(0.0);
     auto paused_ticks = 0U;
-    accumulator.step(0.1F, [&paused_ticks]([[maybe_unused]] float) { ++paused_ticks; });
+    accumulator.step(tempest::chrono::duration<double>{0.1}, [&paused_ticks]([[maybe_unused]] auto) { ++paused_ticks; });
     EXPECT_EQ(paused_ticks, 0U);
-    EXPECT_FLOAT_EQ(accumulator.accumulated_time(), 0.0F);
+    EXPECT_DOUBLE_EQ(accumulator.accumulated_time().count(), 0.0);
 
     // 3. Act - Double speed (scale = 2.0)
-    accumulator.set_time_scale(2.0F);
+    accumulator.set_time_scale(2.0);
     auto fast_ticks = 0U;
-    accumulator.step(fixed_dt, [&fast_ticks]([[maybe_unused]] float) { ++fast_ticks; });
+    accumulator.step(fixed_dt, [&fast_ticks]([[maybe_unused]] auto) { ++fast_ticks; });
     EXPECT_EQ(fast_ticks, 2U);
 }
 

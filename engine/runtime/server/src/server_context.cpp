@@ -83,7 +83,7 @@ namespace tempest::server
         }
     }
 
-    auto server_context::tick_simulation(float delta_time) -> void
+    auto server_context::tick_simulation(chrono::duration<double> delta_time) -> void
     {
         physics::update_character_controllers(_physics_world, _registry, delta_time,
                                               math::vec3<float>{0.0F, -9.81F, 0.0F});
@@ -108,7 +108,8 @@ namespace tempest::server
         while (_running.load())
         {
             const auto current_time = chrono::steady_clock::now();
-            const auto elapsed_frame = chrono::duration<float>(current_time - previous_time).count();
+            const auto elapsed_frame =
+                chrono::duration_cast<chrono::duration<double>>(current_time - previous_time);
             previous_time = current_time;
 
             if (_config.test_run)

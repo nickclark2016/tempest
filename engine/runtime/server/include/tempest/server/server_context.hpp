@@ -60,7 +60,11 @@ namespace tempest::server
         auto poll_network_packets() -> void;
 
         /// @brief Steps character controllers and Jolt physics simulation forward by delta_time.
-        auto tick_simulation(float delta_time) -> void;
+        auto tick_simulation(chrono::duration<double> delta_time) -> void;
+        auto tick_simulation(float delta_time) -> void
+        {
+            tick_simulation(chrono::duration<double>{static_cast<double>(delta_time)});
+        }
 
         [[nodiscard]] auto get_logger() noexcept -> logger&
         {

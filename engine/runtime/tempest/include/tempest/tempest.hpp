@@ -57,11 +57,11 @@ namespace tempest
 
         /// \brief Registers a callback to be executed on fixed update.
         virtual auto register_on_fixed_update_callback(
-            function<void(engine_context&, chrono::duration<float>)> callback) -> void;
+            function<void(engine_context&, chrono::duration<double>)> callback) -> void;
 
         /// \brief Registers a callback to be executed on variable update.
         virtual auto register_on_variable_update_callback(
-            function<void(engine_context&, chrono::duration<float>)> callback) -> void;
+            function<void(engine_context&, chrono::duration<double>)> callback) -> void;
 
         /// \brief Runs the engine, executing the main loop and processing events.
         auto run() -> void;
@@ -100,21 +100,21 @@ namespace tempest
         virtual auto on_poll_events() -> void {}
         [[nodiscard]] virtual auto should_step_simulation() -> bool { return true; }
         virtual auto on_render_frame([[maybe_unused]] float alpha) -> void {}
-        virtual auto on_pace_frame([[maybe_unused]] chrono::duration<float> frame_elapsed) -> void {}
+        virtual auto on_pace_frame([[maybe_unused]] chrono::duration<double> frame_elapsed) -> void {}
         virtual auto on_frame_end() -> void {}
 
-        virtual auto _update_fixed(chrono::duration<float> delta_time) -> void;
-        virtual auto _update_variable(chrono::duration<float> delta_time) -> void;
+        virtual auto _update_fixed(chrono::duration<double> delta_time) -> void;
+        virtual auto _update_variable(chrono::duration<double> delta_time) -> void;
 
         // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes)
         vector<function<void(engine_context&)>> _on_initialize_callbacks;
         vector<function<void(engine_context&)>> _on_close_callbacks;
-        vector<function<void(engine_context&, chrono::duration<float>)>> _on_fixed_update_callbacks;
-        vector<function<void(engine_context&, chrono::duration<float>)>> _on_variable_update_callbacks;
+        vector<function<void(engine_context&, chrono::duration<double>)>> _on_fixed_update_callbacks;
+        vector<function<void(engine_context&, chrono::duration<double>)>> _on_variable_update_callbacks;
 
         fixed_timestep_accumulator _accumulator{};
         chrono::steady_clock::time_point _last_frame_time{};
-        chrono::duration<float> _delta_frame_time{0.0F};
+        chrono::duration<double> _delta_frame_time = chrono::duration<double>::zero();
         bool _should_close{false};
         // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
     };
@@ -264,7 +264,7 @@ namespace tempest
         auto on_poll_events() -> void override;
         [[nodiscard]] auto should_step_simulation() -> bool override;
         auto on_render_frame(float alpha) -> void override;
-        auto on_pace_frame(chrono::duration<float> frame_elapsed) -> void override;
+        auto on_pace_frame(chrono::duration<double> frame_elapsed) -> void override;
         auto on_frame_end() -> void override;
 
         virtual auto _render_frame() -> void;

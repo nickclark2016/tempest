@@ -200,6 +200,11 @@ namespace tempest::chrono
     using weeks = duration<int64_t, ratio<detail::seconds_per_week>>;
     using years = duration<int64_t, ratio<detail::seconds_per_year>>;
 
+    using duration_d = duration<double>;
+    using seconds_d = duration<double>;
+    using duration_f = duration<float>;
+    using seconds_f = duration<float>;
+
     // Duration cast
     template <typename ToDuration, typename Rep, typename Period>
     constexpr auto duration_cast(const duration<Rep, Period>& dur) noexcept -> ToDuration

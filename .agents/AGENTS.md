@@ -95,7 +95,7 @@ When delegating work to subagents or executing multi-component milestones:
 - **Multi-Toolchain Build & Test Gate**: At the completion of every subagent task and milestone, verify that all three supported toolchains compile cleanly with 0 warnings and execute their test suites:
   1. **Ninja + Clang**: `& "C:\Program Files\Git\bin\bash.exe" -l -c "ninja -C build/ninja <target>"`
   2. **Visual Studio 2022 (MSVC `v143`)**: `msbuild build/vs2022/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
-  3. **Visual Studio 2026 (MSVC `v145`)**: `msbuild build/vs2026/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
+  3. **Visual Studio 2026 (MSVC `v145`)**: `& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" build/vs2026/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
 - **Parent Agent Audit Gate (Senior Reviewer Role)**: The parent agent must NEVER passively merge or rubber-stamp a subagent's changes simply because tests pass. The parent agent must explicitly inspect the subagent's diff and audit for:
   1. *Subagent Shortcuts & Compiler Hacks*: Watch for `const_cast` on immutable/storage pointers, unvalidated bounds, unchecked optional dereferences, or swallowed error codes introduced to force compilation.
   2. *Engine Idioms & Invariants*: Enforce proper ECS mutator APIs (`assign_or_replace`), copy-initialization syntax (`=`), named default constants, and strict prohibition of `std::` symbols.
@@ -136,8 +136,8 @@ Whenever modifying the job system, thread pool, work queues, coroutines, or sync
   `& "C:\Program Files\Git\bin\bash.exe" -l -c "ninja -C build/ninja <target>"`
   *(Do NOT use plain `ninja` from PowerShell, and do NOT invoke WSL `bash.exe` which lacks Windows LLVM/Clang in PATH).*
 - **Visual Studio (MSBuild)**: Build the specific target project directly rather than passing `/t:<target>` to `Tempest.sln` (which fails on dependencies with `MSB4057`):
-  `msbuild build/vs2022/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
-  *(Or `build/vs2026/<target>.vcxproj` for VS 2026).*
+  - **VS 2022 (`v143`)**: `msbuild build/vs2022/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
+  - **VS 2026 (`v145`)**: `& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" build/vs2026/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
 
 #### Running Test Executables
 - **Clang Outputs**: `bin/Debug/windows-clang/<target>.exe`

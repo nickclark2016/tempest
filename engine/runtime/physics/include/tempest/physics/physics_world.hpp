@@ -1,6 +1,7 @@
 #ifndef TEMPEST_PHYSICS_PHYSICS_WORLD_HPP
 #define TEMPEST_PHYSICS_PHYSICS_WORLD_HPP
 
+#include <tempest/chrono.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/physics/character_controller_component.hpp>
@@ -37,7 +38,11 @@ namespace tempest::physics
             return _physics_system;
         }
 
-        auto step(float delta_time) -> void;
+        auto step(chrono::duration<double> delta_time) -> void;
+        auto step(float delta_time) -> void
+        {
+            step(chrono::duration<double>{static_cast<double>(delta_time)});
+        }
 
       private:
         jolt::shim::physics_system* _physics_system = nullptr;

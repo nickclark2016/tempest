@@ -254,7 +254,7 @@ namespace tempest::tests
             [[maybe_unused]] auto& jobs = engine_interface.get_job_system();
             [[maybe_unused]] auto& profiler = engine_interface.get_profiler_session();
             [[maybe_unused]] const auto& accumulator = engine_interface.get_accumulator();
-            EXPECT_EQ(accumulator.fixed_delta(), 1.0F / 60.0F);
+            EXPECT_DOUBLE_EQ(accumulator.fixed_delta().count(), static_cast<double>(1.0F / 60.0F));
         });
 
         // 4. Assert: client_context provides graphical and asset subsystems
@@ -303,7 +303,7 @@ namespace tempest::tests
                 standalone_engine_context::on_render_frame(alpha);
             }
 
-            auto on_pace_frame(chrono::duration<float> frame_elapsed) -> void override
+            auto on_pace_frame(chrono::duration<double> frame_elapsed) -> void override
             {
                 execution_log.push_back("on_pace_frame");
                 standalone_engine_context::on_pace_frame(frame_elapsed);
@@ -335,11 +335,11 @@ namespace tempest::tests
             tracker_context.execution_log.push_back("on_close");
         });
 
-        tracker_context.register_on_fixed_update_callback([&](engine_context&, chrono::duration<float>) {
+        tracker_context.register_on_fixed_update_callback([&](engine_context&, chrono::duration<double>) {
             tracker_context.execution_log.push_back("fixed_update");
         });
 
-        tracker_context.register_on_variable_update_callback([&](engine_context&, chrono::duration<float>) {
+        tracker_context.register_on_variable_update_callback([&](engine_context&, chrono::duration<double>) {
             tracker_context.execution_log.push_back("variable_update");
         });
 
@@ -403,11 +403,11 @@ namespace tempest::tests
         auto fixed_update_call_count = uint32_t{0};
         auto variable_update_call_count = uint32_t{0};
 
-        paused_context.register_on_fixed_update_callback([&](engine_context&, chrono::duration<float>) {
+        paused_context.register_on_fixed_update_callback([&](engine_context&, chrono::duration<double>) {
             ++fixed_update_call_count;
         });
 
-        paused_context.register_on_variable_update_callback([&](engine_context&, chrono::duration<float>) {
+        paused_context.register_on_variable_update_callback([&](engine_context&, chrono::duration<double>) {
             ++variable_update_call_count;
         });
 

@@ -11,9 +11,11 @@ namespace tempest::physics
 {
     auto update_character_controllers(physics_world& world,
                                       ecs::archetype_registry& registry,
-                                      float delta_time,
+                                      chrono::duration<double> delta_time,
                                       math::vec3<float> gravity) -> void
     {
+        const auto dt = static_cast<float>(delta_time.count());
+
         registry.each([&](const ecs::self_component& self,
                           character_controller_component& controller,
                           const character_movement_intent& intent,
@@ -46,7 +48,7 @@ namespace tempest::physics
             // 3. Lerp current horizontal velocity toward target with acceleration_rate.
             const auto current_linear_velocity = character->get_linear_velocity();
             auto current_horizontal_velocity = math::vec3<float>{current_linear_velocity.x, 0.0F, current_linear_velocity.z};
-            const auto alpha = math::clamp(controller.acceleration_rate * delta_time, 0.0F, 1.0F);
+            const auto alpha = math::clamp(controller.acceleration_rate * dt, 0.0F, 1.0F);
             current_horizontal_velocity = math::lerp(current_horizontal_velocity, target_horizontal_velocity, alpha);
 
             // 4. Manage vertical velocity.
@@ -65,7 +67,7 @@ namespace tempest::physics
                 }
             }
 
-            vertical_velocity += gravity.y * delta_time;
+            vertical_velocity += gravity.y * dt;
 
             // 5. Check stairs or cancel velocity towards steep slopes for horizontal movement.
             auto horizontal_velocity = jolt::shim::vec3{
@@ -108,7 +110,7 @@ namespace tempest::physics
                 .y = gravity.y,
                 .z = gravity.z,
             };
-            character->extended_update(delta_time, shim_gravity, update_settings);
+            character->extended_update(dt, shim_gravity, update_settings);
 
             // 8. Update character_controller_component runtime state.
             const auto new_position = character->get_position();
