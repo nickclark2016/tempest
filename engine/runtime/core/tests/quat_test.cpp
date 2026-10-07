@@ -11,6 +11,7 @@ using tempest::math::as_degrees;
 using tempest::math::as_mat3;
 using tempest::math::as_mat4;
 using tempest::math::as_radians;
+using tempest::math::conjugate;
 using tempest::math::cross;
 using tempest::math::dot;
 using tempest::math::euler;
@@ -20,6 +21,7 @@ using tempest::math::extract_up;
 using tempest::math::fmat3;
 using tempest::math::fmat4;
 using tempest::math::fquat;
+using tempest::math::inverse;
 using tempest::math::normalize;
 using tempest::math::pitch;
 using tempest::math::quat;
@@ -214,27 +216,78 @@ TEST(quat_test, multiplication_associativity)
     EXPECT_NEAR(q_left_grouped.w, q_right_grouped.w, 1e-5F);
 }
 
-/// @brief Tests unit quaternion conjugate as inverse: q * conjugate(q) == identity.
-TEST(quat_test, conjugate_and_inverse)
+/// @brief Tests quaternion conjugate: conjugate(q) inverts vector part, and conjugate(conjugate(q)) == q.
+TEST(quat_test, conjugate_properties)
 {
-    // 1. Setup - Arbitrary unit quaternion
-    const auto q = normalize(fquat{as_radians(vec3<float>{35.0F, -50.0F, 22.0F})});
-    const auto q_conj = fquat{-q.x, -q.y, -q.z, q.w};
+    // 1. Setup - Arbitrary quaternion
+    const auto q = fquat{1.0F, -2.0F, 3.0F, 4.0F};
 
     // 2. Act
-    const auto q_product_right = q * q_conj;
-    const auto q_product_left = q_conj * q;
+    const auto q_conj = conjugate(q);
+    const auto q_double_conj = conjugate(q_conj);
 
-    // 3. Assert - Product must equal identity quaternion (0, 0, 0, 1)
-    EXPECT_NEAR(q_product_right.x, 0.0F, 1e-6F);
-    EXPECT_NEAR(q_product_right.y, 0.0F, 1e-6F);
-    EXPECT_NEAR(q_product_right.z, 0.0F, 1e-6F);
-    EXPECT_NEAR(q_product_right.w, 1.0F, 1e-6F);
+    // 3. Assert - Vector part negated, scalar part unchanged, double conjugate restores original
+    EXPECT_FLOAT_EQ(q_conj.x, -1.0F);
+    EXPECT_FLOAT_EQ(q_conj.y, 2.0F);
+    EXPECT_FLOAT_EQ(q_conj.z, -3.0F);
+    EXPECT_FLOAT_EQ(q_conj.w, 4.0F);
 
-    EXPECT_NEAR(q_product_left.x, 0.0F, 1e-6F);
-    EXPECT_NEAR(q_product_left.y, 0.0F, 1e-6F);
-    EXPECT_NEAR(q_product_left.z, 0.0F, 1e-6F);
-    EXPECT_NEAR(q_product_left.w, 1.0F, 1e-6F);
+    EXPECT_FLOAT_EQ(q_double_conj.x, q.x);
+    EXPECT_FLOAT_EQ(q_double_conj.y, q.y);
+    EXPECT_FLOAT_EQ(q_double_conj.z, q.z);
+    EXPECT_FLOAT_EQ(q_double_conj.w, q.w);
+
+    // Product of q and conjugate(q) has zero vector part and w equal to norm squared
+    const auto q_prod = q * q_conj;
+    const auto norm_sq = norm(q) * norm(q);
+    EXPECT_NEAR(q_prod.x, 0.0F, 1e-5F);
+    EXPECT_NEAR(q_prod.y, 0.0F, 1e-5F);
+    EXPECT_NEAR(q_prod.z, 0.0F, 1e-5F);
+    EXPECT_NEAR(q_prod.w, norm_sq, 1e-4F);
+}
+
+/// @brief Tests quaternion inverse: q * inverse(q) == inverse(q) * q == identity for unit and non-unit,
+/// and verifies safe fallback to identity on degenerate (zero norm) quaternions.
+TEST(quat_test, inverse_properties_and_degenerate)
+{
+    // 1. Setup - Unit quaternion
+    const auto q_unit = normalize(fquat{as_radians(vec3<float>{35.0F, -50.0F, 22.0F})});
+
+    // 2. Act & Assert - For unit quaternion, inverse equals conjugate
+    const auto q_unit_inv = inverse(q_unit);
+    const auto q_unit_conj = conjugate(q_unit);
+    EXPECT_NEAR(q_unit_inv.x, q_unit_conj.x, 1e-6F);
+    EXPECT_NEAR(q_unit_inv.y, q_unit_conj.y, 1e-6F);
+    EXPECT_NEAR(q_unit_inv.z, q_unit_conj.z, 1e-6F);
+    EXPECT_NEAR(q_unit_inv.w, q_unit_conj.w, 1e-6F);
+
+    const auto prod_right = q_unit * q_unit_inv;
+    const auto prod_left = q_unit_inv * q_unit;
+    EXPECT_NEAR(prod_right.x, 0.0F, 1e-6F);
+    EXPECT_NEAR(prod_right.y, 0.0F, 1e-6F);
+    EXPECT_NEAR(prod_right.z, 0.0F, 1e-6F);
+    EXPECT_NEAR(prod_right.w, 1.0F, 1e-6F);
+    EXPECT_NEAR(prod_left.x, 0.0F, 1e-6F);
+    EXPECT_NEAR(prod_left.y, 0.0F, 1e-6F);
+    EXPECT_NEAR(prod_left.z, 0.0F, 1e-6F);
+    EXPECT_NEAR(prod_left.w, 1.0F, 1e-6F);
+
+    // Non-unit quaternion
+    const auto q_non_unit = fquat{2.0F, -1.0F, 3.0F, -2.0F};
+    const auto q_non_unit_inv = inverse(q_non_unit);
+    const auto non_unit_prod = q_non_unit * q_non_unit_inv;
+    EXPECT_NEAR(non_unit_prod.x, 0.0F, 1e-5F);
+    EXPECT_NEAR(non_unit_prod.y, 0.0F, 1e-5F);
+    EXPECT_NEAR(non_unit_prod.z, 0.0F, 1e-5F);
+    EXPECT_NEAR(non_unit_prod.w, 1.0F, 1e-5F);
+
+    // Degenerate zero quaternion returns identity without NaN/inf
+    const auto q_zero = fquat{0.0F, 0.0F, 0.0F, 0.0F};
+    const auto q_zero_inv = inverse(q_zero);
+    EXPECT_FLOAT_EQ(q_zero_inv.x, 0.0F);
+    EXPECT_FLOAT_EQ(q_zero_inv.y, 0.0F);
+    EXPECT_FLOAT_EQ(q_zero_inv.z, 0.0F);
+    EXPECT_FLOAT_EQ(q_zero_inv.w, 1.0F);
 }
 
 /// @brief Tests norm preservation under quaternion multiplication: norm(q1 * q2) == norm(q1) * norm(q2).

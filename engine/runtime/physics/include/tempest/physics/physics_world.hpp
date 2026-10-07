@@ -1,6 +1,7 @@
 #ifndef TEMPEST_PHYSICS_PHYSICS_WORLD_HPP
 #define TEMPEST_PHYSICS_PHYSICS_WORLD_HPP
 
+#include <tempest/api.hpp>
 #include <tempest/chrono.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
@@ -13,7 +14,7 @@
 
 namespace tempest::physics
 {
-    class physics_world
+    class TEMPEST_API physics_world
     {
       public:
         physics_world();
@@ -33,16 +34,10 @@ namespace tempest::physics
 
         [[nodiscard]] auto get_character(character_id char_id) const -> jolt::shim::character_virtual*;
 
-        [[nodiscard]] auto physics_system() const noexcept -> jolt::shim::physics_system*
-        {
-            return _physics_system;
-        }
+        [[nodiscard]] auto physics_system() const noexcept -> jolt::shim::physics_system*;
 
         auto step(chrono::duration<double> delta_time) -> void;
-        auto step(float delta_time) -> void
-        {
-            step(chrono::duration<double>{static_cast<double>(delta_time)});
-        }
+        auto step(float delta_time) -> void;
 
       private:
         jolt::shim::physics_system* _physics_system = nullptr;

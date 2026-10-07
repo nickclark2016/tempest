@@ -194,6 +194,12 @@ namespace tempest::math
     }
 
     template <typename T>
+    inline constexpr T length(const vec3<T>& v)
+    {
+        return norm(v);
+    }
+
+    template <typename T>
     inline constexpr vec3<T> normalize(const vec3<T>& v)
     {
         return v / norm(v);

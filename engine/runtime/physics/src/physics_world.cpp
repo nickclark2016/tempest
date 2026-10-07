@@ -176,12 +176,22 @@ namespace tempest::physics
         return nullptr;
     }
 
+    auto physics_world::physics_system() const noexcept -> jolt::shim::physics_system*
+    {
+        return _physics_system;
+    }
+
     auto physics_world::step(chrono::duration<double> delta_time) -> void
     {
         if (_physics_system != nullptr)
         {
             _physics_system->step(static_cast<float>(delta_time.count()));
         }
+    }
+
+    auto physics_world::step(float delta_time) -> void
+    {
+        step(chrono::duration<double>{static_cast<double>(delta_time)});
     }
 
     auto physics_world::_release() -> void

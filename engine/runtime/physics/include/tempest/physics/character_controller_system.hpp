@@ -1,6 +1,7 @@
 #ifndef TEMPEST_PHYSICS_CHARACTER_CONTROLLER_SYSTEM_HPP
 #define TEMPEST_PHYSICS_CHARACTER_CONTROLLER_SYSTEM_HPP
 
+#include <tempest/api.hpp>
 #include <tempest/archetype.hpp>
 #include <tempest/chrono.hpp>
 #include <tempest/physics/physics_world.hpp>
@@ -8,10 +9,10 @@
 
 namespace tempest::physics
 {
-    auto update_character_controllers(physics_world& world,
-                                      ecs::archetype_registry& registry,
-                                      chrono::duration<double> delta_time,
-                                      math::vec3<float> gravity) -> void;
+    TEMPEST_API auto update_character_controllers(physics_world& world,
+                                                  ecs::archetype_registry& registry,
+                                                  chrono::duration<double> delta_time,
+                                                  math::vec3<float> gravity) -> void;
 
     inline auto update_character_controllers(physics_world& world,
                                              ecs::archetype_registry& registry,

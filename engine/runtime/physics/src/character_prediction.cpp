@@ -20,6 +20,19 @@ namespace tempest::physics
         };
     }
 
+    auto step_character_simulation(physics_world& world,
+                                   ecs::archetype_registry& registry,
+                                   ecs::entity player_entity,
+                                   const network::user_cmd& cmd,
+                                   chrono::duration<double> delta_time,
+                                   math::vec3<float> gravity) -> void
+    {
+        registry.assign_or_replace(player_entity, apply_user_cmd(cmd));
+
+        update_character_controllers(world, registry, delta_time, gravity);
+        world.step(delta_time);
+    }
+
     auto step_client_prediction(physics_world& world,
                                 ecs::archetype_registry& registry,
                                 ecs::entity player_entity,
@@ -28,10 +41,7 @@ namespace tempest::physics
                                 character_prediction_buffer& buffer,
                                 math::vec3<float> gravity) -> const character_snapshot&
     {
-        registry.assign_or_replace(player_entity, apply_user_cmd(cmd));
-
-        update_character_controllers(world, registry, delta_time, gravity);
-        world.step(delta_time);
+        step_character_simulation(world, registry, player_entity, cmd, delta_time, gravity);
 
         const auto snapshot = capture_character_snapshot(cmd.tick, registry, player_entity);
         const auto& recorded_frame = buffer.record_input(cmd, snapshot);

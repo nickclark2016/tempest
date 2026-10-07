@@ -168,6 +168,24 @@ namespace tempest::math
     }
 
     template <typename T>
+    inline constexpr quat<T> conjugate(const quat<T>& q) noexcept
+    {
+        return quat<T>(-q.x, -q.y, -q.z, q.w);
+    }
+
+    template <typename T>
+    inline constexpr quat<T> inverse(const quat<T>& q) noexcept
+    {
+        const T n_sq = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
+        if (n_sq <= static_cast<T>(1e-8))
+        {
+            return quat<T>(static_cast<T>(0), static_cast<T>(0), static_cast<T>(0), static_cast<T>(1));
+        }
+        const T inv_n_sq = static_cast<T>(1) / n_sq;
+        return quat<T>(-q.x * inv_n_sq, -q.y * inv_n_sq, -q.z * inv_n_sq, q.w * inv_n_sq);
+    }
+
+    template <typename T>
     inline constexpr T roll(const quat<T>& q)
     {
         T const y = static_cast<T>(2) * (q.x * q.y + q.w * q.z);

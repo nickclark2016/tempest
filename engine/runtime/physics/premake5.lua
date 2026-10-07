@@ -45,6 +45,9 @@ scoped.project('physics', function()
         externalincludedirs {
             'include',
         }
+        uses {
+            'jolt-shim:includedirs',
+        }
     end)
 
     scoped.usage("INTERFACE", function()
@@ -85,13 +88,8 @@ scoped.group('Tests', function()
         }
 
         uses {
-            'physics',
             'tempest',
-            'network',
-            'ecs',
-            'core',
-            'job',
-            'logger',
+            'jolt-shim',
             'googletest',
         }
 

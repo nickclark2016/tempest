@@ -85,6 +85,7 @@ scoped.project('tempest', function()
             'job',
             'logger',
             'network',
+            'physics',
             'profiler',
             'render-graph',
             'render-system',
@@ -126,6 +127,7 @@ scoped.project('tempest', function()
         'job',
         'logger',
         'network',
+        'physics',
         'profiler',
         'render-graph',
         'render-system',
@@ -163,8 +165,10 @@ scoped.project('tempest', function()
             'ecs:includedirs',
             'event:includedirs',
             'job:includedirs',
+            'jolt-shim:includedirs',
             'logger:includedirs',
             'network:includedirs',
+            'physics:includedirs',
             'profiler:includedirs',
             'render-graph:includedirs',
             'render-system:includedirs',
@@ -193,6 +197,7 @@ scoped.project('tempest', function()
                 'job',
                 'logger',
                 'network',
+                'physics',
                 'profiler',
                 'rhi-api',
                 'serialization',
@@ -203,6 +208,7 @@ scoped.project('tempest', function()
                 'tinyexr',
                 'tlsf',
                 'rhi-vk',
+                'jolt-shim',
            }
         end)
 

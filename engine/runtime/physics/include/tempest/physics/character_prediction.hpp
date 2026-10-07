@@ -11,10 +11,6 @@
 #include <tempest/physics/physics_world.hpp>
 #include <tempest/vec3.hpp>
 
-#if defined(_WIN32) && !defined(TEMPEST_PHYSICS_DYNAMIC)
-#   undef TEMPEST_API
-#   define TEMPEST_API
-#endif
 
 namespace tempest::physics
 {
@@ -24,6 +20,33 @@ namespace tempest::physics
     /// @param cmd The incoming client input command.
     /// @return Newly synthesized character_movement_intent.
     [[nodiscard]] TEMPEST_API auto apply_user_cmd(const network::user_cmd& cmd) -> character_movement_intent;
+
+    /// @brief Steps the character controller and physics world for a single simulation tick.
+    /// Applies user_cmd movement intent, updates character controllers, and steps physics_world.
+    /// Shared by forward predictive stepping and reconciliation rollback resimulation to ensure determinism.
+    /// @param world The physics world simulation instance.
+    /// @param registry Archetype registry containing the player entity and components.
+    /// @param player_entity Entity handle of the character being simulated.
+    /// @param cmd Input command driving this tick's movement.
+    /// @param delta_time Simulation time delta in duration format.
+    /// @param gravity World gravity vector (defaults to Earth standard (0, -9.81, 0)).
+    TEMPEST_API auto step_character_simulation(physics_world& world,
+                                               ecs::archetype_registry& registry,
+                                               ecs::entity player_entity,
+                                               const network::user_cmd& cmd,
+                                               chrono::duration<double> delta_time,
+                                               math::vec3<float> gravity = math::vec3<float>{0.0F, -9.81F, 0.0F}) -> void;
+
+    inline auto step_character_simulation(physics_world& world,
+                                          ecs::archetype_registry& registry,
+                                          ecs::entity player_entity,
+                                          const network::user_cmd& cmd,
+                                          float delta_time,
+                                          math::vec3<float> gravity = math::vec3<float>{0.0F, -9.81F, 0.0F}) -> void
+    {
+        step_character_simulation(world, registry, player_entity, cmd,
+                                  chrono::duration<double>{static_cast<double>(delta_time)}, gravity);
+    }
 
     /// @brief Steps the character controller and physics world predictively for one client simulation tick,
     /// capturing the resulting state snapshot and recording both command and state into the prediction ring buffer.
