@@ -16,6 +16,16 @@ This directory contains architectural and mathematical design documents for the 
 * **[Production Multiplayer Architecture Roadmap](proposals/production_networking_architecture_roadmap.md)**: Details the transition from single-server prediction to a production-grade distributed MMO/open-world network stack: chunk-relative coordinates, edge gateways, multi-server spatial meshing, token-based authentication, and ChaCha20-Poly1305 AEAD wire security.
 * **[Unified Result-Producing Command Line Parser](proposals/command_line_argument_parser.md)**: Details a strongly-typed, zero-allocation schema-based CLI parser in `tempest::core` that produces validated immutable results rather than mutating pre-existing objects.
 
+### Editor & Scene System
+
+* **[Editor & Scene System (Umbrella)](proposals/editor_and_scene_system.md)**: The shared foundation, key decisions, pre-existing defects fixed, risks, verification matrix and the M1–M9 roadmap for scene saves, prefabs, multi-scene loading, baking, editor authoring with undo, play mode, and the Log and Project panes.
+* **[Component Reflection & Injected Type Registry](proposals/component_reflection_type_registry.md)**: A dependency-injected `component_type_registry` that replaces the static type-index map; `reflect<T>` field descriptors; MSVC/Clang type-name normalization; the shape-test and golden-manifest type-identity gate; migration hooks.
+* **[Scene & Prefab Format, Prefab Instancing, Baking](proposals/scene_prefab_format_and_bake.md)**: Deterministic `.tscene` / `.tprefab` JSON behind an opaque yyjson writer, file-local entity ids, live-linked per-field prefab overrides with nesting, glTF model prefabs, load/save validation, and the versioned `.tscenebin` bake.
+* **[Scene Manager & Multi-Scene Loading](proposals/scene_manager_multi_scene_loading.md)**: One world registry holding many scenes, additive and single loading and unloading, a three-stage decode/resolve/time-sliced-commit pipeline for sync and async loads, and a main-thread executor.
+* **[Project & Asset Workspace](proposals/project_asset_workspace.md)**: `.tproject` and committed `.tmeta` sidecars, `.tassetdb` as a derived cache, built-in primitives, `.tmaterial` assets, an OS file watcher, a reverse dependency index, and the asset-removal flow.
+* **[Editor Authoring, Undo & Play Mode](proposals/editor_authoring_and_play_mode.md)**: ECS hierarchy primitives, the undoable command layer, multi-select, the cached hierarchy pane, the reflected inspector, Edit/Playing/Paused with registry snapshot/restore, Persist to Scene, the game module contract, and network play.
+* **[Editor Log View & Project View](proposals/editor_log_and_project_views.md)**: Logger sink and timestamp extensions, an MPSC log store with a stateful filtered view, and a single-column Project View with drag-to-instantiate.
+
 ### PBR & Render Pipeline Performance Overhaul
 
 * **[PBR Opaque vs. Masked Pipeline Separation](proposals/pbr_opaque_masked_pipeline_split.md)**: Details splitting forward PBR lighting into dedicated opaque (zero `discard`, Early-$Z$ writes enabled) and masked pipelines, and omitting the fragment shader (`VK_NULL_HANDLE`) for opaque Z-prepasses and shadow cascades to enable hardware double-rate depth rasterization.
