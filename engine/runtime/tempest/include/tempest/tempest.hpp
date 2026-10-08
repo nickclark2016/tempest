@@ -172,6 +172,7 @@ namespace tempest
         [[nodiscard]] virtual auto get_render_surface(window_handle win) -> rhi::render_surface* = 0;
         [[nodiscard]] virtual auto get_render_surface(window_handle win) const -> const rhi::render_surface* = 0;
         [[nodiscard]] virtual auto get_raw_surface(window_handle win) const -> rhi::raw_surface_handle = 0;
+        [[nodiscard]] virtual auto get_main_window() const -> window_handle = 0;
     };
 
     class TEMPEST_API standalone_engine_context : public client_context
@@ -237,6 +238,7 @@ namespace tempest
         [[nodiscard]] auto get_render_surface(window_handle win) -> rhi::render_surface* override;
         [[nodiscard]] auto get_render_surface(window_handle win) const -> const rhi::render_surface* override;
         [[nodiscard]] auto get_raw_surface(window_handle win) const -> rhi::raw_surface_handle override;
+        [[nodiscard]] auto get_main_window() const -> window_handle override;
 
         auto load_entity(ecs::entity src) -> ecs::entity override;
 

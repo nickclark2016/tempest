@@ -34,11 +34,15 @@ namespace tempest::physics
             // 1. Normalize horizontal wish direction.
             auto wish_direction = math::vec3<float>{intent.wish_direction.x, 0.0F, intent.wish_direction.z};
             const auto wish_length_squared = wish_direction.x * wish_direction.x + wish_direction.z * wish_direction.z;
-            if (wish_length_squared > 1.0e-6F)
+            if (wish_length_squared > 1.0e-4F)
             {
                 const auto inverse_length = 1.0F / math::sqrt(wish_length_squared);
                 wish_direction.x *= inverse_length;
                 wish_direction.z *= inverse_length;
+            }
+            else
+            {
+                wish_direction = math::vec3<float>{0.0F, 0.0F, 0.0F};
             }
 
             // 2. Calculate target horizontal velocity (d_wish * speed).
@@ -50,6 +54,12 @@ namespace tempest::physics
             auto current_horizontal_velocity = math::vec3<float>{current_linear_velocity.x, 0.0F, current_linear_velocity.z};
             const auto alpha = math::clamp(controller.acceleration_rate * dt, 0.0F, 1.0F);
             current_horizontal_velocity = math::lerp(current_horizontal_velocity, target_horizontal_velocity, alpha);
+            if (wish_direction.x == 0.0F && wish_direction.z == 0.0F &&
+                (current_horizontal_velocity.x * current_horizontal_velocity.x +
+                 current_horizontal_velocity.z * current_horizontal_velocity.z) < 1.0e-4F)
+            {
+                current_horizontal_velocity = math::vec3<float>{0.0F, 0.0F, 0.0F};
+            }
 
             // 4. Manage vertical velocity.
             const auto ground_state = character->get_ground_state();

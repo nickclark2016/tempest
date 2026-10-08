@@ -85,6 +85,33 @@ namespace tempest::network::tests
         EXPECT_EQ(decoded_boundary->buttons, user_button_none);
     }
 
+    /// @brief Verifies that a zero input user command (forward_move = 0, right_move = 0)
+    /// decodes to exact 0.0F without quantization-induced positive or negative drift.
+    TEST(prediction_buffer_tests, user_cmd_zero_codec_exact)
+    {
+        // 1. Setup: User command with zero movement
+        const auto zero_cmd = user_cmd{
+            .tick = 100U,
+            .forward_move = 0.0F,
+            .right_move = 0.0F,
+            .view_yaw = 0.0F,
+            .buttons = user_button_none,
+        };
+
+        // 2. Act: Encode and decode
+        auto writer = bit_writer{};
+        write_user_cmd(writer, zero_cmd);
+        writer.flush();
+
+        auto reader = bit_reader{writer.data()};
+        const auto decoded_cmd = read_user_cmd(reader);
+
+        // 3. Assert: Decodes to exact 0.0F
+        ASSERT_TRUE(decoded_cmd.has_value());
+        EXPECT_EQ(decoded_cmd->forward_move, 0.0F);
+        EXPECT_EQ(decoded_cmd->right_move, 0.0F);
+    }
+
     // =========================================================================
     // SECTION: Prediction Buffer Circular Ring & Overwrite Tests
     // =========================================================================

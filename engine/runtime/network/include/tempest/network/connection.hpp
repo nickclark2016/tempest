@@ -58,6 +58,7 @@ namespace tempest::network
     class TEMPEST_API connection
     {
       public:
+        connection() = default;
         connection(uint64_t session_id, const endpoint& remote_endpoint, ipacket_security* security = nullptr);
 
         [[nodiscard]] auto session_id() const noexcept -> uint64_t

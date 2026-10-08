@@ -377,6 +377,7 @@ namespace tempest
         core::keyboard keyboard{};
         core::mouse mouse{};
         cursor_mode current_cursor_mode{cursor_mode::normal};
+        bool is_focused{true};
 
         function<void(core::key_state)> key_callback;
         function<void(uint32_t)> char_callback;
@@ -470,6 +471,7 @@ namespace tempest
         data->window = native_win;
         data->width = desc.width;
         data->height = desc.height;
+        data->is_focused = (glfwGetWindowAttrib(native_win, GLFW_FOCUSED) == GLFW_TRUE);
 
         glfwSetWindowUserPointer(native_win, data.get());
 
@@ -574,11 +576,19 @@ namespace tempest
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
             if (!win_data) {
                 return;
-}
+            }
+
+            const auto is_focus = (focused == GLFW_TRUE);
+            win_data->is_focused = is_focus;
+            if (!is_focus)
+            {
+                win_data->keyboard.clear();
+                win_data->mouse.clear();
+            }
 
             if (win_data->focus_callback)
             {
-                win_data->focus_callback(focused == GLFW_TRUE);
+                win_data->focus_callback(is_focus);
             }
         });
 
@@ -750,6 +760,12 @@ namespace tempest
     {
         auto* data = _impl->find_window(win);
         return (data != nullptr) ? (data->current_cursor_mode == cursor_mode::disabled) : false;
+    }
+
+    auto window_manager::is_focused(window_handle win) const -> bool
+    {
+        auto* data = _impl->find_window(win);
+        return (data != nullptr) ? data->is_focused : false;
     }
 
     auto window_manager::get_keyboard(window_handle win) -> core::keyboard&

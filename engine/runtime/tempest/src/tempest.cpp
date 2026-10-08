@@ -578,6 +578,11 @@ namespace tempest
         return {};
     }
 
+    auto standalone_engine_context::get_main_window() const -> window_handle
+    {
+        return _windows.empty() ? null_window_handle : _windows.front().handle;
+    }
+
     auto standalone_engine_context::_render_frame() -> void
     {
         [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "engine::render_frame"};

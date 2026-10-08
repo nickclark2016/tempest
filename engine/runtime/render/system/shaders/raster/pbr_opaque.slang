@@ -60,7 +60,7 @@ FragmentOutput FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
     let shadow_comparison_sampler_idx = WaveReadLaneFirst(scene.shadow_comparison_sampler_index);
     let cmp_sampler = bindless_comparison_samplers[shadow_comparison_sampler_idx];
     let shadow_data = (DirectionalShadowData*)WaveReadLaneFirst(push_constants.directional_shadow_address);
-    let shadow_res = sample_csm_shadow_info(shadow_atlas, cmp_sampler, shadow_data, input.world_position, input.normal, view_depth);
+    let shadow_res = sample_csm_shadow_info(shadow_atlas, cmp_sampler, shadow_data, input.world_position, normalize(input.normal), view_depth, input.position.xy);
     let sun_shadow = shadow_res.factor;
     let cascade_idx = shadow_res.cascade_index;
 

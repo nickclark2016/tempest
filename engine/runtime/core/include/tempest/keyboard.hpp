@@ -188,6 +188,11 @@ namespace tempest::core
             return action == key_action::press || action == key_action::repeat;
         }
 
+        void clear() noexcept
+        {
+            _key_states = {};
+        }
+
       private:
         array<key_state, static_cast<underlying_type_t<key>>(key::last_key)> _key_states;
     };

@@ -23,6 +23,8 @@ namespace tempest::physics
         math::quat<float> rotation{0.0F, 0.0F, 0.0F, 1.0F};
         math::vec3<float> linear_velocity{0.0F, 0.0F, 0.0F};
         math::vec3<float> angular_velocity{0.0F, 0.0F, 0.0F};
+
+        auto operator==(const actor_motion_snapshot& other) const noexcept -> bool = default;
     };
 
     /// \brief Specialized character snapshot extending motion snapshot with locomotion and ground state.
@@ -32,6 +34,8 @@ namespace tempest::physics
         bool is_grounded = false;
         jolt::shim::ground_state current_ground_state = jolt::shim::ground_state::in_air;
         math::vec3<float> ground_normal{0.0F, 1.0F, 0.0F};
+
+        auto operator==(const character_snapshot& other) const noexcept -> bool = default;
 
         [[nodiscard]] constexpr auto tick() const noexcept -> uint32_t
         {

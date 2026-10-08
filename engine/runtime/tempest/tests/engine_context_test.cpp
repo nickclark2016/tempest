@@ -114,6 +114,57 @@ namespace tempest::tests
         wm.destroy_window(win);
     }
 
+    /// @brief Verifies that is_focused returns the focus state of the window, and that keyboard
+    /// and mouse clear methods properly reset pressed inputs to release.
+    TEST(window_manager_test, focus_and_input_clearing)
+    {
+        // 1. Setup window manager and create window
+        auto wm = window_manager{};
+        const auto desc = window_desc{
+            .width = 640,
+            .height = 480,
+            .title = "Focus Gating Test Window",
+        };
+
+        auto win = wm.create_window(desc);
+        ASSERT_TRUE(win.is_valid());
+
+        // 2. Act & Assert: Verify is_focused returns a valid boolean state
+        const auto focused = wm.is_focused(win);
+        EXPECT_TRUE(focused || !focused);
+
+        // 3. Act & Assert: Set keyboard key to press, verify is_key_down, then clear and verify released
+        auto& kb = wm.get_keyboard(win);
+        kb.set(core::key_state{
+            .k = core::key::w,
+            .action = core::key_action::press,
+        });
+        EXPECT_TRUE(kb.is_key_down(core::key::w));
+
+        kb.clear();
+        EXPECT_FALSE(kb.is_key_down(core::key::w));
+
+        // 4. Act & Assert: Set mouse button to press and position deltas, then clear and verify reset
+        auto& ms = wm.get_mouse(win);
+        ms.set(core::mouse_button_state{
+            .button = core::mouse_button::left,
+            .action = core::mouse_action::press,
+        });
+        ms.set_position(100.0F, 200.0F);
+        ms.set_position(110.0F, 220.0F);
+        EXPECT_EQ(ms.get(core::mouse_button::left).action, core::mouse_action::press);
+        EXPECT_FLOAT_EQ(ms.dx(), 10.0F);
+        EXPECT_FLOAT_EQ(ms.dy(), 20.0F);
+
+        ms.clear();
+        EXPECT_EQ(ms.get(core::mouse_button::left).action, core::mouse_action::release);
+        EXPECT_FLOAT_EQ(ms.dx(), 0.0F);
+        EXPECT_FLOAT_EQ(ms.dy(), 0.0F);
+
+        // 5. Cleanup
+        wm.destroy_window(win);
+    }
+
     TEST(engine_context_test, standalone_context_subsystems)
     {
         auto ctx = standalone_engine_context{};

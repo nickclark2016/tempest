@@ -63,6 +63,7 @@ namespace tempest
         auto set_cursor_mode(window_handle win, cursor_mode mode) -> void;
         [[nodiscard]] auto get_cursor_mode(window_handle win) const -> cursor_mode;
         [[nodiscard]] auto is_cursor_disabled(window_handle win) const -> bool;
+        [[nodiscard]] auto is_focused(window_handle win) const -> bool;
 
         [[nodiscard]] auto get_keyboard(window_handle win) -> core::keyboard&;
         [[nodiscard]] auto get_keyboard(window_handle win) const -> const core::keyboard&;

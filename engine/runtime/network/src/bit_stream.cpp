@@ -352,7 +352,19 @@ namespace tempest::network
         const auto max_int = (bits == 32) ? 0xFFFFFFFFULL : ((1ULL << bits) - 1ULL);
         const auto range = max_val - min_val;
         const auto normalized = static_cast<double>(raw_value) / static_cast<double>(max_int);
-        return static_cast<float>(static_cast<double>(min_val) + (normalized * static_cast<double>(range)));
+        const auto decoded = static_cast<float>(static_cast<double>(min_val) + (normalized * static_cast<double>(range)));
+
+        // Snap to exact 0.0F when range is symmetric around zero and decoded value is within half a quantization step
+        if (min_val < 0.0F && max_val > 0.0F && math::abs(min_val + max_val) < 1.0e-5F)
+        {
+            const auto half_step = static_cast<float>(static_cast<double>(range) / static_cast<double>(max_int));
+            if (math::abs(decoded) < half_step)
+            {
+                return 0.0F;
+            }
+        }
+
+        return decoded;
     }
 
     auto bit_reader::read_chunk_relative_position(const math::float3& chunk_origin, float chunk_extent_m,

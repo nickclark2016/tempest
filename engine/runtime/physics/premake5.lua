@@ -29,6 +29,14 @@ scoped.project('physics', function()
     externalwarnings 'Off'
     warnings 'Extra'
 
+    scoped.filter({
+        'options:shared-engine',
+    }, function()
+        defines {
+            'TEMPEST_API_EXPORT'
+        }
+    end)
+
 
     scoped.usage("PRIVATE", function()
         uses {

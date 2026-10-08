@@ -39,6 +39,12 @@ FragmentOutput FSMain(VSOutput input) {
             bindless_samplers[push_constants.sampler_index], input.uv);
     }
     hdr_color.rgb = hdr_color.rgb * exp2(push_constants.exposure);
-    output.color = float4(ACES(hdr_color.rgb), 1.0);
+
+    // Monochrome dither using Interleaved Gradient Noise to break up 8-bit quantization gradients
+    float3 magic = float3(0.06711056, 0.00583715, 52.9829189);
+    float ign = frac(magic.z * frac(dot(input.position.xy, magic.xy)));
+    float dither = (ign - 0.5) / 255.0;
+
+    output.color = float4(saturate(ACES(hdr_color.rgb) + dither), 1.0);
     return output;
 }

@@ -272,6 +272,18 @@ namespace tempest::math
             scale_start * start.w + scale_target * target.w);
     }
 
+    template <typename T>
+    constexpr auto operator==(const quat<T>& lhs, const quat<T>& rhs) noexcept -> bool
+    {
+        return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z && lhs.w == rhs.w;
+    }
+
+    template <typename T>
+    constexpr auto operator!=(const quat<T>& lhs, const quat<T>& rhs) noexcept -> bool
+    {
+        return !(lhs == rhs);
+    }
+
     using fquat = quat<float>;
 } // namespace tempest::math
 

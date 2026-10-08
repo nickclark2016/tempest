@@ -82,18 +82,29 @@ struct ShadowSampleResult {
     int cascade_index;
 };
 
-// Canonical 4-tap Poisson distribution
-static const float2 POISSON_DISK_4[4] = {
+// Canonical 8-tap Poisson distribution
+static const float2 POISSON_DISK_8[8] = {
     float2(-0.38, -0.62),
     float2( 0.65, -0.45),
     float2(-0.52,  0.55),
-    float2( 0.42,  0.68)
+    float2( 0.42,  0.68),
+    float2(-0.15,  0.25),
+    float2( 0.20, -0.22),
+    float2(-0.75, -0.10),
+    float2( 0.70,  0.15)
 };
+
+[ForceInline]
+float shadow_ign(float2 screen_pos) {
+    float3 magic = float3(0.06711056f, 0.00583715f, 52.9829189f);
+    return frac(magic.z * frac(dot(screen_pos, magic.xy)));
+}
 
 [ForceInline]
 ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerComparisonState comparison_sampler,
                                           DirectionalShadowData* shadow_data,
-                                          float3 world_pos, float3 geom_normal, float view_depth) {
+                                          float3 world_pos, float3 geom_normal, float view_depth,
+                                          float2 screen_pos = float2(0.0, 0.0)) {
     ShadowSampleResult result;
     result.factor = 1.0;
     result.cascade_index = -1;
@@ -119,8 +130,14 @@ ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerCompari
     result.cascade_index = cascade_idx;
     ShadowCascadeData* cascade = &shadow_data.cascades[cascade_idx];
 
-    // 2. Normal Offset Bias
-    float3 biased_pos = world_pos + geom_normal * shadow_data.normal_bias;
+    // Compute slope in light clip space to scale bias dynamically on grazing surfaces
+    float3 light_space_norm = mul((float3x3)cascade.view_proj, geom_normal);
+    float cos_theta = clamp(abs(light_space_norm.z), 0.05, 1.0);
+    float slope = sqrt(max(0.0, 1.0 - cos_theta * cos_theta)) / cos_theta;
+    float slope_factor = clamp(slope, 0.0, 4.0);
+
+    // 2. Slope-scaled normal bias
+    float3 biased_pos = world_pos + geom_normal * (shadow_data.normal_bias * (1.0 + slope_factor));
 
     // 3. Project into Light Clip Space
     float4 light_clip = mul(cascade.view_proj, float4(biased_pos, 1.0));
@@ -138,27 +155,34 @@ ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerCompari
     float2 atlas_uv = cascade.uv_offset_scale.xy + light_uv * cascade.uv_offset_scale.zw;
 
     // Reverse-Z: lit if current_depth >= occluder depth (closer to near plane 1.0)
-    float compare_depth = saturate(light_ndc.z + shadow_data.depth_bias);
+    float compare_depth = saturate(light_ndc.z + shadow_data.depth_bias * (1.0 + slope_factor * 0.5));
 
-    // 4. Hardware PCF (4 taps * 2x2 bilinear = 16 filtered depth samples)
+    // 4. Per-pixel rotated Poisson PCF to eliminate discrete step banding
+    float angle = shadow_ign(screen_pos) * 6.28318530718;
+    float s = sin(angle);
+    float c = cos(angle);
+    float2x2 rot = float2x2(c, -s, s, c);
+
     float shadow = 0.0;
-    const float filter_radius = 1.5;
+    const float filter_radius = 1.25;
 
     [unroll]
-    for (int i = 0; i < 4; ++i) {
-        float2 offset_uv = atlas_uv + POISSON_DISK_4[i] * shadow_data.atlas_texel_size * filter_radius;
+    for (int i = 0; i < 8; ++i) {
+        float2 offset = mul(rot, POISSON_DISK_8[i]);
+        float2 offset_uv = atlas_uv + offset * shadow_data.atlas_texel_size * filter_radius;
         shadow += shadow_atlas.SampleCmpLevelZero(comparison_sampler, offset_uv, compare_depth);
     }
 
-    result.factor = shadow * 0.25;
+    result.factor = shadow * 0.125;
     return result;
 }
 
 [ForceInline]
 float sample_csm_shadow(Texture2D shadow_atlas, SamplerComparisonState comparison_sampler,
                         DirectionalShadowData* shadow_data,
-                        float3 world_pos, float3 geom_normal, float view_depth) {
-    return sample_csm_shadow_info(shadow_atlas, comparison_sampler, shadow_data, world_pos, geom_normal, view_depth).factor;
+                        float3 world_pos, float3 geom_normal, float view_depth,
+                        float2 screen_pos = float2(0.0, 0.0)) {
+    return sample_csm_shadow_info(shadow_atlas, comparison_sampler, shadow_data, world_pos, geom_normal, view_depth, screen_pos).factor;
 }
 
 [ForceInline]

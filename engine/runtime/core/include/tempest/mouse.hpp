@@ -24,7 +24,7 @@ namespace tempest::core
         middle = mb_3,
     };
 
-    enum class mouse_action : uint32_t
+    enum class mouse_action : uint8_t
     {
         press,
         release,
@@ -32,8 +32,8 @@ namespace tempest::core
 
     struct TEMPEST_API mouse_button_state
     {
-        mouse_button button;
-        mouse_action action;
+        mouse_button button = mouse_button::left;
+        mouse_action action = mouse_action::release;
     };
 
     class TEMPEST_API mouse
@@ -46,7 +46,7 @@ namespace tempest::core
 
         void set_position(float x, float y)
         {
-            if (_x != -1.0f && _y != -1.0f) [[likely]]
+            if (_x != -1.0F && _y != -1.0F) [[likely]]
             {
                 _dx = x - _x;
                 _dy = y - _y;
@@ -127,23 +127,29 @@ namespace tempest::core
 
         void reset_mouse_deltas()
         {
-            _dx = 0.0f;
-            _dy = 0.0f;
-            _scroll_dx = 0.0f;
-            _scroll_dy = 0.0f;
+            _dx = 0.0F;
+            _dy = 0.0F;
+            _scroll_dx = 0.0F;
+            _scroll_dy = 0.0F;
+        }
+
+        void clear() noexcept
+        {
+            _button_states = {};
+            reset_mouse_deltas();
         }
 
       private:
         array<mouse_button_state, to_underlying(mouse_button::last)> _button_states{};
 
-        float _x = -1.0f;
-        float _y = -1.0f;
-        float _dx = 0.0f;
-        float _dy = 0.0f;
-        float _scroll_x = 0.0f;
-        float _scroll_y = 0.0f;
-        float _scroll_dx = 0.0f;
-        float _scroll_dy = 0.0f;
+        float _x = -1.0F;
+        float _y = -1.0F;
+        float _dx = 0.0F;
+        float _dy = 0.0F;
+        float _scroll_x = 0.0F;
+        float _scroll_y = 0.0F;
+        float _scroll_dx = 0.0F;
+        float _scroll_dy = 0.0F;
         bool _disabled = false;
     };
 } // namespace tempest::core

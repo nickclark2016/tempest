@@ -75,7 +75,7 @@ namespace tempest::render_system
         }
 
         const auto pos = tx_comp->position();
-        const auto quat_rot = math::quat(tx_comp->rotation());
+        const auto quat_rot = tx_comp->rotation_quat();
         const auto f = math::extract_forward(quat_rot);
         const auto u = math::extract_up(quat_rot);
 

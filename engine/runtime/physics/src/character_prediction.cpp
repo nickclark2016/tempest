@@ -7,6 +7,9 @@ namespace tempest::physics
 {
     auto apply_user_cmd(const network::user_cmd& cmd) -> character_movement_intent
     {
+        const auto forward_move = (math::abs(cmd.forward_move) < 0.01F) ? 0.0F : cmd.forward_move;
+        const auto right_move = (math::abs(cmd.right_move) < 0.01F) ? 0.0F : cmd.right_move;
+
         const auto sin_yaw = math::sin(cmd.view_yaw);
         const auto cos_yaw = math::cos(cmd.view_yaw);
 
@@ -14,7 +17,7 @@ namespace tempest::physics
         const auto right = math::vec3<float>{cos_yaw, 0.0F, -sin_yaw};
 
         return character_movement_intent{
-            .wish_direction = forward * cmd.forward_move + right * cmd.right_move,
+            .wish_direction = forward * forward_move + right * right_move,
             .jump_requested = (cmd.buttons & network::user_button_jump) != 0,
             .sprint_requested = (cmd.buttons & network::user_button_sprint) != 0,
         };

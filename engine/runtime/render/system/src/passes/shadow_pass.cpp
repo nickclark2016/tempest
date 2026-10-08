@@ -180,7 +180,7 @@ namespace tempest::render_system
             }
 
             const auto light_view_zero =
-                math::look_at(-sun_dir * (radius * 2.0F), math::vec3<float>{0.0F, 0.0F, 0.0F}, light_up);
+                math::look_at(-sun_dir * (radius * 4.0F), math::vec3<float>{0.0F, 0.0F, 0.0F}, light_up);
             const auto center_light = light_view_zero * math::vec4<float>{sphere_center_world.x, sphere_center_world.y,
                                                                           sphere_center_world.z, 1.0F};
 
@@ -190,11 +190,11 @@ namespace tempest::render_system
             const auto delta_x = snapped_x - center_light.x;
             const auto delta_y = snapped_y - center_light.y;
 
-            const auto light_eye = sphere_center_world - sun_dir * (radius * 2.0F);
+            const auto light_eye = sphere_center_world - sun_dir * (radius * 4.0F);
             const auto light_target = sphere_center_world;
             const auto light_view = math::look_at(light_eye, light_target, light_up);
 
-            const auto z_far_light = radius * 4.0F;
+            const auto z_far_light = radius * 8.0F;
             const auto inv_r = 1.0F / radius;
             const auto inv_zfar = 1.0F / z_far_light;
 
@@ -258,9 +258,9 @@ namespace tempest::render_system
                         .front_face = rhi::vertex_winding_order::clockwise,
                         .depth_bias =
                             rhi::depth_bias_state{
-                                .constant_factor = 1.25F,
+                                .constant_factor = 0.0F,
                                 .clamp = 0.0F,
-                                .slope_factor = 1.75F,
+                                .slope_factor = 0.0F,
                             },
                     },
                 .depth_stencil_state =
@@ -294,9 +294,9 @@ namespace tempest::render_system
                         .front_face = rhi::vertex_winding_order::clockwise,
                         .depth_bias =
                             rhi::depth_bias_state{
-                                .constant_factor = 1.25F,
+                                .constant_factor = 0.0F,
                                 .clamp = 0.0F,
-                                .slope_factor = 1.75F,
+                                .slope_factor = 0.0F,
                             },
                     },
                 .depth_stencil_state =
@@ -361,7 +361,7 @@ namespace tempest::render_system
                                                                      : rhi::graphics_pipeline_handle{};
 
                 pass_cmd.bind_index_buffer(pool.get_vertex_buffer(), rhi::index_type::uint32, 0);
-                pass_cmd.set_depth_bias(1.25F, 0.0F, 1.75F);
+                pass_cmd.set_depth_bias(0.0F, 0.0F, 0.0F);
 
                 const auto linear_sampler_idx = static_cast<int32_t>(pool.get_linear_sampler_descriptor().index);
                 const auto objects_addr = pool.get_object_buffer_address();
