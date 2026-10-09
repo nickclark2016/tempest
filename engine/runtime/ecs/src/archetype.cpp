@@ -280,6 +280,26 @@ namespace tempest::ecs
 
     void basic_archetype_registry::destroy(basic_archetype_registry::entity_type entity)
     {
+        using rel_comp_type = relationship_component<entity_type>;
+
+        if (has<rel_comp_type>(entity))
+        {
+            unlink(entity);
+
+            const auto ent_rel = get<rel_comp_type>(entity);
+            auto curr_child = ent_rel.first_child;
+            while (curr_child != tombstone && is_valid(curr_child) && has<rel_comp_type>(curr_child))
+            {
+                auto child_rel = get<rel_comp_type>(curr_child);
+                const auto next_child = child_rel.next_sibling;
+                child_rel.parent = tombstone;
+                replace(curr_child, child_rel);
+                curr_child = next_child;
+            }
+        }
+
+        _names.erase(entity);
+
         const auto& key = _entity_archetype_mapping[entity];
 
         auto archetype_index = key.archetype_index;
@@ -407,7 +427,27 @@ namespace tempest::ecs
 
     void basic_archetype_registry::name(entity_type entity, string_view name)
     {
+        const auto it = _names.find(entity);
+        if (it != _names.end() && it->second == name)
+        {
+            return;
+        }
+
+        tempest::string old_name_storage;
+        string_view old_name_view;
+        if (it != _names.end())
+        {
+            old_name_storage = it->second;
+            old_name_view = old_name_storage;
+        }
+
         _names[entity] = name;
+
+        _event_registry->dispatcher<entity_renamed_event<entity_type>>().publish({
+            .entity = entity,
+            .old_name = old_name_view,
+            .new_name = name,
+        });
     }
 
     [[nodiscard]] auto basic_archetype_registry::find_first_with_name(string_view name) const
@@ -436,60 +476,334 @@ namespace tempest::ecs
         return result;
     }
 
-    void create_parent_child_relationship(basic_archetype_registry& reg, basic_archetype_registry::entity_type parent,
-                                          basic_archetype_registry::entity_type child)
+    namespace
     {
-        using rel_comp_type = relationship_component<basic_archetype_registry::entity_type>;
+        using entity_type = basic_archetype_registry::entity_type;
+        using rel_comp_type = relationship_component<entity_type>;
 
-        // If the parent does not have a relationship component, create one
-        if (!reg.has<rel_comp_type>(parent))
+        auto find_tail_sibling(const basic_archetype_registry& reg, entity_type head) -> entity_type
         {
-            rel_comp_type rel{
-                .parent = tombstone,
-                .next_sibling = tombstone,
-                .first_child = tombstone,
-            };
-
-            reg.assign_or_replace(parent, rel);
+            auto tail = head;
+            while (tail != tombstone && reg.is_valid(tail) && reg.has<rel_comp_type>(tail))
+            {
+                const auto next = reg.get<rel_comp_type>(tail).next_sibling;
+                if (next == tombstone)
+                {
+                    break;
+                }
+                tail = next;
+            }
+            return tail;
         }
 
-        // If the child does not have a relationship component, create one
-        if (!reg.has<rel_comp_type>(child))
+        auto find_prev_sibling(const basic_archetype_registry& reg, entity_type head, entity_type target) -> entity_type
         {
-            rel_comp_type rel{
-                .parent = parent,
-                .next_sibling = tombstone,
-                .first_child = tombstone,
-            };
+            auto prev = head;
+            while (prev != tombstone && reg.is_valid(prev) && reg.has<rel_comp_type>(prev))
+            {
+                if (reg.get<rel_comp_type>(prev).next_sibling == target)
+                {
+                    return prev;
+                }
+                prev = reg.get<rel_comp_type>(prev).next_sibling;
+            }
+            return tombstone;
+        }
+    } // namespace
 
-            reg.assign_or_replace(child, rel);
+    auto basic_archetype_registry::reparent(entity_type child, entity_type new_parent, entity_type insert_before)
+        -> bool
+    {
+        using rel_comp_type = relationship_component<entity_type>;
+
+        if (child == tombstone || child == new_parent || !is_valid(child))
+        {
+            return false;
         }
 
-        auto opt_parent_rel = reg.get<rel_comp_type>(parent);
-        auto opt_child_rel = reg.get<rel_comp_type>(child);
-
-        // If the parent has no children, set the child as the first child
-        // And the parent as the parent of the child
-        if (opt_parent_rel.first_child == ecs::tombstone)
+        if (new_parent != tombstone && !is_valid(new_parent))
         {
-            opt_parent_rel.first_child = child;
-            opt_child_rel.parent = parent;
+            return false;
+        }
 
-            // Replace the components to update the archetype
-            reg.replace(parent, opt_parent_rel);
-            reg.replace(child, opt_child_rel);
+        if (new_parent != tombstone)
+        {
+            const auto ancestor_view = basic_archetype_entity_ancestor_view{*this, new_parent};
+            for (const auto ancestor : ancestor_view)
+            {
+                if (ancestor == child)
+                {
+                    return false;
+                }
+            }
+        }
+
+        if (insert_before != tombstone)
+        {
+            if (insert_before == child || !is_valid(insert_before) || !has<rel_comp_type>(insert_before))
+            {
+                return false;
+            }
+
+            const auto insert_before_rel = get<rel_comp_type>(insert_before);
+            if (insert_before_rel.parent != new_parent)
+            {
+                return false;
+            }
+        }
+
+        unlink(child);
+
+        if (new_parent == tombstone)
+        {
+            if (has<rel_comp_type>(child))
+            {
+                auto child_rel = get<rel_comp_type>(child);
+                child_rel.parent = tombstone;
+                child_rel.next_sibling = tombstone;
+                replace(child, child_rel);
+            }
+            else
+            {
+                assign(child, rel_comp_type{
+                                  .parent = tombstone,
+                                  .next_sibling = tombstone,
+                                  .first_child = tombstone,
+                              });
+            }
+            return true;
+        }
+
+        if (!has<rel_comp_type>(new_parent))
+        {
+            assign_or_replace(new_parent, rel_comp_type{
+                                              .parent = tombstone,
+                                              .next_sibling = tombstone,
+                                              .first_child = tombstone,
+                                          });
+        }
+
+        if (!has<rel_comp_type>(child))
+        {
+            assign_or_replace(child, rel_comp_type{
+                                         .parent = tombstone,
+                                         .next_sibling = tombstone,
+                                         .first_child = tombstone,
+                                     });
+        }
+
+        auto parent_rel = get<rel_comp_type>(new_parent);
+        auto child_rel = get<rel_comp_type>(child);
+        child_rel.parent = new_parent;
+
+        if (insert_before == parent_rel.first_child)
+        {
+            child_rel.next_sibling = parent_rel.first_child;
+            parent_rel.first_child = child;
+            replace(child, child_rel);
+            replace(new_parent, parent_rel);
+        }
+        else if (insert_before == tombstone)
+        {
+            if (parent_rel.first_child == tombstone)
+            {
+                child_rel.next_sibling = tombstone;
+                parent_rel.first_child = child;
+                replace(child, child_rel);
+                replace(new_parent, parent_rel);
+            }
+            else
+            {
+                const auto tail = find_tail_sibling(*this, parent_rel.first_child);
+                auto tail_rel = get<rel_comp_type>(tail);
+                child_rel.next_sibling = tombstone;
+                replace(child, child_rel);
+                tail_rel.next_sibling = child;
+                replace(tail, tail_rel);
+            }
         }
         else
         {
-            // Otherwise, set the first child of the parent as the next sibling of the child
-            // And the child as the first child of the parent
-            opt_child_rel.next_sibling = opt_parent_rel.first_child;
-            opt_child_rel.parent = parent;
-            opt_parent_rel.first_child = child;
+            const auto prev = find_prev_sibling(*this, parent_rel.first_child, insert_before);
+            if (prev == tombstone)
+            {
+                return false;
+            }
 
-            // Replace the components to update the archetype
-            reg.replace(parent, opt_parent_rel);
-            reg.replace(child, opt_child_rel);
+            auto prev_rel = get<rel_comp_type>(prev);
+            child_rel.next_sibling = insert_before;
+            replace(child, child_rel);
+            prev_rel.next_sibling = child;
+            replace(prev, prev_rel);
         }
+
+        return true;
     }
-} // namespace tempest::ecs
+
+    void basic_archetype_registry::unlink(entity_type child)
+    {
+        using rel_comp_type = relationship_component<entity_type>;
+
+        if (child == tombstone || !is_valid(child) || !has<rel_comp_type>(child))
+        {
+            return;
+        }
+
+        auto child_rel = get<rel_comp_type>(child);
+        const auto parent = child_rel.parent;
+
+        if (parent != tombstone && is_valid(parent) && has<rel_comp_type>(parent))
+        {
+            auto parent_rel = get<rel_comp_type>(parent);
+            if (parent_rel.first_child == child)
+            {
+                parent_rel.first_child = child_rel.next_sibling;
+                replace(parent, parent_rel);
+            }
+            else
+            {
+                const auto prev = find_prev_sibling(*this, parent_rel.first_child, child);
+                if (prev != tombstone)
+                {
+                    auto prev_rel = get<rel_comp_type>(prev);
+                    prev_rel.next_sibling = child_rel.next_sibling;
+                    replace(prev, prev_rel);
+                }
+            }
+        }
+
+        child_rel.parent = tombstone;
+        child_rel.next_sibling = tombstone;
+        replace(child, child_rel);
+    }
+
+    void basic_archetype_registry::destroy_recursive(entity_type root)
+    {
+        using rel_comp_type = relationship_component<entity_type>;
+
+        if (root == tombstone || !is_valid(root))
+        {
+            return;
+        }
+
+        if (has<rel_comp_type>(root))
+        {
+            vector<entity_type> children;
+            auto curr = get<rel_comp_type>(root).first_child;
+            while (curr != tombstone && is_valid(curr) && has<rel_comp_type>(curr))
+            {
+                children.push_back(curr);
+                curr = get<rel_comp_type>(curr).next_sibling;
+            }
+
+            for (const auto child : children)
+            {
+                destroy_recursive(child);
+            }
+        }
+
+        destroy(root);
+    }
+
+    void basic_archetype_registry::destroy_and_reparent_children(entity_type target)
+    {
+        using rel_comp_type = relationship_component<entity_type>;
+
+        if (target == tombstone || !is_valid(target))
+        {
+            return;
+        }
+
+        if (!has<rel_comp_type>(target))
+        {
+            destroy(target);
+            return;
+        }
+
+        auto target_rel = get<rel_comp_type>(target);
+        if (target_rel.first_child == tombstone)
+        {
+            destroy(target);
+            return;
+        }
+
+        const auto child_head = target_rel.first_child;
+        auto child_tail = child_head;
+        auto curr = child_head;
+
+        while (curr != tombstone && is_valid(curr) && has<rel_comp_type>(curr))
+        {
+            auto child_rel = get<rel_comp_type>(curr);
+            child_rel.parent = target_rel.parent;
+            replace(curr, child_rel);
+            child_tail = curr;
+            curr = child_rel.next_sibling;
+        }
+
+        const auto parent = target_rel.parent;
+        if (parent != tombstone && is_valid(parent) && has<rel_comp_type>(parent))
+        {
+            auto parent_rel = get<rel_comp_type>(parent);
+            if (parent_rel.first_child == target)
+            {
+                parent_rel.first_child = child_head;
+                replace(parent, parent_rel);
+            }
+            else
+            {
+                const auto prev = find_prev_sibling(*this, parent_rel.first_child, target);
+                if (prev != tombstone)
+                {
+                    auto prev_rel = get<rel_comp_type>(prev);
+                    prev_rel.next_sibling = child_head;
+                    replace(prev, prev_rel);
+                }
+            }
+
+            auto tail_rel = get<rel_comp_type>(child_tail);
+            tail_rel.next_sibling = target_rel.next_sibling;
+            replace(child_tail, tail_rel);
+        }
+        else
+        {
+            auto tail_rel = get<rel_comp_type>(child_tail);
+            tail_rel.next_sibling = target_rel.next_sibling;
+            replace(child_tail, tail_rel);
+        }
+
+        target_rel.parent = tombstone;
+        target_rel.first_child = tombstone;
+        target_rel.next_sibling = tombstone;
+        replace(target, target_rel);
+
+        destroy(target);
+    }
+
+    auto reparent(basic_archetype_registry& reg, basic_archetype_registry::entity_type child,
+                  basic_archetype_registry::entity_type new_parent,
+                  basic_archetype_registry::entity_type insert_before) -> bool
+    {
+        return reg.reparent(child, new_parent, insert_before);
+    }
+
+    void unlink(basic_archetype_registry& reg, basic_archetype_registry::entity_type child)
+    {
+        reg.unlink(child);
+    }
+
+    void destroy_recursive(basic_archetype_registry& reg, basic_archetype_registry::entity_type root)
+    {
+        reg.destroy_recursive(root);
+    }
+
+    void destroy_and_reparent_children(basic_archetype_registry& reg, basic_archetype_registry::entity_type target)
+    {
+        reg.destroy_and_reparent_children(target);
+    }
+
+    void create_parent_child_relationship(basic_archetype_registry& reg, basic_archetype_registry::entity_type parent,
+                                          basic_archetype_registry::entity_type child)
+    {
+        reg.reparent(child, parent, tombstone);
+    }
+} // namespace tempest::ecs

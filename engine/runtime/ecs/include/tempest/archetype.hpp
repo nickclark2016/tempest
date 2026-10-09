@@ -946,6 +946,11 @@ namespace tempest::ecs
 
         auto duplicate(entity_type src) -> entity_type;
 
+        auto reparent(entity_type child, entity_type new_parent, entity_type insert_before = tombstone) -> bool;
+        void unlink(entity_type child);
+        void destroy_recursive(entity_type root);
+        void destroy_and_reparent_children(entity_type target);
+
         template <typename Fn>
         void each(Fn&& func);
 
@@ -1754,6 +1759,17 @@ namespace tempest::ecs
     {
         return {*_registry, tombstone};
     }
+
+    TEMPEST_API auto reparent(basic_archetype_registry& reg, basic_archetype_registry::entity_type child,
+                              basic_archetype_registry::entity_type new_parent,
+                              basic_archetype_registry::entity_type insert_before = tombstone) -> bool;
+
+    TEMPEST_API void unlink(basic_archetype_registry& reg, basic_archetype_registry::entity_type child);
+
+    TEMPEST_API void destroy_recursive(basic_archetype_registry& reg, basic_archetype_registry::entity_type root);
+
+    TEMPEST_API void destroy_and_reparent_children(basic_archetype_registry& reg,
+                                                   basic_archetype_registry::entity_type target);
 
     TEMPEST_API void create_parent_child_relationship(basic_archetype_registry& reg,
                                                       basic_archetype_registry::entity_type parent,

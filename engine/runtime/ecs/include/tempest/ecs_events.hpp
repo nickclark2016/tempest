@@ -1,8 +1,18 @@
 #ifndef tempest_ecs_ecs_events_hpp
 #define tempest_ecs_ecs_events_hpp
 
+#include <tempest/string_view.hpp>
+
 namespace tempest::ecs
 {
+    template <typename E>
+    struct entity_renamed_event
+    {
+        E entity;
+        string_view old_name;
+        string_view new_name;
+    };
+
     template <typename E>
     struct entity_created_event
     {
