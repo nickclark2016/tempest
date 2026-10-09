@@ -37,7 +37,8 @@ namespace tempest::physics::tests
 
         protected:
             event::event_registry event_reg{};
-            ecs::archetype_registry registry{event_reg};
+            ecs::component_type_registry type_reg{};
+            ecs::archetype_registry registry{event_reg, type_reg};
             logger test_logger{};
             profiler::profiler_session test_profiler{false};
             job::job_system test_job_system{test_logger, test_profiler, job::job_system_config{

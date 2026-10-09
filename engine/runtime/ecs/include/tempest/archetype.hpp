@@ -1,10 +1,12 @@
 #ifndef tempest_ecs_archetype_hpp
 #define tempest_ecs_archetype_hpp
 
+#include <tempest/algorithm.hpp>
 #include <tempest/api.hpp>
 #include <tempest/array.hpp>
 #include <tempest/assert.hpp>
 #include <tempest/bit.hpp>
+#include <tempest/component_type_registry.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/ecs_events.hpp>
 #include <tempest/event_registry.hpp>
@@ -12,6 +14,7 @@
 #include <tempest/functional.hpp>
 #include <tempest/int.hpp>
 #include <tempest/limits.hpp>
+#include <tempest/memory.hpp>
 #include <tempest/meta.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/relationship_component.hpp>
@@ -23,53 +26,41 @@
 #include <tempest/traits.hpp>
 #include <tempest/vector.hpp>
 
-#include <tempest/algorithm.hpp>
-#include <tempest/memory.hpp>
-
 namespace tempest::ecs
 {
     class basic_archetype_registry;
 
-    struct TEMPEST_API basic_archetype_type_info
-    {
-        string_view name;
-        uint16_t size;
-        uint16_t alignment;
-        uint32_t index;
-        bool should_duplicate;
-    };
-
-    namespace detail
-    {
-        TEMPEST_API
-        auto get_archetype_type_index(string_view name) -> size_t;
-
-        template <typename T>
-        auto get_archetype_type_index() -> size_t
-        {
-            constexpr auto name = core::get_type_name<T>();
-            static const size_t index = get_archetype_type_index(name);
-            return index;
-        }
-    } // namespace detail
+    using basic_archetype_type_info = component_type_info;
 
     template <typename T>
         requires component<T>
     inline auto create_archetype_type_info() -> basic_archetype_type_info
     {
-        size_t alignment = alignof(T);
-        size_t size = sizeof(T);
-        size_t index = detail::get_archetype_type_index<T>();
+        string_view name;
+        if constexpr (core::is_normalized_type_name_valid_v<remove_cvref_t<T>>)
+        {
+            name = core::normalized_type_name<remove_cvref_t<T>>();
+        }
+        else
+        {
+            name = core::get_type_name<remove_cvref_t<T>>();
+        }
 
-        basic_archetype_type_info ti = {
-            .name = core::get_type_name<T>(),
-            .size = static_cast<uint16_t>(size),
-            .alignment = static_cast<uint16_t>(alignment),
-            .index = static_cast<uint16_t>(index),
+        return basic_archetype_type_info{
+            .name = name,
+            .size = static_cast<uint16_t>(sizeof(T)),
+            .alignment = static_cast<uint16_t>(alignof(T)),
+            .index = 0,
             .should_duplicate = is_duplicatable_v<T>,
         };
+    }
 
-        return ti;
+    template <typename T>
+        requires component<T>
+    inline auto create_archetype_type_info(component_type_registry& registry) -> basic_archetype_type_info
+    {
+        const auto idx = registry.ensure<T>();
+        return registry.type_info(idx);
     }
 
     class TEMPEST_API basic_archetype_storage
@@ -175,45 +166,11 @@ namespace tempest::ecs
         return _storage;
     }
 
-    template <size_t N>
-    struct basic_archetype_types_hash
-    {
-        static constexpr size_t count = bit_ceil(N) / 8;
-        array<byte, count> hash;
-    };
-
-    template <size_t N>
-    constexpr auto operator==(const basic_archetype_types_hash<N>& lhs,
-                              const basic_archetype_types_hash<N>& rhs) noexcept -> bool
-    {
-        return lhs.hash == rhs.hash;
-    }
-
-    template <size_t N>
-    constexpr auto operator!=(const basic_archetype_types_hash<N>& lhs,
-                              const basic_archetype_types_hash<N>& rhs) noexcept -> bool
-    {
-        return !(lhs == rhs);
-    }
-
     struct basic_archetype_entity
     {
         basic_archetype::key_type archetype_key;
         size_t archetype_index;
     };
-
-    namespace detail
-    {
-        template <size_t N, typename... Ts>
-        auto create_archetype_types_hash() -> basic_archetype_types_hash<N>
-        {
-            basic_archetype_types_hash<N> hash = {};
-            ((hash.hash[get_archetype_type_index<Ts>() / 8] |=
-              static_cast<byte>(1 << (get_archetype_type_index<Ts>() % 8))),
-             ...);
-            return hash;
-        }
-    } // namespace detail
 
     namespace detail
     {
@@ -740,18 +697,6 @@ namespace tempest::ecs
     namespace detail
     {
         template <typename... Ts>
-        struct hash_mask_type_list_traits;
-
-        template <typename... Ts>
-        struct hash_mask_type_list_traits<core::type_list<Ts...>>
-        {
-            static auto create() -> basic_archetype_types_hash<256U>
-            {
-                return create_archetype_types_hash<256U, remove_cvref_t<Ts>...>();
-            }
-        };
-
-        template <typename... Ts>
         struct component_view_arg_applier
         {
             static constexpr auto arg_count = sizeof...(Ts);
@@ -760,25 +705,6 @@ namespace tempest::ecs
             static void apply(Fn&& func, const array<byte*, arg_count>& args, index_sequence<Is...> /*unused*/)
             {
                 tempest::forward<Fn>(func)(*reinterpret_cast<remove_cvref_t<Ts>*>(args[Is])...);
-            }
-        };
-
-        struct arch_index_iter
-        {
-            template <typename T>
-            static auto index(size_t arch_index, auto storage_index_fetcher) -> size_t
-            {
-                static const auto type_info = create_archetype_type_info<remove_cvref_t<T>>();
-                return storage_index_fetcher(arch_index, type_info.index);
-            }
-
-            template <typename Args, size_t... Is>
-            static auto iterate(auto arch_index, auto storage_index_fetcher, index_sequence<Is...> /*unused*/)
-                -> array<size_t, sizeof...(Is)>
-            {
-                return array<size_t, sizeof...(Is)>{
-                    index<typename core::type_list_type_at<Is, Args>::type>(arch_index, storage_index_fetcher)...,
-                };
             }
         };
     } // namespace detail
@@ -808,20 +734,7 @@ namespace tempest::ecs
         using reference = tuple<add_lvalue_reference_t<remove_reference_t<Ts>>...>;
         using const_reference = tuple<add_lvalue_reference_t<add_const_t<remove_cvref_t<Ts>>>...>;
 
-        [[nodiscard]] auto operator*() const -> const_reference
-        {
-            using arg_types = core::type_list<remove_cvref_t<Ts>...>;
-
-            auto& archetype = _parent->_registry->_archetypes[_archetype_index];
-            const auto argument_indices = detail::arch_index_iter::iterate<arg_types>(
-                _archetype_index,
-                [&](auto arch_idx, auto type_id) -> auto {
-                    return _parent->_registry->_index_of_component_in_archetype(arch_idx, type_id);
-                },
-                make_index_sequence<sizeof...(Ts)>{});
-
-            return _deref_const(archetype, argument_indices, make_index_sequence<sizeof...(Ts)>{});
-        }
+        [[nodiscard]] auto operator*() const -> const_reference;
 
         friend auto operator==(const basic_archetype_with_components_iter& lhs,
                                const basic_archetype_with_components_iter& rhs) -> bool
@@ -870,9 +783,7 @@ namespace tempest::ecs
       public:
         using registry_type = const basic_archetype_registry;
 
-        explicit basic_archetype_with_components_view(registry_type& parent) : _registry{&parent}
-        {
-        }
+        explicit basic_archetype_with_components_view(registry_type& parent);
 
         auto begin() const -> basic_archetype_with_components_iter<Ts...>
         {
@@ -893,10 +804,7 @@ namespace tempest::ecs
         friend class basic_archetype_with_components_iter<Ts...>;
 
         registry_type* _registry;
-
-        using arg_types = core::type_list<tempest::remove_cvref_t<Ts>...>;
-
-        inline static const auto _type_hash_mask = detail::hash_mask_type_list_traits<arg_types>::create();
+        basic_archetype_types_hash<component_type_registry::max_component_types> _type_hash_mask;
         static constexpr auto argument_count = sizeof...(Ts);
 
         auto _acquire_next_entity(/*inout*/ size_t& archetype_index, /*intout*/ size_t& entity_index) const -> void;
@@ -905,7 +813,18 @@ namespace tempest::ecs
     class TEMPEST_API basic_archetype_registry
     {
       public:
-        explicit basic_archetype_registry(event::event_registry& event_registry);
+        static constexpr size_t max_component_types = component_type_registry::max_component_types;
+        static constexpr size_t default_entities_per_chunk = 4096;
+        using types_hash_type = basic_archetype_types_hash<max_component_types>;
+
+        basic_archetype_registry(event::event_registry& event_registry, component_type_registry& type_registry);
+
+        basic_archetype_registry(const basic_archetype_registry&) = delete;
+        basic_archetype_registry(basic_archetype_registry&& other) noexcept;
+        ~basic_archetype_registry() = default;
+
+        auto operator=(const basic_archetype_registry&) -> basic_archetype_registry& = delete;
+        auto operator=(basic_archetype_registry&& other) noexcept -> basic_archetype_registry&;
 
         using entity_type = entity;
 
@@ -985,16 +904,30 @@ namespace tempest::ecs
             return *_event_registry;
         }
 
+        [[nodiscard]] auto type_registry() noexcept -> component_type_registry&
+        {
+            return *_type_registry;
+        }
+
+        [[nodiscard]] auto type_registry() const noexcept -> const component_type_registry&
+        {
+            return *_type_registry;
+        }
+
       private:
         vector<basic_archetype> _archetypes;
-        vector<basic_archetype_types_hash<256U>> _hashes;
+        vector<types_hash_type> _hashes;
 
-        basic_entity_store<entity_type, 4096, uint64_t> _entities;
+        basic_entity_store<entity_type, default_entities_per_chunk, uint64_t> _entities;
         sparse_map<basic_archetype_entity> _entity_archetype_mapping;
 
         flat_unordered_map<entity, tempest::string> _names;
 
         event::event_registry* _event_registry;
+        component_type_registry* _type_registry;
+
+        template <typename Fn, typename... Args>
+        void _each_impl(Fn&& func, core::type_list<Args...>*);
 
         [[nodiscard]] auto _index_of_component_in_archetype(size_t arch_index, size_t component_id) const -> size_t;
 
@@ -1015,9 +948,35 @@ namespace tempest::ecs
     {
     };
 
-    inline basic_archetype_registry::basic_archetype_registry(event::event_registry& event_registry)
-        : _event_registry(&event_registry)
+    inline basic_archetype_registry::basic_archetype_registry(event::event_registry& event_registry,
+                                                              component_type_registry& type_registry)
+        : _event_registry{&event_registry}, _type_registry{&type_registry}
     {
+    }
+
+    inline basic_archetype_registry::basic_archetype_registry(basic_archetype_registry&& other) noexcept
+        : _archetypes{tempest::move(other._archetypes)}, _hashes{tempest::move(other._hashes)},
+          _entities{tempest::move(other._entities)},
+          _entity_archetype_mapping{tempest::move(other._entity_archetype_mapping)},
+          _names{tempest::move(other._names)}, _event_registry{other._event_registry},
+          _type_registry{other._type_registry}
+    {
+    }
+
+    inline auto basic_archetype_registry::operator=(basic_archetype_registry&& other) noexcept
+        -> basic_archetype_registry&
+    {
+        if (this != &other)
+        {
+            _archetypes = tempest::move(other._archetypes);
+            _hashes = tempest::move(other._hashes);
+            _entities = tempest::move(other._entities);
+            _entity_archetype_mapping = tempest::move(other._entity_archetype_mapping);
+            _names = tempest::move(other._names);
+            _event_registry = other._event_registry;
+            _type_registry = other._type_registry;
+        }
+        return *this;
     }
 
     template <typename... Ts>
@@ -1058,20 +1017,22 @@ namespace tempest::ecs
         // Check if the entity has an archetype
         const auto archetype_key_iter = _entity_archetype_mapping.find(entity);
         const auto is_empty_entity = archetype_key_iter == _entity_archetype_mapping.end();
-        const auto type_hash = [&]() -> tempest::ecs::basic_archetype_types_hash<256> {
+        const auto type_index = _type_registry->ensure<component_type>();
+        const auto type_info = _type_registry->type_info(type_index);
+
+        const auto type_hash = [&]() -> types_hash_type {
             if (is_empty_entity)
             {
-                static const auto hash = detail::create_archetype_types_hash<256U, component_type>();
+                auto hash = types_hash_type{};
+                hash.hash[type_index / char_bit] |= static_cast<byte>(1 << (type_index % char_bit));
                 return hash;
             }
 
             const auto existing_key = archetype_key_iter->second;
             const auto existing_archetype_index = existing_key.archetype_index;
 
-            static const auto type_index = detail::get_archetype_type_index<component_type>();
-
             auto existing_hash = _hashes[existing_archetype_index];
-            existing_hash.hash[type_index / 8] |= static_cast<byte>(1 << (type_index % 8));
+            existing_hash.hash[type_index / char_bit] |= static_cast<byte>(1 << (type_index % char_bit));
 
             return existing_hash;
         }();
@@ -1081,7 +1042,7 @@ namespace tempest::ecs
         {
             // Create a new archetype
             auto new_types = vector<basic_archetype_type_info>();
-            new_types.push_back(create_archetype_type_info<component_type>());
+            new_types.push_back(type_info);
 
             if (!is_empty_entity)
             {
@@ -1131,8 +1092,7 @@ namespace tempest::ecs
             existing_arch.erase(archetype_key_iter->second.archetype_key);
         }
 
-        auto new_component_ti = create_archetype_type_info<component_type>();
-        auto new_component_index = _index_of_component_in_archetype(target_archetype_index, new_component_ti.index);
+        auto new_component_index = _index_of_component_in_archetype(target_archetype_index, type_info.index);
         auto new_component_ptr = target_arch.element_at(target_arch_key, new_component_index);
         auto* result_ptr = construct_at(reinterpret_cast<remove_cvref_t<T>*>(new_component_ptr), component);
 
@@ -1164,14 +1124,14 @@ namespace tempest::ecs
         -> const remove_cvref_t<T>&
     {
         using component_type = remove_cvref_t<T>;
-        static const basic_archetype_type_info type_info = create_archetype_type_info<component_type>();
+        const auto type_index = _type_registry->ensure<component_type>();
 
         auto key = _entity_archetype_mapping[entity];
         auto archetype_index = key.archetype_index;
-        const auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
+        const auto comp_index = _index_of_component_in_archetype(archetype_index, type_index);
 
         auto& arch = _archetypes[archetype_index];
-        auto* data = arch.element_at(key.archetype_key, type_index);
+        auto* data = arch.element_at(key.archetype_key, comp_index);
 
         const auto old_value = *reinterpret_cast<component_type*>(data);
 
@@ -1202,16 +1162,15 @@ namespace tempest::ecs
     inline void basic_archetype_registry::remove(basic_archetype_registry::entity_type entity)
     {
         using component_type = remove_cvref_t<T>;
-        static const auto type_info_index = detail::get_archetype_type_index<component_type>();
-        static const basic_archetype_type_info type_info = create_archetype_type_info<component_type>();
+        const auto type_info_index = _type_registry->ensure<component_type>();
 
         auto key = _entity_archetype_mapping[entity];
         auto archetype_index = key.archetype_index;
 
-        auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
+        auto comp_index = _index_of_component_in_archetype(archetype_index, type_info_index);
 
         auto* arch = &_archetypes[archetype_index];
-        auto* data = arch->element_at(key.archetype_key, type_index);
+        auto* data = arch->element_at(key.archetype_key, comp_index);
 
         const auto old_value = *reinterpret_cast<component_type*>(data);
 
@@ -1219,8 +1178,7 @@ namespace tempest::ecs
 
         // Create a hash without the component
         auto hash = _hashes[archetype_index];
-        hash.hash[detail::get_archetype_type_index<component_type>() / 8] &=
-            static_cast<byte>(~(1 << (detail::get_archetype_type_index<component_type>() % 8)));
+        hash.hash[type_info_index / char_bit] &= static_cast<byte>(~(1 << (type_info_index % char_bit)));
 
         // Check if the archetype already exists
         const auto* archetype_it = tempest::find(_hashes.begin(), _hashes.end(), hash);
@@ -1262,12 +1220,13 @@ namespace tempest::ecs
 
         size_t components_written = 0;
 
-        for (size_t i = 0; i < 256U; ++i)
+        for (size_t i = 0; i < max_component_types; ++i)
         {
             // Test the bit at i
             const bool existing_bit =
-                (existing_hash.hash[i / 8] & static_cast<byte>(1 << (i % 8))) != static_cast<byte>(0);
-            const bool new_bit = (new_hash.hash[i / 8] & static_cast<byte>(1 << (i % 8))) != static_cast<byte>(0);
+                (existing_hash.hash[i / char_bit] & static_cast<byte>(1 << (i % char_bit))) != static_cast<byte>(0);
+            const bool new_bit =
+                (new_hash.hash[i / char_bit] & static_cast<byte>(1 << (i % char_bit))) != static_cast<byte>(0);
 
             auto existing_component_index = _index_of_component_in_archetype(archetype_index, i);
             auto new_component_index = _index_of_component_in_archetype(new_archetype_index, i);
@@ -1312,13 +1271,15 @@ namespace tempest::ecs
         -> const remove_cvref_t<T>&
     {
         using component_type = remove_cvref_t<T>;
-        static const auto type_info = create_archetype_type_info<component_type>();
+        const auto type_index_opt = _type_registry->template type_index<component_type>();
+        TEMPEST_ASSERT(type_index_opt.has_value());
+        const auto type_index = *type_index_opt;
 
         auto key = _entity_archetype_mapping[entity];
         auto archetype_index = key.archetype_index;
-        const auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
+        const auto comp_index = _index_of_component_in_archetype(archetype_index, type_index);
         const auto& arch = _archetypes[archetype_index];
-        auto data = arch.element_at(key.archetype_key, type_index);
+        auto data = arch.element_at(key.archetype_key, comp_index);
         return *reinterpret_cast<const T*>(data);
     }
 
@@ -1327,20 +1288,26 @@ namespace tempest::ecs
         -> const remove_cvref_t<T>*
     {
         using component_type = remove_cvref_t<T>;
-        static const auto type_info = create_archetype_type_info<component_type>();
+        const auto type_index_opt = _type_registry->template type_index<component_type>();
+        if (!type_index_opt.has_value())
+        {
+            return nullptr;
+        }
+        const auto type_index = *type_index_opt;
         basic_archetype_entity key = _entity_archetype_mapping[entity];
 
         // Check if the archetype contains the component
         const auto& hash = _hashes[key.archetype_index];
-        if ((hash.hash[type_info.index / 8] & static_cast<byte>(1 << (type_info.index % 8))) == static_cast<byte>(0))
+        if ((hash.hash[type_index / char_bit] & static_cast<byte>(1 << (type_index % char_bit))) ==
+            static_cast<byte>(0))
         {
             return nullptr;
         }
 
         auto archetype_index = key.archetype_index;
-        const auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
+        const auto storage_index = _index_of_component_in_archetype(archetype_index, type_index);
         const auto& arch = _archetypes[archetype_index];
-        auto data = arch.element_at(key.archetype_key, type_index);
+        auto data = arch.element_at(key.archetype_key, storage_index);
         return reinterpret_cast<const remove_cvref_t<T>*>(data);
     }
 
@@ -1349,10 +1316,15 @@ namespace tempest::ecs
     {
         auto key = _entity_archetype_mapping[entity];
         auto len = _archetypes[key.archetype_index].storages().size();
-        return (static_cast<bool>(
-            ((_index_of_component_in_archetype(key.archetype_index,
-                                               create_archetype_type_info<remove_cvref_t<Ts>>().index) != len) &&
-             ...)));
+        auto check_has = [this, &key, len]<typename U>() -> bool {
+            const auto opt_idx = _type_registry->template type_index<remove_cvref_t<U>>();
+            if (!opt_idx.has_value())
+            {
+                return false;
+            }
+            return _index_of_component_in_archetype(key.archetype_index, *opt_idx) != len;
+        };
+        return (check_has.template operator()<Ts>() && ...);
     }
 
     inline auto basic_archetype_registry::size() const noexcept -> size_t
@@ -1412,15 +1384,21 @@ namespace tempest::ecs
     inline void basic_archetype_registry::each(Fn&& func)
     {
         using fn_traits = function_traits<remove_cvref_t<Fn>>;
-        static const auto hash_mask = detail::hash_mask_type_list_traits<typename fn_traits::argument_types>::create();
-        static constexpr auto argument_count = core::type_list_size_v<typename fn_traits::argument_types>;
+        _each_impl(tempest::forward<Fn>(func), static_cast<typename fn_traits::argument_types*>(nullptr));
+    }
+
+    template <typename Fn, typename... Args>
+    inline void basic_archetype_registry::_each_impl(Fn&& func, core::type_list<Args...>*)
+    {
+        const auto hash_mask = _type_registry->template hash_mask<remove_cvref_t<Args>...>();
+        constexpr auto argument_count = sizeof...(Args);
 
         for (size_t i = 0; i < _archetypes.size(); ++i)
         {
             // Test against the hash mask
             const auto& hash = _hashes[i];
             bool matches = true;
-            for (size_t j = 0; j < 256U / 8U; ++j)
+            for (size_t j = 0; j < types_hash_type::count; ++j)
             {
                 if ((hash_mask.hash[j] & hash.hash[j]) != hash_mask.hash[j])
                 {
@@ -1431,19 +1409,10 @@ namespace tempest::ecs
 
             if (matches)
             {
-                // Compute the index of the requested components in the archetype
-                // This is not the same as the index of the component in the hash
                 basic_archetype& arch = _archetypes[i];
 
-                auto argument_indices = detail::arch_index_iter::iterate<typename fn_traits::argument_types>(
-                    i,
-                    [&](size_t arch_idx, size_t type_id) -> auto {
-                        return _index_of_component_in_archetype(arch_idx, type_id);
-                    },
-                    tempest::make_index_sequence<argument_count>());
-
-                // TODO: Build a tuple of pointers to the first element of each component pool
-                // Use that to iterate instead
+                const auto argument_indices = array<size_t, argument_count>{_index_of_component_in_archetype(
+                    i, _type_registry->template type_index<remove_cvref_t<Args>>().value_or(0))...};
 
                 for (size_t j = 0; j < arch.size(); ++j)
                 {
@@ -1457,7 +1426,7 @@ namespace tempest::ecs
                         arguments[k] = storage_data;
                     }
 
-                    detail::for_each_fn_applier<argument_count, typename fn_traits::argument_types>::apply(
+                    detail::for_each_fn_applier<argument_count, core::type_list<Args...>>::apply(
                         tempest::forward<Fn>(func), tempest::move(arguments));
                 }
             }
@@ -1787,6 +1756,24 @@ namespace tempest::ecs
                                                       basic_archetype_registry::entity_type child);
 
     template <typename... Ts>
+    inline auto basic_archetype_with_components_iter<Ts...>::operator*() const ->
+        typename basic_archetype_with_components_iter<Ts...>::const_reference
+    {
+        auto& archetype = _parent->_registry->_archetypes[_archetype_index];
+        const auto argument_indices = array<size_t, sizeof...(Ts)>{_parent->_registry->_index_of_component_in_archetype(
+            _archetype_index,
+            _parent->_registry->type_registry().template type_index<remove_cvref_t<Ts>>().value_or(0))...};
+
+        return _deref_const(archetype, argument_indices, make_index_sequence<sizeof...(Ts)>{});
+    }
+
+    template <typename... Ts>
+    inline basic_archetype_with_components_view<Ts...>::basic_archetype_with_components_view(registry_type& parent)
+        : _registry{&parent}, _type_hash_mask{parent.type_registry().template hash_mask<Ts...>()}
+    {
+    }
+
+    template <typename... Ts>
     inline auto basic_archetype_with_components_view<Ts...>::cbegin() const
         -> basic_archetype_with_components_iter<Ts...>
 
@@ -1800,10 +1787,10 @@ namespace tempest::ecs
 
             // Check hash match
             auto match = true;
-            for (size_t byte = 0; byte < decltype(archetype_hash)::count / 8U; ++byte)
+            for (size_t byte_idx = 0; byte_idx < archetype_hash.hash.size(); ++byte_idx)
             {
                 const auto byte_match =
-                    (_type_hash_mask.hash[byte] & archetype_hash.hash[byte]) == _type_hash_mask.hash[byte];
+                    (_type_hash_mask.hash[byte_idx] & archetype_hash.hash[byte_idx]) == _type_hash_mask.hash[byte_idx];
                 if (!byte_match)
                 {
                     match = false;
@@ -1848,10 +1835,10 @@ namespace tempest::ecs
 
             // Check hash match
             auto match = true;
-            for (size_t byte = 0; byte < remove_cvref_t<decltype(archetype_hash)>::count / 8U; ++byte)
+            for (size_t byte_idx = 0; byte_idx < archetype_hash.hash.size(); ++byte_idx)
             {
                 const auto byte_match =
-                    (_type_hash_mask.hash[byte] & archetype_hash.hash[byte]) == _type_hash_mask.hash[byte];
+                    (_type_hash_mask.hash[byte_idx] & archetype_hash.hash[byte_idx]) == _type_hash_mask.hash[byte_idx];
                 if (!byte_match)
                 {
                     match = false;

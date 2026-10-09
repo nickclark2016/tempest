@@ -25,7 +25,8 @@ TEST(tempest_ecs_hierarchy, sibling_order_appends)
 {
     // 1. Setup
     auto event_reg = tempest::event::event_registry{};
-    auto reg = tempest::ecs::basic_archetype_registry{event_reg};
+    auto types = tempest::ecs::component_type_registry{};
+    auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
 
     const auto parent = reg.create();
     const auto child_a = reg.create();
@@ -69,7 +70,8 @@ TEST(tempest_ecs_hierarchy, destroy_cleans_links_and_names)
 {
     // 1. Setup - Part A: Middle child destruction and sibling stitching
     auto event_reg = tempest::event::event_registry{};
-    auto reg = tempest::ecs::basic_archetype_registry{event_reg};
+    auto types = tempest::ecs::component_type_registry{};
+    auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
 
     const auto parent = reg.create();
     const auto child_a = reg.create();
@@ -132,7 +134,8 @@ TEST(tempest_ecs_hierarchy, reparent_insert_before)
 {
     // 1. Setup
     auto event_reg = tempest::event::event_registry{};
-    auto reg = tempest::ecs::basic_archetype_registry{event_reg};
+    auto types = tempest::ecs::component_type_registry{};
+    auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
 
     const auto parent1 = reg.create();
     const auto child_a = reg.create();
@@ -193,7 +196,8 @@ TEST(tempest_ecs_hierarchy, reparent_cycle_rejection)
 {
     // 1. Setup - Linear chain: A -> B -> C -> D
     auto event_reg = tempest::event::event_registry{};
-    auto reg = tempest::ecs::basic_archetype_registry{event_reg};
+    auto types = tempest::ecs::component_type_registry{};
+    auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
 
     const auto node_a = reg.create();
     const auto node_b = reg.create();
@@ -237,7 +241,8 @@ TEST(tempest_ecs_hierarchy, unlink_detaches_from_parent_and_siblings)
 {
     // 1. Setup
     auto event_reg = tempest::event::event_registry{};
-    auto reg = tempest::ecs::basic_archetype_registry{event_reg};
+    auto types = tempest::ecs::component_type_registry{};
+    auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
 
     const auto parent = reg.create();
     const auto child_a = reg.create();
@@ -278,7 +283,8 @@ TEST(tempest_ecs_hierarchy, destroy_recursive_teardown)
 {
     // 1. Setup - Build a multi-level tree
     auto event_reg = tempest::event::event_registry{};
-    auto reg = tempest::ecs::basic_archetype_registry{event_reg};
+    auto types = tempest::ecs::component_type_registry{};
+    auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
 
     const auto root = reg.create();
     const auto branch1 = reg.create();
@@ -329,7 +335,8 @@ TEST(tempest_ecs_hierarchy, destroy_and_reparent_children)
 {
     // 1. Setup - Part A: Non-root target splicing
     auto event_reg = tempest::event::event_registry{};
-    auto reg = tempest::ecs::basic_archetype_registry{event_reg};
+    auto types = tempest::ecs::component_type_registry{};
+    auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
 
     const auto grandparent = reg.create();
     const auto child_a = reg.create();
@@ -387,7 +394,8 @@ TEST(tempest_ecs_hierarchy, entity_renamed_event_published)
 {
     // 1. Setup
     auto event_reg = tempest::event::event_registry{};
-    auto reg = tempest::ecs::basic_archetype_registry{event_reg};
+    auto types = tempest::ecs::component_type_registry{};
+    auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
 
     struct rename_record
     {
@@ -443,7 +451,8 @@ TEST(tempest_ecs_hierarchy, reparent_head_prepends_in_o1)
 {
     // 1. Setup - Parent with ChildA -> ChildB
     auto event_reg = tempest::event::event_registry{};
-    auto reg = tempest::ecs::basic_archetype_registry{event_reg};
+    auto types = tempest::ecs::component_type_registry{};
+    auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
 
     const auto parent = reg.create();
     const auto child_a = reg.create();
@@ -471,7 +480,8 @@ TEST(tempest_ecs_hierarchy, reparent_children_appends_at_tail_by_default)
 {
     // 1. Setup - Parent with ChildA -> ChildB
     auto event_reg = tempest::event::event_registry{};
-    auto reg = tempest::ecs::basic_archetype_registry{event_reg};
+    auto types = tempest::ecs::component_type_registry{};
+    auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
 
     const auto parent = reg.create();
     const auto child_a = reg.create();
@@ -508,7 +518,8 @@ TEST(tempest_ecs_hierarchy, reparent_children_insert_before)
 {
     // 1. Setup - Parent with ChildA -> ChildB
     auto event_reg = tempest::event::event_registry{};
-    auto reg = tempest::ecs::basic_archetype_registry{event_reg};
+    auto types = tempest::ecs::component_type_registry{};
+    auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
 
     const auto parent = reg.create();
     const auto child_a = reg.create();
@@ -542,7 +553,8 @@ TEST(tempest_ecs_hierarchy, reparent_children_insert_before_head)
 {
     // 1. Setup - Parent with ChildA -> ChildB
     auto event_reg = tempest::event::event_registry{};
-    auto reg = tempest::ecs::basic_archetype_registry{event_reg};
+    auto types = tempest::ecs::component_type_registry{};
+    auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
 
     const auto parent = reg.create();
     const auto child_a = reg.create();

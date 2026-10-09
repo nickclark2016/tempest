@@ -151,7 +151,8 @@ namespace tempest::render_system::tests
     TEST(render_system_tests, camera_system_single_camera_fallback)
     {
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto cam_sys = camera_system{registry, events};
 
         auto cam1 = registry.create();
@@ -170,7 +171,8 @@ namespace tempest::render_system::tests
     TEST(render_system_tests, camera_system_explicit_possession_and_switching)
     {
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto cam_sys = camera_system{registry, events};
 
         auto cam1 = registry.create();
@@ -206,7 +208,8 @@ namespace tempest::render_system::tests
     TEST(render_system_tests, camera_system_inactive_and_render_texture_cameras_ignored)
     {
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto cam_sys = camera_system{registry, events};
 
         // Inactive camera
@@ -256,7 +259,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -391,7 +395,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -1122,7 +1127,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -1455,7 +1461,8 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto cam_sys = camera_system{registry, events};
         auto pool = resource_pool{*dev};
         auto shaders = shader_manager{*dev, fixture.asset_db};
@@ -1548,7 +1555,8 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto cam_sys = camera_system{registry, events};
         auto pool = resource_pool{*dev};
         auto shaders = shader_manager{*dev, fixture.asset_db};
@@ -1712,7 +1720,8 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto cam_sys = camera_system{registry, events};
         auto pool = resource_pool{*dev};
         auto shaders = shader_manager{*dev, fixture.asset_db};
@@ -1838,7 +1847,8 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto cam_sys = camera_system{registry, events};
 
         auto cam_ent = registry.create();
@@ -1979,7 +1989,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
 
         auto builder = renderer::builder{};
         builder.set_config(renderer_config{
@@ -2036,7 +2047,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
 
         auto builder = renderer::builder{};
         builder.set_config(renderer_config{
@@ -2214,7 +2226,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -3962,7 +3975,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -4145,7 +4159,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -4344,7 +4359,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
 
         // Create pre-existing light before renderer construction to test discovery
         auto pre_light = registry.create();
@@ -4455,7 +4471,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -4589,7 +4606,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -4724,7 +4742,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -4820,7 +4839,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -4886,7 +4906,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -4962,7 +4983,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -5044,7 +5066,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
 
         auto builder = renderer::builder{};
         builder.set_config(renderer_config{
@@ -5084,7 +5107,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -5169,7 +5193,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -5253,7 +5278,8 @@ namespace tempest::render_system::tests
         auto sink = stdout_log_sink{};
         auto log = logger{sink};
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -5312,7 +5338,8 @@ namespace tempest::render_system::tests
         auto sink = stdout_log_sink{};
         auto log = logger{sink};
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -5624,7 +5651,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -5741,7 +5769,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -5853,7 +5882,8 @@ namespace tempest::render_system::tests
         auto log = logger{sink};
 
         auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};

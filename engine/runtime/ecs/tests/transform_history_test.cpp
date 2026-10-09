@@ -66,7 +66,8 @@ TEST(transform_history_test, step_history_snapshots_current_pose)
 {
     // 1. Setup
     auto events = tempest::event::event_registry{};
-    auto registry = archetype_registry{events};
+    auto types = tempest::ecs::component_type_registry{};
+    auto registry = archetype_registry{events, types};
 
     const auto entity = registry.create();
     auto initial_history = transform_history_component{
@@ -103,7 +104,8 @@ TEST(transform_history_test, interpolate_monotonic_position_progression)
 {
     // 1. Setup
     auto events = tempest::event::event_registry{};
-    auto registry = archetype_registry{events};
+    auto types = tempest::ecs::component_type_registry{};
+    auto registry = archetype_registry{events, types};
 
     const auto entity = registry.create();
     auto history = transform_history_component{
@@ -137,7 +139,8 @@ TEST(transform_history_test, interpolate_spherical_rotation)
 {
     // 1. Setup - 0 deg rotation to 90 deg rotation around Y
     auto events = tempest::event::event_registry{};
-    auto registry = archetype_registry{events};
+    auto types = tempest::ecs::component_type_registry{};
+    auto registry = archetype_registry{events, types};
 
     const auto entity = registry.create();
     const auto q_prev = tempest::math::normalize(fquat{as_radians(vec3<float>{0.0F, 0.0F, 0.0F})});
@@ -170,7 +173,8 @@ TEST(transform_history_test, interpolate_synchronizes_transform_component)
 {
     // 1. Setup
     auto events = tempest::event::event_registry{};
-    auto registry = archetype_registry{events};
+    auto types = tempest::ecs::component_type_registry{};
+    auto registry = archetype_registry{events, types};
 
     const auto entity = registry.create();
     auto history = transform_history_component{

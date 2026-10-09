@@ -35,7 +35,8 @@ namespace tempest::rhi::examples
         stdout_log_sink _log_sink{};
         logger _logger{_log_sink};
         event::event_registry _events{};
-        ecs::archetype_registry _registry{_events};
+        ecs::component_type_registry _component_types{};
+        ecs::archetype_registry _registry{_events, _component_types};
         core::mesh_registry _meshes{};
         core::material_registry _materials{};
         core::texture_registry _textures{};

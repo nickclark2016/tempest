@@ -739,7 +739,8 @@ TEST(asset_database_load, falls_back_to_importer_when_not_cached)
     database.register_importer(tempest::unique_ptr<tempest::assets::asset_importer>(mock_ptr), ".mock");
 
     auto events = tempest::event::event_registry();
-    auto reg = tempest::ecs::basic_archetype_registry(events);
+    auto types = tempest::ecs::component_type_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events, types);
 
     auto result = database.load("test_file.mock", reg);
 
@@ -758,7 +759,8 @@ TEST(asset_database_load, returns_tombstone_for_unknown_extension)
     tempest::assets::asset_database database(&type_reg);
 
     auto events = tempest::event::event_registry();
-    auto reg = tempest::ecs::basic_archetype_registry(events);
+    auto types = tempest::ecs::component_type_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events, types);
 
     auto result = database.load("test_file.unknown", reg);
 
@@ -784,7 +786,8 @@ TEST(asset_database_load, cached_asset_resolves_from_blobs)
         database.open(test_db_path);
 
         auto events = tempest::event::event_registry();
-        auto reg = tempest::ecs::basic_archetype_registry(events);
+        auto types = tempest::ecs::component_type_registry();
+        auto reg = tempest::ecs::basic_archetype_registry(events, types);
 
         // First load triggers import — the mock importer registers the asset itself.
         auto result1 = database.load("test_file.mock", reg);
@@ -809,7 +812,8 @@ TEST(asset_database_load, cached_asset_resolves_from_blobs)
         database.open(test_db_path);
 
         auto events = tempest::event::event_registry();
-        auto reg = tempest::ecs::basic_archetype_registry(events);
+        auto types = tempest::ecs::component_type_registry();
+        auto reg = tempest::ecs::basic_archetype_registry(events, types);
 
         // Second load should resolve from blobs (source found in database).
         auto result2 = database.load("test_file.mock", reg);
@@ -852,7 +856,8 @@ TEST(asset_database_load, multi_asset_import_registers_all_assets)
     database.register_importer(tempest::unique_ptr<tempest::assets::asset_importer>(importer_ptr), ".multi");
 
     auto events = tempest::event::event_registry();
-    auto reg = tempest::ecs::basic_archetype_registry(events);
+    auto types = tempest::ecs::component_type_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events, types);
 
     auto result = database.load("scene.multi", reg);
     EXPECT_TRUE(result != tempest::ecs::tombstone);
@@ -910,7 +915,8 @@ TEST(asset_database_load, multi_asset_import_roundtrips_through_save_and_open)
         database.open(test_db_path);
 
         auto events = tempest::event::event_registry();
-        auto reg = tempest::ecs::basic_archetype_registry(events);
+        auto types = tempest::ecs::component_type_registry();
+        auto reg = tempest::ecs::basic_archetype_registry(events, types);
         auto result = database.load("scene.multi", reg);
         EXPECT_TRUE(result != tempest::ecs::tombstone);
         EXPECT_EQ(importer_ptr->import_call_count, 1);
@@ -934,7 +940,8 @@ TEST(asset_database_load, multi_asset_import_roundtrips_through_save_and_open)
         database.open(test_db_path);
 
         auto events = tempest::event::event_registry();
-        auto reg = tempest::ecs::basic_archetype_registry(events);
+        auto types = tempest::ecs::component_type_registry();
+        auto reg = tempest::ecs::basic_archetype_registry(events, types);
         auto result = database.load("scene.multi", reg);
         EXPECT_TRUE(result != tempest::ecs::tombstone);
 
@@ -1557,7 +1564,8 @@ TEST(gltf_importer_tests, no_orphan_template_primitives_created)
     tempest::assets::register_default_importers(database, &mesh_reg, &tex_reg, &mat_reg);
 
     auto events = tempest::event::event_registry{};
-    auto registry = tempest::ecs::basic_archetype_registry{events};
+    auto types = tempest::ecs::component_type_registry{};
+    auto registry = tempest::ecs::basic_archetype_registry{events, types};
 
     // 2. Act: Import the glTF content via asset_database
     auto root = database.load(test_file_path.generic_string().c_str(), registry);
@@ -1711,7 +1719,8 @@ TEST(gltf_importer_tests, texture_color_space_detection)
     tempest::assets::register_default_importers(database, &mesh_reg, &tex_reg, &mat_reg);
 
     auto events = tempest::event::event_registry{};
-    auto registry = tempest::ecs::basic_archetype_registry{events};
+    auto types = tempest::ecs::component_type_registry{};
+    auto registry = tempest::ecs::basic_archetype_registry{events, types};
 
     // 2. Act: Import the glTF file via asset_database
     auto root_entity = database.load(gltf_path.generic_string().c_str(), registry);
@@ -1852,7 +1861,8 @@ TEST(gltf_importer_tests, gltf_database_save_and_reload_mesh_integrity)
         database.open(db_path.generic_string().c_str());
 
         auto events = tempest::event::event_registry{};
-        auto registry = tempest::ecs::basic_archetype_registry{events};
+        auto types = tempest::ecs::component_type_registry{};
+        auto registry = tempest::ecs::basic_archetype_registry{events, types};
         auto root = database.load(gltf_file_path.generic_string().c_str(), registry);
         EXPECT_TRUE(root != tempest::ecs::tombstone);
 
@@ -1883,7 +1893,8 @@ TEST(gltf_importer_tests, gltf_database_save_and_reload_mesh_integrity)
         database.open(db_path.generic_string().c_str());
 
         auto events = tempest::event::event_registry{};
-        auto registry = tempest::ecs::basic_archetype_registry{events};
+        auto types = tempest::ecs::component_type_registry{};
+        auto registry = tempest::ecs::basic_archetype_registry{events, types};
         auto root = database.load(gltf_file_path.generic_string().c_str(), registry);
         EXPECT_TRUE(root != tempest::ecs::tombstone);
 
@@ -1956,7 +1967,8 @@ TEST(gltf_importer_tests, sponza_database_save_and_reload_integrity)
         database.open(db_path.generic_string().c_str());
 
         auto events = tempest::event::event_registry{};
-        auto registry = tempest::ecs::basic_archetype_registry{events};
+        auto types = tempest::ecs::component_type_registry{};
+        auto registry = tempest::ecs::basic_archetype_registry{events, types};
         auto root = database.load(sponza_path, registry);
         ASSERT_TRUE(root != tempest::ecs::tombstone);
 
@@ -1983,7 +1995,8 @@ TEST(gltf_importer_tests, sponza_database_save_and_reload_integrity)
         database.open(db_path.generic_string().c_str());
 
         auto events = tempest::event::event_registry{};
-        auto registry = tempest::ecs::basic_archetype_registry{events};
+        auto types = tempest::ecs::component_type_registry{};
+        auto registry = tempest::ecs::basic_archetype_registry{events, types};
         auto root = database.load(sponza_path, registry);
         ASSERT_TRUE(root != tempest::ecs::tombstone);
 
@@ -2392,13 +2405,14 @@ TEST(asset_database_mount_aliases, aliased_load_subsequent_blob_cache_hit)
 
     // 2. Act 1: Initial load via alias triggers importer
     auto events = tempest::event::event_registry{};
-    auto registry1 = tempest::ecs::basic_archetype_registry{events};
+    auto types = tempest::ecs::component_type_registry{};
+    auto registry1 = tempest::ecs::basic_archetype_registry{events, types};
     auto e1 = database.load("@models/model.mock", registry1);
     EXPECT_TRUE(e1 != tempest::ecs::tombstone);
     EXPECT_EQ(imp_ptr->import_count, 1U);
 
     // 3. Act 2: Subsequent load via alias hits blob cache without re-importing
-    auto registry2 = tempest::ecs::basic_archetype_registry{events};
+    auto registry2 = tempest::ecs::basic_archetype_registry{events, types};
     auto e2 = database.load("@models/model.mock", registry2);
     EXPECT_TRUE(e2 != tempest::ecs::tombstone);
     EXPECT_EQ(imp_ptr->import_count, 1U);
@@ -2735,7 +2749,8 @@ TEST(asset_database_disk_freshness, load_reimports_when_source_file_changed_on_d
     database.register_importer(tempest::move(importer_ptr), ".vasset");
 
     auto events = tempest::event::event_registry{};
-    auto registry = tempest::ecs::archetype_registry{events};
+    auto types = tempest::ecs::component_type_registry{};
+    auto registry = tempest::ecs::archetype_registry{events, types};
 
     // 2. Act: First load() invokes importer
     auto ent1 = database.load("model.vasset", registry);

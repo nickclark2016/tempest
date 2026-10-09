@@ -17,7 +17,8 @@
 namespace tempest::server
 {
     server_context::server_context(server_config config)
-        : _config(config), _log_sink(), _logger(_log_sink), _profiler(false), _job_system(nullptr), _registry(_events),
+        : _config(config), _log_sink(), _logger(_log_sink), _profiler(false), _job_system(nullptr),
+          _registry(_events, _component_types),
           _accumulator(config.fixed_timestep, config.max_frame_delta), _running(false)
     {
     }

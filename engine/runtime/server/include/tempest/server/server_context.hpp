@@ -4,6 +4,7 @@
 #include <tempest/archetype.hpp>
 #include <tempest/atomic.hpp>
 #include <tempest/chrono.hpp>
+#include <tempest/component_type_registry.hpp>
 #include <tempest/event_registry.hpp>
 #include <tempest/fixed_timestep_accumulator.hpp>
 #include <tempest/int.hpp>
@@ -121,6 +122,16 @@ namespace tempest::server
             return _events;
         }
 
+        [[nodiscard]] auto get_component_types() noexcept -> ecs::component_type_registry&
+        {
+            return _component_types;
+        }
+
+        [[nodiscard]] auto get_component_types() const noexcept -> const ecs::component_type_registry&
+        {
+            return _component_types;
+        }
+
         [[nodiscard]] auto get_registry() noexcept -> ecs::archetype_registry&
         {
             return _registry;
@@ -153,6 +164,7 @@ namespace tempest::server
         network::udp_socket _socket;
         physics::physics_world _physics_world;
         event::event_registry _events;
+        ecs::component_type_registry _component_types;
         ecs::archetype_registry _registry;
         fixed_timestep_accumulator _accumulator;
         atomic<bool> _running = false;

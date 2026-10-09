@@ -6,6 +6,7 @@
 
 #include <tempest/asset_database.hpp>
 #include <tempest/asset_type_registry.hpp>
+#include <tempest/component_type_registry.hpp>
 #include <tempest/default_importers.hpp>
 #include <tempest/format.hpp>
 #include <tempest/frame_graph.hpp>
@@ -281,7 +282,8 @@ auto main(int argc, char** argv) -> int
 
     // Registries
     auto event_registry = tempest::event::event_registry();
-    auto entity_registry = tempest::ecs::archetype_registry(event_registry);
+    auto component_types = tempest::ecs::component_type_registry();
+    auto entity_registry = tempest::ecs::archetype_registry(event_registry, component_types);
     auto mesh_registry = tempest::core::mesh_registry();
     auto texture_registry = tempest::core::texture_registry();
     auto material_registry = tempest::core::material_registry();

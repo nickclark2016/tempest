@@ -44,7 +44,7 @@ namespace tempest
     standalone_engine_context::standalone_engine_context(const engine_config& config)
         : client_context(config.fixed_timestep, config.max_frame_delta),
           _log_sinks(make_default_log_sinks()), _logger(make_default_logger(_log_sinks)),
-          _entity_registry(_event_registry), _asset_database(&_asset_type_reg),
+          _entity_registry(_event_registry, _component_types), _asset_database(&_asset_type_reg),
           _config{config}
     {
         if (::setlocale(LC_ALL, "en_US.UTF-8") == nullptr)

@@ -93,7 +93,8 @@ TEST(transform_component_test, hierarchy_world_matrix_computation)
 {
     // 1. Setup
     auto events = tempest::event::event_registry{};
-    auto registry = archetype_registry{events};
+    auto types = tempest::ecs::component_type_registry{};
+    auto registry = archetype_registry{events, types};
 
     const auto parent_ent = registry.create();
     auto parent_tx = transform_component{};

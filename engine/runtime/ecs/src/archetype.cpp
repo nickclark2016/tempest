@@ -262,22 +262,6 @@ namespace tempest::ecs
         return _storage[type_info_index].element_at(trampoline.index);
     }
 
-    namespace detail
-    {
-        auto get_archetype_type_index(string_view name) -> size_t
-        {
-            static flat_unordered_map<string, size_t> type_index_map;
-            static size_t next_index = 0;
-            auto it = type_index_map.find(name);
-            if (it != type_index_map.end())
-            {
-                return it->second;
-            }
-            type_index_map[name] = next_index;
-            return next_index++;
-        }
-    } // namespace detail
-
     void basic_archetype_registry::destroy(basic_archetype_registry::entity_type entity)
     {
         using rel_comp_type = relationship_component<entity_type>;
@@ -331,7 +315,8 @@ namespace tempest::ecs
         }
 
         // We will always have a self_component, so add that to the hash
-        static const auto self_component_ti = create_archetype_type_info<self_component>();
+        const auto self_comp_idx = _type_registry->ensure<self_component>();
+        const auto self_component_ti = _type_registry->type_info(self_comp_idx);
         const auto updated_byte =
             set_bit(static_cast<unsigned int>(hash.hash[self_component_ti.index / 8]), self_component_ti.index % 8);
         hash.hash[self_component_ti.index / 8] = static_cast<byte>(updated_byte);
@@ -352,7 +337,7 @@ namespace tempest::ecs
             }
 
             // Ensure self component exists
-            new_types.push_back(create_archetype_type_info<self_component>());
+            new_types.push_back(self_component_ti);
 
             tempest::sort(new_types.begin(), new_types.end(),
                           [](const auto& lhs, const auto& rhs) -> auto { return lhs.index < rhs.index; });

@@ -89,7 +89,8 @@ namespace tempest::editor::tests
     TEST(editor_window_test, component_view_providers_names_and_default_creation)
     {
         auto events = event::event_registry{};
-        auto reg = ecs::archetype_registry{events};
+        auto types = ecs::component_type_registry{};
+        auto reg = ecs::archetype_registry{events, types};
 
         auto transform_provider = transform_component_view_provider{};
         EXPECT_EQ(transform_provider.name(), "Transform Component");
@@ -152,7 +153,8 @@ namespace tempest::editor::tests
             ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
 
             auto events = event::event_registry{};
-            auto reg = ecs::archetype_registry{events};
+            auto types = ecs::component_type_registry{};
+            auto reg = ecs::archetype_registry{events, types};
 
             auto ent = reg.create();
             reg.assign(ent, ecs::transform_component{});
@@ -216,7 +218,8 @@ namespace tempest::editor::tests
             ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
 
             auto events = event::event_registry{};
-            auto reg = ecs::archetype_registry{events};
+            auto types = ecs::component_type_registry{};
+            auto reg = ecs::archetype_registry{events, types};
 
             auto root1 = reg.create();
             reg.name(root1, "Root Entity 1");
@@ -276,7 +279,8 @@ namespace tempest::editor::tests
             ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
 
             auto events = event::event_registry{};
-            auto reg = ecs::archetype_registry{events};
+            auto types = ecs::component_type_registry{};
+            auto reg = ecs::archetype_registry{events, types};
 
             auto ent = reg.create();
             reg.name(ent, "Test Entity");

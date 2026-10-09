@@ -37,7 +37,8 @@ namespace tempest::physics::tests
 
         protected:
             event::event_registry event_reg{};
-            ecs::archetype_registry registry{event_reg};
+            ecs::component_type_registry type_reg{};
+            ecs::archetype_registry registry{event_reg, type_reg};
             logger test_logger{};
             profiler::profiler_session test_profiler{false};
             job::job_system test_job_system{test_logger, test_profiler, job::job_system_config{
@@ -252,7 +253,8 @@ namespace tempest::physics::tests
         const auto floor_a = create_static_box(system_a, jolt::shim::vec3{20.0F, 1.0F, 20.0F}, jolt::shim::vec3{0.0F, -1.0F, 0.0F});
 
         auto event_reg_a = event::event_registry{};
-        auto registry_a = ecs::archetype_registry{event_reg_a};
+        auto type_reg_a = ecs::component_type_registry{};
+        auto registry_a = ecs::archetype_registry{event_reg_a, type_reg_a};
 
         const auto entity_a = registry_a.create<character_controller_component, velocity_component, character_movement_intent, ecs::transform_component, ecs::transform_history_component>();
         auto controller_a = character_controller_component{
@@ -281,7 +283,8 @@ namespace tempest::physics::tests
         const auto floor_b = create_static_box(system_b, jolt::shim::vec3{20.0F, 1.0F, 20.0F}, jolt::shim::vec3{0.0F, -1.0F, 0.0F});
 
         auto event_reg_b = event::event_registry{};
-        auto registry_b = ecs::archetype_registry{event_reg_b};
+        auto type_reg_b = ecs::component_type_registry{};
+        auto registry_b = ecs::archetype_registry{event_reg_b, type_reg_b};
 
         const auto entity_b = registry_b.create<character_controller_component, velocity_component, character_movement_intent, ecs::transform_component, ecs::transform_history_component>();
         auto controller_b = character_controller_component{

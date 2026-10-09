@@ -201,6 +201,16 @@ namespace tempest
             return _config;
         }
 
+        [[nodiscard]] auto component_types() noexcept -> ecs::component_type_registry&
+        {
+            return _component_types;
+        }
+
+        [[nodiscard]] auto component_types() const noexcept -> const ecs::component_type_registry&
+        {
+            return _component_types;
+        }
+
         [[nodiscard]] auto get_entities() -> ecs::archetype_registry& override;
         [[nodiscard]] auto get_entities() const -> const ecs::archetype_registry& override;
 
@@ -277,6 +287,7 @@ namespace tempest
         profiler::profiler_session _profiler_session{};
 
         event::event_registry _event_registry;
+        ecs::component_type_registry _component_types;
         ecs::archetype_registry _entity_registry;
         core::material_registry _material_reg;
         core::mesh_registry _mesh_reg;
