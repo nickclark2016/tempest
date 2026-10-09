@@ -32,7 +32,10 @@ namespace tempest
             auto logger = tempest::logger();
             for (auto& sink : sinks)
             {
-                logger = tempest::logger(*sink);
+                if (sink != nullptr)
+                {
+                    logger.add_sink(*sink);
+                }
             }
             return logger;
         }

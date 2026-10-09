@@ -109,7 +109,12 @@ namespace
 
 static_assert(tempest::core::normalized_type_name<int32_t>() == "int");
 static_assert(tempest::core::normalized_type_name<float>() == "float");
+static_assert(tempest::core::normalized_type_name<uint32_t>() == "unsigned int");
+#if defined(_MSC_VER)
 static_assert(tempest::core::normalized_type_name<uint64_t>() == "unsigned long long");
+#else
+static_assert(tempest::core::normalized_type_name<uint64_t>() == "unsigned long");
+#endif
 static_assert(tempest::core::normalized_type_name<Foo>() == "Foo");
 static_assert(tempest::core::normalized_type_name<const Foo>() == "const Foo");
 static_assert(tempest::core::normalized_type_name<test_namespace::namespaced_struct>() ==
@@ -151,7 +156,11 @@ TEST(tempest_meta, test_normalized_primitive_types)
     // 2. Assert: Verify canonical representations match expected exact strings.
     ASSERT_EQ(int32_name, "int");
     ASSERT_EQ(float_name, "float");
+#if defined(_MSC_VER)
     ASSERT_EQ(uint64_name, "unsigned long long");
+#else
+    ASSERT_EQ(uint64_name, "unsigned long");
+#endif
 }
 
 /// @brief Verifies that simple structs have elaborated keywords (struct/class)
@@ -350,4 +359,4 @@ TEST(tempest_meta, test_normalization_decomposed_helpers)
     ASSERT_EQ(space_buffer.view(), "TrimMe");
     ASSERT_EQ(space_buffer.size(), 6);
 }
-
+

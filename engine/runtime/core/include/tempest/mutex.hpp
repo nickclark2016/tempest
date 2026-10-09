@@ -388,6 +388,206 @@ namespace tempest
         lhs.swap(rhs);
     }
 
+    template <shared_lockable Mutex>
+    class shared_lock_guard
+    {
+      public:
+        using mutex_type = Mutex;
+
+        explicit shared_lock_guard(mutex_type& mut);
+        shared_lock_guard(mutex_type& mut, adopt_lock_t /*unused*/);
+        shared_lock_guard(const shared_lock_guard&) = delete;
+        shared_lock_guard(shared_lock_guard&&) = delete;
+
+        ~shared_lock_guard();
+
+        auto operator=(const shared_lock_guard&) -> shared_lock_guard& = delete;
+        auto operator=(shared_lock_guard&&) -> shared_lock_guard& = delete;
+
+      private:
+        mutex_type& _mutex;
+    };
+
+    template <shared_lockable Mutex>
+    shared_lock_guard(Mutex&) -> shared_lock_guard<Mutex>;
+
+    template <shared_lockable Mutex>
+    inline shared_lock_guard<Mutex>::shared_lock_guard(mutex_type& mut) : _mutex{mut}
+    {
+        _mutex.lock_shared();
+    }
+
+    template <shared_lockable Mutex>
+    inline shared_lock_guard<Mutex>::shared_lock_guard(mutex_type& mut, adopt_lock_t /*unused*/) : _mutex{mut}
+    {
+    }
+
+    template <shared_lockable Mutex>
+    inline shared_lock_guard<Mutex>::~shared_lock_guard()
+    {
+        _mutex.unlock_shared();
+    }
+
+    template <shared_lockable Mutex>
+    class shared_lock
+    {
+      public:
+        using mutex_type = Mutex;
+
+        shared_lock() noexcept;
+        shared_lock(const shared_lock&) = delete;
+        shared_lock(shared_lock&& other) noexcept;
+        explicit shared_lock(mutex_type& mut);
+        shared_lock(mutex_type& mut, adopt_lock_t /*unused*/);
+        shared_lock(mutex_type& mut, defer_lock_t /*unused*/);
+
+        ~shared_lock();
+
+        auto operator=(const shared_lock&) -> shared_lock& = delete;
+        auto operator=(shared_lock&& rhs) noexcept -> shared_lock&;
+
+        void lock();
+        auto try_lock() -> bool;
+        void unlock();
+
+        void swap(shared_lock& other) noexcept;
+        auto release() noexcept -> mutex_type*;
+        [[nodiscard]] auto owns_lock() const noexcept -> bool;
+        explicit operator bool() const noexcept;
+
+      private:
+        mutex_type* _mutex;
+        bool _owns_lock = false;
+    };
+
+    template <shared_lockable Mutex>
+    shared_lock(Mutex&) -> shared_lock<Mutex>;
+
+    template <shared_lockable Mutex>
+    inline shared_lock<Mutex>::shared_lock() noexcept : _mutex{nullptr}
+    {
+    }
+
+    template <shared_lockable Mutex>
+    inline shared_lock<Mutex>::shared_lock(shared_lock&& other) noexcept
+        : _mutex{exchange(other._mutex, nullptr)}, _owns_lock{exchange(other._owns_lock, false)}
+    {
+    }
+
+    template <shared_lockable Mutex>
+    inline shared_lock<Mutex>::shared_lock(mutex_type& mut) : _mutex{&mut}, _owns_lock{true}
+    {
+        _mutex->lock_shared();
+    }
+
+    template <shared_lockable Mutex>
+    inline shared_lock<Mutex>::shared_lock(mutex_type& mut, adopt_lock_t /*unused*/) : _mutex{&mut}, _owns_lock{true}
+    {
+    }
+
+    template <shared_lockable Mutex>
+    inline shared_lock<Mutex>::shared_lock(mutex_type& mut, defer_lock_t /*unused*/) : _mutex{&mut}
+    {
+    }
+
+    template <shared_lockable Mutex>
+    inline shared_lock<Mutex>::~shared_lock()
+    {
+        if (_owns_lock)
+        {
+            _mutex->unlock_shared();
+        }
+
+        _mutex = nullptr;
+        _owns_lock = false;
+    }
+
+    template <shared_lockable Mutex>
+    inline auto shared_lock<Mutex>::operator=(shared_lock&& rhs) noexcept -> shared_lock<Mutex>&
+    {
+        if (&rhs == this)
+        {
+            return *this;
+        }
+
+        if (_owns_lock)
+        {
+            _mutex->unlock_shared();
+        }
+
+        _mutex = exchange(rhs._mutex, nullptr);
+        _owns_lock = exchange(rhs._owns_lock, false);
+
+        return *this;
+    }
+
+    template <shared_lockable Mutex>
+    inline void shared_lock<Mutex>::lock()
+    {
+        if ((_mutex == nullptr) || owns_lock())
+        {
+            terminate();
+        }
+
+        _mutex->lock_shared();
+        _owns_lock = true;
+    }
+
+    template <shared_lockable Mutex>
+    inline auto shared_lock<Mutex>::try_lock() -> bool
+    {
+        if ((_mutex == nullptr) || owns_lock())
+        {
+            terminate();
+        }
+        _owns_lock = _mutex->try_lock_shared();
+        return _owns_lock;
+    }
+
+    template <shared_lockable Mutex>
+    inline void shared_lock<Mutex>::unlock()
+    {
+        if ((_mutex == nullptr) || !owns_lock())
+        {
+            terminate();
+        }
+        _mutex->unlock_shared();
+        _owns_lock = false;
+    }
+
+    template <shared_lockable Mutex>
+    inline void shared_lock<Mutex>::swap(shared_lock& other) noexcept
+    {
+        using tempest::swap;
+        swap(_mutex, other._mutex);
+        swap(_owns_lock, other._owns_lock);
+    }
+
+    template <shared_lockable Mutex>
+    inline auto shared_lock<Mutex>::release() noexcept -> typename shared_lock<Mutex>::mutex_type*
+    {
+        _owns_lock = false;
+        return exchange(_mutex, nullptr);
+    }
+
+    template <shared_lockable Mutex>
+    inline auto shared_lock<Mutex>::owns_lock() const noexcept -> bool
+    {
+        return _owns_lock;
+    }
+
+    template <shared_lockable Mutex>
+    inline shared_lock<Mutex>::operator bool() const noexcept
+    {
+        return owns_lock();
+    }
+
+    template <shared_lockable Mutex>
+    inline void swap(shared_lock<Mutex>& lhs, shared_lock<Mutex>& rhs) noexcept
+    {
+        lhs.swap(rhs);
+    }
+
     // TODO: Implement lock, try_lock, and unlock free functions
     // TODO: Implement scoped_lock
 } // namespace tempest

@@ -6,6 +6,7 @@
 #include <tempest/int.hpp>
 #include <tempest/mutex.hpp>
 #include <tempest/source_location.hpp>
+#include <tempest/span.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/vector.hpp>
 
@@ -22,6 +23,15 @@ namespace tempest
         fatal,
     };
 
+    struct log_record
+    {
+        log_level level;
+        uint64_t timestamp_ns;
+        uint32_t thread_id;
+        string_view message;
+        source_location source;
+    };
+
     class TEMPEST_API log_sink
     {
       public:
@@ -33,10 +43,11 @@ namespace tempest
         log_sink& operator=(const log_sink&) = delete;
         log_sink& operator=(log_sink&&) noexcept = delete;
 
+        void log(const log_record& record);
         void log(log_level level, string_view message, source_location location);
 
       protected:
-        virtual void do_log(log_level level, string_view message, source_location location) = 0;
+        virtual void do_log(const log_record& record) = 0;
 
       private:
         log_level _min_level;
@@ -49,7 +60,7 @@ namespace tempest
         using log_sink::log_sink;
 
       protected:
-        void do_log(log_level level, string_view message, source_location location) override;
+        void do_log(const log_record& record) override;
     };
 
     class TEMPEST_API mt_stdout_log_sink final : public stdout_log_sink
@@ -58,20 +69,39 @@ namespace tempest
         using stdout_log_sink::stdout_log_sink;
 
       protected:
-        void do_log(log_level level, string_view message, source_location location) override;
+        void do_log(const log_record& record) override;
 
       private:
         mutex _mutex;
     };
 
+    namespace detail
+    {
+        TEMPEST_API auto capture_wall_clock_base() noexcept -> int64_t;
+    }
+
     class TEMPEST_API logger
     {
       public:
+        logger();
+        logger(const logger&) = delete;
+        logger(logger&& other) noexcept;
+
         template <typename... Sinks>
-            requires(derived_from<remove_cvref_t<Sinks>, log_sink> && ...)
-        explicit logger(Sinks&&... sinks);
+            requires(sizeof...(Sinks) > 0 && (derived_from<remove_cvref_t<Sinks>, log_sink> && ...))
+        explicit(sizeof...(Sinks) == 1) logger(Sinks&&... sinks);
 
         explicit logger(span<log_sink*> sinks);
+
+        ~logger() = default;
+
+        auto operator=(const logger&) -> logger& = delete;
+        auto operator=(logger&& other) noexcept -> logger&;
+
+        void add_sink(log_sink& sink);
+        void remove_sink(log_sink& sink);
+
+        [[nodiscard]] auto wall_clock_base() const noexcept -> int64_t;
 
         void trace(string_view message, source_location location = source_location::current());
         void debug(string_view message, source_location location = source_location::current());
@@ -84,12 +114,15 @@ namespace tempest
       private:
         void do_log(log_level level, string_view message, source_location location);
 
+        mutable shared_mutex _mutex;
         vector<log_sink*> _sinks;
+        int64_t _wall_clock_base{0};
     };
 
     template <typename... Sinks>
-        requires(derived_from<remove_cvref_t<Sinks>, log_sink> && ...)
+        requires(sizeof...(Sinks) > 0 && (derived_from<remove_cvref_t<Sinks>, log_sink> && ...))
     logger::logger(Sinks&&... sinks)
+        : _wall_clock_base{detail::capture_wall_clock_base()}
     {
         // Store pointers to the sinks
         (_sinks.push_back(&sinks), ...);
