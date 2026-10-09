@@ -11,65 +11,492 @@
 
 namespace tempest::core
 {
-    template <typename T>
-    constexpr auto get_type_name() noexcept
+    namespace detail
     {
-        auto src = tempest::source_location::current();
-        string_view here = src.function_name();
+        constexpr auto find_substring(string_view haystack, string_view needle) noexcept -> const char*
+        {
+            if (needle.empty())
+            {
+                return haystack.begin();
+            }
+            if (needle.size() > haystack.size())
+            {
+                return haystack.end();
+            }
+            const auto search_end = haystack.end() - needle.size() + 1;
+            for (auto current = haystack.begin(); current != search_end; ++current)
+            {
+                if (tempest::equal(needle.begin(), needle.end(), current))
+                {
+                    return current;
+                }
+            }
+            return haystack.end();
+        }
+
+        constexpr auto contains_substring(string_view haystack, string_view needle) noexcept -> bool
+        {
+            return find_substring(haystack, needle) != haystack.end();
+        }
+
+        template <typename T>
+        constexpr auto raw_type_name() noexcept -> string_view
+        {
+            auto src = tempest::source_location::current();
+            string_view here = src.function_name();
 
 #if defined(_MSC_VER) && !defined(__clang__)
-#if _MSC_VER >= 1951
-        string_view prefix = "class tempest::basic_string_view<char, class tempest::char_traits<char>> __cdecl "
-                             "tempest::core::get_type_name<";
+            constexpr auto marker = string_view{"raw_type_name<"};
+            const auto marker_position = find_substring(here, marker);
+            if (marker_position != here.end())
+            {
+                const auto start_pos = marker_position + marker.size();
+                constexpr auto suffix = string_view{">(void) noexcept"};
+                if (ends_with(here, suffix))
+                {
+                    here = string_view{start_pos, here.end() - suffix.size()};
+                }
+            }
+#elif defined(__clang__) || defined(__GNUC__)
+            constexpr auto marker = string_view{"[T = "};
+            constexpr auto alt_marker = string_view{"[ with T = "};
+            auto marker_position = find_substring(here, marker);
+            auto start_pos = here.end();
+            if (marker_position != here.end())
+            {
+                start_pos = marker_position + marker.size();
+            }
+            else
+            {
+                marker_position = find_substring(here, alt_marker);
+                if (marker_position != here.end())
+                {
+                    start_pos = marker_position + alt_marker.size();
+                }
+            }
+
+            if (marker_position != here.end())
+            {
+                if (ends_with(here, ']'))
+                {
+                    here = string_view{start_pos, here.end() - 1};
+                }
+            }
 #else
-        string_view prefix = "auto __cdecl tempest::core::get_type_name<";
+#error "Unsupported compiler"
 #endif
-        string_view suffix = ">(void) noexcept";
-#elif defined(_MSC_VER) && defined(__clang__)
-        string_view prefix = "auto __cdecl tempest::core::get_type_name(void) [T = ";
-        string_view suffix = "]";
-#elif defined(__clang__)
-        string_view prefix = "auto tempest::core::get_type_name() [T = ";
-        string_view suffix = "]";
-#elif defined(__GNUC__)
-        string_view prefix = "constexpr auto tempest::core::get_type_name() [ with T = ";
-        string_view suffix = "]";
-#else
-#error Unsupported compiler
-#endif
-        // remove prefix
-        here = substr(here, prefix.size(), here.size() - prefix.size());
 
-        // remove suffix
-        here = substr(here, 0, here.size() - suffix.size());
-
-        if (tempest::starts_with(here, "()::")) // defined in function scope
-        {
-            here = string_view(here.data() + 4, here.size() - 4);
+            return here;
         }
 
-        if (tempest::starts_with(here, "<lambda()>::")) // defined in lambda scope
+        template <size_t Capacity>
+        struct fixed_string_buffer
         {
-            here = string_view(here.data() + 12, here.size() - 12);
+            static constexpr size_t default_length = 0;
+
+            using value_type = char;
+            using size_type = size_t;
+            using difference_type = ptrdiff_t;
+            using reference = char&;
+            using const_reference = const char&;
+            using pointer = char*;
+            using const_pointer = const char*;
+            using iterator = pointer;
+            using const_iterator = const_pointer;
+
+            array<char, Capacity> characters{};
+            size_t length = default_length;
+
+            [[nodiscard]] constexpr auto begin() noexcept -> iterator
+            {
+                return characters.data();
+            }
+
+            [[nodiscard]] constexpr auto begin() const noexcept -> const_iterator
+            {
+                return characters.data();
+            }
+
+            [[nodiscard]] constexpr auto cbegin() const noexcept -> const_iterator
+            {
+                return characters.data();
+            }
+
+            [[nodiscard]] constexpr auto end() noexcept -> iterator
+            {
+                return characters.data() + length;
+            }
+
+            [[nodiscard]] constexpr auto end() const noexcept -> const_iterator
+            {
+                return characters.data() + length;
+            }
+
+            [[nodiscard]] constexpr auto cend() const noexcept -> const_iterator
+            {
+                return characters.data() + length;
+            }
+
+            [[nodiscard]] constexpr auto size() const noexcept -> size_type
+            {
+                return length;
+            }
+
+            [[nodiscard]] constexpr auto empty() const noexcept -> bool
+            {
+                return length == 0;
+            }
+
+            [[nodiscard]] constexpr auto back() noexcept -> reference
+            {
+                return characters[length - 1];
+            }
+
+            [[nodiscard]] constexpr auto back() const noexcept -> const_reference
+            {
+                return characters[length - 1];
+            }
+
+            [[nodiscard]] constexpr auto data() noexcept -> pointer
+            {
+                return characters.data();
+            }
+
+            [[nodiscard]] constexpr auto data() const noexcept -> const_pointer
+            {
+                return characters.data();
+            }
+
+            [[nodiscard]] constexpr auto capacity() const noexcept -> size_type
+            {
+                return Capacity;
+            }
+
+            constexpr void push_back(char character) noexcept
+            {
+                if (length < Capacity - 1)
+                {
+                    characters[length] = character;
+                    ++length;
+                    characters[length] = '\0';
+                }
+            }
+
+            constexpr void pop_back() noexcept
+            {
+                if (length > 0)
+                {
+                    --length;
+                    characters[length] = '\0';
+                }
+            }
+
+            constexpr void append(string_view text) noexcept
+            {
+                for (const auto character : text)
+                {
+                    push_back(character);
+                }
+            }
+
+            [[nodiscard]] constexpr auto view() const noexcept -> string_view
+            {
+                return string_view{characters.data(), length};
+            }
+        };
+
+        static constexpr size_t default_normalized_name_capacity = 512;
+
+        struct type_token_replacement
+        {
+            string_view pattern;
+            string_view replacement;
+        };
+
+        static constexpr array<type_token_replacement, 3> type_token_replacements = {
+            type_token_replacement{string_view{"unsigned __int64"}, string_view{"unsigned long long"}},
+            type_token_replacement{string_view{"signed __int64"}, string_view{"long long"}},
+            type_token_replacement{string_view{"__int64"}, string_view{"long long"}},
+        };
+
+        static constexpr array<string_view, 2> compiler_modifiers = {
+            string_view{"__cdecl"},
+            string_view{"__ptr64"},
+        };
+
+        static constexpr array<string_view, 4> elaborated_type_keywords = {
+            string_view{"struct"},
+            string_view{"class"},
+            string_view{"union"},
+            string_view{"enum"},
+        };
+
+        constexpr auto is_identifier_character(char character) noexcept -> bool
+        {
+            return (character >= 'a' && character <= 'z') ||
+                   (character >= 'A' && character <= 'Z') ||
+                   (character >= '0' && character <= '9') ||
+                   (character == '_');
         }
 
-        if (tempest::starts_with(here, "enum ")) // defined in enum scope
+        constexpr auto is_unsupported_type_scope(string_view raw_name) noexcept -> bool
         {
-            here = string_view(here.data() + 5, here.size() - 5);
+            constexpr auto function_scope_marker = string_view{"()::"};
+            if (contains_substring(raw_name, function_scope_marker))
+            {
+                return true;
+            }
+
+            constexpr auto lambda_marker = string_view{"lambda"};
+            if (contains_substring(raw_name, lambda_marker))
+            {
+                return true;
+            }
+
+            constexpr auto anonymous_marker = string_view{"anonymous"};
+            constexpr auto braced_anonymous_marker = string_view{"{anonymous}"};
+            if (contains_substring(raw_name, anonymous_marker) ||
+                contains_substring(raw_name, braced_anonymous_marker))
+            {
+                return true;
+            }
+
+            return false;
         }
 
-        if (tempest::starts_with(here, "struct ")) // defined in struct scope
+        constexpr auto is_word_boundary(const char* begin, const char* current) noexcept -> bool
         {
-            here = string_view(here.data() + 7, here.size() - 7);
+            return (current == begin) || !is_identifier_character(*(current - 1));
         }
 
-        if (tempest::starts_with(here, "class ")) // defined in class scope
+        constexpr auto skip_spaces(const char* current, const char* end) noexcept -> const char*
         {
-            here = string_view(here.data() + 6, here.size() - 6);
+            while (current != end && *current == ' ')
+            {
+                ++current;
+            }
+            return current;
+        }
+
+        template <typename Buffer>
+        constexpr auto try_consume_type_replacement(const char* current, const char* end, Buffer& out) noexcept
+            -> const char*
+        {
+            for (const auto& rule : type_token_replacements)
+            {
+                const auto pattern_length = rule.pattern.size();
+                if (static_cast<size_t>(end - current) >= pattern_length &&
+                    tempest::equal(rule.pattern.begin(), rule.pattern.end(), current))
+                {
+                    const auto next_position = current + pattern_length;
+                    if (next_position == end || !is_identifier_character(*next_position))
+                    {
+                        out.append(rule.replacement);
+                        return next_position;
+                    }
+                }
+            }
+            return nullptr;
+        }
+
+        constexpr auto try_consume_modifier(const char* current, const char* end) noexcept -> const char*
+        {
+            for (const auto modifier : compiler_modifiers)
+            {
+                const auto modifier_length = modifier.size();
+                if (static_cast<size_t>(end - current) >= modifier_length &&
+                    tempest::equal(modifier.begin(), modifier.end(), current))
+                {
+                    const auto next_position = current + modifier_length;
+                    if (next_position == end || !is_identifier_character(*next_position))
+                    {
+                        return skip_spaces(next_position, end);
+                    }
+                }
+            }
+            return nullptr;
+        }
+
+        constexpr auto try_consume_elaborated_keyword(const char* current, const char* end) noexcept -> const char*
+        {
+            for (const auto keyword : elaborated_type_keywords)
+            {
+                const auto keyword_length = keyword.size();
+                if (static_cast<size_t>(end - current) > keyword_length &&
+                    tempest::equal(keyword.begin(), keyword.end(), current))
+                {
+                    const auto after_keyword = current + keyword_length;
+                    if (*after_keyword == ' ')
+                    {
+                        return skip_spaces(after_keyword, end);
+                    }
+                }
+            }
+            return nullptr;
+        }
+
+        constexpr auto is_space_removable_before(char character) noexcept -> bool
+        {
+            return character == '>' || character == '<' || character == ',' ||
+                   character == '*' || character == '&';
+        }
+
+        template <typename Buffer>
+        constexpr auto process_whitespace(Buffer& out, const char* current, const char* end) noexcept -> const char*
+        {
+            const auto next_non_space = skip_spaces(current, end);
+            if (next_non_space == end)
+            {
+                return end;
+            }
+
+            if (out.empty() || out.back() == ' ' || out.back() == ',' || out.back() == '<')
+            {
+                return next_non_space;
+            }
+
+            if (is_space_removable_before(*next_non_space))
+            {
+                return next_non_space;
+            }
+
+            out.push_back(' ');
+            return next_non_space;
+        }
+
+        template <typename Buffer>
+        constexpr auto trim_trailing_spaces(Buffer& buffer) noexcept -> void
+        {
+            while (!buffer.empty() && buffer.back() == ' ')
+            {
+                buffer.pop_back();
+            }
+        }
+
+        constexpr auto normalize_type_string(string_view raw_name) noexcept
+            -> fixed_string_buffer<default_normalized_name_capacity>
+        {
+            auto result = fixed_string_buffer<default_normalized_name_capacity>{};
+            const auto begin = raw_name.begin();
+            const auto end = raw_name.end();
+            auto current = begin;
+
+            while (current != end)
+            {
+                if (is_word_boundary(begin, current))
+                {
+                    if (const auto next_position = try_consume_type_replacement(current, end, result);
+                        next_position != nullptr)
+                    {
+                        current = next_position;
+                        continue;
+                    }
+
+                    if (const auto next_position = try_consume_modifier(current, end); next_position != nullptr)
+                    {
+                        current = next_position;
+                        continue;
+                    }
+
+                    if (const auto next_position = try_consume_elaborated_keyword(current, end);
+                        next_position != nullptr)
+                    {
+                        current = next_position;
+                        continue;
+                    }
+                }
+
+                if (*current == ' ')
+                {
+                    current = process_whitespace(result, current, end);
+                    continue;
+                }
+
+                result.push_back(*current);
+                ++current;
+            }
+
+            trim_trailing_spaces(result);
+            return result;
+        }
+
+        constexpr auto fnv1a_64(string_view text) noexcept -> uint64_t
+        {
+            constexpr uint64_t fnv_offset_basis = 14695981039346656037ull;
+            constexpr uint64_t fnv_prime = 1099511628211ull;
+
+            auto hash_value = fnv_offset_basis;
+            for (const auto character : text)
+            {
+                hash_value = (hash_value ^ static_cast<uint64_t>(static_cast<unsigned char>(character))) * fnv_prime;
+            }
+            return hash_value;
+        }
+
+        template <typename T>
+        struct normalized_name_holder
+        {
+            static_assert(!detail::is_unsupported_type_scope(detail::raw_type_name<T>()),
+                          "normalized_type_name: local function scope, lambda scope, and anonymous namespace types are not supported");
+
+            static constexpr auto storage = detail::normalize_type_string(detail::raw_type_name<T>());
+            static constexpr string_view value = storage.view();
+            static constexpr uint64_t hash = detail::fnv1a_64(storage.view());
+        };
+    } // namespace detail
+
+    template <typename T>
+    constexpr auto get_type_name() noexcept -> string_view
+    {
+        auto here = detail::raw_type_name<T>();
+
+        constexpr auto function_scope_prefix = string_view{"()::"};
+        if (tempest::starts_with(here, function_scope_prefix))
+        {
+            here = string_view{here.begin() + function_scope_prefix.size(), here.end()};
+        }
+
+        constexpr auto lambda_scope_prefix = string_view{"<lambda()>::"};
+        if (tempest::starts_with(here, lambda_scope_prefix))
+        {
+            here = string_view{here.begin() + lambda_scope_prefix.size(), here.end()};
+        }
+
+        constexpr auto enum_prefix = string_view{"enum "};
+        if (tempest::starts_with(here, enum_prefix))
+        {
+            here = string_view{here.begin() + enum_prefix.size(), here.end()};
+        }
+
+        constexpr auto struct_prefix = string_view{"struct "};
+        if (tempest::starts_with(here, struct_prefix))
+        {
+            here = string_view{here.begin() + struct_prefix.size(), here.end()};
+        }
+
+        constexpr auto class_prefix = string_view{"class "};
+        if (tempest::starts_with(here, class_prefix))
+        {
+            here = string_view{here.begin() + class_prefix.size(), here.end()};
         }
 
         return here;
     }
+
+    template <typename T>
+    inline constexpr bool is_normalized_type_name_valid_v =
+        !detail::is_unsupported_type_scope(detail::raw_type_name<T>());
+
+    template <typename T>
+    consteval auto normalized_type_name() noexcept -> string_view
+    {
+        static_assert(!detail::is_unsupported_type_scope(detail::raw_type_name<T>()),
+                      "normalized_type_name: local function scope, lambda scope, and anonymous namespace types are not supported");
+        return detail::normalized_name_holder<T>::value;
+    }
+
+    template <typename T>
+    inline constexpr uint64_t normalized_type_hash_v = detail::normalized_name_holder<T>::hash;
 
     template <size_t N>
     struct string_literal
@@ -562,5 +989,12 @@ namespace tempest::core
     template <typename T>
     inline constexpr size_t size_of_v = size_of<T>::value;
 } // namespace tempest::core
+
+namespace tempest
+{
+    using core::is_normalized_type_name_valid_v;
+    using core::normalized_type_hash_v;
+    using core::normalized_type_name;
+} // namespace tempest
 
 #endif // tempest_core_meta_hpp
