@@ -570,12 +570,21 @@ namespace tempest::filesystem
                 return {};
             }
 
-            if (last_slash == path.begin() && is_slash<T>(path[0]))
+            // If the last slash is at the root directory of a drive letter (e.g. "C:\foo"),
+            // the parent path is "C:\" (include the slash).
+            if (last_slash == path.begin() + 2 && is_letter<T>(path[0]) && path[1] == colon<T>)
             {
-                return {}; // Root directory has no parent
+                return tempest::substr(path, 0, 3);
             }
 
-            return tempest::substr(path, 0, last_slash - path.begin() + 1);
+            // If the last slash is at the root directory of a Unix path (e.g. "/foo"),
+            // the parent path is "/" (include the slash).
+            if (last_slash == path.begin() && is_slash<T>(path[0]))
+            {
+                return tempest::substr(path, 0, 1);
+            }
+
+            return tempest::substr(path, 0, last_slash - path.begin());
         }
 
         template <character_type T>
@@ -642,11 +651,6 @@ namespace tempest::filesystem
             if (last_slash == path.begin() + end)
             {
                 return false;
-            }
-
-            if (last_slash == path.begin() && is_slash<T>(path[0]))
-            {
-                return false; // Root directory has no parent
             }
 
             return true;

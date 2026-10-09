@@ -504,7 +504,7 @@ TEST(path, append)
 
 #ifdef _WIN32
     EXPECT_EQ(no_roots.native(), L"hello\\world");
-    EXPECT_EQ(win_style_left_root.native(), L"C:\\hello");
+    EXPECT_EQ(win_style_left_root.native(), L"C:\\hello\\world");
     EXPECT_EQ(win_style_right_root.native(), L"C:\\world");
     EXPECT_EQ(win_style_both_roots.native(), L"C:\\world");
     EXPECT_EQ(win_style_unc_left.native(), L"\\\\server\\share\\file.txt");
@@ -514,7 +514,7 @@ TEST(path, append)
     EXPECT_EQ(unix_style_both_roots.native(), L"/world");
 #else
     EXPECT_EQ(no_roots.native(), "hello/world");
-    EXPECT_EQ(win_style_left_root.native(), "C:\\hello");
+    EXPECT_EQ(win_style_left_root.native(), "C:\\hello\\world");
     EXPECT_EQ(win_style_right_root.native(), "C:\\world");
     EXPECT_EQ(win_style_both_roots.native(), "C:\\world");
     EXPECT_EQ(win_style_unc_left.native(), "\\\\server\\share\\file.txt");
@@ -615,14 +615,14 @@ TEST(path, remove_filename)
     EXPECT_EQ(only_filename.native(), L"");
     EXPECT_EQ(win_root.native(), L"C:\\");
     EXPECT_EQ(unix_root.native(), L"/");
-    EXPECT_EQ(win_style_path.native(), L"C:\\Users\\User\\Documents");
-    EXPECT_EQ(unix_style_path.native(), L"/home/user/documents");
+    EXPECT_EQ(win_style_path.native(), L"C:\\Users\\User\\Documents\\");
+    EXPECT_EQ(unix_style_path.native(), L"/home/user/documents/");
 #else
     EXPECT_EQ(only_filename.native(), "");
     EXPECT_EQ(win_root.native(), "C:\\");
     EXPECT_EQ(unix_root.native(), "/");
-    EXPECT_EQ(win_style_path.native(), "C:\\Users\\User\\Documents");
-    EXPECT_EQ(unix_style_path.native(), "/home/user/documents");
+    EXPECT_EQ(win_style_path.native(), "C:\\Users\\User\\Documents\\");
+    EXPECT_EQ(unix_style_path.native(), "/home/user/documents/");
 #endif
 }
 
@@ -1072,4 +1072,28 @@ TEST(filesystem_directories, remove_all_non_existent)
 
     // 3. Assert: count is 0
     EXPECT_EQ(count, 0U);
+}
+
+/// @brief Tests that remove_all successfully removes dot-prefixed directories like .git and .agents.
+TEST(filesystem_directories, remove_all_dot_directories)
+{
+    // 1. Setup: create directories starting with '.' and write nested files
+    auto root = fs::temp_directory_path() / "tempest_test_dot_dir";
+    fs::remove_all(root);
+    ASSERT_TRUE(fs::create_directories(root / ".git"));
+    ASSERT_TRUE(fs::create_directories(root / ".agents"));
+
+    const auto* data = "test";
+    tempest::write_file_from_bytes(root / ".git" / "ignored.slang", {reinterpret_cast<const tempest::byte*>(data), 4});
+    tempest::write_file_from_bytes(root / ".agents" / "ignored.slang", {reinterpret_cast<const tempest::byte*>(data), 4});
+
+    ASSERT_TRUE(fs::exists(root / ".git" / "ignored.slang"));
+    ASSERT_TRUE(fs::exists(root / ".agents" / "ignored.slang"));
+
+    // 2. Act: remove entire directory tree
+    auto count = fs::remove_all(root);
+
+    // 3. Assert: 2 files + 2 subdirectories + 1 base directory = 5 items removed
+    EXPECT_EQ(count, 5U);
+    EXPECT_FALSE(fs::exists(root));
 }

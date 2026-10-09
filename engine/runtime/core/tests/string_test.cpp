@@ -2338,6 +2338,26 @@ TEST(string, equality)
     EXPECT_EQ(s, t);
 }
 
+TEST(string, equality_cstring_and_prefix_rejection)
+{
+    tempest::string s = "hello world";
+
+    EXPECT_TRUE(s == "hello world");
+    EXPECT_TRUE("hello world" == s);
+    EXPECT_FALSE(s == "hello");
+    EXPECT_FALSE("hello" == s);
+    EXPECT_FALSE(s == "hello world longer");
+    EXPECT_FALSE("hello world longer" == s);
+
+    tempest::wstring ws = L".git";
+    EXPECT_TRUE(ws == L".git");
+    EXPECT_TRUE(L".git" == ws);
+    EXPECT_FALSE(ws == L".");
+    EXPECT_FALSE(L"." == ws);
+    EXPECT_FALSE(ws == L"..");
+    EXPECT_FALSE(L".." == ws);
+}
+
 TEST(string, inequality)
 {
     tempest::string s = "hello world";

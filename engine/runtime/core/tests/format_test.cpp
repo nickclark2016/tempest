@@ -165,9 +165,9 @@ TEST(format_test, float_formatting)
     EXPECT_EQ(tempest::format("{}", 100.0), "100");
 
     // 4. Act & Assert: Sign formatting
-    EXPECT_EQ(tempest::format("{:+f}", 0.0), "+0");
+    EXPECT_EQ(tempest::format("{:+f}", 0.0), "+0.000000");
     EXPECT_EQ(tempest::format("{:+.1f}", -0.0), "-0.0");
-    EXPECT_EQ(tempest::format("{:+f}", 3.5), "+3.5");
+    EXPECT_EQ(tempest::format("{:+f}", 3.5), "+3.500000");
 
     // 5. Act & Assert: Special values
     auto nan_val = tempest::numeric_limits<double>::quiet_NaN();

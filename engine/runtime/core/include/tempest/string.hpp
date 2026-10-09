@@ -1979,13 +1979,15 @@ namespace tempest
     template <typename CharT, typename Traits, typename Allocator>
     inline constexpr auto operator==(const CharT* lhs, const basic_string<CharT, Traits, Allocator>& rhs) -> bool
     {
-        return Traits::compare(lhs, rhs.data(), Traits::length(lhs)) == 0;
+        const auto len = Traits::length(lhs);
+        return len == rhs.size() && Traits::compare(lhs, rhs.data(), len) == 0;
     }
 
     template <typename CharT, typename Traits, typename Allocator>
     inline constexpr auto operator==(const basic_string<CharT, Traits, Allocator>& lhs, const CharT* rhs) -> bool
     {
-        return Traits::compare(lhs.data(), rhs, Traits::length(rhs)) == 0;
+        const auto len = Traits::length(rhs);
+        return lhs.size() == len && Traits::compare(lhs.data(), rhs, len) == 0;
     }
 
     template <typename CharT, typename Traits, typename Allocator>
