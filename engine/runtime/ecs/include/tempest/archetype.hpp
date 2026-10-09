@@ -947,6 +947,9 @@ namespace tempest::ecs
         auto duplicate(entity_type src) -> entity_type;
 
         auto reparent(entity_type child, entity_type new_parent, entity_type insert_before = tombstone) -> bool;
+        auto reparent_head(entity_type child, entity_type new_parent) -> bool;
+        auto reparent_children(span<const entity_type> children, entity_type new_parent,
+                               entity_type insert_before = tombstone) -> bool;
         void unlink(entity_type child);
         void destroy_recursive(entity_type root);
         void destroy_and_reparent_children(entity_type target);
@@ -1763,6 +1766,14 @@ namespace tempest::ecs
     TEMPEST_API auto reparent(basic_archetype_registry& reg, basic_archetype_registry::entity_type child,
                               basic_archetype_registry::entity_type new_parent,
                               basic_archetype_registry::entity_type insert_before = tombstone) -> bool;
+
+    TEMPEST_API auto reparent_head(basic_archetype_registry& reg, basic_archetype_registry::entity_type child,
+                                   basic_archetype_registry::entity_type new_parent) -> bool;
+
+    TEMPEST_API auto reparent_children(basic_archetype_registry& reg,
+                                       span<const basic_archetype_registry::entity_type> children,
+                                       basic_archetype_registry::entity_type new_parent,
+                                       basic_archetype_registry::entity_type insert_before = tombstone) -> bool;
 
     TEMPEST_API void unlink(basic_archetype_registry& reg, basic_archetype_registry::entity_type child);
 

@@ -640,6 +640,261 @@ namespace tempest::ecs
         return true;
     }
 
+    auto basic_archetype_registry::reparent_head(entity_type child, entity_type new_parent) -> bool
+    {
+        using rel_comp_type = relationship_component<entity_type>;
+
+        if (child == tombstone || child == new_parent || !is_valid(child))
+        {
+            return false;
+        }
+
+        if (new_parent != tombstone && !is_valid(new_parent))
+        {
+            return false;
+        }
+
+        if (new_parent != tombstone)
+        {
+            const auto ancestor_view = basic_archetype_entity_ancestor_view{*this, new_parent};
+            for (const auto ancestor : ancestor_view)
+            {
+                if (ancestor == child)
+                {
+                    return false;
+                }
+            }
+        }
+
+        unlink(child);
+
+        if (new_parent == tombstone)
+        {
+            if (has<rel_comp_type>(child))
+            {
+                auto child_rel = get<rel_comp_type>(child);
+                child_rel.parent = tombstone;
+                child_rel.next_sibling = tombstone;
+                replace(child, child_rel);
+            }
+            else
+            {
+                assign(child, rel_comp_type{
+                                  .parent = tombstone,
+                                  .next_sibling = tombstone,
+                                  .first_child = tombstone,
+                              });
+            }
+            return true;
+        }
+
+        if (!has<rel_comp_type>(new_parent))
+        {
+            assign_or_replace(new_parent, rel_comp_type{
+                                              .parent = tombstone,
+                                              .next_sibling = tombstone,
+                                              .first_child = tombstone,
+                                          });
+        }
+
+        if (!has<rel_comp_type>(child))
+        {
+            assign_or_replace(child, rel_comp_type{
+                                         .parent = tombstone,
+                                         .next_sibling = tombstone,
+                                         .first_child = tombstone,
+                                     });
+        }
+
+        auto parent_rel = get<rel_comp_type>(new_parent);
+        auto child_rel = get<rel_comp_type>(child);
+        child_rel.parent = new_parent;
+        child_rel.next_sibling = parent_rel.first_child;
+        parent_rel.first_child = child;
+
+        replace(child, child_rel);
+        replace(new_parent, parent_rel);
+
+        return true;
+    }
+
+    auto basic_archetype_registry::reparent_children(span<const entity_type> children, entity_type new_parent,
+                                                     entity_type insert_before) -> bool
+    {
+        using rel_comp_type = relationship_component<entity_type>;
+
+        if (children.empty())
+        {
+            return true;
+        }
+
+        if (children.size() == 1)
+        {
+            return reparent(children.front(), new_parent, insert_before);
+        }
+
+        if (new_parent != tombstone && !is_valid(new_parent))
+        {
+            return false;
+        }
+
+        for (const auto child : children)
+        {
+            if (child == tombstone || child == new_parent || !is_valid(child))
+            {
+                return false;
+            }
+        }
+
+        if (new_parent != tombstone)
+        {
+            const auto ancestor_view = basic_archetype_entity_ancestor_view{*this, new_parent};
+            for (const auto ancestor : ancestor_view)
+            {
+                for (const auto child : children)
+                {
+                    if (ancestor == child)
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if (insert_before != tombstone)
+        {
+            if (!is_valid(insert_before) || !has<rel_comp_type>(insert_before))
+            {
+                return false;
+            }
+
+            const auto insert_before_rel = get<rel_comp_type>(insert_before);
+            if (insert_before_rel.parent != new_parent)
+            {
+                return false;
+            }
+
+            for (const auto child : children)
+            {
+                if (child == insert_before)
+                {
+                    return false;
+                }
+            }
+        }
+
+        for (const auto child : children)
+        {
+            unlink(child);
+        }
+
+        if (new_parent == tombstone)
+        {
+            for (const auto child : children)
+            {
+                if (has<rel_comp_type>(child))
+                {
+                    auto child_rel = get<rel_comp_type>(child);
+                    child_rel.parent = tombstone;
+                    child_rel.next_sibling = tombstone;
+                    replace(child, child_rel);
+                }
+                else
+                {
+                    assign(child, rel_comp_type{
+                                      .parent = tombstone,
+                                      .next_sibling = tombstone,
+                                      .first_child = tombstone,
+                                  });
+                }
+            }
+            return true;
+        }
+
+        if (!has<rel_comp_type>(new_parent))
+        {
+            assign_or_replace(new_parent, rel_comp_type{
+                                              .parent = tombstone,
+                                              .next_sibling = tombstone,
+                                              .first_child = tombstone,
+                                          });
+        }
+
+        for (const auto child : children)
+        {
+            if (!has<rel_comp_type>(child))
+            {
+                assign_or_replace(child, rel_comp_type{
+                                             .parent = tombstone,
+                                             .next_sibling = tombstone,
+                                             .first_child = tombstone,
+                                         });
+            }
+        }
+
+        auto child_it = children.begin();
+        const auto last_it = children.end() - 1;
+        while (child_it != last_it)
+        {
+            const auto curr_ent = *child_it;
+            ++child_it;
+            const auto next_ent = *child_it;
+
+            auto curr_rel = get<rel_comp_type>(curr_ent);
+            curr_rel.parent = new_parent;
+            curr_rel.next_sibling = next_ent;
+            replace(curr_ent, curr_rel);
+        }
+
+        const auto last_child = *last_it;
+        auto last_child_rel = get<rel_comp_type>(last_child);
+        last_child_rel.parent = new_parent;
+
+        auto parent_rel = get<rel_comp_type>(new_parent);
+
+        if (insert_before == parent_rel.first_child)
+        {
+            last_child_rel.next_sibling = parent_rel.first_child;
+            replace(last_child, last_child_rel);
+            parent_rel.first_child = children.front();
+            replace(new_parent, parent_rel);
+        }
+        else if (insert_before == tombstone)
+        {
+            last_child_rel.next_sibling = tombstone;
+            replace(last_child, last_child_rel);
+
+            if (parent_rel.first_child == tombstone)
+            {
+                parent_rel.first_child = children.front();
+                replace(new_parent, parent_rel);
+            }
+            else
+            {
+                const auto tail = find_tail_sibling(*this, parent_rel.first_child);
+                auto tail_rel = get<rel_comp_type>(tail);
+                tail_rel.next_sibling = children.front();
+                replace(tail, tail_rel);
+            }
+        }
+        else
+        {
+            const auto prev = find_prev_sibling(*this, parent_rel.first_child, insert_before);
+            if (prev == tombstone)
+            {
+                return false;
+            }
+
+            auto prev_rel = get<rel_comp_type>(prev);
+            last_child_rel.next_sibling = insert_before;
+            replace(last_child, last_child_rel);
+            prev_rel.next_sibling = children.front();
+            replace(prev, prev_rel);
+        }
+
+        return true;
+    }
+
     void basic_archetype_registry::unlink(entity_type child)
     {
         using rel_comp_type = relationship_component<entity_type>;
@@ -784,6 +1039,20 @@ namespace tempest::ecs
                   basic_archetype_registry::entity_type insert_before) -> bool
     {
         return reg.reparent(child, new_parent, insert_before);
+    }
+
+    auto reparent_head(basic_archetype_registry& reg, basic_archetype_registry::entity_type child,
+                       basic_archetype_registry::entity_type new_parent) -> bool
+    {
+        return reg.reparent_head(child, new_parent);
+    }
+
+    auto reparent_children(basic_archetype_registry& reg,
+                           span<const basic_archetype_registry::entity_type> children,
+                           basic_archetype_registry::entity_type new_parent,
+                           basic_archetype_registry::entity_type insert_before) -> bool
+    {
+        return reg.reparent_children(children, new_parent, insert_before);
     }
 
     void unlink(basic_archetype_registry& reg, basic_archetype_registry::entity_type child)
