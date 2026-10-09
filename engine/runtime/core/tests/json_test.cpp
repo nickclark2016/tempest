@@ -3,6 +3,7 @@
 #include <tempest/json.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/vector.hpp>
 
@@ -679,3 +680,550 @@ TEST(json_tests, string_escape_sequences)
     ASSERT_TRUE(unicode_res.has_value());
     EXPECT_EQ(*unicode_res, "Hello");
 }
+
+//==============================================================================
+// JSON Writer & Serialization Tests
+//==============================================================================
+
+namespace
+{
+    void copy_value_to_mut(tempest::json_value val, tempest::string_view key, tempest::json_object_mut& target);
+    void copy_value_to_array_mut(tempest::json_value val, tempest::json_array_mut& target);
+
+    void copy_value_to_mut(tempest::json_value val, tempest::string_view key, tempest::json_object_mut& target)
+    {
+        if (val.is_null())
+        {
+            target.set_null(key);
+        }
+        else if (val.is_bool())
+        {
+            target.set(key, val.as_bool().value());
+        }
+        else if (val.is_int())
+        {
+            target.set(key, val.as_int64().value());
+        }
+        else if (val.is_uint())
+        {
+            target.set(key, val.as_uint64().value());
+        }
+        else if (val.is_real())
+        {
+            target.set(key, val.as_double().value());
+        }
+        else if (val.is_string())
+        {
+            target.set(key, val.as_string().value());
+        }
+        else if (val.is_object())
+        {
+            auto child = target.create_child_object(key);
+            auto child_obj_res = val.as_object();
+            if (child_obj_res.has_value())
+            {
+                for (auto member : *child_obj_res)
+                {
+                    copy_value_to_mut(member.value, member.key, child);
+                }
+            }
+        }
+        else if (val.is_array())
+        {
+            auto child = target.create_child_array(key);
+            auto child_arr_res = val.as_array();
+            if (child_arr_res.has_value())
+            {
+                for (auto item : *child_arr_res)
+                {
+                    copy_value_to_array_mut(item, child);
+                }
+            }
+        }
+    }
+
+    void copy_value_to_array_mut(tempest::json_value val, tempest::json_array_mut& target)
+    {
+        if (val.is_null())
+        {
+            target.push_back_null();
+        }
+        else if (val.is_bool())
+        {
+            target.push_back(val.as_bool().value());
+        }
+        else if (val.is_int())
+        {
+            target.push_back(val.as_int64().value());
+        }
+        else if (val.is_uint())
+        {
+            target.push_back(val.as_uint64().value());
+        }
+        else if (val.is_real())
+        {
+            target.push_back(val.as_double().value());
+        }
+        else if (val.is_string())
+        {
+            target.push_back(val.as_string().value());
+        }
+        else if (val.is_object())
+        {
+            auto child = target.create_child_object();
+            auto child_obj_res = val.as_object();
+            if (child_obj_res.has_value())
+            {
+                for (auto member : *child_obj_res)
+                {
+                    copy_value_to_mut(member.value, member.key, child);
+                }
+            }
+        }
+        else if (val.is_array())
+        {
+            auto child = target.create_child_array();
+            auto child_arr_res = val.as_array();
+            if (child_arr_res.has_value())
+            {
+                for (auto item : *child_arr_res)
+                {
+                    copy_value_to_array_mut(item, child);
+                }
+            }
+        }
+    }
+} // namespace
+
+/// @brief Verify serialization of all supported primitive types, strings, and null.
+TEST(json_tests, writer_primitive_types)
+{
+    // 1. Setup: Instantiate writer and test data
+    auto writer = tempest::json_writer{};
+    auto root = writer.create_object();
+
+    constexpr auto expected_i32 = static_cast<tempest::int32_t>(-42);
+    constexpr auto expected_u32 = static_cast<tempest::uint32_t>(42U);
+    constexpr auto expected_i64 = static_cast<tempest::int64_t>(-9000000000LL);
+    constexpr auto expected_u64 = static_cast<tempest::uint64_t>(18000000000ULL);
+    constexpr auto expected_float = 3.14F;
+    constexpr auto expected_double = 2.718281828459;
+    constexpr auto expected_str = tempest::string_view{"tempest engine"};
+
+    // 2. Act: Set primitive properties on root object
+    root.set("flag_true", true);
+    root.set("flag_false", false);
+    root.set("int32_val", expected_i32);
+    root.set("uint32_val", expected_u32);
+    root.set("int64_val", expected_i64);
+    root.set("uint64_val", expected_u64);
+    root.set("float_val", expected_float);
+    root.set("double_val", expected_double);
+    root.set("string_val", expected_str);
+    root.set_null("null_val");
+    writer.set_root(root);
+
+    auto serialized_str = writer.to_string(tempest::json_format::compact);
+    auto serialized_bytes = writer.to_bytes(tempest::json_format::compact);
+
+    // 3. Assert: Byte representation matches string representation
+    ASSERT_EQ(serialized_bytes.size(), serialized_str.size());
+    for (auto byte_index = size_t{0}; byte_index < serialized_bytes.size(); ++byte_index)
+    {
+        EXPECT_EQ(static_cast<char>(serialized_bytes[byte_index]), serialized_str[byte_index]);
+    }
+
+    // 4. Assert: Parse back and verify all primitive values
+    auto alloc = tempest::system_allocator{};
+    auto doc_res = tempest::json_document::from_string(serialized_str, alloc);
+    ASSERT_TRUE(doc_res.has_value());
+    auto parsed_root = doc_res->root();
+
+    EXPECT_EQ(parsed_root["flag_true"].as_bool().value(), true);
+    EXPECT_EQ(parsed_root["flag_false"].as_bool().value(), false);
+    EXPECT_EQ(parsed_root["int32_val"].as_int32().value(), expected_i32);
+    EXPECT_EQ(parsed_root["uint32_val"].as_uint32().value(), expected_u32);
+    EXPECT_EQ(parsed_root["int64_val"].as_int64().value(), expected_i64);
+    EXPECT_EQ(parsed_root["uint64_val"].as_uint64().value(), expected_u64);
+    EXPECT_FLOAT_EQ(parsed_root["float_val"].as_float().value(), expected_float);
+    EXPECT_DOUBLE_EQ(parsed_root["double_val"].as_double().value(), expected_double);
+    EXPECT_EQ(parsed_root["string_val"].as_string().value(), expected_str);
+    EXPECT_TRUE(parsed_root["null_val"].is_null());
+}
+
+/// @brief Verify serialization of nested objects and arrays of arbitrary depth.
+TEST(json_tests, writer_nested_objects_and_arrays)
+{
+    // 1. Setup: Instantiate writer and construct nested hierarchy
+    auto writer = tempest::json_writer{};
+    auto root = writer.create_object();
+    root.set("title", "nested_hierarchy");
+
+    // 2. Act: Populate child object and nested arrays
+    auto child_meta = root.create_child_object("metadata");
+    child_meta.set("author", "tempest");
+    child_meta.set("version", static_cast<tempest::int32_t>(1));
+
+    auto child_tags = root.create_child_array("tags");
+    child_tags.push_back("vulkan");
+    child_tags.push_back("engine");
+    child_tags.push_back_null();
+    child_tags.push_back(static_cast<tempest::int32_t>(100));
+
+    auto nested_elem_obj = child_tags.create_child_object();
+    nested_elem_obj.set("active", true);
+
+    auto nested_elem_arr = child_tags.create_child_array();
+    nested_elem_arr.push_back(1.5);
+    nested_elem_arr.push_back(2.5);
+
+    writer.set_root(root);
+    auto serialized = writer.to_string(tempest::json_format::compact);
+
+    // 3. Assert: Parse back and traverse full hierarchy
+    auto alloc = tempest::system_allocator{};
+    auto doc_res = tempest::json_document::from_string(serialized, alloc);
+    ASSERT_TRUE(doc_res.has_value());
+    auto parsed_root = doc_res->root();
+
+    EXPECT_EQ(parsed_root["title"].as_string().value(), "nested_hierarchy");
+    EXPECT_EQ(parsed_root["metadata"]["author"].as_string().value(), "tempest");
+    EXPECT_EQ(parsed_root["metadata"]["version"].as_int32().value(), 1);
+
+    auto tags_arr = parsed_root["tags"].as_array();
+    ASSERT_TRUE(tags_arr.has_value());
+    EXPECT_EQ(tags_arr->size(), 6U);
+    EXPECT_EQ((*tags_arr)[0].as_string().value(), "vulkan");
+    EXPECT_EQ((*tags_arr)[1].as_string().value(), "engine");
+    EXPECT_TRUE((*tags_arr)[2].is_null());
+    EXPECT_EQ((*tags_arr)[3].as_int32().value(), 100);
+    EXPECT_EQ((*tags_arr)[4]["active"].as_bool().value(), true);
+
+    auto inner_arr = (*tags_arr)[5].as_array();
+    ASSERT_TRUE(inner_arr.has_value());
+    EXPECT_EQ(inner_arr->size(), 2U);
+    EXPECT_DOUBLE_EQ((*inner_arr)[0].as_double().value(), 1.5);
+    EXPECT_DOUBLE_EQ((*inner_arr)[1].as_double().value(), 2.5);
+}
+
+/// @brief Verify key order in serialized output preserves the exact order keys were inserted.
+TEST(json_tests, writer_key_order_preservation)
+{
+    // 1. Setup: Create writer and define explicit non-alphabetical insertion order
+    auto writer = tempest::json_writer{};
+    auto root = writer.create_object();
+
+    root.set("zeta", static_cast<tempest::int32_t>(1));
+    root.set("beta", static_cast<tempest::int32_t>(2));
+    root.set("theta", static_cast<tempest::int32_t>(3));
+    root.set("alpha", static_cast<tempest::int32_t>(4));
+    root.set("gamma", static_cast<tempest::int32_t>(5));
+    writer.set_root(root);
+
+    // 2. Act: Serialize to compact JSON
+    auto serialized = writer.to_string(tempest::json_format::compact);
+
+    // 3. Assert: Keys appear in serialized text in the exact sequence inserted
+    auto serialized_view = tempest::string_view{serialized.data(), serialized.size()};
+    auto it_zeta = tempest::search(serialized_view, "zeta");
+    auto it_beta = tempest::search(serialized_view, "beta");
+    auto it_theta = tempest::search(serialized_view, "theta");
+    auto it_alpha = tempest::search(serialized_view, "alpha");
+    auto it_gamma = tempest::search(serialized_view, "gamma");
+
+    EXPECT_NE(it_zeta, serialized_view.end());
+    EXPECT_NE(it_beta, serialized_view.end());
+    EXPECT_NE(it_theta, serialized_view.end());
+    EXPECT_NE(it_alpha, serialized_view.end());
+    EXPECT_NE(it_gamma, serialized_view.end());
+
+    EXPECT_LT(it_zeta, it_beta);
+    EXPECT_LT(it_beta, it_theta);
+    EXPECT_LT(it_theta, it_alpha);
+    EXPECT_LT(it_alpha, it_gamma);
+
+    // 4. Assert: Iterating parsed object produces matching keys in insertion order
+    auto alloc = tempest::system_allocator{};
+    auto doc_res = tempest::json_document::from_string(serialized, alloc);
+    ASSERT_TRUE(doc_res.has_value());
+    auto parsed_obj = doc_res->root().as_object();
+    ASSERT_TRUE(parsed_obj.has_value());
+
+    const tempest::string_view expected_keys[] = {"zeta", "beta", "theta", "alpha", "gamma"};
+    auto key_index = size_t{0};
+    for (auto member : *parsed_obj)
+    {
+        ASSERT_LT(key_index, 5U);
+        EXPECT_EQ(member.key, expected_keys[key_index]);
+        ++key_index;
+    }
+    EXPECT_EQ(key_index, 5U);
+}
+
+/// @brief Verify compact formatting emits minimal whitespace while pretty format emits 2-space indented lines.
+TEST(json_tests, writer_compact_vs_pretty_format)
+{
+    // 1. Setup: Create writer with simple structure
+    auto writer = tempest::json_writer{};
+    auto root = writer.create_object();
+    root.set("name", "tempest");
+    root.set("version", static_cast<tempest::int32_t>(1));
+    writer.set_root(root);
+
+    // 2. Act: Generate both formats
+    auto compact_output = writer.to_string(tempest::json_format::compact);
+    auto pretty_output = writer.to_string(tempest::json_format::pretty);
+
+    // 3. Assert: Compact has no spaces or newlines around tokens
+    EXPECT_EQ(compact_output, R"({"name":"tempest","version":1})");
+
+    // 4. Assert: Pretty has newlines and 2-space indentation
+    constexpr auto expected_pretty = "{\n  \"name\": \"tempest\",\n  \"version\": 1\n}";
+    EXPECT_EQ(pretty_output, expected_pretty);
+}
+
+/// @brief Verify floating-point values serialize using shortest round-trip representation without precision loss.
+TEST(json_tests, writer_shortest_roundtrip_float)
+{
+    // 1. Setup: Create writer with various float and double numbers
+    auto writer = tempest::json_writer{};
+    auto root = writer.create_object();
+
+    constexpr auto test_float_fraction = 0.125F;
+    constexpr auto test_float_arbitrary = 1234.5678F;
+    constexpr auto test_double_pi = 3.141592653589793;
+    constexpr auto test_double_large = 1.7976931348623157e+308;
+    constexpr auto test_double_small = 2.2250738585072014e-308;
+
+    root.set("flt_frac", test_float_fraction);
+    root.set("flt_arb", test_float_arbitrary);
+    root.set("dbl_pi", test_double_pi);
+    root.set("dbl_large", test_double_large);
+    root.set("dbl_small", test_double_small);
+    writer.set_root(root);
+
+    // 2. Act: Serialize and parse back
+    auto serialized = writer.to_string(tempest::json_format::compact);
+    auto alloc = tempest::system_allocator{};
+    auto doc_res = tempest::json_document::from_string(serialized, alloc);
+    ASSERT_TRUE(doc_res.has_value());
+    auto parsed_root = doc_res->root();
+
+    // 3. Assert: Round-trip preserves exact values
+    EXPECT_FLOAT_EQ(parsed_root["flt_frac"].as_float().value(), test_float_fraction);
+    EXPECT_FLOAT_EQ(parsed_root["flt_arb"].as_float().value(), test_float_arbitrary);
+    EXPECT_DOUBLE_EQ(parsed_root["dbl_pi"].as_double().value(), test_double_pi);
+    EXPECT_DOUBLE_EQ(parsed_root["dbl_large"].as_double().value(), test_double_large);
+    EXPECT_DOUBLE_EQ(parsed_root["dbl_small"].as_double().value(), test_double_small);
+
+    // 4. Assert: No superfluous trailing zeros (e.g., "0.125", not "0.12500000000000000")
+    auto serialized_view = tempest::string_view{serialized.data(), serialized.size()};
+    EXPECT_NE(tempest::search(serialized_view, "\"flt_frac\":0.125"), serialized_view.end());
+}
+
+/// @brief Verify round-trip determinism: write(doc) == write(parse(write(doc))).
+TEST(json_tests, writer_roundtrip_determinism)
+{
+    // 1. Setup: Build complex document
+    auto initial_writer = tempest::json_writer{};
+    auto root = initial_writer.create_object();
+    root.set("app", "tempest");
+    root.set("count", static_cast<tempest::int32_t>(42));
+    root.set("ratio", 3.14159);
+    root.set("valid", true);
+    root.set_null("empty");
+
+    auto cfg = root.create_child_object("config");
+    cfg.set("threads", static_cast<tempest::uint32_t>(8U));
+    cfg.set("profile", "development");
+
+    auto list = root.create_child_array("items");
+    list.push_back("first");
+    list.push_back(static_cast<tempest::int32_t>(2));
+    list.push_back(false);
+    initial_writer.set_root(root);
+
+    // 2. Act: First write
+    auto write1 = initial_writer.to_string(tempest::json_format::compact);
+
+    // 3. Act: Parse write1 and perform second write
+    auto alloc = tempest::system_allocator{};
+    auto doc1_res = tempest::json_document::from_string(write1, alloc);
+    ASSERT_TRUE(doc1_res.has_value());
+
+    auto serialize_doc = [](const tempest::json_document& doc) -> tempest::string {
+        auto writer = tempest::json_writer{};
+        auto doc_root = doc.root();
+        if (doc_root.is_object())
+        {
+            auto obj_res = doc_root.as_object();
+            if (obj_res.has_value())
+            {
+                auto obj = writer.create_object();
+                for (auto member : *obj_res)
+                {
+                    copy_value_to_mut(member.value, member.key, obj);
+                }
+                writer.set_root(obj);
+            }
+        }
+        else if (doc_root.is_array())
+        {
+            auto arr_res = doc_root.as_array();
+            if (arr_res.has_value())
+            {
+                auto arr = writer.create_array();
+                for (auto item : *arr_res)
+                {
+                    copy_value_to_array_mut(item, arr);
+                }
+                writer.set_root(arr);
+            }
+        }
+        return writer.to_string(tempest::json_format::compact);
+    };
+
+    auto write2 = serialize_doc(*doc1_res);
+
+    // 4. Assert: write1 matches write2
+    EXPECT_EQ(write1, write2);
+
+    // 5. Act: Parse write2 and perform third write
+    auto doc2_res = tempest::json_document::from_string(write2, alloc);
+    ASSERT_TRUE(doc2_res.has_value());
+    auto write3 = serialize_doc(*doc2_res);
+
+    // 6. Assert: write2 matches write3
+    EXPECT_EQ(write2, write3);
+}
+
+/// @brief Verify zero memory leaks when json_writer is used with tracking_allocator.
+TEST(json_tests, writer_zero_memory_leaks_tracking_allocator)
+{
+    // 1. Setup: Instantiate tracking allocator
+    auto track_alloc = tracking_allocator{};
+
+    // 2. Act: Create and populate writer inside nested scope
+    {
+        auto writer = tempest::json_writer{track_alloc};
+        auto root = writer.create_object();
+        root.set("service", "tempest_runtime");
+        root.set("version", static_cast<tempest::int32_t>(100));
+
+        auto child_arr = root.create_child_array("metrics");
+        for (auto metric_index = 0; metric_index < 30; ++metric_index)
+        {
+            auto child_obj = child_arr.create_child_object();
+            child_obj.set("id", static_cast<tempest::int32_t>(metric_index));
+            child_obj.set("value", static_cast<double>(metric_index) * 1.5);
+            child_obj.set("label", "metric_sample");
+        }
+        writer.set_root(root);
+
+        EXPECT_GT(track_alloc.active_allocations, 0U);
+
+        auto serialized_str = writer.to_string(tempest::json_format::pretty);
+        EXPECT_FALSE(serialized_str.empty());
+
+        auto serialized_bytes = writer.to_bytes(tempest::json_format::compact);
+        EXPECT_FALSE(serialized_bytes.empty());
+    }
+
+    // 3. Assert: All allocations through tracking_allocator are released cleanly
+    EXPECT_EQ(track_alloc.active_allocations, 0U);
+    EXPECT_GT(track_alloc.total_allocations, 0U);
+    EXPECT_EQ(track_alloc.total_allocations, track_alloc.total_deallocations);
+}
+
+/// @brief Verify serialization with an array as the root entity and array mutation methods.
+TEST(json_tests, writer_array_root_and_methods)
+{
+    // 1. Setup: Instantiate writer with array root
+    auto writer = tempest::json_writer{};
+    auto root_arr = writer.create_array();
+
+    // 2. Act: Push various primitive types, null, and containers
+    root_arr.push_back(true);
+    root_arr.push_back(static_cast<tempest::int32_t>(-100));
+    root_arr.push_back(static_cast<tempest::uint32_t>(200U));
+    root_arr.push_back(static_cast<tempest::int64_t>(-3000000000LL));
+    root_arr.push_back(static_cast<tempest::uint64_t>(4000000000ULL));
+    root_arr.push_back(0.5F);
+    root_arr.push_back(1.25);
+    root_arr.push_back(tempest::string_view{"array_element"});
+    root_arr.push_back_null();
+
+    auto child_obj = root_arr.create_child_object();
+    child_obj.set("nested_key", "nested_val");
+
+    auto child_arr = root_arr.create_child_array();
+    child_arr.push_back(static_cast<tempest::int32_t>(999));
+
+    writer.set_root(root_arr);
+    auto serialized = writer.to_string(tempest::json_format::compact);
+
+    // 3. Assert: Parse back and verify root is array with expected items
+    auto alloc = tempest::system_allocator{};
+    auto doc_res = tempest::json_document::from_string(serialized, alloc);
+    ASSERT_TRUE(doc_res.has_value());
+    auto parsed_arr = doc_res->root().as_array();
+    ASSERT_TRUE(parsed_arr.has_value());
+
+    EXPECT_EQ(parsed_arr->size(), 11U);
+    EXPECT_EQ((*parsed_arr)[0].as_bool().value(), true);
+    EXPECT_EQ((*parsed_arr)[1].as_int32().value(), -100);
+    EXPECT_EQ((*parsed_arr)[2].as_uint32().value(), 200U);
+    EXPECT_EQ((*parsed_arr)[3].as_int64().value(), -3000000000LL);
+    EXPECT_EQ((*parsed_arr)[4].as_uint64().value(), 4000000000ULL);
+    EXPECT_FLOAT_EQ((*parsed_arr)[5].as_float().value(), 0.5F);
+    EXPECT_DOUBLE_EQ((*parsed_arr)[6].as_double().value(), 1.25);
+    EXPECT_EQ((*parsed_arr)[7].as_string().value(), "array_element");
+    EXPECT_TRUE((*parsed_arr)[8].is_null());
+    EXPECT_EQ((*parsed_arr)[9]["nested_key"].as_string().value(), "nested_val");
+    EXPECT_EQ((*parsed_arr)[10][0].as_int32().value(), 999);
+}
+
+/// @brief Verify move construction and move assignment of json_writer transfer ownership correctly.
+TEST(json_tests, writer_move_semantics)
+{
+    // 1. Setup: Create initial writer with populated root
+    auto writer1 = tempest::json_writer{};
+    auto root1 = writer1.create_object();
+    root1.set("key", "value1");
+    writer1.set_root(root1);
+
+    // 2. Act: Move construct writer2 from writer1
+    auto writer2 = tempest::move(writer1);
+
+    // 3. Assert: writer2 serializes correctly
+    auto str2 = writer2.to_string(tempest::json_format::compact);
+    EXPECT_EQ(str2, R"({"key":"value1"})");
+
+    // 4. Act: Move assign writer3 from writer2
+    auto writer3 = tempest::json_writer{};
+    writer3 = tempest::move(writer2);
+
+    // 5. Assert: writer3 serializes correctly
+    auto str3 = writer3.to_string(tempest::json_format::compact);
+    EXPECT_EQ(str3, R"({"key":"value1"})");
+}
+
+/// @brief Verify tempest::core namespace aliases for json types compile and behave identically.
+TEST(json_tests, writer_namespace_core_aliases)
+{
+    // 1. Setup: Use tempest::core types exclusively
+    auto writer = tempest::core::json_writer{};
+    auto root = writer.create_object();
+
+    // 2. Act: Populate using core handles
+    root.set("alias_test", true);
+    auto child = root.create_child_array("items");
+    child.push_back(static_cast<tempest::int32_t>(7));
+    writer.set_root(root);
+
+    auto result = writer.to_string(tempest::core::json_format::compact);
+
+    // 3. Assert: Output is valid
+    EXPECT_EQ(result, R"({"alias_test":true,"items":[7]})");
+}
+

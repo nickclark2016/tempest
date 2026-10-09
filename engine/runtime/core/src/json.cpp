@@ -49,9 +49,24 @@ namespace tempest
             }
         }
 
-        inline auto unconst(const yyjson_val* val) noexcept -> yyjson_val*
+        inline auto cast_val(const void* val) noexcept -> yyjson_val*
         {
-            return const_cast<yyjson_val*>(val);
+            return const_cast<yyjson_val*>(static_cast<const yyjson_val*>(val));
+        }
+
+        inline auto cast_doc(void* doc) noexcept -> yyjson_doc*
+        {
+            return static_cast<yyjson_doc*>(doc);
+        }
+
+        inline auto to_mut_doc(void* doc) noexcept -> yyjson_mut_doc*
+        {
+            return static_cast<yyjson_mut_doc*>(doc);
+        }
+
+        inline auto to_mut_val(void* val) noexcept -> yyjson_mut_val*
+        {
+            return static_cast<yyjson_mut_val*>(val);
         }
     } // namespace
 
@@ -60,16 +75,17 @@ namespace tempest
     //==============================================================================
 
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-    json_object_iterator::json_object_iterator(const yyjson_val* cur, size_t idx, size_t max) noexcept
+    json_object_iterator::json_object_iterator(const void* cur, size_t idx, size_t max) noexcept
         : _cur{cur}, _idx{idx}, _max{max}
     {
     }
 
     auto json_object_iterator::operator*() const noexcept -> json_member
     {
+        auto* cur_val = cast_val(_cur);
         return json_member{
-            .key = string_view{unsafe_yyjson_get_str(unconst(_cur)), unsafe_yyjson_get_len(unconst(_cur))},
-            .value = json_value{_cur + 1},
+            .key = string_view{unsafe_yyjson_get_str(cur_val), unsafe_yyjson_get_len(cur_val)},
+            .value = json_value{cur_val + 1},
         };
     }
 
@@ -77,7 +93,7 @@ namespace tempest
     {
         if ((_cur != nullptr) && _idx < _max)
         {
-            _cur = unsafe_yyjson_get_next(unconst(_cur + 1));
+            _cur = unsafe_yyjson_get_next(cast_val(_cur) + 1);
             ++_idx;
         }
         return *this;
@@ -95,7 +111,7 @@ namespace tempest
     //==============================================================================
 
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-    json_array_iterator::json_array_iterator(const yyjson_val* cur, size_t idx, size_t max) noexcept
+    json_array_iterator::json_array_iterator(const void* cur, size_t idx, size_t max) noexcept
         : _cur{cur}, _idx{idx}, _max{max}
     {
     }
@@ -109,7 +125,7 @@ namespace tempest
     {
         if ((_cur != nullptr) && _idx < _max)
         {
-            _cur = unsafe_yyjson_get_next(unconst(_cur));
+            _cur = unsafe_yyjson_get_next(cast_val(_cur));
             ++_idx;
         }
         return *this;
@@ -128,54 +144,54 @@ namespace tempest
 
     auto json_value::is_null() const noexcept -> bool
     {
-        return _val == nullptr || yyjson_is_null(unconst(_val));
+        return _val == nullptr || yyjson_is_null(cast_val(_val));
     }
 
     auto json_value::is_bool() const noexcept -> bool
     {
-        return _val != nullptr && yyjson_is_bool(unconst(_val));
+        return _val != nullptr && yyjson_is_bool(cast_val(_val));
     }
 
     auto json_value::is_number() const noexcept -> bool
     {
-        return _val != nullptr && yyjson_is_num(unconst(_val));
+        return _val != nullptr && yyjson_is_num(cast_val(_val));
     }
 
     auto json_value::is_int() const noexcept -> bool
     {
-        return _val != nullptr && yyjson_is_int(unconst(_val));
+        return _val != nullptr && yyjson_is_int(cast_val(_val));
     }
 
     auto json_value::is_uint() const noexcept -> bool
     {
-        return _val != nullptr && yyjson_is_uint(unconst(_val));
+        return _val != nullptr && yyjson_is_uint(cast_val(_val));
     }
 
     auto json_value::is_real() const noexcept -> bool
     {
-        return _val != nullptr && yyjson_is_real(unconst(_val));
+        return _val != nullptr && yyjson_is_real(cast_val(_val));
     }
 
     auto json_value::is_string() const noexcept -> bool
     {
-        return _val != nullptr && yyjson_is_str(unconst(_val));
+        return _val != nullptr && yyjson_is_str(cast_val(_val));
     }
 
     auto json_value::is_array() const noexcept -> bool
     {
-        return _val != nullptr && yyjson_is_arr(unconst(_val));
+        return _val != nullptr && yyjson_is_arr(cast_val(_val));
     }
 
     auto json_value::is_object() const noexcept -> bool
     {
-        return _val != nullptr && yyjson_is_obj(unconst(_val));
+        return _val != nullptr && yyjson_is_obj(cast_val(_val));
     }
 
     auto json_value::as_bool() const noexcept -> expected<bool, json_error>
     {
-        if ((_val != nullptr) && yyjson_is_bool(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_bool(cast_val(_val)))
         {
-            return yyjson_get_bool(unconst(_val));
+            return yyjson_get_bool(cast_val(_val));
         }
         return unexpected(json_error::type_mismatch);
     }
@@ -186,13 +202,13 @@ namespace tempest
         {
             return unexpected(json_error::type_mismatch);
         }
-        if (yyjson_is_sint(unconst(_val)))
+        if (yyjson_is_sint(cast_val(_val)))
         {
-            return yyjson_get_sint(unconst(_val));
+            return yyjson_get_sint(cast_val(_val));
         }
-        if (yyjson_is_uint(unconst(_val)))
+        if (yyjson_is_uint(cast_val(_val)))
         {
-            const auto uint_val = yyjson_get_uint(unconst(_val));
+            const auto uint_val = yyjson_get_uint(cast_val(_val));
             if (uint_val <= static_cast<uint64_t>(numeric_limits<int64_t>::max()))
             {
                 return static_cast<int64_t>(uint_val);
@@ -208,13 +224,13 @@ namespace tempest
         {
             return unexpected(json_error::type_mismatch);
         }
-        if (yyjson_is_uint(unconst(_val)))
+        if (yyjson_is_uint(cast_val(_val)))
         {
-            return yyjson_get_uint(unconst(_val));
+            return yyjson_get_uint(cast_val(_val));
         }
-        if (yyjson_is_sint(unconst(_val)))
+        if (yyjson_is_sint(cast_val(_val)))
         {
-            const auto sint_val = yyjson_get_sint(unconst(_val));
+            const auto sint_val = yyjson_get_sint(cast_val(_val));
             if (sint_val >= 0)
             {
                 return static_cast<uint64_t>(sint_val);
@@ -310,18 +326,18 @@ namespace tempest
 
     auto json_value::as_double() const noexcept -> expected<double, json_error>
     {
-        if ((_val != nullptr) && yyjson_is_real(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_real(cast_val(_val)))
         {
-            return yyjson_get_real(unconst(_val));
+            return yyjson_get_real(cast_val(_val));
         }
         return unexpected(json_error::type_mismatch);
     }
 
     auto json_value::as_float() const noexcept -> expected<float, json_error>
     {
-        if ((_val != nullptr) && yyjson_is_real(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_real(cast_val(_val)))
         {
-            const auto double_val = yyjson_get_real(unconst(_val));
+            const auto double_val = yyjson_get_real(cast_val(_val));
             if (double_val > static_cast<double>(numeric_limits<float>::max()) ||
                 double_val < static_cast<double>(numeric_limits<float>::lowest()))
             {
@@ -334,25 +350,25 @@ namespace tempest
 
     auto json_value::as_number() const noexcept -> expected<double, json_error>
     {
-        if ((_val != nullptr) && yyjson_is_num(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_num(cast_val(_val)))
         {
-            return yyjson_get_num(unconst(_val));
+            return yyjson_get_num(cast_val(_val));
         }
         return unexpected(json_error::type_mismatch);
     }
 
     auto json_value::as_string() const noexcept -> expected<string_view, json_error>
     {
-        if ((_val != nullptr) && yyjson_is_str(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_str(cast_val(_val)))
         {
-            return string_view{yyjson_get_str(unconst(_val)), yyjson_get_len(unconst(_val))};
+            return string_view{yyjson_get_str(cast_val(_val)), yyjson_get_len(cast_val(_val))};
         }
         return unexpected(json_error::type_mismatch);
     }
 
     auto json_value::as_object() const noexcept -> expected<json_object, json_error>
     {
-        if ((_val != nullptr) && yyjson_is_obj(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_obj(cast_val(_val)))
         {
             return json_object{_val};
         }
@@ -361,7 +377,7 @@ namespace tempest
 
     auto json_value::as_array() const noexcept -> expected<json_array, json_error>
     {
-        if ((_val != nullptr) && yyjson_is_arr(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_arr(cast_val(_val)))
         {
             return json_array{_val};
         }
@@ -370,18 +386,18 @@ namespace tempest
 
     auto json_value::operator[](string_view key) const noexcept -> json_value
     {
-        if ((_val != nullptr) && yyjson_is_obj(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_obj(cast_val(_val)))
         {
-            return json_value{yyjson_obj_getn(unconst(_val), key.data(), key.size())};
+            return json_value{yyjson_obj_getn(cast_val(_val), key.data(), key.size())};
         }
         return json_value{nullptr};
     }
 
     auto json_value::operator[](size_t index) const noexcept -> json_value
     {
-        if ((_val != nullptr) && yyjson_is_arr(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_arr(cast_val(_val)))
         {
-            return json_value{yyjson_arr_get(unconst(_val), index)};
+            return json_value{yyjson_arr_get(cast_val(_val), index)};
         }
         return json_value{nullptr};
     }
@@ -392,13 +408,13 @@ namespace tempest
         {
             return 0;
         }
-        if (yyjson_is_arr(unconst(_val)))
+        if (yyjson_is_arr(cast_val(_val)))
         {
-            return yyjson_arr_size(unconst(_val));
+            return yyjson_arr_size(cast_val(_val));
         }
-        if (yyjson_is_obj(unconst(_val)))
+        if (yyjson_is_obj(cast_val(_val)))
         {
-            return yyjson_obj_size(unconst(_val));
+            return yyjson_obj_size(cast_val(_val));
         }
         return 0;
     }
@@ -410,9 +426,9 @@ namespace tempest
 
     auto json_value::contains(string_view key) const noexcept -> bool
     {
-        if ((_val != nullptr) && yyjson_is_obj(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_obj(cast_val(_val)))
         {
-            return yyjson_obj_getn(unconst(_val), key.data(), key.size()) != nullptr;
+            return yyjson_obj_getn(cast_val(_val), key.data(), key.size()) != nullptr;
         }
         return false;
     }
@@ -425,14 +441,14 @@ namespace tempest
     {
         if (val.is_object())
         {
-            return json_object{val.raw()};
+            return json_object{val._val};
         }
         return unexpected(json_error::type_mismatch);
     }
 
     auto json_object::size() const noexcept -> size_t
     {
-        return (_val != nullptr) ? yyjson_obj_size(unconst(_val)) : 0;
+        return (_val != nullptr) ? yyjson_obj_size(cast_val(_val)) : 0;
     }
 
     auto json_object::empty() const noexcept -> bool
@@ -446,33 +462,33 @@ namespace tempest
         {
             return false;
         }
-        return yyjson_obj_getn(unconst(_val), key.data(), key.size()) != nullptr;
+        return yyjson_obj_getn(cast_val(_val), key.data(), key.size()) != nullptr;
     }
 
     auto json_object::operator[](string_view key) const noexcept -> json_value
     {
         if (_val != nullptr)
         {
-            return json_value{yyjson_obj_getn(unconst(_val), key.data(), key.size())};
+            return json_value{yyjson_obj_getn(cast_val(_val), key.data(), key.size())};
         }
         return json_value{nullptr};
     }
 
     auto json_object::begin() const noexcept -> json_object_iterator
     {
-        if ((_val != nullptr) && yyjson_is_obj(unconst(_val)) && unsafe_yyjson_get_len(unconst(_val)) > 0)
+        if ((_val != nullptr) && yyjson_is_obj(cast_val(_val)) && unsafe_yyjson_get_len(cast_val(_val)) > 0)
         {
-            return json_object_iterator{unsafe_yyjson_get_first(unconst(_val)), 0,
-                                        unsafe_yyjson_get_len(unconst(_val))};
+            return json_object_iterator{unsafe_yyjson_get_first(cast_val(_val)), 0,
+                                        unsafe_yyjson_get_len(cast_val(_val))};
         }
         return json_object_iterator{nullptr, 0, 0};
     }
 
     auto json_object::end() const noexcept -> json_object_iterator
     {
-        if ((_val != nullptr) && yyjson_is_obj(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_obj(cast_val(_val)))
         {
-            const auto len = unsafe_yyjson_get_len(unconst(_val));
+            const auto len = unsafe_yyjson_get_len(cast_val(_val));
             return json_object_iterator{nullptr, len, len};
         }
         return json_object_iterator{nullptr, 0, 0};
@@ -486,14 +502,14 @@ namespace tempest
     {
         if (val.is_array())
         {
-            return json_array{val.raw()};
+            return json_array{val._val};
         }
         return unexpected(json_error::type_mismatch);
     }
 
     auto json_array::size() const noexcept -> size_t
     {
-        return (_val != nullptr) ? yyjson_arr_size(unconst(_val)) : 0;
+        return (_val != nullptr) ? yyjson_arr_size(cast_val(_val)) : 0;
     }
 
     auto json_array::empty() const noexcept -> bool
@@ -505,25 +521,26 @@ namespace tempest
     {
         if (_val != nullptr)
         {
-            return json_value{yyjson_arr_get(unconst(_val), index)};
+            return json_value{yyjson_arr_get(cast_val(_val), index)};
         }
         return json_value{nullptr};
     }
 
     auto json_array::begin() const noexcept -> json_array_iterator
     {
-        if ((_val != nullptr) && yyjson_is_arr(unconst(_val)) && unsafe_yyjson_get_len(unconst(_val)) > 0)
+        if ((_val != nullptr) && yyjson_is_arr(cast_val(_val)) && unsafe_yyjson_get_len(cast_val(_val)) > 0)
         {
-            return json_array_iterator{unsafe_yyjson_get_first(unconst(_val)), 0, unsafe_yyjson_get_len(unconst(_val))};
+            return json_array_iterator{unsafe_yyjson_get_first(cast_val(_val)), 0,
+                                       unsafe_yyjson_get_len(cast_val(_val))};
         }
         return json_array_iterator{nullptr, 0, 0};
     }
 
     auto json_array::end() const noexcept -> json_array_iterator
     {
-        if ((_val != nullptr) && yyjson_is_arr(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_arr(cast_val(_val)))
         {
-            const auto len = unsafe_yyjson_get_len(unconst(_val));
+            const auto len = unsafe_yyjson_get_len(cast_val(_val));
             return json_array_iterator{nullptr, len, len};
         }
         return json_array_iterator{nullptr, 0, 0};
@@ -537,7 +554,7 @@ namespace tempest
     {
         if (_doc != nullptr)
         {
-            yyjson_doc_free(_doc);
+            yyjson_doc_free(cast_doc(_doc));
             _doc = nullptr;
         }
     }
@@ -553,7 +570,7 @@ namespace tempest
         {
             if (_doc != nullptr)
             {
-                yyjson_doc_free(_doc);
+                yyjson_doc_free(cast_doc(_doc));
             }
             _doc = other._doc;
             other._doc = nullptr;
@@ -604,8 +621,514 @@ namespace tempest
     {
         if (_doc != nullptr)
         {
-            return json_value{yyjson_doc_get_root(_doc)};
+            return json_value{yyjson_doc_get_root(cast_doc(_doc))};
         }
         return json_value{nullptr};
+    }
+
+    //==============================================================================
+    // json_object_mut
+    //==============================================================================
+
+    void json_object_mut::set(string_view key, bool val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = yyjson_mut_bool(doc, val);
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
+    void json_object_mut::set(string_view key, int32_t val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = yyjson_mut_int(doc, val);
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
+    void json_object_mut::set(string_view key, uint32_t val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = yyjson_mut_uint(doc, val);
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
+    void json_object_mut::set(string_view key, int64_t val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = yyjson_mut_int(doc, val);
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
+    void json_object_mut::set(string_view key, uint64_t val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = yyjson_mut_uint(doc, val);
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
+    void json_object_mut::set(string_view key, float val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = yyjson_mut_float(doc, val);
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
+    void json_object_mut::set(string_view key, double val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = yyjson_mut_double(doc, val);
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
+    void json_object_mut::set(string_view key, string_view val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = yyjson_mut_strncpy(doc, val.data(), val.size());
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
+    void json_object_mut::set(string_view key, json_object_mut val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = to_mut_val(val._val);
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
+    void json_object_mut::set(string_view key, json_array_mut val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = to_mut_val(val._val);
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
+    void json_object_mut::set_null(string_view key)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = yyjson_mut_null(doc);
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
+    auto json_object_mut::create_child_object(string_view key) -> json_object_mut
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return json_object_mut{};
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* child = yyjson_mut_obj(doc);
+        yyjson_mut_obj_add(obj, k, child);
+        return json_object_mut{_doc, child};
+    }
+
+    auto json_object_mut::create_child_array(string_view key) -> json_array_mut
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return json_array_mut{};
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* child = yyjson_mut_arr(doc);
+        yyjson_mut_obj_add(obj, k, child);
+        return json_array_mut{_doc, child};
+    }
+
+    //==============================================================================
+    // json_array_mut
+    //==============================================================================
+
+    void json_array_mut::push_back(bool val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* v = yyjson_mut_bool(doc, val);
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    void json_array_mut::push_back(int32_t val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* v = yyjson_mut_int(doc, val);
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    void json_array_mut::push_back(uint32_t val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* v = yyjson_mut_uint(doc, val);
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    void json_array_mut::push_back(int64_t val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* v = yyjson_mut_int(doc, val);
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    void json_array_mut::push_back(uint64_t val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* v = yyjson_mut_uint(doc, val);
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    void json_array_mut::push_back(float val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* v = yyjson_mut_float(doc, val);
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    void json_array_mut::push_back(double val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* v = yyjson_mut_double(doc, val);
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    void json_array_mut::push_back(string_view val)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* v = yyjson_mut_strncpy(doc, val.data(), val.size());
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    void json_array_mut::push_back(json_object_mut val)
+    {
+        if (_val == nullptr)
+        {
+            return;
+        }
+        auto* arr = to_mut_val(_val);
+        auto* v = to_mut_val(val._val);
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    void json_array_mut::push_back(json_array_mut val)
+    {
+        if (_val == nullptr)
+        {
+            return;
+        }
+        auto* arr = to_mut_val(_val);
+        auto* v = to_mut_val(val._val);
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    void json_array_mut::push_back_null()
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* v = yyjson_mut_null(doc);
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    auto json_array_mut::create_child_object() -> json_object_mut
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return json_object_mut{};
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* child = yyjson_mut_obj(doc);
+        yyjson_mut_arr_append(arr, child);
+        return json_object_mut{_doc, child};
+    }
+
+    auto json_array_mut::create_child_array() -> json_array_mut
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return json_array_mut{};
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* child = yyjson_mut_arr(doc);
+        yyjson_mut_arr_append(arr, child);
+        return json_array_mut{_doc, child};
+    }
+
+    //==============================================================================
+    // json_writer::impl
+    //==============================================================================
+
+    struct json_writer::impl
+    {
+        system_allocator default_alloc;
+        abstract_allocator* alloc{nullptr};
+        yyjson_alc alc{};
+        yyjson_mut_doc* doc{nullptr};
+
+        impl() : alloc{&default_alloc}
+        {
+            init_doc();
+        }
+
+        explicit impl(abstract_allocator& custom_alloc) : alloc{&custom_alloc}
+        {
+            init_doc();
+        }
+
+        ~impl()
+        {
+            if (doc != nullptr)
+            {
+                yyjson_mut_doc_free(doc);
+                doc = nullptr;
+            }
+        }
+
+        impl(const impl&) = delete;
+        auto operator=(const impl&) -> impl& = delete;
+        impl(impl&&) = delete;
+        auto operator=(impl&&) -> impl& = delete;
+
+        void init_doc()
+        {
+            alc = yyjson_alc{
+                .malloc = yyjson_malloc_cb,
+                .realloc = yyjson_realloc_cb,
+                .free = yyjson_free_cb,
+                .ctx = alloc,
+            };
+            doc = yyjson_mut_doc_new(&alc);
+        }
+
+        auto create_object() -> json_object_mut
+        {
+            auto* obj = yyjson_mut_obj(doc);
+            return json_object_mut{doc, obj};
+        }
+
+        auto create_array() -> json_array_mut
+        {
+            auto* arr = yyjson_mut_arr(doc);
+            return json_array_mut{doc, arr};
+        }
+
+        void set_root(json_object_mut obj)
+        {
+            yyjson_mut_doc_set_root(doc, to_mut_val(obj._val));
+        }
+
+        void set_root(json_array_mut arr)
+        {
+            yyjson_mut_doc_set_root(doc, to_mut_val(arr._val));
+        }
+
+        auto to_string(json_format fmt) const -> string
+        {
+            if (doc == nullptr)
+            {
+                return string{};
+            }
+
+            const auto flags = (fmt == json_format::pretty) ? yyjson_write_flag{YYJSON_WRITE_PRETTY_TWO_SPACES}
+                                                            : yyjson_write_flag{YYJSON_WRITE_NOFLAG};
+
+            auto len = size_t{0};
+            auto err = yyjson_write_err{};
+            auto* buf = yyjson_mut_write_opts(doc, flags, &alc, &len, &err);
+            if (buf == nullptr)
+            {
+                return string{};
+            }
+
+            auto result = string{buf, len};
+            alc.free(alc.ctx, buf);
+            return result;
+        }
+
+        auto to_bytes(json_format fmt) const -> vector<byte>
+        {
+            if (doc == nullptr)
+            {
+                return vector<byte>{};
+            }
+
+            const auto flags = (fmt == json_format::pretty) ? yyjson_write_flag{YYJSON_WRITE_PRETTY_TWO_SPACES}
+                                                            : yyjson_write_flag{YYJSON_WRITE_NOFLAG};
+
+            auto len = size_t{0};
+            auto err = yyjson_write_err{};
+            auto* buf = yyjson_mut_write_opts(doc, flags, &alc, &len, &err);
+            if (buf == nullptr)
+            {
+                return vector<byte>{};
+            }
+
+            auto result = vector<byte>{};
+            result.resize(len);
+            tempest::memcpy(result.data(), buf, len);
+            alc.free(alc.ctx, buf);
+            return result;
+        }
+    };
+
+    //==============================================================================
+    // json_writer
+    //==============================================================================
+
+    json_writer::json_writer() : _impl{make_unique<impl>()}
+    {
+    }
+
+    json_writer::json_writer(abstract_allocator& alloc) : _impl{make_unique<impl>(alloc)}
+    {
+    }
+
+    json_writer::~json_writer() = default;
+
+    json_writer::json_writer(json_writer&& other) noexcept = default;
+
+    auto json_writer::operator=(json_writer&& other) noexcept -> json_writer& = default;
+
+    auto json_writer::create_object() -> json_object_mut
+    {
+        return _impl ? _impl->create_object() : json_object_mut{};
+    }
+
+    auto json_writer::create_array() -> json_array_mut
+    {
+        return _impl ? _impl->create_array() : json_array_mut{};
+    }
+
+    void json_writer::set_root(json_object_mut obj)
+    {
+        if (_impl)
+        {
+            _impl->set_root(obj);
+        }
+    }
+
+    void json_writer::set_root(json_array_mut arr)
+    {
+        if (_impl)
+        {
+            _impl->set_root(arr);
+        }
+    }
+
+    auto json_writer::to_string(json_format fmt) const -> string
+    {
+        return _impl ? _impl->to_string(fmt) : string{};
+    }
+
+    auto json_writer::to_bytes(json_format fmt) const -> vector<byte>
+    {
+        return _impl ? _impl->to_bytes(fmt) : vector<byte>{};
     }
 } // namespace tempest

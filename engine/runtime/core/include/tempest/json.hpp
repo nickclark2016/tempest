@@ -6,10 +6,9 @@
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/span.hpp>
+#include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
-
-struct yyjson_doc;
-struct yyjson_val;
+#include <tempest/vector.hpp>
 
 namespace tempest
 {
@@ -21,18 +20,27 @@ namespace tempest
         parse_error,
     };
 
+    enum class json_format : uint8_t
+    {
+        compact,
+        pretty,
+    };
+
     class json_value;
     class json_object;
     class json_array;
     class json_object_iterator;
     class json_array_iterator;
     class json_document;
+    class json_object_mut;
+    class json_array_mut;
+    class json_writer;
 
     class TEMPEST_API json_value
     {
       public:
         constexpr json_value() noexcept = default;
-        constexpr explicit json_value(const yyjson_val* val) noexcept : _val{val}
+        constexpr explicit json_value(const void* val) noexcept : _val{val}
         {
         }
         json_value(const json_object& obj) noexcept;
@@ -96,13 +104,12 @@ namespace tempest
         [[nodiscard]] auto empty() const noexcept -> bool;
         [[nodiscard]] auto contains(string_view key) const noexcept -> bool;
 
-        [[nodiscard]] auto raw() const noexcept -> const yyjson_val*
-        {
-            return _val;
-        }
-
       private:
-        const yyjson_val* _val{nullptr};
+        friend class json_object;
+        friend class json_array;
+        friend class json_document;
+
+        const void* _val{nullptr};
     };
 
     struct json_member
@@ -120,7 +127,7 @@ namespace tempest
         using reference = json_member;
 
         constexpr json_object_iterator() noexcept = default;
-        json_object_iterator(const yyjson_val* cur, size_t idx, size_t max) noexcept;
+        json_object_iterator(const void* cur, size_t idx, size_t max) noexcept;
 
         auto operator*() const noexcept -> json_member;
         auto operator++() noexcept -> json_object_iterator&;
@@ -137,7 +144,7 @@ namespace tempest
         }
 
       private:
-        const yyjson_val* _cur{nullptr};
+        const void* _cur{nullptr};
         size_t _idx{0};
         size_t _max{0};
     };
@@ -151,7 +158,7 @@ namespace tempest
         using reference = json_value;
 
         constexpr json_array_iterator() noexcept = default;
-        json_array_iterator(const yyjson_val* cur, size_t idx, size_t max) noexcept;
+        json_array_iterator(const void* cur, size_t idx, size_t max) noexcept;
 
         auto operator*() const noexcept -> json_value;
         auto operator++() noexcept -> json_array_iterator&;
@@ -168,7 +175,7 @@ namespace tempest
         }
 
       private:
-        const yyjson_val* _cur{nullptr};
+        const void* _cur{nullptr};
         size_t _idx{0};
         size_t _max{0};
     };
@@ -177,7 +184,7 @@ namespace tempest
     {
       public:
         constexpr json_object() noexcept = default;
-        constexpr explicit json_object(const yyjson_val* val) noexcept : _val{val}
+        constexpr explicit json_object(const void* val) noexcept : _val{val}
         {
         }
 
@@ -209,20 +216,17 @@ namespace tempest
             return end();
         }
 
-        [[nodiscard]] auto raw() const noexcept -> const yyjson_val*
-        {
-            return _val;
-        }
-
       private:
-        const yyjson_val* _val{nullptr};
+        friend class json_value;
+
+        const void* _val{nullptr};
     };
 
     class TEMPEST_API json_array
     {
       public:
         constexpr json_array() noexcept = default;
-        constexpr explicit json_array(const yyjson_val* val) noexcept : _val{val}
+        constexpr explicit json_array(const void* val) noexcept : _val{val}
         {
         }
 
@@ -253,20 +257,17 @@ namespace tempest
             return end();
         }
 
-        [[nodiscard]] auto raw() const noexcept -> const yyjson_val*
-        {
-            return _val;
-        }
-
       private:
-        const yyjson_val* _val{nullptr};
+        friend class json_value;
+
+        const void* _val{nullptr};
     };
 
-    inline json_value::json_value(const json_object& obj) noexcept : _val{obj.raw()}
+    inline json_value::json_value(const json_object& obj) noexcept : _val{obj._val}
     {
     }
 
-    inline json_value::json_value(const json_array& arr) noexcept : _val{arr.raw()}
+    inline json_value::json_value(const json_array& arr) noexcept : _val{arr._val}
     {
     }
 
@@ -274,7 +275,7 @@ namespace tempest
     {
       public:
         json_document() noexcept = default;
-        explicit json_document(yyjson_doc* doc) noexcept : _doc{doc}
+        explicit json_document(void* doc) noexcept : _doc{doc}
         {
         }
         ~json_document();
@@ -301,13 +302,131 @@ namespace tempest
             return is_valid();
         }
 
-        [[nodiscard]] auto raw() const noexcept -> const yyjson_doc*
+      private:
+        void* _doc{nullptr};
+    };
+
+    class TEMPEST_API json_object_mut
+    {
+      public:
+        constexpr json_object_mut() noexcept = default;
+        constexpr json_object_mut(void* doc, void* val) noexcept : _doc{doc}, _val{val}
         {
-            return _doc;
         }
 
+        [[nodiscard]] auto is_valid() const noexcept -> bool
+        {
+            return _val != nullptr;
+        }
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return is_valid();
+        }
+
+        void set(string_view key, bool val);
+        void set(string_view key, int32_t val);
+        void set(string_view key, uint32_t val);
+        void set(string_view key, int64_t val);
+        void set(string_view key, uint64_t val);
+        void set(string_view key, float val);
+        void set(string_view key, double val);
+        void set(string_view key, string_view val);
+        void set(string_view key, const char* val)
+        {
+            set(key, string_view{val});
+        }
+        void set(string_view key, const string& val)
+        {
+            set(key, string_view{val.data(), val.size()});
+        }
+        void set(string_view key, json_object_mut val);
+        void set(string_view key, json_array_mut val);
+        void set_null(string_view key);
+        auto create_child_object(string_view key) -> json_object_mut;
+        auto create_child_array(string_view key) -> json_array_mut;
+
       private:
-        yyjson_doc* _doc{nullptr};
+        friend class json_writer;
+        friend class json_array_mut;
+
+        void* _doc{nullptr};
+        void* _val{nullptr};
+    };
+
+    class TEMPEST_API json_array_mut
+    {
+      public:
+        constexpr json_array_mut() noexcept = default;
+        constexpr json_array_mut(void* doc, void* val) noexcept : _doc{doc}, _val{val}
+        {
+        }
+
+        [[nodiscard]] auto is_valid() const noexcept -> bool
+        {
+            return _val != nullptr;
+        }
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return is_valid();
+        }
+
+        void push_back(bool val);
+        void push_back(int32_t val);
+        void push_back(uint32_t val);
+        void push_back(int64_t val);
+        void push_back(uint64_t val);
+        void push_back(float val);
+        void push_back(double val);
+        void push_back(string_view val);
+        void push_back(const char* val)
+        {
+            push_back(string_view{val});
+        }
+        void push_back(const string& val)
+        {
+            push_back(string_view{val.data(), val.size()});
+        }
+        void push_back(json_object_mut val);
+        void push_back(json_array_mut val);
+        void push_back_null();
+        auto create_child_object() -> json_object_mut;
+        auto create_child_array() -> json_array_mut;
+
+      private:
+        friend class json_writer;
+        friend class json_object_mut;
+
+        void* _doc{nullptr};
+        void* _val{nullptr};
+    };
+
+    class TEMPEST_API json_writer
+    {
+      public:
+        struct impl;
+
+        json_writer();
+        explicit json_writer(abstract_allocator& alloc);
+        ~json_writer();
+
+        json_writer(const json_writer&) = delete;
+        auto operator=(const json_writer&) -> json_writer& = delete;
+
+        json_writer(json_writer&& other) noexcept;
+        auto operator=(json_writer&& other) noexcept -> json_writer&;
+
+        auto create_object() -> json_object_mut;
+        auto create_array() -> json_array_mut;
+        void set_root(json_object_mut obj);
+        void set_root(json_array_mut arr);
+
+        [[nodiscard]] auto to_string(json_format fmt = json_format::compact) const -> string;
+        [[nodiscard]] auto to_bytes(json_format fmt = json_format::compact) const -> vector<byte>;
+
+      private:
+        unique_ptr<impl> _impl;
     };
 
     // Template specializations for json_value::as<T>()
@@ -394,6 +513,22 @@ namespace tempest
     {
         return as_array();
     }
+
+    namespace core
+    {
+        using json_error = tempest::json_error;
+        using json_format = tempest::json_format;
+        using json_value = tempest::json_value;
+        using json_member = tempest::json_member;
+        using json_object_iterator = tempest::json_object_iterator;
+        using json_array_iterator = tempest::json_array_iterator;
+        using json_object = tempest::json_object;
+        using json_array = tempest::json_array;
+        using json_document = tempest::json_document;
+        using json_object_mut = tempest::json_object_mut;
+        using json_array_mut = tempest::json_array_mut;
+        using json_writer = tempest::json_writer;
+    } // namespace core
 } // namespace tempest
 
 #endif // tempest_core_json_hpp
