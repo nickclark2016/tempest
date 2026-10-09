@@ -1,4 +1,5 @@
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <memory>
 #include <thread>
@@ -162,7 +163,13 @@ namespace jolt::shim
 
         tempest_jolt_job_system(const tempest_jolt_job_system&) = delete;
         tempest_jolt_job_system(tempest_jolt_job_system&&) noexcept = delete;
-        ~tempest_jolt_job_system() override = default;
+        ~tempest_jolt_job_system() override
+        {
+            while (_active_jobs.load(std::memory_order_acquire) > 0)
+            {
+                std::this_thread::yield();
+            }
+        }
 
         auto operator=(const tempest_jolt_job_system&) -> tempest_jolt_job_system& = delete;
         auto operator=(tempest_jolt_job_system&&) noexcept -> tempest_jolt_job_system& = delete;
@@ -175,6 +182,7 @@ namespace jolt::shim
         [[nodiscard]] auto CreateJob(const char* inName, JPH::ColorArg inColor, const JobFunction& inJobFunction,
                                      uint32_t inNumDependencies = 0) -> JobHandle override
         {
+            _active_jobs.fetch_add(1, std::memory_order_relaxed);
             auto index = JPH::FixedSizeFreeList<Job>::cInvalidObjectIndex;
             for (;;)
             {
@@ -198,6 +206,7 @@ namespace jolt::shim
         auto FreeJob(Job* inJob) -> void override
         {
             _jobs.DestructObject(inJob);
+            _active_jobs.fetch_sub(1, std::memory_order_release);
         }
 
       protected:
@@ -225,6 +234,7 @@ namespace jolt::shim
         job_dispatch_fn _dispatch = nullptr;
         void* _dispatch_user_data = nullptr;
         int _max_concurrency = static_cast<int>(default_max_concurrency);
+        std::atomic<uint32_t> _active_jobs{0};
         JPH::FixedSizeFreeList<Job> _jobs;
     };
 
