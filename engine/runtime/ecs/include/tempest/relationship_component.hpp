@@ -17,6 +17,11 @@ namespace tempest::ecs
     struct is_duplicatable<relationship_component<E>> : false_type
     {
     };
+
+    template <typename E>
+    struct is_serializable<relationship_component<E>> : false_type
+    {
+    };
 } // namespace tempest::ecs
 
 #endif // tempest_ecs_relationship_component_hpp

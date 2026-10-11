@@ -33,6 +33,11 @@ namespace tempest::ecs
     };
 
     static_assert(component<transform_history_component>);
+
+    template <>
+    struct is_serializable<transform_history_component> : false_type
+    {
+    };
 } // namespace tempest::ecs
 
 #endif // tempest_ecs_transform_history_component_hpp

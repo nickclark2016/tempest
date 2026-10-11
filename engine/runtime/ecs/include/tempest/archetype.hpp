@@ -36,15 +36,16 @@ namespace tempest::ecs
         requires component<T>
     inline auto create_archetype_type_info() -> basic_archetype_type_info
     {
-        string_view name;
-        if constexpr (core::is_normalized_type_name_valid_v<remove_cvref_t<T>>)
-        {
-            name = core::normalized_type_name<remove_cvref_t<T>>();
-        }
-        else
-        {
-            name = core::get_type_name<remove_cvref_t<T>>();
-        }
+        const auto name = []() {
+            if constexpr (core::is_normalized_type_name_valid_v<remove_cvref_t<T>>)
+            {
+                return core::normalized_type_name<remove_cvref_t<T>>();
+            }
+            else
+            {
+                return core::get_type_name<remove_cvref_t<T>>();
+            }
+        }();
 
         return basic_archetype_type_info{
             .name = name,
@@ -52,6 +53,8 @@ namespace tempest::ecs
             .alignment = static_cast<uint16_t>(alignof(T)),
             .index = 0,
             .should_duplicate = is_duplicatable_v<T>,
+            .descriptor = nullopt,
+            .is_serializable = is_serializable_v<T>,
         };
     }
 
@@ -945,6 +948,11 @@ namespace tempest::ecs
 
     template <>
     struct is_duplicatable<self_component> : false_type
+    {
+    };
+
+    template <>
+    struct is_serializable<self_component> : false_type
     {
     };
 

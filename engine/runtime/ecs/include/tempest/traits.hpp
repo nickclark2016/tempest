@@ -211,6 +211,14 @@ namespace tempest::ecs
 
     template <typename T>
     inline constexpr bool is_duplicatable_v = is_duplicatable<T>::value;
+
+    template <typename T>
+    struct is_serializable : true_type
+    {
+    };
+
+    template <typename T>
+    inline constexpr bool is_serializable_v = is_serializable<T>::value;
 } // namespace tempest::ecs
 
 namespace tempest

@@ -9,6 +9,7 @@
 #include <tempest/int.hpp>
 #include <tempest/meta.hpp>
 #include <tempest/optional.hpp>
+#include <tempest/reflection.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/traits.hpp>
@@ -38,11 +39,19 @@ namespace tempest::ecs
 
     struct TEMPEST_API component_type_info
     {
+        static constexpr uint16_t default_size = 0;
+        static constexpr uint16_t default_alignment = 0;
+        static constexpr uint32_t default_index = 0;
+        static constexpr bool default_should_duplicate = true;
+        static constexpr bool default_is_serializable = true;
+
         string_view name;
-        uint16_t size = 0;
-        uint16_t alignment = 0;
-        uint32_t index = 0;
-        bool should_duplicate = true;
+        uint16_t size = default_size;
+        uint16_t alignment = default_alignment;
+        uint32_t index = default_index;
+        bool should_duplicate = default_should_duplicate;
+        optional<type_descriptor> descriptor;
+        bool is_serializable = default_is_serializable;
     };
 
     class TEMPEST_API component_type_registry
@@ -62,15 +71,16 @@ namespace tempest::ecs
         auto register_type() -> uint32_t
         {
             using component_type = remove_cvref_t<T>;
-            string_view name;
-            if constexpr (core::is_normalized_type_name_valid_v<component_type>)
-            {
-                name = core::normalized_type_name<component_type>();
-            }
-            else
-            {
-                name = core::get_type_name<component_type>();
-            }
+            const auto name = []() {
+                if constexpr (core::is_normalized_type_name_valid_v<component_type>)
+                {
+                    return core::normalized_type_name<component_type>();
+                }
+                else
+                {
+                    return core::get_type_name<component_type>();
+                }
+            }();
 
             const auto resolved = resolve_alias(name);
             const auto existing = type_index(resolved);
@@ -82,22 +92,44 @@ namespace tempest::ecs
             TEMPEST_ASSERT(_count < max_component_types);
 
             const auto idx = static_cast<uint32_t>(_count);
-            bool should_dup = true;
+            auto should_dup = true;
             if constexpr (requires { is_duplicatable_v<component_type>; })
             {
                 should_dup = is_duplicatable_v<component_type>;
             }
 
-            const auto info = component_type_info{
+            auto serializable = true;
+            if constexpr (requires { is_serializable_v<component_type>; })
+            {
+                serializable = is_serializable_v<component_type>;
+            }
+
+            auto desc = optional<type_descriptor>{nullopt};
+            if constexpr (reflected_component<component_type>)
+            {
+                auto builder = type_builder<component_type>{resolved};
+                reflect<component_type>::describe(builder);
+                desc = builder.build();
+            }
+
+            auto info = component_type_info{
                 .name = resolved,
                 .size = static_cast<uint16_t>(sizeof(component_type)),
                 .alignment = static_cast<uint16_t>(alignof(component_type)),
                 .index = idx,
                 .should_duplicate = should_dup,
+                .descriptor = tempest::move(desc),
+                .is_serializable = serializable,
             };
 
-            _register_type_info(info);
+            _register_type_info(tempest::move(info));
             return idx;
+        }
+
+        template <reflected_component T>
+        auto register_reflected() -> uint32_t
+        {
+            return register_type<T>();
         }
 
         template <typename T>
@@ -110,21 +142,24 @@ namespace tempest::ecs
         [[nodiscard]] auto type_index() const -> optional<uint32_t>
         {
             using component_type = remove_cvref_t<T>;
-            string_view name;
-            if constexpr (core::is_normalized_type_name_valid_v<component_type>)
-            {
-                name = core::normalized_type_name<component_type>();
-            }
-            else
-            {
-                name = core::get_type_name<component_type>();
-            }
+            const auto name = []() {
+                if constexpr (core::is_normalized_type_name_valid_v<component_type>)
+                {
+                    return core::normalized_type_name<component_type>();
+                }
+                else
+                {
+                    return core::get_type_name<component_type>();
+                }
+            }();
             return type_index(name);
         }
 
         [[nodiscard]] auto type_index(string_view name) const -> optional<uint32_t>;
         [[nodiscard]] auto type_info(uint32_t index) const -> const component_type_info&;
         [[nodiscard]] auto type_info(string_view name) const -> const component_type_info*;
+        [[nodiscard]] auto descriptor(uint32_t index) const -> const type_descriptor*;
+        [[nodiscard]] auto descriptor(string_view name) const -> const type_descriptor*;
 
         void add_alias(string_view legacy_name, string_view current_name);
         [[nodiscard]] auto resolve_alias(string_view name) const -> string_view;
@@ -163,7 +198,7 @@ namespace tempest::ecs
         }
 
       private:
-        void _register_type_info(const component_type_info& info);
+        void _register_type_info(component_type_info info);
 
         array<component_type_info, max_component_types> _types{};
         flat_unordered_map<string, uint32_t> _name_to_index;

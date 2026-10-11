@@ -3,6 +3,7 @@
 
 #include <tempest/api.hpp>
 #include <tempest/mat4.hpp>
+#include <tempest/reflection.hpp>
 #include <tempest/traits.hpp>
 #include <tempest/transformations.hpp>
 #include <tempest/type_traits.hpp>
@@ -12,6 +13,9 @@ namespace tempest::ecs
 {
     class TEMPEST_API transform_component
     {
+        friend struct reflect<transform_component>;
+        friend class type_builder<transform_component>;
+
       public:
         [[nodiscard]] auto position() const noexcept -> math::vec3<float>
         {
@@ -82,6 +86,21 @@ namespace tempest::ecs
     };
 
     static_assert(component<transform_component>);
+
+    template <>
+    struct reflect<transform_component>
+    {
+        static void describe(type_builder<transform_component>& builder)
+        {
+            builder.version(1)
+                .field<&transform_component::_position>("position")
+                .field<&transform_component::_rotation>("rotation")
+                .field<&transform_component::_scale>("scale")
+                .post_load([](transform_component& transform) {
+                    transform._build_transform();
+                });
+        }
+    };
 } // namespace tempest::ecs
 
 #endif // tempest_ecs_transform_component_hpp
