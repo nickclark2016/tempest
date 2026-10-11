@@ -249,3 +249,120 @@ TEST(component_type_registry_tests, shared_type_registry_with_archetypes)
     ASSERT_TRUE((registry_b.has<component_beta, component_gamma>(entity_b)));
     ASSERT_EQ(registry_b.get<component_gamma>(entity_b).identifier, 999ULL);
 }
+
+// ============================================================================
+// Type Manifest & Schema Hash Tests
+// ============================================================================
+
+namespace
+{
+    struct reflected_manifest_component
+    {
+        float second_field{0.0F};
+        int32_t first_field{0};
+    };
+
+    struct non_serializable_manifest_component
+    {
+        uint32_t tag{0};
+    };
+} // namespace
+
+namespace tempest::ecs
+{
+    template <>
+    struct is_serializable<non_serializable_manifest_component> : false_type
+    {
+    };
+
+    template <>
+    struct reflect<reflected_manifest_component>
+    {
+        static void describe(type_builder<reflected_manifest_component>& builder)
+        {
+            builder.version(3)
+                .field<&reflected_manifest_component::first_field>("first_field")
+                .field<&reflected_manifest_component::second_field>("second_field");
+        }
+    };
+} // namespace tempest::ecs
+
+/// @brief Verifies that export_manifest sorts types alphabetically by name and sorts
+/// fields by offset then name deterministically.
+TEST(component_type_registry_tests, export_manifest_deterministic_sorting)
+{
+    // 1. Setup: create two registries registering types in opposite orders.
+    auto registry_a = tempest::ecs::component_type_registry{};
+    auto registry_b = tempest::ecs::component_type_registry{};
+
+    registry_a.register_type<component_gamma>();
+    registry_a.register_type<reflected_manifest_component>();
+    registry_a.register_type<component_alpha>();
+
+    registry_b.register_type<component_alpha>();
+    registry_b.register_type<component_gamma>();
+    registry_b.register_type<reflected_manifest_component>();
+
+    // 2. Act: export manifests.
+    const auto manifest_a = registry_a.export_manifest();
+    const auto manifest_b = registry_b.export_manifest();
+
+    // 3. Assert: manifests match identically in size, schema hash, and entry ordering.
+    ASSERT_EQ(manifest_a.types.size(), 3U);
+    ASSERT_EQ(manifest_b.types.size(), 3U);
+    EXPECT_EQ(manifest_a.schema_hash, manifest_b.schema_hash);
+    EXPECT_EQ(manifest_a.to_json(), manifest_b.to_json());
+
+    // 4. Assert: reflected component fields are sorted by offset (second_field at 0, first_field at 4).
+    const auto* reflected_entry = static_cast<const tempest::ecs::type_manifest_entry*>(nullptr);
+    for (const auto& entry : manifest_a.types)
+    {
+        if (entry.version == 3)
+        {
+            reflected_entry = &entry;
+            break;
+        }
+    }
+    ASSERT_NE(reflected_entry, nullptr);
+    ASSERT_EQ(reflected_entry->fields.size(), 2U);
+    EXPECT_EQ(reflected_entry->fields[0].name, "second_field");
+    EXPECT_EQ(reflected_entry->fields[0].offset, 0U);
+    EXPECT_EQ(reflected_entry->fields[1].name, "first_field");
+    EXPECT_EQ(reflected_entry->fields[1].offset, 4U);
+}
+
+/// @brief Verifies that registering non-serializable components does not alter schema_hash
+/// while still including them in the full exported manifest.
+TEST(component_type_registry_tests, schema_hash_ignores_non_serializable_types)
+{
+    // 1. Setup: registry with only serializable components.
+    auto base_registry = tempest::ecs::component_type_registry{};
+    base_registry.register_type<component_alpha>();
+    base_registry.register_type<component_beta>();
+
+    const auto base_hash = base_registry.schema_hash();
+    ASSERT_NE(base_hash, 0ULL);
+
+    // 2. Act: add non-serializable component.
+    base_registry.register_type<non_serializable_manifest_component>();
+
+    // 3. Assert: schema_hash remains identical.
+    EXPECT_EQ(base_registry.schema_hash(), base_hash);
+
+    // 4. Assert: exported manifest contains the non-serializable entry marked correctly.
+    const auto manifest = base_registry.export_manifest();
+    EXPECT_EQ(manifest.schema_hash, base_hash);
+    ASSERT_EQ(manifest.types.size(), 3U);
+
+    auto found_non_serializable = false;
+    for (const auto& entry : manifest.types)
+    {
+        if (!entry.is_serializable)
+        {
+            found_non_serializable = true;
+            EXPECT_TRUE(entry.fields.empty());
+        }
+    }
+    EXPECT_TRUE(found_non_serializable);
+}
+

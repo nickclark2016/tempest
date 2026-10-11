@@ -1,0 +1,123 @@
+{
+  "schema_hash": "0x63a5d147851dd547",
+  "types": [
+    {
+      "name": "tempest::core::material_component",
+      "size": 16,
+      "alignment": 1,
+      "version": 1,
+      "is_serializable": true,
+      "fields": []
+    },
+    {
+      "name": "tempest::core::mesh_component",
+      "size": 16,
+      "alignment": 1,
+      "version": 1,
+      "is_serializable": true,
+      "fields": []
+    },
+    {
+      "name": "tempest::ecs::relationship_component<tempest::ecs::entity>",
+      "size": 24,
+      "alignment": 8,
+      "version": 1,
+      "is_serializable": false,
+      "fields": []
+    },
+    {
+      "name": "tempest::ecs::self_component",
+      "size": 8,
+      "alignment": 8,
+      "version": 1,
+      "is_serializable": false,
+      "fields": []
+    },
+    {
+      "name": "tempest::ecs::transform_component",
+      "size": 112,
+      "alignment": 16,
+      "version": 1,
+      "is_serializable": true,
+      "fields": [
+        {
+          "name": "position",
+          "kind": "vec3",
+          "flags": 0,
+          "offset": 0,
+          "size": 16
+        },
+        {
+          "name": "rotation",
+          "kind": "quat",
+          "flags": 0,
+          "offset": 16,
+          "size": 16
+        },
+        {
+          "name": "scale",
+          "kind": "vec3",
+          "flags": 0,
+          "offset": 32,
+          "size": 16
+        }
+      ]
+    },
+    {
+      "name": "tempest::ecs::transform_history_component",
+      "size": 96,
+      "alignment": 16,
+      "version": 1,
+      "is_serializable": false,
+      "fields": []
+    },
+    {
+      "name": "tempest::physics::character_controller_component",
+      "size": 80,
+      "alignment": 16,
+      "version": 1,
+      "is_serializable": true,
+      "fields": []
+    },
+    {
+      "name": "tempest::physics::velocity_component",
+      "size": 32,
+      "alignment": 16,
+      "version": 1,
+      "is_serializable": true,
+      "fields": []
+    },
+    {
+      "name": "tempest::render_system::camera_component",
+      "size": 36,
+      "alignment": 4,
+      "version": 1,
+      "is_serializable": true,
+      "fields": []
+    },
+    {
+      "name": "tempest::render_system::directional_light_component",
+      "size": 32,
+      "alignment": 16,
+      "version": 1,
+      "is_serializable": true,
+      "fields": []
+    },
+    {
+      "name": "tempest::render_system::point_light_component",
+      "size": 32,
+      "alignment": 16,
+      "version": 1,
+      "is_serializable": true,
+      "fields": []
+    },
+    {
+      "name": "tempest::render_system::shadow_caster_component",
+      "size": 32,
+      "alignment": 4,
+      "version": 1,
+      "is_serializable": true,
+      "fields": []
+    }
+  ]
+}

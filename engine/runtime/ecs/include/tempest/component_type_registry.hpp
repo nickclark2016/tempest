@@ -13,6 +13,7 @@
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/traits.hpp>
+#include <tempest/type_manifest.hpp>
 
 namespace tempest::ecs
 {
@@ -166,6 +167,9 @@ namespace tempest::ecs
 
         [[nodiscard]] auto size() const noexcept -> size_t;
         [[nodiscard]] auto empty() const noexcept -> bool;
+
+        [[nodiscard]] auto schema_hash() const noexcept -> uint64_t;
+        [[nodiscard]] auto export_manifest() const -> type_manifest;
 
         template <typename... Ts>
         [[nodiscard]] auto hash_mask() -> basic_archetype_types_hash<max_component_types>
