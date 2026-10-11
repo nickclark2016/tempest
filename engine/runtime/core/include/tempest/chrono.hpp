@@ -531,6 +531,24 @@ namespace tempest::chrono
         }
     };
 
+    /// @brief Broken-down calendar and clock time representation.
+    struct calendar_time
+    {
+        int32_t year{1970};
+        int32_t month{1};       ///< Month of year [1, 12]
+        int32_t day{1};         ///< Day of month [1, 31]
+        int32_t hour{0};        ///< Hour of day [0, 23]
+        int32_t minute{0};      ///< Minute of hour [0, 59]
+        int32_t second{0};      ///< Second of minute [0, 59]
+        int32_t millisecond{0}; ///< Millisecond of second [0, 999]
+    };
+
+    /// @brief Converts a system_clock time_point to local calendar/clock time.
+    [[nodiscard]] TEMPEST_API auto to_local_time(system_clock::time_point timepoint) noexcept -> calendar_time;
+
+    /// @brief Converts a system_clock time_point to UTC calendar/clock time.
+    [[nodiscard]] TEMPEST_API auto to_utc_time(system_clock::time_point timepoint) noexcept -> calendar_time;
+
     using high_resolution_clock = steady_clock;
 
 } // namespace tempest::chrono

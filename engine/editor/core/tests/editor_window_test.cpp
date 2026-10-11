@@ -506,4 +506,48 @@ namespace tempest::editor::tests
         ASSERT_NE(updated_tx, nullptr);
         EXPECT_GT(updated_tx->position().x, initial_pos.x);
     }
+
+    /// @brief Verifies that editor_engine_context defaults to normal cursor mode,
+    /// captures cursor exclusively in play mode, and restores normal cursor on pause/stop.
+    TEST(editor_window_test, cursor_mode_and_play_mode_transitions)
+    {
+        // 1. Setup: Create editor_engine_context and register a window
+        auto engine_ctx = editor_engine_context{};
+        const auto desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Cursor Transition Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+
+        const auto reg_info = engine_ctx.register_window(desc, false);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto& wm = engine_ctx.get_window_manager();
+
+        // 2. Assert initial state: stopped mode, not playing, cursor normal
+        EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::stopped);
+        EXPECT_FALSE(engine_ctx.is_play_mode());
+        EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::normal);
+        EXPECT_FALSE(wm.is_cursor_disabled(reg_info.handle));
+
+        // 3. Act & Assert: Transition to play mode captures cursor
+        engine_ctx.set_simulation_state(simulation_state::play);
+        EXPECT_TRUE(engine_ctx.is_play_mode());
+        EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::disabled);
+        EXPECT_TRUE(wm.is_cursor_disabled(reg_info.handle));
+
+        // 4. Act & Assert: Transition to pause mode uncaptures cursor
+        engine_ctx.set_simulation_state(simulation_state::pause);
+        EXPECT_FALSE(engine_ctx.is_play_mode());
+        EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::normal);
+        EXPECT_FALSE(wm.is_cursor_disabled(reg_info.handle));
+
+        // 5. Act & Assert: Transition to stopped mode retains normal cursor
+        engine_ctx.set_simulation_state(simulation_state::stopped);
+        EXPECT_FALSE(engine_ctx.is_play_mode());
+        EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::normal);
+        EXPECT_FALSE(wm.is_cursor_disabled(reg_info.handle));
+    }
 } // namespace tempest::editor::tests

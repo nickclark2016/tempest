@@ -651,6 +651,8 @@ namespace tempest::editor
         {
             if (_impl->dev != nullptr)
             {
+                _impl->dev->wait_idle();
+
                 if (_impl->font_descriptor.index != ~0U)
                 {
                     _impl->dev->free_descriptor(rhi::descriptor_type::sampled_image, _impl->font_descriptor);
@@ -759,6 +761,7 @@ namespace tempest::editor
         {
             if (fb.vertex_buffer.handle != 0)
             {
+                _impl->dev->wait_idle();
                 _impl->dev->destroy_buffer(fb.vertex_buffer);
             }
             fb.vertex_count = required_vtx_count + 1024;
@@ -776,6 +779,7 @@ namespace tempest::editor
         {
             if (fb.index_buffer.handle != 0)
             {
+                _impl->dev->wait_idle();
                 _impl->dev->destroy_buffer(fb.index_buffer);
             }
             fb.index_count = required_idx_count + 2048;

@@ -545,6 +545,88 @@ TEST(chrono_clock_test, system_clock_conversions)
     EXPECT_EQ(time_val, reconstructed_time_val);
 }
 
+/// @brief Tests calendar_time conversion to UTC from a known fixed epoch.
+TEST(chrono_clock_test, to_utc_time_known_epoch)
+{
+    using clock = tempest::chrono::system_clock;
+    using tempest::chrono::milliseconds;
+    using tempest::chrono::seconds;
+
+    // 1. Setup: Known epoch 2026-01-01 00:00:00 UTC (1767225600 seconds) + 350ms
+    constexpr auto jan_1_2026_epoch = 1'767'225'600LL;
+    constexpr auto test_ms = 350LL;
+    const auto tp = clock::time_point(seconds(jan_1_2026_epoch) + milliseconds(test_ms));
+
+    // 2. Act: Convert to UTC calendar time
+    const auto cal = tempest::chrono::to_utc_time(tp);
+
+    // 3. Assert: Verify broken-down components
+    EXPECT_EQ(cal.year, 2026);
+    EXPECT_EQ(cal.month, 1);
+    EXPECT_EQ(cal.day, 1);
+    EXPECT_EQ(cal.hour, 0);
+    EXPECT_EQ(cal.minute, 0);
+    EXPECT_EQ(cal.second, 0);
+    EXPECT_EQ(cal.millisecond, 350);
+}
+
+/// @brief Tests calendar_time local time conversion validity from current system clock.
+TEST(chrono_clock_test, to_local_time_current)
+{
+    using clock = tempest::chrono::system_clock;
+
+    // 1. Setup: Sample current system time
+    const auto now = clock::now();
+
+    // 2. Act: Convert to local calendar time
+    const auto local_cal = tempest::chrono::to_local_time(now);
+    const auto utc_cal = tempest::chrono::to_utc_time(now);
+
+    // 3. Assert: Range validations for calendar components
+    EXPECT_GE(local_cal.year, 2026);
+    EXPECT_GE(local_cal.month, 1);
+    EXPECT_LE(local_cal.month, 12);
+    EXPECT_GE(local_cal.day, 1);
+    EXPECT_LE(local_cal.day, 31);
+    EXPECT_GE(local_cal.hour, 0);
+    EXPECT_LE(local_cal.hour, 23);
+    EXPECT_GE(local_cal.minute, 0);
+    EXPECT_LE(local_cal.minute, 59);
+    EXPECT_GE(local_cal.second, 0);
+    EXPECT_LE(local_cal.second, 59);
+    EXPECT_GE(local_cal.millisecond, 0);
+    EXPECT_LE(local_cal.millisecond, 999);
+
+    // Assert: Milliseconds match between UTC and local time
+    EXPECT_EQ(local_cal.millisecond, utc_cal.millisecond);
+    EXPECT_EQ(local_cal.second, utc_cal.second);
+}
+
+/// @brief Tests calendar_time conversions handle zero and negative timestamps gracefully.
+TEST(chrono_clock_test, calendar_time_edge_cases)
+{
+    using clock = tempest::chrono::system_clock;
+    using tempest::chrono::nanoseconds;
+
+    // 1. Setup: Zero and negative timepoints
+    const auto zero_tp = clock::time_point{};
+    const auto neg_tp = clock::time_point(nanoseconds(-1000));
+
+    // 2. Act: Convert both to local and UTC
+    const auto zero_local = tempest::chrono::to_local_time(zero_tp);
+    const auto zero_utc = tempest::chrono::to_utc_time(zero_tp);
+    const auto neg_local = tempest::chrono::to_local_time(neg_tp);
+    const auto neg_utc = tempest::chrono::to_utc_time(neg_tp);
+
+    // 3. Assert: Default constructed calendar_time is returned
+    EXPECT_EQ(zero_local.year, 1970);
+    EXPECT_EQ(zero_local.hour, 0);
+    EXPECT_EQ(zero_utc.year, 1970);
+    EXPECT_EQ(zero_utc.hour, 0);
+    EXPECT_EQ(neg_local.year, 1970);
+    EXPECT_EQ(neg_utc.year, 1970);
+}
+
 /// @brief Tests that high_resolution_clock is an alias of steady_clock.
 TEST(chrono_clock_test, high_resolution_clock_alias)
 {

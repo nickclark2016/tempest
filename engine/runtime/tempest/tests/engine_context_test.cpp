@@ -95,6 +95,27 @@ namespace tempest::tests
         wm.destroy_window(win);
     }
 
+    TEST(window_manager_test, multiple_callbacks_coexist)
+    {
+        auto wm = window_manager{};
+        const auto desc = window_desc{
+            .width = 640,
+            .height = 480,
+            .title = "Multiple Callback Test Window",
+        };
+
+        auto win = wm.create_window(desc);
+        ASSERT_TRUE(win.is_valid());
+
+        auto cb1_called = false;
+        auto cb2_called = false;
+
+        wm.register_cursor_pos_callback(win, [&](float, float) { cb1_called = true; });
+        wm.register_cursor_pos_callback(win, [&](float, float) { cb2_called = true; });
+
+        wm.destroy_window(win);
+    }
+
     TEST(window_manager_test, close_flag)
     {
         auto wm = window_manager{};

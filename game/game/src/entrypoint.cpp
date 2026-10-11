@@ -753,10 +753,17 @@ namespace
             {
                 auto& wm = ctx->get_window_manager();
                 client->is_focused = wm.is_focused(win);
-                wm.set_cursor_mode(win, tempest::cursor_mode::disabled);
+                if (ctx->is_play_mode())
+                {
+                    wm.set_cursor_mode(win, tempest::cursor_mode::disabled);
+                }
+                else
+                {
+                    wm.set_cursor_mode(win, tempest::cursor_mode::normal);
+                }
 
-                wm.register_cursor_pos_callback(win, [client](float xpos, float ypos) -> void {
-                    if (!client->is_focused)
+                wm.register_cursor_pos_callback(win, [client, ctx](float xpos, float ypos) -> void {
+                    if (!ctx->is_play_mode() || !client->is_focused)
                     {
                         client->first_mouse = true;
                         return;
@@ -799,7 +806,18 @@ namespace
                 wm.register_key_callback(win, [ctx](tempest::core::key_state state) -> void {
                     if (state.k == tempest::core::key::escape && state.action == tempest::core::key_action::press)
                     {
-                        ctx->request_close(true);
+                        if (ctx->is_play_mode())
+                        {
+                            const auto main_win = ctx->get_main_window();
+                            if (main_win.is_valid())
+                            {
+                                ctx->get_window_manager().set_cursor_mode(main_win, tempest::cursor_mode::normal);
+                            }
+                        }
+                        else
+                        {
+                            ctx->request_close(true);
+                        }
                     }
                 });
             }
@@ -910,7 +928,7 @@ namespace
                 auto right_move = 0.0F;
                 auto buttons = static_cast<tempest::uint16_t>(tempest::network::user_button_none);
 
-                if (client->is_focused && win.is_valid())
+                if (client->is_focused && win.is_valid() && ctx->is_play_mode())
                 {
                     auto& wm = ctx->get_window_manager();
                     const auto& kb = wm.get_keyboard(win);

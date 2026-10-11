@@ -3,7 +3,9 @@
 
 #include <tempest/api.hpp>
 #include <tempest/editor_camera.hpp>
+#include <tempest/editor_log_sink.hpp>
 #include <tempest/functional.hpp>
+#include <tempest/log_store.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/profiler/profiler.hpp>
 #include <tempest/string_view.hpp>
@@ -32,19 +34,24 @@ namespace tempest::editor
         auto operator=(const editor_engine_context&) -> editor_engine_context& = delete;
         auto operator=(editor_engine_context&&) noexcept -> editor_engine_context& = delete;
 
+        auto register_window(window_desc desc, bool install_swapchain_blit = true)
+            -> window_registration_info override;
+
         void register_on_editor_paint_callback(function<void(engine_context&)> callback);
         void register_on_editor_update_callback(function<void(engine_context&)> callback);
         void clear_editor_callbacks();
+
+        [[nodiscard]] auto is_play_mode() const noexcept -> bool override
+        {
+            return _sim_state == simulation_state::play;
+        }
 
         [[nodiscard]] auto get_simulation_state() const noexcept -> simulation_state
         {
             return _sim_state;
         }
 
-        auto set_simulation_state(simulation_state state) noexcept -> void
-        {
-            _sim_state = state;
-        }
+        auto set_simulation_state(simulation_state state) noexcept -> void;
 
         auto set_ui_context(ui_context* ui_ctx) noexcept -> void
         {
@@ -163,6 +170,26 @@ namespace tempest::editor
 
         auto collect_and_broadcast_telemetry() -> void;
 
+        [[nodiscard]] auto get_log_sink() noexcept -> editor_log_sink&
+        {
+            return _log_sink;
+        }
+
+        [[nodiscard]] auto get_log_sink() const noexcept -> const editor_log_sink&
+        {
+            return _log_sink;
+        }
+
+        [[nodiscard]] auto get_log_store() noexcept -> log_store&
+        {
+            return _log_store;
+        }
+
+        [[nodiscard]] auto get_log_store() const noexcept -> const log_store&
+        {
+            return _log_store;
+        }
+
       protected:
         auto should_step_simulation() -> bool override;
         auto on_render_frame(float alpha) -> void override;
@@ -172,6 +199,9 @@ namespace tempest::editor
         simulation_state _sim_state = simulation_state::stopped;
         ui_context* _ui_ctx{nullptr};
         editor_camera _editor_camera{};
+
+        editor_log_sink _log_sink{};
+        log_store _log_store{};
 
         unique_ptr<profiler::web_server> _web_server{};
         uint64_t _frame_index{0};

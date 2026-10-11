@@ -379,14 +379,14 @@ namespace tempest
         cursor_mode current_cursor_mode{cursor_mode::normal};
         bool is_focused{true};
 
-        function<void(core::key_state)> key_callback;
-        function<void(uint32_t)> char_callback;
-        function<void(core::mouse_button_state)> mouse_button_callback;
-        function<void(float, float)> cursor_pos_callback;
-        function<void(float, float)> scroll_callback;
-        function<void(uint32_t, uint32_t)> resize_callback;
-        function<void(bool)> focus_callback;
-        function<void()> close_callback;
+        vector<function<void(core::key_state)>> key_callbacks;
+        vector<function<void(uint32_t)>> char_callbacks;
+        vector<function<void(core::mouse_button_state)>> mouse_button_callbacks;
+        vector<function<void(float, float)>> cursor_pos_callbacks;
+        vector<function<void(float, float)>> scroll_callbacks;
+        vector<function<void(uint32_t, uint32_t)>> resize_callbacks;
+        vector<function<void(bool)>> focus_callbacks;
+        vector<function<void()>> close_callbacks;
     };
 
     struct window_manager::impl
@@ -481,7 +481,7 @@ namespace tempest
                                auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
                                if (!win_data) {
                                    return;
-}
+                               }
 
                                auto state = core::key_state{
                                    .k = translate_glfw_key(key),
@@ -490,9 +490,12 @@ namespace tempest
                                };
 
                                win_data->keyboard.set(state);
-                               if (win_data->key_callback)
+                               for (auto& cb : win_data->key_callbacks)
                                {
-                                   win_data->key_callback(state);
+                                   if (cb)
+                                   {
+                                       cb(state);
+                                   }
                                }
                            });
 
@@ -501,7 +504,7 @@ namespace tempest
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
             if (!win_data) {
                 return;
-}
+            }
 
             auto state = core::mouse_button_state{
                 .button = translate_glfw_mouse_button(button),
@@ -509,9 +512,12 @@ namespace tempest
             };
 
             win_data->mouse.set(state);
-            if (win_data->mouse_button_callback)
+            for (auto& cb : win_data->mouse_button_callbacks)
             {
-                win_data->mouse_button_callback(state);
+                if (cb)
+                {
+                    cb(state);
+                }
             }
         });
 
@@ -520,12 +526,15 @@ namespace tempest
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
             if (!win_data) {
                 return;
-}
+            }
 
             win_data->mouse.set_position(static_cast<float>(xpos), static_cast<float>(ypos));
-            if (win_data->cursor_pos_callback)
+            for (auto& cb : win_data->cursor_pos_callbacks)
             {
-                win_data->cursor_pos_callback(static_cast<float>(xpos), static_cast<float>(ypos));
+                if (cb)
+                {
+                    cb(static_cast<float>(xpos), static_cast<float>(ypos));
+                }
             }
         });
 
@@ -534,12 +543,15 @@ namespace tempest
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
             if (!win_data) {
                 return;
-}
+            }
 
             win_data->mouse.set_scroll(static_cast<float>(xoffset), static_cast<float>(yoffset));
-            if (win_data->scroll_callback)
+            for (auto& cb : win_data->scroll_callbacks)
             {
-                win_data->scroll_callback(static_cast<float>(xoffset), static_cast<float>(yoffset));
+                if (cb)
+                {
+                    cb(static_cast<float>(xoffset), static_cast<float>(yoffset));
+                }
             }
         });
 
@@ -548,13 +560,16 @@ namespace tempest
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
             if (!win_data) {
                 return;
-}
+            }
 
             win_data->width = static_cast<uint32_t>(width);
             win_data->height = static_cast<uint32_t>(height);
-            if (win_data->resize_callback)
+            for (auto& cb : win_data->resize_callbacks)
             {
-                win_data->resize_callback(win_data->width, win_data->height);
+                if (cb)
+                {
+                    cb(win_data->width, win_data->height);
+                }
             }
         });
 
@@ -563,11 +578,14 @@ namespace tempest
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
             if (!win_data) {
                 return;
-}
+            }
 
-            if (win_data->char_callback)
+            for (auto& cb : win_data->char_callbacks)
             {
-                win_data->char_callback(static_cast<uint32_t>(codepoint));
+                if (cb)
+                {
+                    cb(static_cast<uint32_t>(codepoint));
+                }
             }
         });
 
@@ -586,9 +604,12 @@ namespace tempest
                 win_data->mouse.clear();
             }
 
-            if (win_data->focus_callback)
+            for (auto& cb : win_data->focus_callbacks)
             {
-                win_data->focus_callback(is_focus);
+                if (cb)
+                {
+                    cb(is_focus);
+                }
             }
         });
 
@@ -597,11 +618,14 @@ namespace tempest
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
             if (!win_data) {
                 return;
-}
+            }
 
-            if (win_data->close_callback)
+            for (auto& cb : win_data->close_callbacks)
             {
-                win_data->close_callback();
+                if (cb)
+                {
+                    cb();
+                }
             }
         });
 
@@ -829,7 +853,7 @@ namespace tempest
         auto* data = _impl->find_window(win);
         if (data != nullptr)
         {
-            data->key_callback = tempest::move(cb);
+            data->key_callbacks.push_back(tempest::move(cb));
         }
     }
 
@@ -838,7 +862,7 @@ namespace tempest
         auto* data = _impl->find_window(win);
         if (data != nullptr)
         {
-            data->char_callback = tempest::move(cb);
+            data->char_callbacks.push_back(tempest::move(cb));
         }
     }
 
@@ -848,7 +872,7 @@ namespace tempest
         auto* data = _impl->find_window(win);
         if (data != nullptr)
         {
-            data->mouse_button_callback = tempest::move(cb);
+            data->mouse_button_callbacks.push_back(tempest::move(cb));
         }
     }
 
@@ -857,7 +881,7 @@ namespace tempest
         auto* data = _impl->find_window(win);
         if (data != nullptr)
         {
-            data->cursor_pos_callback = tempest::move(cb);
+            data->cursor_pos_callbacks.push_back(tempest::move(cb));
         }
     }
 
@@ -866,7 +890,7 @@ namespace tempest
         auto* data = _impl->find_window(win);
         if (data != nullptr)
         {
-            data->scroll_callback = tempest::move(cb);
+            data->scroll_callbacks.push_back(tempest::move(cb));
         }
     }
 
@@ -875,7 +899,7 @@ namespace tempest
         auto* data = _impl->find_window(win);
         if (data != nullptr)
         {
-            data->resize_callback = tempest::move(cb);
+            data->resize_callbacks.push_back(tempest::move(cb));
         }
     }
 
@@ -884,7 +908,7 @@ namespace tempest
         auto* data = _impl->find_window(win);
         if (data != nullptr)
         {
-            data->focus_callback = tempest::move(cb);
+            data->focus_callbacks.push_back(tempest::move(cb));
         }
     }
 
@@ -893,7 +917,7 @@ namespace tempest
         auto* data = _impl->find_window(win);
         if (data != nullptr)
         {
-            data->close_callback = tempest::move(cb);
+            data->close_callbacks.push_back(tempest::move(cb));
         }
     }
 } // namespace tempest

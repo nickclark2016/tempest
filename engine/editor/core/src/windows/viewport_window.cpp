@@ -90,6 +90,17 @@ namespace tempest::editor
             auto& io = ImGui::GetIO();
             auto& cam = _ctx->get_editor_camera();
 
+            // Left click in viewport while in play mode to capture cursor
+            if (current_state == simulation_state::play && (is_hovered || is_active) &&
+                ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                const auto main_win = _ctx->get_main_window();
+                if (main_win.is_valid())
+                {
+                    _ctx->get_window_manager().set_cursor_mode(main_win, cursor_mode::disabled);
+                }
+            }
+
             // Right click hold for fly camera navigation (active in edit/pause modes)
             if (current_state != simulation_state::play && (is_hovered || is_active) &&
                 ImGui::IsMouseDown(ImGuiMouseButton_Right))

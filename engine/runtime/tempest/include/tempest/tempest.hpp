@@ -96,6 +96,11 @@ namespace tempest
             return _accumulator;
         }
 
+        [[nodiscard]] virtual auto is_play_mode() const noexcept -> bool
+        {
+            return true;
+        }
+
       protected:
         virtual auto on_poll_events() -> void {}
         [[nodiscard]] virtual auto should_step_simulation() -> bool { return true; }

@@ -106,6 +106,88 @@ namespace tempest::chrono
         return system_clock::time_point(nanoseconds(nanosecs));
     }
 
+    auto to_local_time(system_clock::time_point timepoint) noexcept -> calendar_time
+    {
+        const auto ns = timepoint.time_since_epoch().count();
+        if (ns <= 0)
+        {
+            return calendar_time{};
+        }
+
+        constexpr auto nanoseconds_per_100ns_interval = 100LL;
+        constexpr auto epoch_offset_100ns = 116444736000000000ULL;
+
+        const auto intervals_since_1970 = ns / nanoseconds_per_100ns_interval;
+        const auto intervals_since_1601 = static_cast<uint64_t>(intervals_since_1970) + epoch_offset_100ns;
+
+        auto uli = ULARGE_INTEGER{};
+        uli.QuadPart = intervals_since_1601;
+
+        auto file_time = FILETIME{};
+        file_time.dwLowDateTime = uli.LowPart;
+        file_time.dwHighDateTime = uli.HighPart;
+
+        auto local_file_time = FILETIME{};
+        if (FileTimeToLocalFileTime(&file_time, &local_file_time) == 0)
+        {
+            return calendar_time{};
+        }
+
+        auto st = SYSTEMTIME{};
+        if (FileTimeToSystemTime(&local_file_time, &st) == 0)
+        {
+            return calendar_time{};
+        }
+
+        auto result = calendar_time{};
+        result.year = static_cast<int32_t>(st.wYear);
+        result.month = static_cast<int32_t>(st.wMonth);
+        result.day = static_cast<int32_t>(st.wDay);
+        result.hour = static_cast<int32_t>(st.wHour);
+        result.minute = static_cast<int32_t>(st.wMinute);
+        result.second = static_cast<int32_t>(st.wSecond);
+        result.millisecond = static_cast<int32_t>(st.wMilliseconds);
+        return result;
+    }
+
+    auto to_utc_time(system_clock::time_point timepoint) noexcept -> calendar_time
+    {
+        const auto ns = timepoint.time_since_epoch().count();
+        if (ns <= 0)
+        {
+            return calendar_time{};
+        }
+
+        constexpr auto nanoseconds_per_100ns_interval = 100LL;
+        constexpr auto epoch_offset_100ns = 116444736000000000ULL;
+
+        const auto intervals_since_1970 = ns / nanoseconds_per_100ns_interval;
+        const auto intervals_since_1601 = static_cast<uint64_t>(intervals_since_1970) + epoch_offset_100ns;
+
+        auto uli = ULARGE_INTEGER{};
+        uli.QuadPart = intervals_since_1601;
+
+        auto file_time = FILETIME{};
+        file_time.dwLowDateTime = uli.LowPart;
+        file_time.dwHighDateTime = uli.HighPart;
+
+        auto st = SYSTEMTIME{};
+        if (FileTimeToSystemTime(&file_time, &st) == 0)
+        {
+            return calendar_time{};
+        }
+
+        auto result = calendar_time{};
+        result.year = static_cast<int32_t>(st.wYear);
+        result.month = static_cast<int32_t>(st.wMonth);
+        result.day = static_cast<int32_t>(st.wDay);
+        result.hour = static_cast<int32_t>(st.wHour);
+        result.minute = static_cast<int32_t>(st.wMinute);
+        result.second = static_cast<int32_t>(st.wSecond);
+        result.millisecond = static_cast<int32_t>(st.wMilliseconds);
+        return result;
+    }
+
 #else
 
     auto steady_clock::now() noexcept -> steady_clock::time_point
@@ -122,6 +204,62 @@ namespace tempest::chrono
         clock_gettime(CLOCK_REALTIME, &ts);
         const auto nanosecs = static_cast<int64_t>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
         return system_clock::time_point(nanoseconds(nanosecs));
+    }
+
+    auto to_local_time(system_clock::time_point timepoint) noexcept -> calendar_time
+    {
+        const auto ns = timepoint.time_since_epoch().count();
+        if (ns <= 0)
+        {
+            return calendar_time{};
+        }
+
+        const auto sec = static_cast<time_t>(ns / 1000000000LL);
+        const auto ms = static_cast<int32_t>((ns % 1000000000LL) / 1000000LL);
+
+        auto tm_val = tm{};
+        if (localtime_r(&sec, &tm_val) == nullptr)
+        {
+            return calendar_time{};
+        }
+
+        auto result = calendar_time{};
+        result.year = tm_val.tm_year + 1900;
+        result.month = tm_val.tm_mon + 1;
+        result.day = tm_val.tm_mday;
+        result.hour = tm_val.tm_hour;
+        result.minute = tm_val.tm_min;
+        result.second = tm_val.tm_sec;
+        result.millisecond = ms;
+        return result;
+    }
+
+    auto to_utc_time(system_clock::time_point timepoint) noexcept -> calendar_time
+    {
+        const auto ns = timepoint.time_since_epoch().count();
+        if (ns <= 0)
+        {
+            return calendar_time{};
+        }
+
+        const auto sec = static_cast<time_t>(ns / 1000000000LL);
+        const auto ms = static_cast<int32_t>((ns % 1000000000LL) / 1000000LL);
+
+        auto tm_val = tm{};
+        if (gmtime_r(&sec, &tm_val) == nullptr)
+        {
+            return calendar_time{};
+        }
+
+        auto result = calendar_time{};
+        result.year = tm_val.tm_year + 1900;
+        result.month = tm_val.tm_mon + 1;
+        result.day = tm_val.tm_mday;
+        result.hour = tm_val.tm_hour;
+        result.minute = tm_val.tm_min;
+        result.second = tm_val.tm_sec;
+        result.millisecond = ms;
+        return result;
     }
 
 #endif

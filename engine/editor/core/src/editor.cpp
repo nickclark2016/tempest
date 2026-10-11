@@ -140,6 +140,28 @@ namespace tempest::editor
           private:
             editor_engine_context* _ctx;
         };
+
+        class log_view_menu_item final : public menu_item
+        {
+          public:
+            explicit log_view_menu_item(log_view_window& window)
+                : menu_item("Window", "Log View"), _window{&window}
+            {
+            }
+
+            [[nodiscard]] auto is_checked() const noexcept -> bool override
+            {
+                return _window->open;
+            }
+
+            auto on_press() noexcept -> void override
+            {
+                _window->open = !_window->open;
+            }
+
+          private:
+            log_view_window* _window;
+        };
     } // namespace
 
     editor_context::menu_hierarchy::menu_node::~menu_node() = default;
@@ -236,7 +258,8 @@ namespace tempest::editor
         : _engine_ctx{&ctx}, _win{win}, _ui_ctx{&ui_ctx},
           _entity_view(register_window(make_unique<entity_view_window>(ctx.get_entities()))),
           _scene_hierarchy_view(register_window(make_unique<scene_hierarchy_window>(ctx.get_entities()))),
-          _viewport_view(register_window(make_unique<viewport_window>(ctx)))
+          _viewport_view(register_window(make_unique<viewport_window>(ctx))),
+          _log_view(register_window(make_unique<log_view_window>(ctx.get_log_store())))
     {
         ctx.set_ui_context(&ui_ctx);
 
@@ -277,6 +300,7 @@ namespace tempest::editor
         register_menu_item(make_unique<live_stream_menu_item>(ctx));
         register_menu_item(make_unique<gpu_stats_menu_item>(ctx));
         register_menu_item(make_unique<open_captures_folder_menu_item>(ctx));
+        register_menu_item(make_unique<log_view_menu_item>(*_log_view));
     }
 
     auto editor_context::_process_shortcuts() -> void
@@ -309,6 +333,53 @@ namespace tempest::editor
         {
             _engine_ctx->insert_bookmark_marker();
         }
+
+        // Escape in play mode: pause simulation and release cursor
+        if (_engine_ctx->get_simulation_state() == simulation_state::play && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        {
+            _engine_ctx->set_simulation_state(simulation_state::pause);
+        }
+    }
+
+    auto editor_context::_calculate_log_pill_width() const -> float
+    {
+        const auto& store = _engine_ctx->get_log_store();
+        const auto warn_count = store.filter().warn_count;
+        const auto error_count = store.filter().error_count;
+
+        const auto warn_str = tempest::format("{}", warn_count);
+        const auto error_str = tempest::format("{}", error_count);
+
+        const auto bracket_left_size = ImGui::CalcTextSize("[ ");
+        const auto warn_icon_size = ImGui::CalcTextSize("⚠ ");
+        const auto warn_text_size = ImGui::CalcTextSize(warn_str.c_str());
+        const auto separator_size = ImGui::CalcTextSize(" | ");
+        const auto error_icon_size = ImGui::CalcTextSize("❌ ");
+        const auto error_text_size = ImGui::CalcTextSize(error_str.c_str());
+        const auto bracket_right_size = ImGui::CalcTextSize(" ]");
+
+        return bracket_left_size.x + warn_icon_size.x + warn_text_size.x + separator_size.x +
+               error_icon_size.x + error_text_size.x + bracket_right_size.x + 16.0F;
+    }
+
+    auto editor_context::_calculate_profiler_pill_width() const -> float
+    {
+        const auto* server = _engine_ctx->get_web_server();
+        const auto port = (server != nullptr) ? server->get_bound_port() : uint16_t{0};
+        const auto clients = (server != nullptr) ? server->connected_client_count() : size_t{0};
+
+        const auto fps = _engine_ctx->get_rolling_fps();
+        const auto frame_ms = _engine_ctx->get_rolling_frame_time_ms();
+        const auto cpu_ms = _engine_ctx->get_rolling_cpu_time_ms();
+        const auto gpu_ms = _engine_ctx->get_rolling_gpu_time_ms();
+
+        const auto pill_text = tempest::format(" {:.1f} FPS | {:.1f}ms (CPU {:.1f}ms / GPU {:.1f}ms) | :{} ({}) ]", fps,
+                                               frame_ms, cpu_ms, gpu_ms, port, clients);
+
+        const auto bracket_left_size = ImGui::CalcTextSize("[ ");
+        const auto dot_size = ImGui::CalcTextSize("●");
+        const auto text_size = ImGui::CalcTextSize(pill_text.c_str());
+        return bracket_left_size.x + dot_size.x + text_size.x + 16.0F;
     }
 
     auto editor_context::_draw_status_bar() -> void
@@ -328,11 +399,114 @@ namespace tempest::editor
             {
                 ImGui::TextUnformatted("Status: Ready");
 
+                const auto log_pill_width = _calculate_log_pill_width();
+                const auto profiler_pill_width = _calculate_profiler_pill_width();
+                constexpr auto pill_spacing = 8.0F;
+                const auto total_width = log_pill_width + pill_spacing + profiler_pill_width;
+                const auto avail_width = ImGui::GetContentRegionAvail().x;
+
+                if (avail_width > total_width)
+                {
+                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail_width - total_width);
+                }
+
+                _draw_log_status_pill();
+                ImGui::SameLine(0.0F, pill_spacing);
                 _draw_profiler_status_pill();
 
                 ImGui::EndMenuBar();
             }
             ImGui::End();
+        }
+    }
+
+    auto editor_context::_draw_log_status_pill() -> void
+    {
+        const auto& store = _engine_ctx->get_log_store();
+        const auto warn_count = store.filter().warn_count;
+        const auto error_count = store.filter().error_count;
+
+        const auto warn_str = tempest::format("{}", warn_count);
+        const auto error_str = tempest::format("{}", error_count);
+
+        const auto bracket_left_size = ImGui::CalcTextSize("[ ");
+        const auto warn_icon_size = ImGui::CalcTextSize("⚠ ");
+        const auto warn_text_size = ImGui::CalcTextSize(warn_str.c_str());
+        const auto separator_size = ImGui::CalcTextSize(" | ");
+        const auto error_icon_size = ImGui::CalcTextSize("❌ ");
+        const auto error_text_size = ImGui::CalcTextSize(error_str.c_str());
+        const auto bracket_right_size = ImGui::CalcTextSize(" ]");
+
+        const auto total_width = bracket_left_size.x + warn_icon_size.x + warn_text_size.x + separator_size.x +
+                                 error_icon_size.x + error_text_size.x + bracket_right_size.x + 16.0F;
+
+        const auto pos = ImGui::GetCursorScreenPos();
+        const auto size = ImVec2(total_width, ImGui::GetFrameHeight());
+
+        auto* draw_list = ImGui::GetWindowDrawList();
+        const auto bg_color = ImGui::GetColorU32(ImGuiCol_FrameBg);
+        const auto border_color = ImGui::GetColorU32(ImGuiCol_Border);
+        draw_list->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), bg_color, 4.0F);
+        draw_list->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), border_color, 4.0F);
+
+        ImGui::InvisibleButton("##LogStatusPill", size);
+
+        const auto is_hovered = ImGui::IsItemHovered();
+        const auto is_left_clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+
+        if (is_hovered)
+        {
+            draw_list->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y),
+                               ImGui::GetColorU32(ImGuiCol_ButtonHovered), 4.0F);
+        }
+
+        const auto text_pos_y = pos.y + ((size.y - bracket_left_size.y) * 0.5F);
+        auto cur_x = pos.x + 8.0F;
+
+        draw_list->AddText(ImVec2(cur_x, text_pos_y), ImGui::GetColorU32(ImGuiCol_Text), "[ ");
+        cur_x += bracket_left_size.x;
+
+        const auto warn_color = (warn_count > 0) ? ImVec4(1.0F, 0.8F, 0.2F, 1.0F) : ImVec4(0.6F, 0.6F, 0.6F, 1.0F);
+        draw_list->AddText(ImVec2(cur_x, text_pos_y), ImGui::GetColorU32(warn_color), "⚠ ");
+        cur_x += warn_icon_size.x;
+
+        draw_list->AddText(ImVec2(cur_x, text_pos_y), ImGui::GetColorU32(warn_color), warn_str.c_str());
+        cur_x += warn_text_size.x;
+
+        draw_list->AddText(ImVec2(cur_x, text_pos_y), ImGui::GetColorU32(ImGuiCol_Text), " | ");
+        cur_x += separator_size.x;
+
+        const auto error_color = (error_count > 0) ? ImVec4(1.0F, 0.3F, 0.3F, 1.0F) : ImVec4(0.6F, 0.6F, 0.6F, 1.0F);
+        draw_list->AddText(ImVec2(cur_x, text_pos_y), ImGui::GetColorU32(error_color), "❌ ");
+        cur_x += error_icon_size.x;
+
+        draw_list->AddText(ImVec2(cur_x, text_pos_y), ImGui::GetColorU32(error_color), error_str.c_str());
+        cur_x += error_text_size.x;
+
+        draw_list->AddText(ImVec2(cur_x, text_pos_y), ImGui::GetColorU32(ImGuiCol_Text), " ]");
+
+        if (is_left_clicked)
+        {
+            if (_log_view != nullptr)
+            {
+                _log_view->open = true;
+                _log_view->request_scroll_to_bottom = true;
+                ImGui::SetWindowFocus(_log_view->window_name().data());
+            }
+        }
+
+        if (is_hovered)
+        {
+            ImGui::BeginTooltip();
+            ImGui::TextColored(ImVec4(0.4F, 0.8F, 1.0F, 1.0F), "Tempest Diagnostics");
+            ImGui::Separator();
+            ImGui::Text("Retained Logs : %zu", store.size());
+            ImGui::Text("Visible Logs  : %zu", store.visible_count());
+            ImGui::TextColored(ImVec4(1.0F, 0.8F, 0.2F, 1.0F), "Warnings      : %zu", warn_count);
+            ImGui::TextColored(ImVec4(1.0F, 0.3F, 0.3F, 1.0F), "Errors        : %zu", error_count);
+            ImGui::Separator();
+            ImGui::TextDisabled("Click to open Log View");
+            ImGui::EndTooltip();
         }
     }
 
@@ -370,12 +544,6 @@ namespace tempest::editor
         const auto dot_size = ImGui::CalcTextSize(dot_symbol);
         const auto text_size = ImGui::CalcTextSize(pill_text.c_str());
         const auto total_width = bracket_left_size.x + dot_size.x + text_size.x + 16.0F;
-        const auto avail_width = ImGui::GetContentRegionAvail().x;
-
-        if (avail_width > total_width)
-        {
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail_width - total_width);
-        }
 
         const auto pos = ImGui::GetCursorScreenPos();
         const auto size = ImVec2(total_width, ImGui::GetFrameHeight());

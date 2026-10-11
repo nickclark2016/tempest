@@ -123,6 +123,8 @@ namespace tempest::editor
 {
     editor_engine_context::editor_engine_context()
     {
+        _log_sink.attach(get_logger());
+
         _profiler_session.set_thread_name("Main Thread");
         auto config = profiler::web_server_config{
             .host = "127.0.0.1",
@@ -142,9 +144,40 @@ namespace tempest::editor
 
     editor_engine_context::~editor_engine_context()
     {
+        _log_sink.detach();
+
         if (_web_server)
         {
             _web_server->stop();
+        }
+    }
+
+    auto editor_engine_context::register_window(window_desc desc, bool install_swapchain_blit)
+        -> window_registration_info
+    {
+        auto info = standalone_engine_context::register_window(desc, install_swapchain_blit);
+        if (info.handle.is_valid())
+        {
+            _window_manager.set_cursor_mode(info.handle, (_sim_state == simulation_state::play)
+                                                             ? cursor_mode::disabled
+                                                             : cursor_mode::normal);
+        }
+        return info;
+    }
+
+    auto editor_engine_context::set_simulation_state(simulation_state state) noexcept -> void
+    {
+        _sim_state = state;
+        for (auto& win : _windows)
+        {
+            if (state == simulation_state::play)
+            {
+                _window_manager.set_cursor_mode(win.handle, cursor_mode::disabled);
+            }
+            else
+            {
+                _window_manager.set_cursor_mode(win.handle, cursor_mode::normal);
+            }
         }
     }
 
@@ -343,6 +376,8 @@ namespace tempest::editor
 
     auto editor_engine_context::on_render_frame(float alpha) -> void
     {
+        _log_store.drain(_log_sink);
+
         if (_sim_state == simulation_state::play)
         {
             ecs::interpolate_transform_history(_entity_registry, alpha);
@@ -363,6 +398,7 @@ namespace tempest::editor
 
     auto editor_engine_context::on_frame_end() -> void
     {
+        _log_store.drain(_log_sink);
         collect_and_broadcast_telemetry();
     }
 

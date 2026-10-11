@@ -14,6 +14,7 @@
 #include <tempest/windows/component_view.hpp>
 #include <tempest/windows/editor_window.hpp>
 #include <tempest/windows/entity_view_window.hpp>
+#include <tempest/windows/log_view_window.hpp>
 #include <tempest/windows/scene_hierarchy_window.hpp>
 #include <tempest/windows/viewport_window.hpp>
 
@@ -53,15 +54,28 @@ namespace tempest::editor
         auto register_menu_item(unique_ptr<menu_item> menu) -> void;
 
         template <derived_from<menu_item> T>
-        auto register_menu_item(unique_ptr<T> menu) -> void
+        auto register_menu_item(unique_ptr<menu_item> menu) -> void
         {
             register_menu_item(unique_ptr<menu_item>(menu.release()));
+        }
+
+        [[nodiscard]] auto get_log_view_window() noexcept -> log_view_window*
+        {
+            return _log_view;
+        }
+
+        [[nodiscard]] auto get_log_view_window() const noexcept -> const log_view_window*
+        {
+            return _log_view;
         }
 
       private:
         auto _process_shortcuts() -> void;
         auto _draw_status_bar() -> void;
+        auto _draw_log_status_pill() -> void;
+        auto _calculate_log_pill_width() const -> float;
         auto _draw_profiler_status_pill() -> void;
+        auto _calculate_profiler_pill_width() const -> float;
         auto _draw_profiler_tooltip() -> void;
 
         editor_engine_context* _engine_ctx;
@@ -72,6 +86,7 @@ namespace tempest::editor
         entity_view_window* _entity_view = nullptr;
         scene_hierarchy_window* _scene_hierarchy_view = nullptr;
         viewport_window* _viewport_view = nullptr;
+        log_view_window* _log_view = nullptr;
 
         class menu_hierarchy
         {

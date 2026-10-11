@@ -74,7 +74,7 @@ namespace tempest
     {
         const auto record = log_record{
             .level = level,
-            .timestamp_ns = static_cast<uint64_t>(chrono::steady_clock::now().time_since_epoch().count()),
+            .timestamp_ns = static_cast<uint64_t>(chrono::system_clock::now().time_since_epoch().count()),
             .thread_id = static_cast<uint32_t>(this_thread::get_id().to_uint64()),
             .message = message,
             .source = location,
@@ -211,7 +211,7 @@ namespace tempest
     {
         const auto record = log_record{
             .level = level,
-            .timestamp_ns = static_cast<uint64_t>(chrono::steady_clock::now().time_since_epoch().count()),
+            .timestamp_ns = static_cast<uint64_t>(chrono::system_clock::now().time_since_epoch().count()),
             .thread_id = static_cast<uint32_t>(this_thread::get_id().to_uint64()),
             .message = message,
             .source = location,
