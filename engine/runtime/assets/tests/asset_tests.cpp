@@ -1365,10 +1365,10 @@ TEST(asset_database_mount_and_scan, large_and_small_assets_chunk_arena)
 /// and reopened.
 TEST(asset_database_mount_and_scan, chunks_coalesce_on_save_and_reopen)
 {
-    const auto test_db_path = tempest::filesystem::path("tempest_test_coalesce.tassetdb");
-    if (tempest::filesystem::exists(test_db_path))
+    const auto coalesce_db_path = tempest::filesystem::path("tempest_test_coalesce.tassetdb");
+    if (tempest::filesystem::exists(coalesce_db_path))
     {
-        tempest::filesystem::remove(test_db_path);
+        tempest::filesystem::remove(coalesce_db_path);
     }
 
     auto type_reg = tempest::assets::asset_type_registry{};
@@ -1378,7 +1378,7 @@ TEST(asset_database_mount_and_scan, chunks_coalesce_on_save_and_reopen)
     // 1. Setup & Act: Create database with multiple mixed-size chunks and save to disk
     {
         auto database = tempest::assets::asset_database{&type_reg};
-        database.open(test_db_path.generic_string().c_str());
+        database.open(coalesce_db_path.generic_string().c_str());
 
         id_small = database.register_asset(tempest::assets::asset_type_id::from_hash(1), "chunked_small.spv");
         auto small_bytes = tempest::vector<tempest::byte>(4096, static_cast<tempest::byte>(0x11));
@@ -1395,7 +1395,7 @@ TEST(asset_database_mount_and_scan, chunks_coalesce_on_save_and_reopen)
     // 2. Act: Reopen from .tassetdb
     {
         auto database = tempest::assets::asset_database{&type_reg};
-        database.open(test_db_path.generic_string().c_str());
+        database.open(coalesce_db_path.generic_string().c_str());
 
         // 3. Assert: All assets are present, contiguous, and intact
         const auto* entry_small = database.find_by_guid(id_small);
@@ -1418,19 +1418,19 @@ TEST(asset_database_mount_and_scan, chunks_coalesce_on_save_and_reopen)
     }
 
     // 4. Teardown
-    if (tempest::filesystem::exists(test_db_path))
+    if (tempest::filesystem::exists(coalesce_db_path))
     {
-        tempest::filesystem::remove(test_db_path);
+        tempest::filesystem::remove(coalesce_db_path);
     }
 }
 
 /// @brief Verifies mutation/hot-reload of an asset loaded from .tassetdb and subsequent re-coalescing on save.
 TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
 {
-    const auto test_db_path = tempest::filesystem::path("tempest_test_mutate_coalesce.tassetdb");
-    if (tempest::filesystem::exists(test_db_path))
+    const auto mutate_db_path = tempest::filesystem::path("tempest_test_mutate_coalesce.tassetdb");
+    if (tempest::filesystem::exists(mutate_db_path))
     {
-        tempest::filesystem::remove(test_db_path);
+        tempest::filesystem::remove(mutate_db_path);
     }
 
     auto type_reg = tempest::assets::asset_type_registry{};
@@ -1440,7 +1440,7 @@ TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
     // 1. Setup: Create and save initial database
     {
         auto database = tempest::assets::asset_database{&type_reg};
-        database.open(test_db_path.generic_string().c_str());
+        database.open(mutate_db_path.generic_string().c_str());
 
         shader_id = database.register_asset(tempest::assets::asset_type_id::from_hash(10), "pbr.frag.spv");
         auto initial_shader = tempest::string("INITIAL_SHADER_V1");
@@ -1459,7 +1459,7 @@ TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
     // 2. Act: Reopen and mutate shader_id (hot-reload simulation)
     {
         auto database = tempest::assets::asset_database{&type_reg};
-        database.open(test_db_path.generic_string().c_str());
+        database.open(mutate_db_path.generic_string().c_str());
 
         // Mutate shader blob
         auto updated_shader = tempest::string("RELOADED_SHADER_V2_LONGER_PAYLOAD_HERE");
@@ -1483,7 +1483,7 @@ TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
     // 3. Assert: Reopen and verify new mutated data is cleanly coalesced
     {
         auto database = tempest::assets::asset_database{&type_reg};
-        database.open(test_db_path.generic_string().c_str());
+        database.open(mutate_db_path.generic_string().c_str());
 
         auto final_shader_blob = database.get_blob(shader_id);
         EXPECT_EQ(tempest::string(reinterpret_cast<const char*>(final_shader_blob.data()), final_shader_blob.size()),
@@ -1495,9 +1495,9 @@ TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
     }
 
     // 4. Teardown
-    if (tempest::filesystem::exists(test_db_path))
+    if (tempest::filesystem::exists(mutate_db_path))
     {
-        tempest::filesystem::remove(test_db_path);
+        tempest::filesystem::remove(mutate_db_path);
     }
 }
 

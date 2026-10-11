@@ -20,8 +20,6 @@ scoped.project('editor-core', function()
     uses {
         'tempest',
         'imgui',
-        'rhi-api',
-        'rhi-vk',
         'glfw',
     }
 
@@ -29,8 +27,6 @@ scoped.project('editor-core', function()
         uses {
             'tempest',
             'imgui',
-            'rhi-api',
-            'rhi-vk',
             'glfw',
         }
 
