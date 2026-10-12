@@ -11,6 +11,7 @@ scoped.group('Runtime', function()
     include 'profiler/premake5.lua'
     include 'render/premake5.lua'
     include 'runner/premake5.lua'
+    include 'scene/premake5.lua'
     include 'serialization/premake5.lua'
     include 'server/premake5.lua'
     include 'tempest/premake5.lua'

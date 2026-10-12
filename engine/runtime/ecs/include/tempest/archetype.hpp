@@ -788,6 +788,9 @@ namespace tempest::ecs
 
         explicit basic_archetype_with_components_view(registry_type& parent);
 
+        template <typename... Ex>
+        auto without() const -> basic_archetype_with_components_view<Ts...>;
+
         auto begin() const -> basic_archetype_with_components_iter<Ts...>
         {
             return cbegin();
@@ -808,6 +811,7 @@ namespace tempest::ecs
 
         registry_type* _registry;
         basic_archetype_types_hash<component_type_registry::max_component_types> _type_hash_mask;
+        basic_archetype_types_hash<component_type_registry::max_component_types> _exclude_hash_mask{};
         static constexpr auto argument_count = sizeof...(Ts);
 
         auto _acquire_next_entity(/*inout*/ size_t& archetype_index, /*intout*/ size_t& entity_index) const -> void;
@@ -1782,6 +1786,19 @@ namespace tempest::ecs
     }
 
     template <typename... Ts>
+    template <typename... Ex>
+    inline auto basic_archetype_with_components_view<Ts...>::without() const -> basic_archetype_with_components_view<Ts...>
+    {
+        auto copy = *this;
+        const auto exclude_mask = _registry->type_registry().template hash_mask<Ex...>();
+        for (size_t byte_idx = 0; byte_idx < copy._exclude_hash_mask.hash.size(); ++byte_idx)
+        {
+            copy._exclude_hash_mask.hash[byte_idx] |= exclude_mask.hash[byte_idx];
+        }
+        return copy;
+    }
+
+    template <typename... Ts>
     inline auto basic_archetype_with_components_view<Ts...>::cbegin() const
         -> basic_archetype_with_components_iter<Ts...>
 
@@ -1800,6 +1817,14 @@ namespace tempest::ecs
                 const auto byte_match =
                     (_type_hash_mask.hash[byte_idx] & archetype_hash.hash[byte_idx]) == _type_hash_mask.hash[byte_idx];
                 if (!byte_match)
+                {
+                    match = false;
+                    break;
+                }
+
+                const auto exclude_match =
+                    (_exclude_hash_mask.hash[byte_idx] & archetype_hash.hash[byte_idx]) != static_cast<byte>(0);
+                if (exclude_match)
                 {
                     match = false;
                     break;
@@ -1848,6 +1873,14 @@ namespace tempest::ecs
                 const auto byte_match =
                     (_type_hash_mask.hash[byte_idx] & archetype_hash.hash[byte_idx]) == _type_hash_mask.hash[byte_idx];
                 if (!byte_match)
+                {
+                    match = false;
+                    break;
+                }
+
+                const auto exclude_match =
+                    (_exclude_hash_mask.hash[byte_idx] & archetype_hash.hash[byte_idx]) != static_cast<byte>(0);
+                if (exclude_match)
                 {
                     match = false;
                     break;

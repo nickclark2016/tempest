@@ -91,6 +91,7 @@ scoped.project('tempest', function()
             'render-system',
             'rhi-api',
             'rhi-vk',
+            'scene',
             'serialization',
             'units',
         }
