@@ -5978,5 +5978,127 @@ namespace tempest::render_system::tests
 
         dev->wait_idle();
     }
+
+    /// @brief Verifies that calling prepare_frame and render_frame across varying resolutions
+    /// (including growing to 5120x1417 and shrinking back down to 1920x1080) with UI passes executes
+    /// successfully without Vulkan renderArea or attachment extent mismatches.
+    TEST(render_system_tests, renderer_frame_resize_ui_pass_dimensions)
+    {
+        // 1. Setup: test fixture, logger, and registry
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1920,
+            .render_height = 1080,
+            .enable_ssao = false,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            struct test_target
+            {
+                rhi::texture_handle tex;
+                rhi::texture_view_handle view;
+            };
+
+            auto make_target = [&](uint32_t w, uint32_t h) -> test_target {
+                auto tex = dev->create_texture(rhi::texture_desc{
+                    .width = w,
+                    .height = h,
+                    .depth = 1,
+                    .mip_levels = 1,
+                    .array_layers = 1,
+                    .format = rhi::data_format::rgba8_unorm,
+                    .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
+                    .name = "TestSwapchainTarget",
+                });
+                auto view = dev->create_texture_view(tex, rhi::texture_view_desc{
+                    .override_format = nullopt,
+                    .base_mip_level = 0,
+                    .mip_level_count = 1,
+                    .base_array_layer = 0,
+                    .array_layer_count = 1,
+                });
+                return test_target{.tex = tex, .view = view};
+            };
+
+            auto target_1920x1080 = make_target(1920, 1080);
+            auto target_5120x1417 = make_target(5120, 1417);
+            auto target_shrink_1920 = make_target(1920, 1080);
+
+            auto ui_called = false;
+            auto ui_width = 0U;
+            auto ui_height = 0U;
+            auto ui_cb = [&](rhi::command_list&, uint32_t w, uint32_t h) {
+                ui_called = true;
+                ui_width = w;
+                ui_height = h;
+            };
+
+            // 2. Act: Render at initial 1920x1080
+            rend->prepare_frame(1920, 1080, target_1920x1080.tex, target_1920x1080.view, nullopt, ui_cb);
+            auto res = rend->render();
+            EXPECT_TRUE(res.has_value());
+            EXPECT_TRUE(ui_called);
+            EXPECT_EQ(ui_width, 1920U);
+            EXPECT_EQ(ui_height, 1080U);
+
+            dev->wait_idle();
+
+            // 3. Act: Resize up to ultrawide 5120x1417
+            ui_called = false;
+            rend->prepare_frame(5120, 1417, target_5120x1417.tex, target_5120x1417.view, nullopt, ui_cb);
+            res = rend->render();
+            EXPECT_TRUE(res.has_value());
+            EXPECT_TRUE(ui_called);
+            EXPECT_EQ(ui_width, 5120U);
+            EXPECT_EQ(ui_height, 1417U);
+
+            dev->wait_idle();
+
+            // 4. Act: Resize down from 5120x1417 to 1920x1080 (shrink cycle)
+            ui_called = false;
+            rend->prepare_frame(1920, 1080, target_shrink_1920.tex, target_shrink_1920.view, nullopt, ui_cb);
+            res = rend->render();
+            EXPECT_TRUE(res.has_value());
+            EXPECT_TRUE(ui_called);
+            EXPECT_EQ(ui_width, 1920U);
+            EXPECT_EQ(ui_height, 1080U);
+
+            dev->wait_idle();
+
+            // 5. Cleanup test targets
+            dev->destroy_texture_view(target_1920x1080.view);
+            dev->destroy_texture(target_1920x1080.tex);
+            dev->destroy_texture_view(target_5120x1417.view);
+            dev->destroy_texture(target_5120x1417.tex);
+            dev->destroy_texture_view(target_shrink_1920.view);
+            dev->destroy_texture(target_shrink_1920.tex);
+        }
+
+        dev->wait_idle();
+    }
 } // namespace tempest::render_system::tests
 

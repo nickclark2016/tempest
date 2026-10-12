@@ -872,6 +872,14 @@ namespace tempest::render_system
         {
             if ((_device != nullptr) && surf->render_surface && surf->raw_surface.handle != 0)
             {
+                if (surf->width == 0 || surf->height == 0)
+                {
+                    surf->current_sc_image = nullopt;
+                    surf->need_recreate = true;
+                    _frame_begun = true;
+                    return;
+                }
+
                 if (surf->width > 0 && surf->height > 0 &&
                     (surf->width != surf->render_surface->get_width() ||
                      surf->height != surf->render_surface->get_height() || surf->need_recreate))
@@ -1495,6 +1503,15 @@ namespace tempest::render_system
             auto swapchain_target =
                 _graph.import_texture(*effective_sc_tex, *effective_sc_view, rhi::image_layout::undefined);
 
+            const auto* surf = _find_surface(_active_surface_window);
+            auto ui_width = width;
+            auto ui_height = height;
+            if (!swapchain_tex.has_value() && (surf != nullptr) && surf->render_surface)
+            {
+                ui_width = surf->render_surface->get_width();
+                ui_height = surf->render_surface->get_height();
+            }
+
             _graph.add_graphics_pass<ui_pass_data>(
                 "UIRenderPass",
                 [this, swapchain_target](render_graph::pass_builder& builder, ui_pass_data& data) -> void {
@@ -1506,17 +1523,17 @@ namespace tempest::render_system
                                   rhi::resource_access::write, rhi::image_layout::general);
                     builder.mark_sink();
                 },
-                [ui_cb = tempest::move(ui_callback), view = *effective_sc_view, width,
-                 height]([[maybe_unused]] const ui_pass_data& data,
-                         [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& cmd) -> void {
+                [ui_cb = tempest::move(ui_callback), view = *effective_sc_view, ui_width,
+                 ui_height]([[maybe_unused]] const ui_pass_data& data,
+                            [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& cmd) -> void {
                     auto color_att = rhi::color_attachment{
                         .view = view,
                         .load_op = rhi::load_op::clear,
                         .store_op = rhi::store_op::store,
                         .clear_value = rhi::clear_color_value{.r = 0.0F, .g = 0.0F, .b = 0.0F, .a = 1.0F},
                     };
-                    cmd.begin_render_pass(span<const rhi::color_attachment>{&color_att, 1}, nullopt, width, height);
-                    ui_cb(cmd, width, height);
+                    cmd.begin_render_pass(span<const rhi::color_attachment>{&color_att, 1}, nullopt, ui_width, ui_height);
+                    ui_cb(cmd, ui_width, ui_height);
                     cmd.end_render_pass();
                 });
         }
@@ -1635,17 +1652,17 @@ namespace tempest::render_system
             target_win = _surfaces.front().window;
         }
 
-        auto* surf = _find_surface(target_win);
-        auto w = ((surf != nullptr) && surf->render_surface) ? surf->render_surface->get_width() : _cfg.render_width;
-        auto h = ((surf != nullptr) && surf->render_surface) ? surf->render_surface->get_height() : _cfg.render_height;
-
         begin_frame(target_win);
 
+        auto* surf = _find_surface(target_win);
         if ((surf != nullptr) && surf->render_surface && !surf->current_sc_image.has_value())
         {
-            // Image acquisition failed / recreate pending
+            // Image acquisition failed / recreate pending / minimized
             return {};
         }
+
+        auto w = ((surf != nullptr) && surf->render_surface) ? surf->render_surface->get_width() : _cfg.render_width;
+        auto h = ((surf != nullptr) && surf->render_surface) ? surf->render_surface->get_height() : _cfg.render_height;
 
         prepare_frame(w, h, nullopt, nullopt, tempest::move(camera_override), tempest::move(ui_callback));
 
