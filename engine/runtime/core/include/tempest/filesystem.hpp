@@ -64,6 +64,12 @@ namespace tempest::filesystem
             using type = remove_const_t<remove_extent_t<remove_cvref_t<T>>>;
         };
 
+        template <character_type T>
+        struct fs_char_type<T[]>
+        {
+            using type = remove_const_t<remove_extent_t<remove_cvref_t<T>>>;
+        };
+
         template <typename T>
         auto convert_to_native(const T& p)
         {

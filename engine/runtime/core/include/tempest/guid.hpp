@@ -6,7 +6,9 @@
 #include <tempest/array.hpp>
 #include <tempest/hash.hpp>
 #include <tempest/int.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/string.hpp>
+#include <tempest/string_view.hpp>
 
 namespace tempest
 {
@@ -43,6 +45,7 @@ namespace tempest
     };
 
     [[nodiscard]] TEMPEST_API auto to_string(const guid& uid) -> string;
+    [[nodiscard]] TEMPEST_API auto parse_guid(string_view str) noexcept -> optional<guid>;
 }; // namespace tempest
 
 #endif // tempest_guid_hpp

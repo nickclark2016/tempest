@@ -555,7 +555,7 @@ namespace tempest
                         auto* event = reinterpret_cast<struct inotify_event*>(&buffer[offset]);
                         if (event->len > 0)
                         {
-                            auto full_path = _options.watch_path / filesystem::path(event->name);
+                            auto full_path = _options.watch_path / filesystem::path(static_cast<const char*>(event->name));
                             if (event->mask & IN_CREATE)
                             {
                                 _add_or_update_pending(file_watch_event_type::added, tempest::move(full_path), {});

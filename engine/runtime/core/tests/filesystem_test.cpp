@@ -96,6 +96,49 @@ TEST(path, construct_from_wchar_path)
 #endif
 }
 
+namespace
+{
+    auto get_unbounded_narrow_array() -> const char (&)[]
+    {
+        static const char buffer[] = "Hello/World";
+        return reinterpret_cast<const char (&)[]>(buffer);
+    }
+
+    auto get_unbounded_wide_array() -> const wchar_t (&)[]
+    {
+        static const wchar_t buffer[] = L"Hello\\World";
+        return reinterpret_cast<const wchar_t (&)[]>(buffer);
+    }
+} // namespace
+
+/// @brief Tests that path can be constructed and assigned from an array of unknown bound (e.g. flexible array members).
+TEST(path, construct_from_array_of_unknown_bound)
+{
+    // 1. Act: construct from narrow array of unknown bound (char[])
+    const auto p1 = fs::path(get_unbounded_narrow_array());
+
+    // 2. Assert: narrow path converted or stored correctly
+#ifdef _WIN32
+    EXPECT_EQ(p1.native(), L"Hello/World");
+    EXPECT_STREQ(p1.c_str(), L"Hello/World");
+#else
+    EXPECT_EQ(p1.native(), "Hello/World");
+    EXPECT_STREQ(p1.c_str(), "Hello/World");
+#endif
+
+    // 3. Act: construct from wide array of unknown bound (wchar_t[])
+    const auto p2 = fs::path(get_unbounded_wide_array());
+
+    // 4. Assert: wide path converted or stored correctly
+#ifdef _WIN32
+    EXPECT_EQ(p2.native(), L"Hello\\World");
+    EXPECT_STREQ(p2.c_str(), L"Hello\\World");
+#else
+    EXPECT_EQ(p2.native(), "Hello\\World");
+    EXPECT_STREQ(p2.c_str(), "Hello\\World");
+#endif
+}
+
 TEST(path, root_name)
 {
     fs::path win_style_path = L"C:\\Users\\User\\Documents\\file.txt";

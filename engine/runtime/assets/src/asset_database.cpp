@@ -428,6 +428,7 @@ namespace tempest::assets
         _cached_blobs.clear();
         _basename_to_relative_path.clear();
         _relative_path_to_source_path.clear();
+        _sidecars.clear();
         _dirty = false;
 
         // Try to read existing database file
@@ -466,10 +467,13 @@ namespace tempest::assets
             auto type_hash = serialization::serializer<serialization::binary_archive, uint64_t>::deserialize(archive);
             auto type_name = serialization::serializer<serialization::binary_archive, string>::deserialize(archive);
             auto type_id = asset_type_id::from_hash(static_cast<size_t>(type_hash));
-            auto validation = _type_reg->validate(type_id, type_name);
-            if (validation.has_value() && !validation.value())
+            if (_type_reg != nullptr)
             {
-                return;
+                auto validation = _type_reg->validate(type_id, type_name);
+                if (validation.has_value() && !validation.value())
+                {
+                    return;
+                }
             }
         }
 
@@ -579,13 +583,19 @@ namespace tempest::assets
 
         // Write type registry section
         uint64_t num_types = 0;
-        _type_reg->for_each([&num_types](const type_entry&) -> void { ++num_types; });
+        if (_type_reg != nullptr)
+        {
+            _type_reg->for_each([&num_types](const type_entry&) -> void { ++num_types; });
+        }
         serialization::serializer<serialization::binary_archive, uint64_t>::serialize(archive, num_types);
-        _type_reg->for_each([&archive](const type_entry& entry) -> void {
-            serialization::serializer<serialization::binary_archive, uint64_t>::serialize(
-                archive, static_cast<uint64_t>(entry.id.hash()));
-            serialization::serializer<serialization::binary_archive, string>::serialize(archive, entry.canonical_name);
-        });
+        if (_type_reg != nullptr)
+        {
+            _type_reg->for_each([&archive](const type_entry& entry) -> void {
+                serialization::serializer<serialization::binary_archive, uint64_t>::serialize(
+                    archive, static_cast<uint64_t>(entry.id.hash()));
+                serialization::serializer<serialization::binary_archive, string>::serialize(archive, entry.canonical_name);
+            });
+        }
 
         // Write source table
         serialization::serializer<serialization::binary_archive, uint64_t>::serialize(
@@ -2037,5 +2047,279 @@ namespace tempest::assets
         _dirty = true;
 
         return ref;
+    }
+
+    auto asset_database::register_source_with_guid(const guid& uid, string_view source_path) -> source_entry&
+    {
+        auto normalized = normalize_path_str(source_path);
+        auto iter = _source_path_to_index.find(normalized);
+        if (iter != _source_path_to_index.end())
+        {
+            return *_sources[iter->second];
+        }
+
+        auto entry = make_unique<source_entry>(source_entry{
+            .id = uid,
+            .source_path = normalized,
+            .source_hash = {},
+            .last_modified_time = 0,
+        });
+
+        auto index = _sources.size();
+        string path_copy = entry->source_path;
+        _source_path_to_index.insert({tempest::move(path_copy), index});
+        _source_id_to_index.insert({uid, index});
+        auto& ref = *entry;
+        _sources.push_back(tempest::move(entry));
+
+        _dirty = true;
+
+        return ref;
+    }
+
+    auto asset_database::find_sidecar(string_view source_path) const -> optional<sidecar_meta>
+    {
+        const auto iter = _sidecars.find(source_path);
+        if (iter != _sidecars.end())
+        {
+            return iter->second;
+        }
+
+        const auto disk_path_opt = resolve_disk_path(source_path);
+        if (disk_path_opt.has_value())
+        {
+            auto meta_path = string(*disk_path_opt);
+            meta_path += ".tmeta";
+            if (filesystem::exists(filesystem::path(meta_path)))
+            {
+                return sidecar_meta::load_from_file(meta_path);
+            }
+        }
+
+        return nullopt;
+    }
+
+    auto asset_database::store_sidecar(string_view source_path, const sidecar_meta& meta) -> bool
+    {
+        _sidecars[string(source_path)] = meta;
+
+        const auto disk_path_opt = resolve_disk_path(source_path);
+        if (disk_path_opt.has_value())
+        {
+            auto meta_path = string(*disk_path_opt);
+            meta_path += ".tmeta";
+            return meta.save_to_file(meta_path);
+        }
+
+        return false;
+    }
+
+    auto asset_database::resolve_sub_asset_guid(string_view source_path, string_view sub_asset_key,
+                                                optional<asset_type_id> type) -> guid
+    {
+        auto meta_opt = find_sidecar(source_path);
+        auto meta = sidecar_meta{};
+        if (meta_opt.has_value())
+        {
+            meta = tempest::move(*meta_opt);
+        }
+        else
+        {
+            auto& src = _get_or_create_source(source_path);
+            meta.source_guid = src.id;
+        }
+
+        const auto sub_guid = meta.resolve_or_create_sub_asset(sub_asset_key, type);
+        if (type.has_value())
+        {
+            register_asset_with_guid(sub_guid, *type, source_path);
+        }
+
+        [[maybe_unused]] const auto store_result = store_sidecar(source_path, meta);
+        return sub_guid;
+    }
+
+    auto asset_database::rebuild_from_workspace(const project_workspace& workspace) -> bool
+    {
+        // 1. Ensure cache directory exists and set db path
+        const auto cache_dir = workspace.cache_directory();
+        if (!cache_dir.empty())
+        {
+            filesystem::create_directories(filesystem::path(cache_dir));
+        }
+        _db_path = workspace.cache_db_path();
+
+        // 2. Clear current database entries
+        _sources.clear();
+        _source_path_to_index.clear();
+        _source_id_to_index.clear();
+        _assets.clear();
+        _asset_guid_to_index.clear();
+        _blob_chunks.clear();
+        _packing_chunk.reset();
+        _current_chunk_capacity = 0;
+        _current_chunk_used = 0;
+        _cached_blobs.clear();
+        _basename_to_relative_path.clear();
+        _relative_path_to_source_path.clear();
+        _metadata.clear();
+        _sidecars.clear();
+        clear_mount_roots();
+        clear_ignores();
+
+        // 3. Configure mount roots
+        for (const auto& mount : workspace.mounts)
+        {
+            auto mount_disk_path = filesystem::path{};
+            if (filesystem::path(mount.path).is_absolute() || workspace.root_directory.empty())
+            {
+                mount_disk_path = filesystem::path(mount.path);
+            }
+            else
+            {
+                mount_disk_path = filesystem::path(workspace.root_directory) / filesystem::path(mount.path);
+            }
+            mount_root(mount_disk_path.generic_string(), mount.priority, mount.alias);
+        }
+
+        // 4. Scan mounts and discover assets & sidecars
+        for (const auto& mount_point_entry : _mount_roots)
+        {
+            const auto root_path = filesystem::path(mount_point_entry.path.c_str());
+            if (!filesystem::exists(root_path) || !filesystem::is_directory(root_path))
+            {
+                continue;
+            }
+
+            auto scan_dir = [&](auto& self, const filesystem::path& dir, string_view rel_accum) -> void {
+                for (auto entry_it = filesystem::directory_iterator(dir); entry_it != filesystem::directory_iterator(); ++entry_it)
+                {
+                    const auto filename_str = string(entry_it->path().filename().string());
+                    if (filename_str.empty() || filename_str == "." || filename_str == "..")
+                    {
+                        continue;
+                    }
+
+                    auto child_rel = string{};
+                    if (rel_accum.empty())
+                    {
+                        child_rel = filename_str;
+                    }
+                    else
+                    {
+                        child_rel.append(rel_accum.data(), rel_accum.size());
+                        child_rel.append("/");
+                        child_rel.append(filename_str);
+                    }
+
+                    if (entry_it->is_directory())
+                    {
+                        if (filename_str.size() > 1 && filename_str[0] == '.')
+                        {
+                            continue;
+                        }
+
+                        bool is_ignored = false;
+                        for (const auto& ignored_dir : _ignored_directories)
+                        {
+                            if (filename_str == ignored_dir || child_rel == ignored_dir)
+                            {
+                                is_ignored = true;
+                                break;
+                            }
+                        }
+                        if (is_ignored)
+                        {
+                            continue;
+                        }
+
+                        self(self, entry_it->path(), child_rel);
+                    }
+                    else if (entry_it->is_regular_file())
+                    {
+                        if (tempest::ends_with(filename_str, ".tmeta") ||
+                            tempest::ends_with(filename_str, ".tproject"))
+                        {
+                            continue;
+                        }
+
+                        auto entry_key = string{};
+                        if (mount_point_entry.alias.empty())
+                        {
+                            entry_key = child_rel;
+                        }
+                        else
+                        {
+                            entry_key.append("@");
+                            entry_key.append(mount_point_entry.alias);
+                            entry_key.append("/");
+                            entry_key.append(child_rel);
+                        }
+
+                        const auto disk_path_str = entry_it->path().generic_string();
+                        auto meta_path_str = disk_path_str;
+                        meta_path_str += ".tmeta";
+                        const auto meta_path = filesystem::path(meta_path_str);
+
+                        const auto disk_mtime = get_file_last_write_time(disk_path_str);
+                        const auto file_bytes = read_file_to_vector(entry_it->path()).value_or(vector<byte>{});
+                        const auto file_hash =
+                            content_hash::compute(span<const byte>{file_bytes.data(), file_bytes.size()});
+
+                        auto meta = sidecar_meta{};
+                        auto meta_existed = false;
+                        if (filesystem::exists(meta_path))
+                        {
+                            auto loaded_opt = sidecar_meta::load_from_file(meta_path_str);
+                            if (loaded_opt.has_value())
+                            {
+                                meta = tempest::move(*loaded_opt);
+                                meta_existed = true;
+                            }
+                        }
+
+                        if (!meta_existed)
+                        {
+                            meta.source_guid = sidecar_meta::generate_deterministic_guid(guid{}, entry_key);
+                            meta.importer = "";
+                            meta.importer_version = 1;
+
+                            if (tempest::ends_with(entry_key, ".spv") || tempest::ends_with(entry_key, ".slang"))
+                            {
+                                [[maybe_unused]] const auto shader_sub_id =
+                                    meta.resolve_or_create_sub_asset("shader", asset_type_id::of<shader_asset>());
+                            }
+
+                            [[maybe_unused]] const auto save_result = meta.save_to_file(meta_path_str);
+                        }
+
+                        auto& source_entry_ref = register_source_with_guid(meta.source_guid, entry_key);
+                        source_entry_ref.last_modified_time = disk_mtime;
+                        source_entry_ref.source_hash = file_hash;
+
+                        for (const auto& sub_pair : meta.sub_assets)
+                        {
+                            const auto type_it = meta.sub_asset_types.find(sub_pair.first);
+                            const auto sub_type = (type_it != meta.sub_asset_types.end())
+                                                      ? type_it->second
+                                                      : asset_type_id::from_hash(0);
+                            register_asset_with_guid(sub_pair.second, sub_type, entry_key);
+                        }
+
+                        _sidecars[entry_key] = meta;
+
+                        if (!_basename_to_relative_path.contains(filename_str))
+                        {
+                            _basename_to_relative_path.insert({filename_str, entry_key});
+                        }
+                    }
+                }
+            };
+
+            scan_dir(scan_dir, root_path, "");
+        }
+
+        _dirty = true;
+        return save();
     }
 } // namespace tempest::assets

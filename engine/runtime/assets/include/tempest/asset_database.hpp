@@ -13,6 +13,7 @@
 #include <tempest/memory.hpp>
 #include <tempest/meta.hpp>
 #include <tempest/optional.hpp>
+#include <tempest/project_workspace.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string.hpp>
 #include <tempest/utility.hpp>
@@ -90,18 +91,6 @@ namespace tempest::assets
     {
     };
 
-    struct TEMPEST_API mount_point
-    {
-        string path;
-        int32_t priority{0};
-        string alias;
-
-        auto operator==(const mount_point& rhs) const noexcept -> bool
-        {
-            return priority == rhs.priority && path == rhs.path && alias == rhs.alias;
-        }
-    };
-
     struct TEMPEST_API scan_options
     {
         vector<string> extension_whitelist;
@@ -168,6 +157,14 @@ namespace tempest::assets
         [[nodiscard]] auto register_asset_metadata(asset_metadata meta) -> guid;
         [[nodiscard]] auto get_asset_metadata(guid asset_id) const -> optional<const asset_metadata&>;
 
+        // Project Workspace & Sidecars
+        auto rebuild_from_workspace(const project_workspace& workspace) -> bool;
+        auto register_source_with_guid(const guid& uid, string_view source_path) -> source_entry&;
+        auto resolve_sub_asset_guid(string_view source_path, string_view sub_asset_key,
+                                    optional<asset_type_id> type = nullopt) -> guid;
+        [[nodiscard]] auto find_sidecar(string_view source_path) const -> optional<sidecar_meta>;
+        auto store_sidecar(string_view source_path, const sidecar_meta& meta) -> bool;
+
         [[nodiscard]] auto type_registry() noexcept -> asset_type_registry*
         {
             return _type_reg;
@@ -204,6 +201,7 @@ namespace tempest::assets
 
         flat_unordered_map<string, unique_ptr<asset_importer>> _importers;
         flat_unordered_map<guid, asset_metadata> _metadata;
+        flat_unordered_map<string, sidecar_meta> _sidecars;
 
         vector<component_serializer> _component_serializers;
         flat_unordered_map<size_t, size_t> _component_hash_to_index;

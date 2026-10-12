@@ -51,4 +51,66 @@ namespace tempest
 
         return str;
     }
+
+    namespace
+    {
+        auto parse_hex_digit(char hex_char) noexcept -> int
+        {
+            if (hex_char >= '0' && hex_char <= '9')
+            {
+                return hex_char - '0';
+            }
+            if (hex_char >= 'a' && hex_char <= 'f')
+            {
+                return hex_char - 'a' + 10;
+            }
+            if (hex_char >= 'A' && hex_char <= 'F')
+            {
+                return hex_char - 'A' + 10;
+            }
+            return -1;
+        }
+    } // namespace
+
+    auto parse_guid(string_view str) noexcept -> optional<guid>
+    {
+        auto result = guid{};
+        auto byte_index = size_t{0};
+        auto high_nibble = -1;
+
+        for (const auto character : str)
+        {
+            if (character == '-' || character == '{' || character == '}')
+            {
+                continue;
+            }
+
+            const auto hex_value = parse_hex_digit(character);
+            if (hex_value < 0)
+            {
+                return nullopt;
+            }
+
+            if (high_nibble < 0)
+            {
+                high_nibble = hex_value;
+            }
+            else
+            {
+                if (byte_index >= guid::size)
+                {
+                    return nullopt;
+                }
+                result.data[byte_index++] = static_cast<byte>((high_nibble << 4) | hex_value);
+                high_nibble = -1;
+            }
+        }
+
+        if (byte_index != guid::size || high_nibble >= 0)
+        {
+            return nullopt;
+        }
+
+        return result;
+    }
 } // namespace tempest
