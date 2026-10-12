@@ -83,6 +83,7 @@ namespace tempest
 #if defined(_WIN32)
         HANDLE _dir_handle{INVALID_HANDLE_VALUE};
         HANDLE _stop_event{nullptr};
+        HANDLE _ready_event{nullptr};
         OVERLAPPED _overlapped{};
         vector<uint8_t> _buffer;
 #elif defined(__linux__)
@@ -116,10 +117,16 @@ namespace tempest
         }
 
         _stop_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        _ready_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         _overlapped.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
-        if (_stop_event == nullptr || _overlapped.hEvent == nullptr)
+        if (_stop_event == nullptr || _ready_event == nullptr || _overlapped.hEvent == nullptr)
         {
+            if (_ready_event != nullptr)
+            {
+                CloseHandle(_ready_event);
+                _ready_event = nullptr;
+            }
             if (_stop_event != nullptr)
             {
                 CloseHandle(_stop_event);
@@ -150,11 +157,29 @@ namespace tempest
             _inotify_fd = -1;
             return;
         }
+
+        const auto watch_mask = IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO;
+        const auto wd = inotify_add_watch(_inotify_fd, _options.watch_path.c_str(), watch_mask);
+        if (wd == -1)
+        {
+            close(_stop_pipe[0]);
+            close(_stop_pipe[1]);
+            _stop_pipe[0] = -1;
+            _stop_pipe[1] = -1;
+            close(_inotify_fd);
+            _inotify_fd = -1;
+            return;
+        }
+
         _pending_events.reserve(256);
 #endif
 
         _running.store(true, memory_order::release);
         _worker_thread = thread{[this]() { _worker_thread_func(); }};
+
+#if defined(_WIN32)
+        WaitForSingleObject(_ready_event, INFINITE);
+#endif
     }
 
     file_watcher_impl::~file_watcher_impl() noexcept
@@ -196,6 +221,11 @@ namespace tempest
         {
             CloseHandle(_overlapped.hEvent);
             _overlapped.hEvent = nullptr;
+        }
+        if (_ready_event != nullptr)
+        {
+            CloseHandle(_ready_event);
+            _ready_event = nullptr;
         }
         if (_stop_event != nullptr)
         {
@@ -370,8 +400,11 @@ namespace tempest
         if (!issue_read())
         {
             _running.store(false, memory_order::release);
+            SetEvent(_ready_event);
             return;
         }
+
+        SetEvent(_ready_event);
 
         HANDLE wait_handles[2] = {_stop_event, _overlapped.hEvent};
         optional<filesystem::path> pending_rename_old;
@@ -493,14 +526,6 @@ namespace tempest
 #elif defined(__linux__)
     void file_watcher_impl::_worker_thread_func()
     {
-        const auto watch_mask = IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | IN_MOVED_TO;
-        const auto wd = inotify_add_watch(_inotify_fd, _options.watch_path.c_str(), watch_mask);
-        if (wd == -1)
-        {
-            _running.store(false, memory_order::release);
-            return;
-        }
-
         struct pollfd fds[2];
         fds[0].fd = _stop_pipe[0];
         fds[0].events = POLLIN;
