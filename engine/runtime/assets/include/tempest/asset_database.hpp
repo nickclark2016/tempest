@@ -56,13 +56,18 @@ namespace tempest::assets
 
     struct TEMPEST_API asset_entry
     {
+        static constexpr uint64_t default_blob_offset = 0;
+        static constexpr uint64_t default_blob_size = 0;
+        static constexpr bool default_is_transient = false;
+
         guid id;
         asset_type_id type;
-        uint64_t blob_offset{0};
-        uint64_t blob_size{0};
+        uint64_t blob_offset = default_blob_offset;
+        uint64_t blob_size = default_blob_size;
         guid source_id;
         vector<guid> dependencies;
         flat_unordered_map<string, string> user_metadata;
+        bool is_transient = default_is_transient;
     };
 
     struct TEMPEST_API import_result
@@ -145,6 +150,7 @@ namespace tempest::assets
         auto register_asset_with_guid(const guid& uid, asset_type_id type, string_view source_path) -> bool;
         auto store_blob(const guid& asset_id, span<const byte> blob_data) -> void;
         [[nodiscard]] auto get_blob(const guid& asset_id) const -> span<const byte>;
+        [[nodiscard]] auto is_transient_asset(const guid& id) const -> bool;
 
         auto register_importer(unique_ptr<asset_importer> importer, string_view extension) -> void;
 

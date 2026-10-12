@@ -522,6 +522,7 @@ namespace tempest::assets
                 .source_id = source_id,
                 .dependencies = tempest::move(deps),
                 .user_metadata = tempest::move(meta),
+                .is_transient = false,
             });
 
             auto asset_index = _assets.size();
@@ -1581,6 +1582,10 @@ namespace tempest::assets
     {
         auto& src = _get_or_create_source(source_path);
 
+        const auto is_builtin = tempest::starts_with(source_path, "@builtin/") || source_path == "@builtin";
+        const auto has_sidecar = is_builtin || find_sidecar(source_path).has_value();
+        const auto transient = !has_sidecar;
+
         auto new_id = guid::generate_random_guid();
         auto entry = make_unique<asset_entry>(asset_entry{
             .id = new_id,
@@ -1590,6 +1595,7 @@ namespace tempest::assets
             .source_id = src.id,
             .dependencies = {},
             .user_metadata = {},
+            .is_transient = transient,
         });
 
         auto index = _assets.size();
@@ -1610,6 +1616,10 @@ namespace tempest::assets
 
         auto& src = _get_or_create_source(source_path);
 
+        const auto is_builtin = tempest::starts_with(source_path, "@builtin/") || source_path == "@builtin";
+        const auto has_sidecar = is_builtin || find_sidecar(source_path).has_value();
+        const auto transient = !has_sidecar;
+
         auto entry = make_unique<asset_entry>(asset_entry{
             .id = uid,
             .type = type,
@@ -1618,6 +1628,7 @@ namespace tempest::assets
             .source_id = src.id,
             .dependencies = {},
             .user_metadata = {},
+            .is_transient = transient,
         });
 
         auto index = _assets.size();
@@ -1625,6 +1636,16 @@ namespace tempest::assets
         _assets.push_back(tempest::move(entry));
 
         return true;
+    }
+
+    auto asset_database::is_transient_asset(const guid& id) const -> bool
+    {
+        const auto* entry = find_by_guid(id);
+        if (entry != nullptr)
+        {
+            return entry->is_transient;
+        }
+        return false;
     }
 
     auto asset_database::store_blob(const guid& asset_id, span<const byte> data) -> void
@@ -2130,12 +2151,11 @@ namespace tempest::assets
         }
 
         const auto sub_guid = meta.resolve_or_create_sub_asset(sub_asset_key, type);
+        [[maybe_unused]] const auto store_result = store_sidecar(source_path, meta);
         if (type.has_value())
         {
             register_asset_with_guid(sub_guid, *type, source_path);
         }
-
-        [[maybe_unused]] const auto store_result = store_sidecar(source_path, meta);
         return sub_guid;
     }
 
@@ -2297,6 +2317,8 @@ namespace tempest::assets
                         source_entry_ref.last_modified_time = disk_mtime;
                         source_entry_ref.source_hash = file_hash;
 
+                        _sidecars[entry_key] = meta;
+
                         for (const auto& sub_pair : meta.sub_assets)
                         {
                             const auto type_it = meta.sub_asset_types.find(sub_pair.first);
@@ -2305,8 +2327,6 @@ namespace tempest::assets
                                                       : asset_type_id::from_hash(0);
                             register_asset_with_guid(sub_pair.second, sub_type, entry_key);
                         }
-
-                        _sidecars[entry_key] = meta;
 
                         if (!_basename_to_relative_path.contains(filename_str))
                         {
