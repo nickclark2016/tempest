@@ -1844,6 +1844,15 @@ namespace tempest::filesystem
 #endif
     }
 
+    auto rename(const path& old_p, const path& new_p) -> bool
+    {
+#ifdef _WIN32
+        return MoveFileExW(old_p.native().c_str(), new_p.native().c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+#else
+        return ::rename(old_p.native().c_str(), new_p.native().c_str()) == 0;
+#endif
+    }
+
     auto remove_all(const path& p) -> uintmax_t
     {
         if (!exists(p))

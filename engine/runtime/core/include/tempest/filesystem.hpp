@@ -434,6 +434,7 @@ namespace tempest::filesystem
 
     TEMPEST_API auto remove(const path& p) -> bool;
     TEMPEST_API auto remove_all(const path& p) -> uintmax_t;
+    TEMPEST_API auto rename(const path& old_p, const path& new_p) -> bool;
 
     [[nodiscard]] TEMPEST_API auto file_size(const path& p) -> size_t;
 

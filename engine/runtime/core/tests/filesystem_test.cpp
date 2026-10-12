@@ -1097,3 +1097,35 @@ TEST(filesystem_directories, remove_all_dot_directories)
     EXPECT_EQ(count, 5U);
     EXPECT_FALSE(fs::exists(root));
 }
+
+/// @brief Tests that rename moves files and directories and updates paths correctly.
+TEST(filesystem_directories, rename_file_and_directory)
+{
+    // 1. Setup: create directories and a test file
+    auto root = fs::temp_directory_path() / "tempest_test_fs_rename";
+    fs::remove_all(root);
+    ASSERT_TRUE(fs::create_directories(root / "source_dir"));
+
+    auto old_file = root / "source_dir" / "file.txt";
+    auto new_file = root / "source_dir" / "renamed_file.txt";
+    const auto* data = "rename_content";
+    ASSERT_TRUE(tempest::write_file_from_bytes(old_file, {reinterpret_cast<const tempest::byte*>(data), 14}));
+    ASSERT_TRUE(fs::exists(old_file));
+
+    // 2. Act: rename file
+    ASSERT_TRUE(fs::rename(old_file, new_file));
+
+    // 3. Assert: old file does not exist, new file exists
+    EXPECT_FALSE(fs::exists(old_file));
+    EXPECT_TRUE(fs::exists(new_file));
+
+    // 4. Act: rename directory
+    auto new_dir = root / "target_dir";
+    ASSERT_TRUE(fs::rename(root / "source_dir", new_dir));
+
+    // 5. Assert: old directory does not exist, new directory and its file exist
+    EXPECT_FALSE(fs::exists(root / "source_dir"));
+    EXPECT_TRUE(fs::exists(new_dir / "renamed_file.txt"));
+
+    fs::remove_all(root);
+}

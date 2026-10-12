@@ -177,9 +177,15 @@ auto basic_archetype_registry::restore(registry_snapshot&& snapshot) -> void;
 - The scene is marked dirty. On Stop the change survives the restore, and the user must still save explicitly. Saving to disk is disabled during a session.
 
 #### Network play (Viewport 1e)
-- A Play settings dropdown offers **Offline**, **Connect to host:port** and **Launch local server + connect**.
-- The last option spawns `tempest-server` as a child process and kills it on Stop.
-- The game module's client path (today's `--connect`) is given the endpoint through `on_play_begin(play_settings)`.
+- **Embedded In-Process Server**: Rather than spawning an external child process, an instance of `tempest::server::server_context` runs on a dedicated background `tempest::thread` inside the editor. The `server` project in `engine/runtime/server/premake5.lua` is converted into a shared library (`server.dll`) linked by `editor-core` and `tempest-server`.
+- **Automatic Port Hunting**: Tries port `7777` by default. If occupied, it automatically increments (`7778`, `7779`, ...) until binding succeeds. External runner instances can connect to `127.0.0.1:<port>` for multiplayer testing.
+- **Session Lifecycle & Pause Synchronization**:
+  - **Play**: Embedded server thread starts and binds port; `client_context` session callbacks (`on_play_session_start`) fire and connect loopback UDP.
+  - **Pause**: Server tick loop halts its physics and snapshot advancement, freezing the world deterministically for editing/inspection.
+  - **Stop**: Server shuts down gracefully (`on_play_session_stop`); game client despawns player and remote proxies, flushes prediction buffers, and restores the editor camera.
+- **Editor Controls & Diagnostics**:
+  - Status Bar Server Pill: `[ ○ Server: Stopped ]` (Edit mode) / `[ ● Server: :<port> (<N> clients) ]` (Play mode).
+  - "Tools -> Network Settings..." modal dialog: Mode selection (*Embedded Private Server*, *Remote Server*, *Standalone Offline*), port configuration, and artificial latency/packet drop simulation filters.
 - Replicated entities show the networked marker. The world restore on Stop also discards replicated entities.
 
 ### 7. Game Module Contract (M7)
