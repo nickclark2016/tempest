@@ -7,6 +7,7 @@
 #include <tempest/asset_importer.hpp>
 #include <tempest/asset_type_id.hpp>
 #include <tempest/asset_type_registry.hpp>
+#include <tempest/file_watcher.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/guid.hpp>
@@ -18,6 +19,18 @@
 #include <tempest/string.hpp>
 #include <tempest/utility.hpp>
 #include <tempest/vector.hpp>
+
+namespace tempest::core
+{
+    class mesh_registry;
+    class texture_registry;
+    class material_registry;
+} // namespace tempest::core
+
+namespace tempest
+{
+    class logger;
+} // namespace tempest
 
 namespace tempest::assets
 {
@@ -143,8 +156,30 @@ namespace tempest::assets
         [[nodiscard]] auto resolve_source_path(string_view path_or_name) const -> optional<string>;
         [[nodiscard]] auto resolve_disk_path(string_view relative_path) const -> optional<string>;
 
-        // Filewatching & Change Notification
+        // File Watching & Hot-Reload Integration
+        auto start_file_watcher(const filesystem::path& watch_path) -> bool;
+        auto start_file_watcher(const filesystem::path& watch_path,
+                                chrono::milliseconds debounce_interval) -> bool;
+        auto stop_file_watcher() noexcept -> void;
+        [[nodiscard]] auto is_file_watcher_running() const noexcept -> bool;
+        auto tick_file_watcher() -> size_t;
         auto notify_file_changed(string_view disk_path) -> bool;
+
+        // Resource Registry Associations
+        auto set_mesh_registry(core::mesh_registry* mesh_reg) noexcept -> void;
+        auto set_texture_registry(core::texture_registry* texture_reg) noexcept -> void;
+        auto set_material_registry(core::material_registry* material_reg) noexcept -> void;
+        auto set_resource_registries(core::mesh_registry* mesh_reg,
+                                     core::texture_registry* texture_reg,
+                                     core::material_registry* material_reg) noexcept -> void;
+
+        [[nodiscard]] auto mesh_registry() const noexcept -> core::mesh_registry*;
+        [[nodiscard]] auto texture_registry() const noexcept -> core::texture_registry*;
+        [[nodiscard]] auto material_registry() const noexcept -> core::material_registry*;
+
+        // Logger Association
+        auto set_logger(logger* log) noexcept -> void;
+        [[nodiscard]] auto get_logger() const noexcept -> logger*;
 
         auto register_asset(asset_type_id type, string_view source_path) -> guid;
         auto register_asset_with_guid(const guid& uid, asset_type_id type, string_view source_path) -> bool;
@@ -164,7 +199,8 @@ namespace tempest::assets
         [[nodiscard]] auto get_asset_metadata(guid asset_id) const -> optional<const asset_metadata&>;
 
         // Project Workspace & Sidecars
-        auto rebuild_from_workspace(const project_workspace& workspace) -> bool;
+        static constexpr bool default_start_watching = false;
+        auto rebuild_from_workspace(const project_workspace& workspace, bool start_watching = default_start_watching) -> bool;
         auto register_source_with_guid(const guid& uid, string_view source_path) -> source_entry&;
         auto resolve_sub_asset_guid(string_view source_path, string_view sub_asset_key,
                                     optional<asset_type_id> type = nullopt) -> guid;
@@ -211,6 +247,31 @@ namespace tempest::assets
 
         vector<component_serializer> _component_serializers;
         flat_unordered_map<size_t, size_t> _component_hash_to_index;
+
+        unique_ptr<file_watcher> _watcher = nullptr;
+        core::mesh_registry* _mesh_reg = nullptr;
+        core::texture_registry* _texture_reg = nullptr;
+        core::material_registry* _material_reg = nullptr;
+        logger* _logger = nullptr;
+
+        [[nodiscard]] auto _compute_canonical_entry_key(const filesystem::path& disk_path) const -> string;
+        [[nodiscard]] auto _find_source_entry_by_disk_path(string_view disk_path) -> source_entry*;
+        auto _remove_source(const guid& source_id) -> void;
+
+        auto _log_warn(string_view message) const -> void;
+        [[nodiscard]] auto _should_ignore_watch_event(const file_watch_event& event) const -> bool;
+        auto _reimport_source_if_supported(string_view source_path) -> void;
+        auto _hot_swap_mesh(const guid& asset_id) -> void;
+        auto _hot_swap_texture(const guid& asset_id) -> void;
+        auto _hot_swap_material(const guid& asset_id) -> void;
+        auto _hot_swap_source_assets(const guid& source_id) -> void;
+        auto _handle_watch_event_modified(const file_watch_event& event) -> void;
+        auto _handle_watch_event_removed(const file_watch_event& event) -> void;
+        [[nodiscard]] auto _find_source_entry_for_rename(const file_watch_event& event) -> source_entry*;
+        auto _rename_source(source_entry& source, const filesystem::path& old_path, const filesystem::path& new_path) -> void;
+        auto _handle_watch_event_renamed(const file_watch_event& event) -> void;
+        auto _register_new_watch_source(string_view disk_path, const filesystem::path& file_path, string_view canonical_key) -> void;
+        auto _handle_watch_event_added(const file_watch_event& event) -> void;
 
         [[nodiscard]] auto _load_from_blobs(string_view source_path, ecs::archetype_registry& registry) -> ecs::entity;
         [[nodiscard]] auto _load_via_import(string_view source_path, ecs::archetype_registry& registry) -> ecs::entity;

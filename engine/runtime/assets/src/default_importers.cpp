@@ -13,6 +13,8 @@ namespace tempest::assets
     auto register_default_importers(asset_database& database, core::mesh_registry* mesh_reg,
                                     core::texture_registry* texture_reg, core::material_registry* material_reg) -> void
     {
+        database.set_resource_registries(mesh_reg, texture_reg, material_reg);
+
         // Register ECS component types for entity hierarchy serialization.
         // These must be registered before open() so _load_from_blobs can
         // reconstruct the entity hierarchy with all component data.

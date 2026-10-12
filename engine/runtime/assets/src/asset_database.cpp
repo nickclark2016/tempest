@@ -1,11 +1,15 @@
 #include <tempest/asset_database.hpp>
 #include <tempest/asset_serializers.hpp>
 #include <tempest/entity_hierarchy.hpp>
+#include <tempest/event.hpp>
 #include <tempest/files.hpp>
 #include <tempest/filesystem.hpp>
 #include <tempest/logger.hpp>
+#include <tempest/material.hpp>
 #include <tempest/serial.hpp>
+#include <tempest/texture.hpp>
 #include <tempest/utility.hpp>
+#include <tempest/vertex.hpp>
 
 namespace tempest::assets
 {
@@ -1224,6 +1228,15 @@ namespace tempest::assets
             }
         }
 
+        if (_watcher && !_watcher->watch_path().empty())
+        {
+            auto watcher_candidate = _watcher->watch_path() / direct_path;
+            if (filesystem::exists(watcher_candidate))
+            {
+                return watcher_candidate.string();
+            }
+        }
+
         if (filesystem::exists(direct_path))
         {
             return direct_path.string();
@@ -2159,7 +2172,7 @@ namespace tempest::assets
         return sub_guid;
     }
 
-    auto asset_database::rebuild_from_workspace(const project_workspace& workspace) -> bool
+    auto asset_database::rebuild_from_workspace(const project_workspace& workspace, bool start_watching) -> bool
     {
         // 1. Ensure cache directory exists and set db path
         const auto cache_dir = workspace.cache_directory();
@@ -2339,7 +2352,799 @@ namespace tempest::assets
             scan_dir(scan_dir, root_path, "");
         }
 
+        if (start_watching && !workspace.root_directory.empty() &&
+            filesystem::exists(filesystem::path(workspace.root_directory)))
+        {
+            static_cast<void>(start_file_watcher(filesystem::path(workspace.root_directory)));
+        }
+
         _dirty = true;
         return save();
+    }
+
+    auto asset_database::start_file_watcher(const filesystem::path& watch_path) -> bool
+    {
+        return start_file_watcher(watch_path, file_watcher_options::default_debounce_interval);
+    }
+
+    auto asset_database::start_file_watcher(const filesystem::path& watch_path,
+                                            chrono::milliseconds debounce_interval) -> bool
+    {
+        stop_file_watcher();
+
+        if (watch_path.empty() || !filesystem::exists(watch_path) || !filesystem::is_directory(watch_path))
+        {
+            return false;
+        }
+
+        auto options = file_watcher_options{
+            .watch_path = watch_path,
+            .debounce_interval = debounce_interval,
+            .recursive = true,
+        };
+
+        _watcher = make_unique<file_watcher>(tempest::move(options));
+        return is_file_watcher_running();
+    }
+
+    auto asset_database::stop_file_watcher() noexcept -> void
+    {
+        _watcher.reset();
+    }
+
+    auto asset_database::is_file_watcher_running() const noexcept -> bool
+    {
+        return _watcher && _watcher->is_running();
+    }
+
+    auto asset_database::set_mesh_registry(core::mesh_registry* mesh_reg) noexcept -> void
+    {
+        _mesh_reg = mesh_reg;
+    }
+
+    auto asset_database::set_texture_registry(core::texture_registry* texture_reg) noexcept -> void
+    {
+        _texture_reg = texture_reg;
+    }
+
+    auto asset_database::set_material_registry(core::material_registry* material_reg) noexcept -> void
+    {
+        _material_reg = material_reg;
+    }
+
+    auto asset_database::set_resource_registries(core::mesh_registry* mesh_reg,
+                                                 core::texture_registry* texture_reg,
+                                                 core::material_registry* material_reg) noexcept -> void
+    {
+        _mesh_reg = mesh_reg;
+        _texture_reg = texture_reg;
+        _material_reg = material_reg;
+    }
+
+    auto asset_database::mesh_registry() const noexcept -> core::mesh_registry*
+    {
+        return _mesh_reg;
+    }
+
+    auto asset_database::texture_registry() const noexcept -> core::texture_registry*
+    {
+        return _texture_reg;
+    }
+
+    auto asset_database::material_registry() const noexcept -> core::material_registry*
+    {
+        return _material_reg;
+    }
+
+    auto asset_database::set_logger(logger* log) noexcept -> void
+    {
+        _logger = log;
+    }
+
+    auto asset_database::get_logger() const noexcept -> logger*
+    {
+        return _logger;
+    }
+
+    auto asset_database::_compute_canonical_entry_key(const filesystem::path& disk_path) const -> string
+    {
+        auto normalized_disk_path = normalize_path_str(disk_path.generic_string());
+        if (normalized_disk_path.empty())
+        {
+            return {};
+        }
+
+        // 1. Check against registered mount roots
+        for (const auto& mount : _mount_roots)
+        {
+            auto normalized_mount_path = normalize_path_str(mount.path);
+            if (tempest::starts_with(normalized_disk_path, normalized_mount_path))
+            {
+                auto child_relative_path = tempest::substr(
+                    normalized_disk_path, normalized_mount_path.size(), normalized_disk_path.size() - normalized_mount_path.size());
+                while (!child_relative_path.empty() &&
+                       (child_relative_path.front() == '/' || child_relative_path.front() == '\\'))
+                {
+                    child_relative_path = tempest::substr(child_relative_path, 1, child_relative_path.size() - 1);
+                }
+
+                if (mount.alias.empty())
+                {
+                    return string(child_relative_path);
+                }
+
+                auto aliased_key = string("@");
+                aliased_key.append(mount.alias.data(), mount.alias.size());
+                aliased_key.append("/");
+                aliased_key.append(child_relative_path.data(), child_relative_path.size());
+                return aliased_key;
+            }
+        }
+
+        // 2. Check against watcher root directory if active
+        if (_watcher && !_watcher->watch_path().empty())
+        {
+            auto normalized_watch_path = normalize_path_str(_watcher->watch_path().generic_string());
+            if (tempest::starts_with(normalized_disk_path, normalized_watch_path))
+            {
+                auto child_relative_path = tempest::substr(
+                    normalized_disk_path, normalized_watch_path.size(), normalized_disk_path.size() - normalized_watch_path.size());
+                while (!child_relative_path.empty() &&
+                       (child_relative_path.front() == '/' || child_relative_path.front() == '\\'))
+                {
+                    child_relative_path = tempest::substr(child_relative_path, 1, child_relative_path.size() - 1);
+                }
+                return string(child_relative_path);
+            }
+        }
+
+        return normalized_disk_path;
+    }
+
+    auto asset_database::_find_source_entry_by_disk_path(string_view disk_path) -> source_entry*
+    {
+        auto normalized_disk_path = normalize_path_str(disk_path);
+        if (normalized_disk_path.empty())
+        {
+            return nullptr;
+        }
+
+        // 1. Direct path lookup in source index
+        auto direct_iterator = _source_path_to_index.find(normalized_disk_path);
+        if (direct_iterator != _source_path_to_index.end())
+        {
+            return _sources[direct_iterator->second].get();
+        }
+
+        // 2. Check canonical key
+        auto canonical_key = _compute_canonical_entry_key(filesystem::path(normalized_disk_path.c_str()));
+        if (!canonical_key.empty())
+        {
+            auto canonical_iterator = _source_path_to_index.find(canonical_key);
+            if (canonical_iterator != _source_path_to_index.end())
+            {
+                return _sources[canonical_iterator->second].get();
+            }
+        }
+
+        // 3. Match against sources via paths_match or disk resolution
+        auto filesystem_path = filesystem::path(normalized_disk_path.c_str());
+        auto filename_string = filesystem_path.filename().string();
+
+        for (const auto& source_entry_unique_ptr : _sources)
+        {
+            if (paths_match(normalized_disk_path, source_entry_unique_ptr->source_path))
+            {
+                return source_entry_unique_ptr.get();
+            }
+
+            auto resolved_disk_path = resolve_disk_path(source_entry_unique_ptr->source_path);
+            if (resolved_disk_path.has_value())
+            {
+                auto normalized_resolved_path = normalize_path_str(resolved_disk_path.value());
+                if (paths_match(normalized_disk_path, normalized_resolved_path))
+                {
+                    return source_entry_unique_ptr.get();
+                }
+            }
+            else
+            {
+                auto source_filename_string =
+                    filesystem::path(source_entry_unique_ptr->source_path.c_str()).filename().string();
+                if (source_filename_string == filename_string)
+                {
+                    return source_entry_unique_ptr.get();
+                }
+            }
+        }
+
+        return nullptr;
+    }
+
+    auto asset_database::_remove_source(const guid& source_id) -> void
+    {
+        auto source_iterator = _source_id_to_index.find(source_id);
+        if (source_iterator == _source_id_to_index.end())
+        {
+            return;
+        }
+
+        const auto source_index = source_iterator->second;
+        const auto source_path_copy = _sources[source_index]->source_path;
+
+        // Clean up orphan .tmeta file if present on disk
+        auto resolved_disk_path = resolve_disk_path(source_path_copy);
+        if (resolved_disk_path.has_value())
+        {
+            auto meta_path_string = string{resolved_disk_path.value()};
+            meta_path_string.append(".tmeta");
+            auto metadata_path = filesystem::path(meta_path_string.c_str());
+            if (filesystem::exists(metadata_path))
+            {
+                static_cast<void>(filesystem::remove(metadata_path));
+            }
+        }
+
+        // Remove all assets belonging to this source
+        auto remaining_assets = vector<unique_ptr<asset_entry>>{};
+        remaining_assets.reserve(_assets.size());
+        _asset_guid_to_index.clear();
+
+        for (auto& asset_entry_unique_ptr : _assets)
+        {
+            if (asset_entry_unique_ptr->source_id == source_id)
+            {
+                static_cast<void>(_cached_blobs.erase(asset_entry_unique_ptr->id));
+                if (_mesh_reg != nullptr)
+                {
+                    static_cast<void>(_mesh_reg->remove_mesh(asset_entry_unique_ptr->id));
+                }
+            }
+            else
+            {
+                const auto new_asset_index = remaining_assets.size();
+                _asset_guid_to_index.insert({asset_entry_unique_ptr->id, new_asset_index});
+                remaining_assets.push_back(tempest::move(asset_entry_unique_ptr));
+            }
+        }
+        _assets = tempest::move(remaining_assets);
+
+        // Remove source entry and rebuild source indices
+        auto remaining_sources = vector<unique_ptr<source_entry>>{};
+        remaining_sources.reserve(_sources.size());
+        _source_path_to_index.clear();
+        _source_id_to_index.clear();
+
+        for (auto& source_entry_ptr : _sources)
+        {
+            if (source_entry_ptr->id == source_id)
+            {
+                static_cast<void>(_sidecars.erase(source_entry_ptr->source_path));
+
+                for (auto basename_iterator = _basename_to_relative_path.begin();
+                     basename_iterator != _basename_to_relative_path.end();)
+                {
+                    if (basename_iterator->second == source_entry_ptr->source_path)
+                    {
+                        basename_iterator = _basename_to_relative_path.erase(basename_iterator);
+                    }
+                    else
+                    {
+                        ++basename_iterator;
+                    }
+                }
+            }
+            else
+            {
+                const auto new_source_index = remaining_sources.size();
+                _source_path_to_index.insert({source_entry_ptr->source_path, new_source_index});
+                _source_id_to_index.insert({source_entry_ptr->id, new_source_index});
+                remaining_sources.push_back(tempest::move(source_entry_ptr));
+            }
+        }
+        _sources = tempest::move(remaining_sources);
+
+        _dirty = true;
+    }
+
+    auto asset_database::_log_warn(string_view message) const -> void
+    {
+        if (_logger != nullptr)
+        {
+            _logger->warn(message);
+        }
+    }
+
+    auto asset_database::_should_ignore_watch_event(const file_watch_event& event) const -> bool
+    {
+        const auto path_string = event.path.generic_string();
+        if (path_string.empty())
+        {
+            return true;
+        }
+
+        // 1. Filter out .cache directories / files
+        if (tempest::contains(path_string, "/.cache") || tempest::contains(path_string, "\\.cache") ||
+            event.path.filename().string() == ".cache")
+        {
+            return true;
+        }
+
+        // 2. Filter out workspace project files and temp files
+        if (tempest::ends_with(path_string, ".tproject") || tempest::ends_with(path_string, ".tmp") ||
+            tempest::ends_with(path_string, ".swp") || tempest::ends_with(path_string, "~"))
+        {
+            return true;
+        }
+
+        // 3. Filter directory-only events for added/modified
+        if (event.type != file_watch_event_type::removed && filesystem::exists(event.path) &&
+            filesystem::is_directory(event.path))
+        {
+            return true;
+        }
+
+        // 4. Filter ignored extensions / directories
+        if (is_path_ignored(path_string, _ignored_directories, _ignored_extensions))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    auto asset_database::_reimport_source_if_supported(string_view source_path) -> void
+    {
+        const auto source_path_view = string_view{source_path};
+        const auto* extension_iterator = search_last_of(source_path_view, '.');
+        if (extension_iterator == source_path_view.end())
+        {
+            return;
+        }
+
+        const auto extension_string = string(extension_iterator, source_path_view.end());
+        if (!_importers.contains(extension_string))
+        {
+            return;
+        }
+
+        auto event_registry = event::event_registry{};
+        auto component_registry = ecs::component_type_registry{};
+        auto temporary_registry = ecs::archetype_registry{event_registry, component_registry};
+        static_cast<void>(_load_via_import(source_path, temporary_registry));
+    }
+
+    auto asset_database::_hot_swap_mesh(const guid& asset_id) -> void
+    {
+        if (_mesh_reg == nullptr)
+        {
+            return;
+        }
+
+        const auto blob = get_blob(asset_id);
+        if (blob.empty())
+        {
+            return;
+        }
+
+        auto archive = serialization::binary_archive{};
+        archive.write(blob);
+        auto deserialized_mesh =
+            serialization::serializer<serialization::binary_archive, core::mesh>::deserialize(archive);
+
+        auto mesh_lookup_result = _mesh_reg->find(asset_id);
+        if (mesh_lookup_result.has_value())
+        {
+            *mesh_lookup_result = tempest::move(deserialized_mesh);
+        }
+        else
+        {
+            static_cast<void>(_mesh_reg->register_mesh_with_id(asset_id, tempest::move(deserialized_mesh)));
+        }
+    }
+
+    auto asset_database::_hot_swap_texture(const guid& asset_id) -> void
+    {
+        if (_texture_reg == nullptr)
+        {
+            return;
+        }
+
+        const auto blob = get_blob(asset_id);
+        if (blob.empty())
+        {
+            return;
+        }
+
+        auto archive = serialization::binary_archive{};
+        archive.write(blob);
+        auto deserialized_texture =
+            serialization::serializer<serialization::binary_archive, core::texture>::deserialize(archive);
+
+        if (_texture_reg->get_texture(asset_id).has_value())
+        {
+            _texture_reg->update_texture(asset_id, [&](core::texture& existing_texture) {
+                existing_texture = tempest::move(deserialized_texture);
+            });
+        }
+        else
+        {
+            static_cast<void>(_texture_reg->register_texture_with_id(asset_id, tempest::move(deserialized_texture)));
+        }
+    }
+
+    auto asset_database::_hot_swap_material(const guid& asset_id) -> void
+    {
+        if (_material_reg == nullptr)
+        {
+            return;
+        }
+
+        const auto blob = get_blob(asset_id);
+        if (blob.empty())
+        {
+            return;
+        }
+
+        auto archive = serialization::binary_archive{};
+        archive.write(blob);
+        auto deserialized_material =
+            serialization::serializer<serialization::binary_archive, core::material>::deserialize(archive);
+
+        if (_material_reg->find(asset_id).has_value())
+        {
+            _material_reg->update_material(asset_id, [&](core::material& existing_material) {
+                existing_material = tempest::move(deserialized_material);
+            });
+        }
+        else
+        {
+            static_cast<void>(_material_reg->register_material_with_id(asset_id, tempest::move(deserialized_material)));
+        }
+    }
+
+    auto asset_database::_hot_swap_source_assets(const guid& source_id) -> void
+    {
+        if (_mesh_reg == nullptr && _texture_reg == nullptr && _material_reg == nullptr)
+        {
+            return;
+        }
+
+        for (const auto& asset_entry_ptr : _assets)
+        {
+            if (asset_entry_ptr->source_id != source_id)
+            {
+                continue;
+            }
+
+            if (_mesh_reg != nullptr && asset_entry_ptr->type == asset_type_id::of<core::mesh>())
+            {
+                _hot_swap_mesh(asset_entry_ptr->id);
+            }
+            else if (_texture_reg != nullptr && asset_entry_ptr->type == asset_type_id::of<core::texture>())
+            {
+                _hot_swap_texture(asset_entry_ptr->id);
+            }
+            else if (_material_reg != nullptr && asset_entry_ptr->type == asset_type_id::of<core::material>())
+            {
+                _hot_swap_material(asset_entry_ptr->id);
+            }
+        }
+    }
+
+    auto asset_database::_handle_watch_event_modified(const file_watch_event& event) -> void
+    {
+        const auto path_string = event.path.generic_string();
+        const auto is_meta_file = tempest::ends_with(path_string, ".tmeta");
+
+        if (is_meta_file)
+        {
+            const auto source_path_on_disk = tempest::substr(path_string, 0, path_string.size() - 6);
+            auto* source_entry_ptr = _find_source_entry_by_disk_path(source_path_on_disk);
+            if (source_entry_ptr != nullptr)
+            {
+                auto loaded_metadata = sidecar_meta::load_from_file(path_string);
+                if (loaded_metadata.has_value())
+                {
+                    _sidecars[source_entry_ptr->source_path] = tempest::move(*loaded_metadata);
+                }
+
+                _reimport_source_if_supported(source_entry_ptr->source_path);
+            }
+            static_cast<void>(notify_file_changed(source_path_on_disk));
+        }
+        else
+        {
+            static_cast<void>(notify_file_changed(path_string));
+
+            auto* source_entry_ptr = _find_source_entry_by_disk_path(path_string);
+            if (source_entry_ptr != nullptr)
+            {
+                auto metadata_disk_path = string{path_string};
+                metadata_disk_path.append(".tmeta");
+                if (filesystem::exists(filesystem::path(metadata_disk_path.c_str())))
+                {
+                    auto loaded_metadata = sidecar_meta::load_from_file(metadata_disk_path);
+                    if (loaded_metadata.has_value())
+                    {
+                        _sidecars[source_entry_ptr->source_path] = tempest::move(*loaded_metadata);
+                    }
+                }
+
+                _reimport_source_if_supported(source_entry_ptr->source_path);
+                _hot_swap_source_assets(source_entry_ptr->id);
+            }
+        }
+    }
+
+    auto asset_database::_handle_watch_event_removed(const file_watch_event& event) -> void
+    {
+        const auto path_string = event.path.generic_string();
+        const auto is_meta_file = tempest::ends_with(path_string, ".tmeta");
+
+        if (is_meta_file)
+        {
+            const auto source_path_on_disk = tempest::substr(path_string, 0, path_string.size() - 6);
+            auto* source_entry_ptr = _find_source_entry_by_disk_path(source_path_on_disk);
+            if (source_entry_ptr != nullptr)
+            {
+                static_cast<void>(_sidecars.erase(source_entry_ptr->source_path));
+            }
+        }
+        else
+        {
+            auto* source_entry_ptr = _find_source_entry_by_disk_path(path_string);
+            if (source_entry_ptr != nullptr)
+            {
+                auto log_message = string{"Source asset removed: "};
+                log_message.append(path_string.data(), path_string.size());
+                _log_warn(log_message);
+                _remove_source(source_entry_ptr->id);
+            }
+        }
+    }
+
+    auto asset_database::_find_source_entry_for_rename(const file_watch_event& event) -> source_entry*
+    {
+        if (!event.old_path.empty())
+        {
+            return _find_source_entry_by_disk_path(event.old_path.generic_string());
+        }
+
+        const auto file_bytes = read_file_to_vector(event.path).value_or(vector<byte>{});
+        if (file_bytes.empty())
+        {
+            return nullptr;
+        }
+
+        const auto computed_hash = content_hash::compute(span<const byte>{file_bytes.data(), file_bytes.size()});
+        for (auto& candidate_source : _sources)
+        {
+            if (candidate_source->source_hash == computed_hash)
+            {
+                auto resolved_candidate_path = resolve_disk_path(candidate_source->source_path);
+                if (!resolved_candidate_path.has_value() ||
+                    !filesystem::exists(filesystem::path(resolved_candidate_path.value())))
+                {
+                    return candidate_source.get();
+                }
+            }
+        }
+
+        return nullptr;
+    }
+
+    auto asset_database::_rename_source(source_entry& source, const filesystem::path& old_path,
+                                        const filesystem::path& new_path) -> void
+    {
+        const auto old_canonical_key = source.source_path;
+        const auto new_canonical_key = _compute_canonical_entry_key(new_path);
+
+        const auto source_index = _source_id_to_index[source.id];
+
+        static_cast<void>(_source_path_to_index.erase(old_canonical_key));
+        source.source_path = new_canonical_key;
+        _source_path_to_index.insert({new_canonical_key, source_index});
+
+        if (!old_path.empty())
+        {
+            static_cast<void>(_basename_to_relative_path.erase(old_path.filename().string()));
+        }
+        _basename_to_relative_path.insert({new_path.filename().string(), new_canonical_key});
+
+        auto sidecar_iterator = _sidecars.find(old_canonical_key);
+        if (sidecar_iterator != _sidecars.end())
+        {
+            auto sidecar_metadata = tempest::move(sidecar_iterator->second);
+            static_cast<void>(_sidecars.erase(sidecar_iterator));
+            _sidecars.insert({new_canonical_key, tempest::move(sidecar_metadata)});
+        }
+
+        if (!old_path.empty())
+        {
+            auto old_meta_string = string{old_path.generic_string()};
+            old_meta_string.append(".tmeta");
+            const auto old_metadata_path = filesystem::path(old_meta_string.c_str());
+
+            auto new_meta_string = string{new_path.generic_string()};
+            new_meta_string.append(".tmeta");
+            const auto new_metadata_path = filesystem::path(new_meta_string.c_str());
+
+            if (filesystem::exists(old_metadata_path))
+            {
+                filesystem::rename(old_metadata_path, new_metadata_path);
+            }
+        }
+
+        _dirty = true;
+    }
+
+    auto asset_database::_handle_watch_event_renamed(const file_watch_event& event) -> void
+    {
+        const auto path_string = event.path.generic_string();
+        const auto is_meta_file = tempest::ends_with(path_string, ".tmeta");
+
+        if (is_meta_file)
+        {
+            if (!event.old_path.empty() && !event.path.empty())
+            {
+                const auto old_source_path =
+                    tempest::substr(event.old_path.generic_string(), 0, event.old_path.generic_string().size() - 6);
+                const auto new_source_path = tempest::substr(path_string, 0, path_string.size() - 6);
+
+                const auto old_canonical_key = _compute_canonical_entry_key(filesystem::path(old_source_path));
+                const auto new_canonical_key = _compute_canonical_entry_key(filesystem::path(new_source_path));
+
+                auto sidecar_iterator = _sidecars.find(old_canonical_key);
+                if (sidecar_iterator != _sidecars.end())
+                {
+                    auto sidecar_metadata = tempest::move(sidecar_iterator->second);
+                    static_cast<void>(_sidecars.erase(sidecar_iterator));
+                    _sidecars.insert({new_canonical_key, tempest::move(sidecar_metadata)});
+                }
+            }
+        }
+        else
+        {
+            auto* source_entry_ptr = _find_source_entry_for_rename(event);
+            if (source_entry_ptr != nullptr)
+            {
+                _rename_source(*source_entry_ptr, event.old_path, event.path);
+            }
+        }
+    }
+
+    auto asset_database::_register_new_watch_source(string_view disk_path, const filesystem::path& file_path,
+                                                    string_view canonical_key) -> void
+    {
+        auto meta_path_string = string{disk_path};
+        meta_path_string.append(".tmeta");
+        const auto metadata_path = filesystem::path(meta_path_string.c_str());
+
+        auto metadata = sidecar_meta{};
+        bool metadata_existed = false;
+        if (filesystem::exists(metadata_path))
+        {
+            auto loaded_metadata = sidecar_meta::load_from_file(metadata_path.generic_string());
+            if (loaded_metadata.has_value())
+            {
+                metadata = tempest::move(*loaded_metadata);
+                metadata_existed = true;
+            }
+        }
+
+        if (!metadata_existed)
+        {
+            metadata.source_guid = sidecar_meta::generate_deterministic_guid(guid{}, canonical_key);
+        }
+
+        auto& source_entry_ref = register_source_with_guid(metadata.source_guid, canonical_key);
+        source_entry_ref.last_modified_time = get_file_last_write_time(disk_path);
+
+        const auto file_bytes = read_file_to_vector(file_path).value_or(vector<byte>{});
+        if (!file_bytes.empty())
+        {
+            source_entry_ref.source_hash =
+                content_hash::compute(span<const byte>{file_bytes.data(), file_bytes.size()});
+        }
+
+        _sidecars[canonical_key] = metadata;
+
+        for (const auto& sub_asset_pair : metadata.sub_assets)
+        {
+            const auto type_iterator = metadata.sub_asset_types.find(sub_asset_pair.first);
+            const auto sub_type = (type_iterator != metadata.sub_asset_types.end())
+                                      ? type_iterator->second
+                                      : asset_type_id::from_hash(0);
+            static_cast<void>(register_asset_with_guid(sub_asset_pair.second, sub_type, canonical_key));
+        }
+
+        _basename_to_relative_path.insert({file_path.filename().string(), canonical_key});
+
+        if (tempest::ends_with(canonical_key, ".spv") || tempest::ends_with(canonical_key, ".slang"))
+        {
+            static_cast<void>(register_asset(asset_type_id::of<shader_asset>(), canonical_key));
+        }
+
+        _reimport_source_if_supported(canonical_key);
+        _dirty = true;
+    }
+
+    auto asset_database::_handle_watch_event_added(const file_watch_event& event) -> void
+    {
+        const auto path_string = event.path.generic_string();
+        const auto is_meta_file = tempest::ends_with(path_string, ".tmeta");
+
+        if (is_meta_file)
+        {
+            const auto source_path_on_disk = tempest::substr(path_string, 0, path_string.size() - 6);
+            const auto canonical_key = _compute_canonical_entry_key(filesystem::path(source_path_on_disk));
+            auto loaded_metadata = sidecar_meta::load_from_file(path_string);
+            if (loaded_metadata.has_value())
+            {
+                _sidecars[canonical_key] = tempest::move(*loaded_metadata);
+            }
+        }
+        else
+        {
+            const auto canonical_key = _compute_canonical_entry_key(event.path);
+            if (_source_path_to_index.contains(canonical_key))
+            {
+                static_cast<void>(notify_file_changed(path_string));
+            }
+            else
+            {
+                _register_new_watch_source(path_string, event.path, canonical_key);
+            }
+        }
+    }
+
+    auto asset_database::tick_file_watcher() -> size_t
+    {
+        if (!_watcher)
+        {
+            return 0;
+        }
+
+        auto events = _watcher->poll_events();
+        if (events.empty())
+        {
+            return 0;
+        }
+
+        size_t processed_count = 0;
+
+        for (const auto& event : events)
+        {
+            if (_should_ignore_watch_event(event))
+            {
+                continue;
+            }
+
+            switch (event.type)
+            {
+            case file_watch_event_type::modified:
+                _handle_watch_event_modified(event);
+                ++processed_count;
+                break;
+
+            case file_watch_event_type::removed:
+                _handle_watch_event_removed(event);
+                ++processed_count;
+                break;
+
+            case file_watch_event_type::renamed:
+                _handle_watch_event_renamed(event);
+                ++processed_count;
+                break;
+
+            case file_watch_event_type::added:
+                _handle_watch_event_added(event);
+                ++processed_count;
+                break;
+            }
+        }
+
+        return processed_count;
     }
 } // namespace tempest::assets

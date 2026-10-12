@@ -1,6 +1,7 @@
 #include <tempest/editor_engine_context.hpp>
 
 #include <tempest/array.hpp>
+#include <tempest/asset_database.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/move.hpp>
@@ -124,6 +125,7 @@ namespace tempest::editor
     editor_engine_context::editor_engine_context()
     {
         _log_sink.attach(get_logger());
+        get_assets().set_logger(&get_logger());
 
         _profiler_session.set_thread_name("Main Thread");
         auto config = profiler::web_server_config{
@@ -144,6 +146,7 @@ namespace tempest::editor
 
     editor_engine_context::~editor_engine_context()
     {
+        get_assets().stop_file_watcher();
         _log_sink.detach();
 
         if (_web_server)
@@ -377,6 +380,8 @@ namespace tempest::editor
     auto editor_engine_context::on_render_frame(float alpha) -> void
     {
         _log_store.drain(_log_sink);
+
+        static_cast<void>(get_assets().tick_file_watcher());
 
         if (_sim_state == simulation_state::play)
         {
