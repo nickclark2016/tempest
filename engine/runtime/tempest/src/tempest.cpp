@@ -313,6 +313,8 @@ namespace tempest
                 break;
             }
 
+            get_main_thread_executor().dispatch_pending();
+
             // 2. Fixed Timestep Simulation
             _accumulator.accumulate(delta_ns);
             if (should_step_simulation())

@@ -324,6 +324,8 @@ namespace tempest::tests
             [[maybe_unused]] auto& events = engine_interface.get_events();
             [[maybe_unused]] auto& logger = engine_interface.get_logger();
             [[maybe_unused]] auto& jobs = engine_interface.get_job_system();
+            [[maybe_unused]] auto& main_executor = engine_interface.get_main_thread_executor();
+            EXPECT_TRUE(main_executor.empty());
             [[maybe_unused]] auto& profiler = engine_interface.get_profiler_session();
             [[maybe_unused]] const auto& accumulator = engine_interface.get_accumulator();
             EXPECT_DOUBLE_EQ(accumulator.fixed_delta().count(), static_cast<double>(1.0F / 60.0F));
@@ -490,5 +492,43 @@ namespace tempest::tests
         EXPECT_EQ(fixed_update_call_count, 0U);
         EXPECT_EQ(variable_update_call_count, 3U);
         EXPECT_FALSE(paused_context.get_accumulator().has_pending_ticks());
+    }
+
+    /// @brief Verifies that tasks posted to main_thread_executor are dispatched at the start of each frame.
+    TEST(engine_context_test, main_thread_executor_dispatched_in_frame_loop)
+    {
+        // 1. Setup: test context
+        class frame_executor_engine_context final : public standalone_engine_context
+        {
+          public:
+            explicit frame_executor_engine_context(const engine_config& config) : standalone_engine_context{config} {}
+
+            bool task_executed{false};
+
+          protected:
+            auto on_frame_end() -> void override
+            {
+                request_close(true);
+            }
+        };
+
+        const auto config = engine_config{
+            .headless = true,
+            .fixed_timestep = 1.0F / 60.0F,
+            .max_frame_delta = 0.1F,
+        };
+        auto ctx = frame_executor_engine_context{config};
+
+        // 2. Act: Post task to main_thread_executor
+        ctx.get_main_thread_executor().post([&ctx]() {
+            ctx.task_executed = true;
+        });
+
+        EXPECT_FALSE(ctx.task_executed);
+        ctx.run();
+
+        // 3. Assert: Task was dispatched and executed during the frame loop
+        EXPECT_TRUE(ctx.task_executed);
+        EXPECT_TRUE(ctx.get_main_thread_executor().empty());
     }
 } // namespace tempest::tests

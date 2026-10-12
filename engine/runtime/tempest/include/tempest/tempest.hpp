@@ -10,6 +10,7 @@
 #include <tempest/functional.hpp>
 #include <tempest/input.hpp>
 #include <tempest/job/job_system.hpp>
+#include <tempest/job/main_thread_executor.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/profiler/profiler.hpp>
 #include <tempest/render_system/renderer.hpp>
@@ -74,6 +75,9 @@ namespace tempest
 
         [[nodiscard]] virtual auto get_job_system() -> job::job_system& = 0;
         [[nodiscard]] virtual auto get_job_system() const -> const job::job_system& = 0;
+
+        [[nodiscard]] virtual auto get_main_thread_executor() -> job::main_thread_executor& = 0;
+        [[nodiscard]] virtual auto get_main_thread_executor() const -> const job::main_thread_executor& = 0;
 
         virtual auto request_close(bool close = true) -> void;
         [[nodiscard]] virtual auto should_close() const -> bool;
@@ -241,6 +245,16 @@ namespace tempest
             return *_job_system;
         }
 
+        [[nodiscard]] auto get_main_thread_executor() -> job::main_thread_executor& override
+        {
+            return _main_thread_executor;
+        }
+
+        [[nodiscard]] auto get_main_thread_executor() const -> const job::main_thread_executor& override
+        {
+            return _main_thread_executor;
+        }
+
         [[nodiscard]] auto get_renderer() -> render_system::renderer& override;
         [[nodiscard]] auto get_renderer() const -> const render_system::renderer& override;
 
@@ -304,6 +318,7 @@ namespace tempest
         unique_ptr<rhi::context> _rhi_context;
         unique_ptr<rhi::device> _device;
         unique_ptr<job::job_system> _job_system;
+        job::main_thread_executor _main_thread_executor;
         unique_ptr<render_system::renderer> _renderer;
 
         vector<window_context> _windows;
