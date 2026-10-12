@@ -930,6 +930,7 @@ namespace tempest::job
         auto schedule_node(task_node* node) -> void
         {
             node->_task = node_coro(node);
+            node->_task.set_name(node->name());
             if (sys != nullptr)
             {
                 node->_task.set_profiler(&sys->get_profiler());

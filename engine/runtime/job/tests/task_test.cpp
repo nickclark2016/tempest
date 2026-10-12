@@ -1,8 +1,10 @@
 #include <gtest/gtest.h>
 
 #include <tempest/job/async_event.hpp>
+#include <tempest/job/job_system.hpp>
 #include <tempest/job/task.hpp>
 #include <tempest/job/types.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/profiler/session.hpp>
 
 namespace tempest::job::tests
@@ -689,5 +691,136 @@ namespace tempest::job::tests
         EXPECT_EQ(t_a2.coroutine_id(), 2U);
         EXPECT_EQ(t_b1.coroutine_id(), 1U);
         EXPECT_EQ(t_b2.coroutine_id(), 2U);
+    }
+
+    // =========================================================================
+    // SECTION: Task Provenance, Naming, and Source Location Tests
+    // =========================================================================
+
+    /// @brief Verifies that detached_task supports naming, source location, and provenance tracking,
+    ///        and that when executed under an active profiler session, the coroutine slice record
+    ///        accurately reflects the assigned provenance and naming metadata.
+    TEST(task_test, detached_task_naming_and_provenance)
+    {
+        // 1. Setup: Enabled profiler session
+        auto prof = profiler::profiler_session{true};
+        auto executed = false;
+
+        auto make_detached = [&prof, &executed]() -> detail::detached_task {
+            executed = true;
+            co_return;
+        };
+
+        // 2. Act: Create task, assign custom naming, source location, and provenance
+        auto dtask = make_detached();
+        dtask.set_profiler(&prof);
+
+        EXPECT_EQ(dtask.name(), "detached_task");
+        dtask.set_name("custom_worker_pass");
+        EXPECT_EQ(dtask.name(), "custom_worker_pass");
+
+        const auto custom_loc = source_location::current();
+        dtask.set_source_location(custom_loc);
+        EXPECT_EQ(dtask.location().line(), custom_loc.line());
+
+        constexpr auto mock_spawn_tid = uint64_t{101};
+        constexpr auto mock_spawn_cid = uint64_t{202};
+        constexpr auto mock_await_tid = uint64_t{303};
+        constexpr auto mock_await_cid = uint64_t{404};
+        dtask.set_provenance(mock_spawn_tid, mock_spawn_cid, mock_await_tid, mock_await_cid);
+
+        // Resume the detached task
+        dtask.handle.resume();
+
+        // 3. Assert: Verify execution and recorded slice metadata in profiler session
+        EXPECT_TRUE(executed);
+
+        auto chunks = prof.drain_completed_chunks();
+        ASSERT_FALSE(chunks.empty());
+
+        auto found_slice = false;
+        for (const auto& chunk : chunks)
+        {
+            for (const auto& zone : chunk->zones())
+            {
+                if (zone.name == "custom_worker_pass")
+                {
+                    found_slice = true;
+                    EXPECT_EQ(zone.spawned_by_thread_id, mock_spawn_tid);
+                    EXPECT_EQ(zone.spawned_by_coroutine_id, mock_spawn_cid);
+                    EXPECT_EQ(zone.awaited_by_thread_id, mock_await_tid);
+                    EXPECT_EQ(zone.awaited_by_coroutine_id, mock_await_cid);
+                    EXPECT_EQ(zone.location.line(), custom_loc.line());
+                }
+            }
+        }
+        EXPECT_TRUE(found_slice);
+    }
+
+    /// @brief Verifies that job_system::schedule automatically sets task names from caller source_location
+    ///        when unassigned, and that job_system::async sets task name, source_location, and profiler session.
+    TEST(task_test, source_location_automatic_naming_in_async_and_schedule)
+    {
+        // 1. Setup: 2-worker job system with active profiler
+        auto log = logger{};
+        auto prof = profiler::profiler_session{true};
+        auto config = job_system_config{
+            .performance_worker_count = 2,
+            .efficiency_worker_count = 0,
+        };
+        auto sys = job_system{log, prof, config};
+
+        // 2. Act: Test automatic naming via schedule
+        auto default_named_coro = []() -> task<void> {
+            co_return;
+        };
+
+        auto scheduled_task = default_named_coro();
+        EXPECT_EQ(scheduled_task.name(), "task");
+
+        sys.schedule(scheduled_task);
+        // Automatic naming should replace "task" with the caller function name
+        EXPECT_NE(scheduled_task.name(), "task");
+        EXPECT_NE(scheduled_task.name(), "");
+
+        // Test explicit naming and automatic naming in async
+        auto auto_async_task = sys.async([]() {
+            return 42;
+        });
+        EXPECT_NE(auto_async_task.name(), "task");
+        EXPECT_NE(auto_async_task.name(), "");
+        EXPECT_NE(auto_async_task.location().function_name(), nullptr);
+
+        auto named_async_task = sys.async("explicit_named_job", []() {
+            return 84;
+        });
+        EXPECT_EQ(named_async_task.name(), "explicit_named_job");
+
+        sys.wait_idle();
+
+        // 3. Assert: Verify completion and recorded profiler zones
+        EXPECT_TRUE(scheduled_task.is_ready());
+        EXPECT_TRUE(auto_async_task.is_ready());
+        EXPECT_EQ(auto_async_task.value(), 42);
+        EXPECT_TRUE(named_async_task.is_ready());
+        EXPECT_EQ(named_async_task.value(), 84);
+
+        auto chunks = prof.drain_completed_chunks();
+        ASSERT_FALSE(chunks.empty());
+
+        auto found_named_zone = false;
+        for (const auto& chunk : chunks)
+        {
+            for (const auto& zone : chunk->zones())
+            {
+                EXPECT_NE(zone.name, "detached_task");
+                if (zone.name == "explicit_named_job")
+                {
+                    found_named_zone = true;
+                    EXPECT_GT(zone.spawned_by_thread_id, 0U);
+                }
+            }
+        }
+        EXPECT_TRUE(found_named_zone);
     }
 } // namespace tempest::job::tests

@@ -12,6 +12,7 @@
 #include <tempest/optional.hpp>
 #include <tempest/profiler/session.hpp>
 #include <tempest/profiler/types.hpp>
+#include <tempest/source_location.hpp>
 #include <tempest/thread.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
@@ -307,22 +308,38 @@ namespace tempest::job
                 profiler::profiler_session* session = nullptr;
                 uint64_t coroutine_id = 0;
                 string_view name{"detached_task"};
+                source_location location{source_location::current()};
+                uint64_t spawned_by_thread_id{0};
+                uint64_t spawned_by_coroutine_id{0};
+                uint64_t awaited_by_thread_id{0};
+                uint64_t awaited_by_coroutine_id{0};
 
                 template <typename... Args>
                     requires(sizeof...(Args) > 0)
                 explicit promise_type(Args&&... args) : session{find_profiler_session(forward<Args>(args)...)}
                 {
+                    spawned_by_thread_id = tempest::this_thread::get_id().to_uint64();
                     if (session != nullptr && session->is_enabled())
                     {
                         coroutine_id = session->allocate_coroutine_id();
+                        spawned_by_coroutine_id = session->get_or_register_thread().get_current_coroutine_id();
                     }
                 }
-                promise_type() = default;
+
+                promise_type()
+                {
+                    spawned_by_thread_id = tempest::this_thread::get_id().to_uint64();
+                    if (session != nullptr && session->is_enabled())
+                    {
+                        spawned_by_coroutine_id = session->get_or_register_thread().get_current_coroutine_id();
+                    }
+                }
 
                 auto get_return_object() noexcept -> detached_task
                 {
                     return detached_task{coroutine_handle<promise_type>::from_promise(*this)};
                 }
+
                 auto initial_suspend() noexcept
                 {
                     struct awaiter
@@ -347,17 +364,20 @@ namespace tempest::job
                                     prom->coroutine_id = prom->session->allocate_coroutine_id();
                                 }
                                 auto& ctx = prom->session->get_or_register_thread();
-                                ctx.begin_coroutine_slice(prom->coroutine_id, 0, prom->name, source_location::current(),
-                                                          tempest::this_thread::get_id().to_uint64(), 0, 0, 0);
+                                ctx.begin_coroutine_slice(prom->coroutine_id, 0, prom->name, prom->location,
+                                                          prom->spawned_by_thread_id, prom->spawned_by_coroutine_id,
+                                                          prom->awaited_by_thread_id, prom->awaited_by_coroutine_id);
                             }
                         }
                     };
                     return awaiter{*this};
                 }
+
                 auto final_suspend() noexcept -> suspend_never
                 {
                     return {};
                 }
+
                 auto return_void() noexcept -> void
                 {
                     if (session != nullptr && session->is_enabled())
@@ -366,12 +386,127 @@ namespace tempest::job
                         ctx.end_coroutine_slice(profiler::suspend_reason::completed);
                     }
                 }
+
                 auto unhandled_exception() noexcept -> void
                 {
+                }
+
+                auto await_transform(set_task_name stn) noexcept -> set_task_name_awaiter
+                {
+                    this->name = stn.name;
+                    if (this->session != nullptr && this->session->is_enabled())
+                    {
+                        auto& ctx = this->session->get_or_register_thread();
+                        ctx.set_current_zone_name(stn.name);
+                    }
+                    return {};
+                }
+
+                template <typename Awaitable>
+                auto await_transform(Awaitable&& awaitable) -> decltype(auto)
+                {
+                    return forward<Awaitable>(awaitable);
                 }
             };
 
             coroutine_handle<promise_type> handle{nullptr};
+
+            auto set_name(string_view task_name) noexcept -> void
+            {
+                if (handle)
+                {
+                    handle.promise().name = task_name;
+                }
+            }
+
+            auto with_name(string_view task_name) & noexcept -> detached_task&
+            {
+                set_name(task_name);
+                return *this;
+            }
+
+            auto with_name(string_view task_name) && noexcept -> detached_task&&
+            {
+                set_name(task_name);
+                return move(*this);
+            }
+
+            auto set_source_location(source_location loc) noexcept -> void
+            {
+                if (handle)
+                {
+                    handle.promise().location = loc;
+                }
+            }
+
+            auto with_source_location(source_location loc) & noexcept -> detached_task&
+            {
+                set_source_location(loc);
+                return *this;
+            }
+
+            auto with_source_location(source_location loc) && noexcept -> detached_task&&
+            {
+                set_source_location(loc);
+                return move(*this);
+            }
+
+            auto set_provenance(uint64_t spawn_tid, uint64_t spawn_cid, uint64_t await_tid, uint64_t await_cid) noexcept -> void
+            {
+                if (handle)
+                {
+                    handle.promise().spawned_by_thread_id = spawn_tid;
+                    handle.promise().spawned_by_coroutine_id = spawn_cid;
+                    handle.promise().awaited_by_thread_id = await_tid;
+                    handle.promise().awaited_by_coroutine_id = await_cid;
+                }
+            }
+
+            [[nodiscard]] auto name() const noexcept -> string_view
+            {
+                if (handle)
+                {
+                    return handle.promise().name;
+                }
+                return "detached_task";
+            }
+
+            [[nodiscard]] auto location() const noexcept -> source_location
+            {
+                if (handle)
+                {
+                    return handle.promise().location;
+                }
+                return {};
+            }
+
+            auto set_profiler(profiler::profiler_session* sess) noexcept -> void
+            {
+                if (handle)
+                {
+                    handle.promise().session = sess;
+                    if (sess != nullptr && sess->is_enabled())
+                    {
+                        if (handle.promise().coroutine_id == 0)
+                        {
+                            handle.promise().coroutine_id = sess->allocate_coroutine_id();
+                        }
+                        if (handle.promise().spawned_by_coroutine_id == 0)
+                        {
+                            handle.promise().spawned_by_coroutine_id = sess->get_or_register_thread().get_current_coroutine_id();
+                        }
+                    }
+                }
+            }
+
+            [[nodiscard]] auto get_profiler() const noexcept -> profiler::profiler_session*
+            {
+                if (handle)
+                {
+                    return handle.promise().session;
+                }
+                return nullptr;
+            }
         };
 
         template <typename T>
@@ -520,7 +655,7 @@ namespace tempest::job
                         auto& ctx = prom->session->get_or_register_thread();
                         prom->current_slice_index++;
                         ctx.begin_coroutine_slice(prom->coroutine_id, prom->current_slice_index, prom->name,
-                                                  source_location::current(), prom->spawned_by_thread_id,
+                                                  prom->location, prom->spawned_by_thread_id,
                                                   prom->spawned_by_coroutine_id, prom->awaited_by_thread_id,
                                                   prom->awaited_by_coroutine_id);
                         auto* header = get_coroutine_header(*prom);
@@ -561,7 +696,7 @@ namespace tempest::job
                         prom->spawned_by_coroutine_id = ctx.get_current_coroutine_id();
                     }
                     ctx.begin_coroutine_slice(prom->coroutine_id, prom->current_slice_index, prom->name,
-                                              source_location::current(), prom->spawned_by_thread_id,
+                                              prom->location, prom->spawned_by_thread_id,
                                               prom->spawned_by_coroutine_id, prom->awaited_by_thread_id,
                                               prom->awaited_by_coroutine_id);
                     auto* header = get_coroutine_header(*prom);
@@ -703,6 +838,7 @@ namespace tempest::job
             uint64_t coroutine_id = 0;
             uint32_t current_slice_index = 0;
             string_view name = "task";
+            source_location location{source_location::current()};
             uint64_t spawned_by_thread_id = tempest::this_thread::get_id().to_uint64();
             uint64_t spawned_by_coroutine_id = 0;
             uint64_t awaited_by_thread_id = 0;
@@ -713,12 +849,22 @@ namespace tempest::job
                 requires(sizeof...(Args) > 0)
             explicit promise_type(Args&&... args) : session{detail::find_profiler_session(forward<Args>(args)...)}
             {
+                spawned_by_thread_id = tempest::this_thread::get_id().to_uint64();
                 if (session != nullptr && session->is_enabled())
                 {
                     coroutine_id = session->allocate_coroutine_id();
+                    spawned_by_coroutine_id = session->get_or_register_thread().get_current_coroutine_id();
                 }
             }
-            promise_type() = default;
+
+            promise_type()
+            {
+                spawned_by_thread_id = tempest::this_thread::get_id().to_uint64();
+                if (session != nullptr && session->is_enabled())
+                {
+                    spawned_by_coroutine_id = session->get_or_register_thread().get_current_coroutine_id();
+                }
+            }
 
             auto get_return_object() noexcept -> task
             {
@@ -872,6 +1018,11 @@ namespace tempest::job
 
                     auto await_suspend(coroutine_handle<promise_type> hnd) noexcept -> coroutine_handle<>
                     {
+                        if (hnd.promise().session != nullptr && hnd.promise().session->is_enabled())
+                        {
+                            auto& ctx = hnd.promise().session->get_or_register_thread();
+                            ctx.end_coroutine_slice(profiler::suspend_reason::cancellation);
+                        }
                         auto* parent = hnd.promise().parent_propagator;
                         hnd.promise().propagate_error(static_cast<job_error>(error.value));
                         auto next = hnd.promise().get_continuation();
@@ -880,7 +1031,7 @@ namespace tempest::job
                         {
                             parent->destroy_frame();
                         }
-                        return next;
+                        return next ? next : noop_coroutine();
                     }
 
                     auto await_resume() -> void
@@ -888,8 +1039,7 @@ namespace tempest::job
                     }
                 };
 
-                return detail::profiled_awaiter<promise_type, unexp_awaiter>{*this, unexp_awaiter{unexp},
-                                                                             profiler::suspend_reason::yield};
+                return unexp_awaiter{unexp};
             }
 
             // Await transform for expected<Val, Err>
@@ -907,6 +1057,11 @@ namespace tempest::job
 
                     auto await_suspend(coroutine_handle<promise_type> hnd) noexcept -> coroutine_handle<>
                     {
+                        if (hnd.promise().session != nullptr && hnd.promise().session->is_enabled())
+                        {
+                            auto& ctx = hnd.promise().session->get_or_register_thread();
+                            ctx.end_coroutine_slice(profiler::suspend_reason::cancellation);
+                        }
                         auto* parent = hnd.promise().parent_propagator;
                         hnd.promise().propagate_error(static_cast<job_error>(value.error()));
                         auto next = hnd.promise().get_continuation();
@@ -915,7 +1070,7 @@ namespace tempest::job
                         {
                             parent->destroy_frame();
                         }
-                        return next;
+                        return next ? next : noop_coroutine();
                     }
 
                     auto await_resume() -> Val
@@ -927,11 +1082,9 @@ namespace tempest::job
                     }
                 };
 
-                return detail::profiled_awaiter<promise_type, exp_awaiter>{*this,
-                                                                           exp_awaiter{
-                                                                               .value = move(exp),
-                                                                           },
-                                                                           profiler::suspend_reason::yield};
+                return exp_awaiter{
+                    .value = move(exp),
+                };
             }
 
             auto await_transform(set_task_name stn) noexcept -> detail::set_task_name_awaiter
@@ -1112,6 +1265,46 @@ namespace tempest::job
             }
         }
 
+        auto set_source_location(source_location loc) noexcept -> void
+        {
+            if (_handle)
+            {
+                _handle.promise().location = loc;
+            }
+        }
+
+        auto with_source_location(source_location loc) & noexcept -> task&
+        {
+            set_source_location(loc);
+            return *this;
+        }
+
+        auto with_source_location(source_location loc) && noexcept -> task&&
+        {
+            set_source_location(loc);
+            return move(*this);
+        }
+
+        [[nodiscard]] auto location() const noexcept -> source_location
+        {
+            if (_handle)
+            {
+                return _handle.promise().location;
+            }
+            return {};
+        }
+
+        auto set_provenance(uint64_t spawn_tid, uint64_t spawn_cid, uint64_t await_tid, uint64_t await_cid) noexcept -> void
+        {
+            if (_handle)
+            {
+                _handle.promise().spawned_by_thread_id = spawn_tid;
+                _handle.promise().spawned_by_coroutine_id = spawn_cid;
+                _handle.promise().awaited_by_thread_id = await_tid;
+                _handle.promise().awaited_by_coroutine_id = await_cid;
+            }
+        }
+
         [[nodiscard]] auto get_profiler() const noexcept -> profiler::profiler_session*
         {
             return _handle ? _handle.promise().session : nullptr;
@@ -1122,9 +1315,17 @@ namespace tempest::job
             if (_handle)
             {
                 _handle.promise().session = session;
-                if (session != nullptr && session->is_enabled() && _handle.promise().coroutine_id == 0)
+                if (session != nullptr && session->is_enabled())
                 {
-                    _handle.promise().coroutine_id = session->allocate_coroutine_id();
+                    if (_handle.promise().coroutine_id == 0)
+                    {
+                        _handle.promise().coroutine_id = session->allocate_coroutine_id();
+                    }
+                    if (_handle.promise().spawned_by_coroutine_id == 0)
+                    {
+                        _handle.promise().spawned_by_coroutine_id =
+                            session->get_or_register_thread().get_current_coroutine_id();
+                    }
                 }
             }
         }
@@ -1203,6 +1404,7 @@ namespace tempest::job
             uint64_t coroutine_id{0};
             uint32_t current_slice_index{0};
             string_view name{"task"};
+            source_location location{source_location::current()};
             uint64_t spawned_by_thread_id{tempest::this_thread::get_id().to_uint64()};
             uint64_t spawned_by_coroutine_id{0};
             uint64_t awaited_by_thread_id{0};
@@ -1213,12 +1415,22 @@ namespace tempest::job
                 requires(sizeof...(Args) > 0)
             explicit promise_type(Args&&... args) : session{detail::find_profiler_session(forward<Args>(args)...)}
             {
+                spawned_by_thread_id = tempest::this_thread::get_id().to_uint64();
                 if (session != nullptr && session->is_enabled())
                 {
                     coroutine_id = session->allocate_coroutine_id();
+                    spawned_by_coroutine_id = session->get_or_register_thread().get_current_coroutine_id();
                 }
             }
-            promise_type() = default;
+
+            promise_type()
+            {
+                spawned_by_thread_id = tempest::this_thread::get_id().to_uint64();
+                if (session != nullptr && session->is_enabled())
+                {
+                    spawned_by_coroutine_id = session->get_or_register_thread().get_current_coroutine_id();
+                }
+            }
 
             auto get_return_object() noexcept -> task
             {
@@ -1360,6 +1572,11 @@ namespace tempest::job
 
                     auto await_suspend(coroutine_handle<promise_type> hnd) noexcept -> coroutine_handle<>
                     {
+                        if (hnd.promise().session != nullptr && hnd.promise().session->is_enabled())
+                        {
+                            auto& ctx = hnd.promise().session->get_or_register_thread();
+                            ctx.end_coroutine_slice(profiler::suspend_reason::cancellation);
+                        }
                         auto* parent = hnd.promise().parent_propagator;
                         hnd.promise().propagate_error(static_cast<job_error>(error.value));
                         auto next = hnd.promise().get_continuation();
@@ -1368,7 +1585,7 @@ namespace tempest::job
                         {
                             parent->destroy_frame();
                         }
-                        return next;
+                        return next ? next : noop_coroutine();
                     }
 
                     auto await_resume() -> void
@@ -1376,8 +1593,7 @@ namespace tempest::job
                     }
                 };
 
-                return detail::profiled_awaiter<promise_type, unexp_awaiter>{*this, unexp_awaiter{unexp},
-                                                                             profiler::suspend_reason::yield};
+                return unexp_awaiter{unexp};
             }
 
             // Await transform for expected<Val, Err>
@@ -1395,6 +1611,11 @@ namespace tempest::job
 
                     auto await_suspend(coroutine_handle<promise_type> hnd) noexcept -> coroutine_handle<>
                     {
+                        if (hnd.promise().session != nullptr && hnd.promise().session->is_enabled())
+                        {
+                            auto& ctx = hnd.promise().session->get_or_register_thread();
+                            ctx.end_coroutine_slice(profiler::suspend_reason::cancellation);
+                        }
                         auto* parent = hnd.promise().parent_propagator;
                         hnd.promise().propagate_error(static_cast<job_error>(value.error()));
                         auto next = hnd.promise().get_continuation();
@@ -1403,7 +1624,7 @@ namespace tempest::job
                         {
                             parent->destroy_frame();
                         }
-                        return next;
+                        return next ? next : noop_coroutine();
                     }
 
                     auto await_resume() -> Val
@@ -1415,8 +1636,7 @@ namespace tempest::job
                     }
                 };
 
-                return detail::profiled_awaiter<promise_type, exp_awaiter>{*this, exp_awaiter{move(exp)},
-                                                                           profiler::suspend_reason::yield};
+                return exp_awaiter{move(exp)};
             }
 
             auto await_transform(set_task_name stn) noexcept -> detail::set_task_name_awaiter
@@ -1591,6 +1811,46 @@ namespace tempest::job
             }
         }
 
+        auto set_source_location(source_location loc) noexcept -> void
+        {
+            if (_handle)
+            {
+                _handle.promise().location = loc;
+            }
+        }
+
+        auto with_source_location(source_location loc) & noexcept -> task&
+        {
+            set_source_location(loc);
+            return *this;
+        }
+
+        auto with_source_location(source_location loc) && noexcept -> task&&
+        {
+            set_source_location(loc);
+            return move(*this);
+        }
+
+        [[nodiscard]] auto location() const noexcept -> source_location
+        {
+            if (_handle)
+            {
+                return _handle.promise().location;
+            }
+            return {};
+        }
+
+        auto set_provenance(uint64_t spawn_tid, uint64_t spawn_cid, uint64_t await_tid, uint64_t await_cid) noexcept -> void
+        {
+            if (_handle)
+            {
+                _handle.promise().spawned_by_thread_id = spawn_tid;
+                _handle.promise().spawned_by_coroutine_id = spawn_cid;
+                _handle.promise().awaited_by_thread_id = await_tid;
+                _handle.promise().awaited_by_coroutine_id = await_cid;
+            }
+        }
+
         [[nodiscard]] auto get_profiler() const noexcept -> profiler::profiler_session*
         {
             return _handle ? _handle.promise().session : nullptr;
@@ -1601,9 +1861,17 @@ namespace tempest::job
             if (_handle)
             {
                 _handle.promise().session = session;
-                if (session != nullptr && session->is_enabled() && _handle.promise().coroutine_id == 0)
+                if (session != nullptr && session->is_enabled())
                 {
-                    _handle.promise().coroutine_id = session->allocate_coroutine_id();
+                    if (_handle.promise().coroutine_id == 0)
+                    {
+                        _handle.promise().coroutine_id = session->allocate_coroutine_id();
+                    }
+                    if (_handle.promise().spawned_by_coroutine_id == 0)
+                    {
+                        _handle.promise().spawned_by_coroutine_id =
+                            session->get_or_register_thread().get_current_coroutine_id();
+                    }
                 }
             }
         }
@@ -1679,6 +1947,7 @@ namespace tempest::job
             uint64_t coroutine_id{0};
             uint32_t current_slice_index{0};
             string_view name{"task"};
+            source_location location{source_location::current()};
             uint64_t spawned_by_thread_id{tempest::this_thread::get_id().to_uint64()};
             uint64_t spawned_by_coroutine_id{0};
             uint64_t awaited_by_thread_id{0};
@@ -1689,12 +1958,22 @@ namespace tempest::job
                 requires(sizeof...(Args) > 0)
             explicit promise_type(Args&&... args) : session{detail::find_profiler_session(forward<Args>(args)...)}
             {
+                spawned_by_thread_id = tempest::this_thread::get_id().to_uint64();
                 if (session != nullptr && session->is_enabled())
                 {
                     coroutine_id = session->allocate_coroutine_id();
+                    spawned_by_coroutine_id = session->get_or_register_thread().get_current_coroutine_id();
                 }
             }
-            promise_type() = default;
+
+            promise_type()
+            {
+                spawned_by_thread_id = tempest::this_thread::get_id().to_uint64();
+                if (session != nullptr && session->is_enabled())
+                {
+                    spawned_by_coroutine_id = session->get_or_register_thread().get_current_coroutine_id();
+                }
+            }
 
             auto get_return_object() noexcept -> task
             {
@@ -1854,6 +2133,46 @@ namespace tempest::job
             }
         }
 
+        auto set_source_location(source_location loc) noexcept -> void
+        {
+            if (_handle)
+            {
+                _handle.promise().location = loc;
+            }
+        }
+
+        auto with_source_location(source_location loc) & noexcept -> task&
+        {
+            set_source_location(loc);
+            return *this;
+        }
+
+        auto with_source_location(source_location loc) && noexcept -> task&&
+        {
+            set_source_location(loc);
+            return move(*this);
+        }
+
+        [[nodiscard]] auto location() const noexcept -> source_location
+        {
+            if (_handle)
+            {
+                return _handle.promise().location;
+            }
+            return {};
+        }
+
+        auto set_provenance(uint64_t spawn_tid, uint64_t spawn_cid, uint64_t await_tid, uint64_t await_cid) noexcept -> void
+        {
+            if (_handle)
+            {
+                _handle.promise().spawned_by_thread_id = spawn_tid;
+                _handle.promise().spawned_by_coroutine_id = spawn_cid;
+                _handle.promise().awaited_by_thread_id = await_tid;
+                _handle.promise().awaited_by_coroutine_id = await_cid;
+            }
+        }
+
         [[nodiscard]] auto get_profiler() const noexcept -> profiler::profiler_session*
         {
             return _handle ? _handle.promise().session : nullptr;
@@ -1864,9 +2183,17 @@ namespace tempest::job
             if (_handle)
             {
                 _handle.promise().session = session;
-                if (session != nullptr && session->is_enabled() && _handle.promise().coroutine_id == 0)
+                if (session != nullptr && session->is_enabled())
                 {
-                    _handle.promise().coroutine_id = session->allocate_coroutine_id();
+                    if (_handle.promise().coroutine_id == 0)
+                    {
+                        _handle.promise().coroutine_id = session->allocate_coroutine_id();
+                    }
+                    if (_handle.promise().spawned_by_coroutine_id == 0)
+                    {
+                        _handle.promise().spawned_by_coroutine_id =
+                            session->get_or_register_thread().get_current_coroutine_id();
+                    }
                 }
             }
         }
@@ -1936,6 +2263,7 @@ namespace tempest::job
             uint64_t coroutine_id{0};
             uint32_t current_slice_index{0};
             string_view name{"task"};
+            source_location location{source_location::current()};
             uint64_t spawned_by_thread_id{tempest::this_thread::get_id().to_uint64()};
             uint64_t spawned_by_coroutine_id{0};
             uint64_t awaited_by_thread_id{0};
@@ -1946,12 +2274,22 @@ namespace tempest::job
                 requires(sizeof...(Args) > 0)
             explicit promise_type(Args&&... args) : session{detail::find_profiler_session(forward<Args>(args)...)}
             {
+                spawned_by_thread_id = tempest::this_thread::get_id().to_uint64();
                 if (session != nullptr && session->is_enabled())
                 {
                     coroutine_id = session->allocate_coroutine_id();
+                    spawned_by_coroutine_id = session->get_or_register_thread().get_current_coroutine_id();
                 }
             }
-            promise_type() = default;
+
+            promise_type()
+            {
+                spawned_by_thread_id = tempest::this_thread::get_id().to_uint64();
+                if (session != nullptr && session->is_enabled())
+                {
+                    spawned_by_coroutine_id = session->get_or_register_thread().get_current_coroutine_id();
+                }
+            }
 
             auto get_return_object() noexcept -> task
             {
@@ -2099,6 +2437,46 @@ namespace tempest::job
             }
         }
 
+        auto set_source_location(source_location loc) noexcept -> void
+        {
+            if (_handle)
+            {
+                _handle.promise().location = loc;
+            }
+        }
+
+        auto with_source_location(source_location loc) & noexcept -> task&
+        {
+            set_source_location(loc);
+            return *this;
+        }
+
+        auto with_source_location(source_location loc) && noexcept -> task&&
+        {
+            set_source_location(loc);
+            return move(*this);
+        }
+
+        [[nodiscard]] auto location() const noexcept -> source_location
+        {
+            if (_handle)
+            {
+                return _handle.promise().location;
+            }
+            return {};
+        }
+
+        auto set_provenance(uint64_t spawn_tid, uint64_t spawn_cid, uint64_t await_tid, uint64_t await_cid) noexcept -> void
+        {
+            if (_handle)
+            {
+                _handle.promise().spawned_by_thread_id = spawn_tid;
+                _handle.promise().spawned_by_coroutine_id = spawn_cid;
+                _handle.promise().awaited_by_thread_id = await_tid;
+                _handle.promise().awaited_by_coroutine_id = await_cid;
+            }
+        }
+
         [[nodiscard]] auto get_profiler() const noexcept -> profiler::profiler_session*
         {
             return _handle ? _handle.promise().session : nullptr;
@@ -2109,9 +2487,17 @@ namespace tempest::job
             if (_handle)
             {
                 _handle.promise().session = session;
-                if (session != nullptr && session->is_enabled() && _handle.promise().coroutine_id == 0)
+                if (session != nullptr && session->is_enabled())
                 {
-                    _handle.promise().coroutine_id = session->allocate_coroutine_id();
+                    if (_handle.promise().coroutine_id == 0)
+                    {
+                        _handle.promise().coroutine_id = session->allocate_coroutine_id();
+                    }
+                    if (_handle.promise().spawned_by_coroutine_id == 0)
+                    {
+                        _handle.promise().spawned_by_coroutine_id =
+                            session->get_or_register_thread().get_current_coroutine_id();
+                    }
                 }
             }
         }

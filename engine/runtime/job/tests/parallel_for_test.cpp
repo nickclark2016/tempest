@@ -125,4 +125,80 @@ namespace tempest::job::tests
             EXPECT_EQ(values[i], 777);
         }
     }
+
+    // =========================================================================
+    // SECTION: Profiler Provenance & Naming
+    // =========================================================================
+
+    /// @brief Verifies that parallel_for chunk tasks are named "parallel_for_chunk" rather
+    ///        than "detached_task", and that their provenance (spawned_by_coroutine_id,
+    ///        spawned_by_thread_id) links back to the parent task.
+    TEST(parallel_for_test, parallel_for_chunks_provenance_and_naming)
+    {
+        // 1. Setup: 4-worker job system with active profiler
+        auto log = logger{};
+        auto prof = profiler::profiler_session{true};
+        auto config = job_system_config{
+            .performance_worker_count = 4,
+            .efficiency_worker_count = 0,
+        };
+        auto sys = job_system{log, prof, config};
+
+        constexpr auto count = 100u;
+        auto static_values = vector<int>{};
+        static_values.resize(count, 0);
+        auto guided_values = vector<int>{};
+        guided_values.resize(count, 0);
+
+        // 2. Act: Execute both static and guided parallel_for inside a parent task
+        auto parent_task = [&]() -> task<void> {
+            co_await sys.parallel_for<partitioner::static_chunk>(count, [&](size_t i) {
+                static_values[i] = static_cast<int>(i + 1);
+            });
+
+            co_await sys.parallel_for<partitioner::guided>(count, [&](size_t i) {
+                guided_values[i] = static_cast<int>(i + 10);
+            });
+        };
+
+        auto t = parent_task().with_profiler(prof);
+        const auto parent_cid = t.coroutine_id();
+        EXPECT_GT(parent_cid, 0U);
+
+        sys.schedule(t);
+        sys.wait_idle();
+
+        // 3. Assert: Verify execution completion
+        ASSERT_TRUE(t.is_ready());
+        for (auto i = 0u; i < count; ++i)
+        {
+            EXPECT_EQ(static_values[i], static_cast<int>(i + 1));
+            EXPECT_EQ(guided_values[i], static_cast<int>(i + 10));
+        }
+
+        // Drain chunks and audit all recorded zones
+        auto chunks = prof.drain_completed_chunks();
+        ASSERT_FALSE(chunks.empty());
+
+        auto chunk_zone_count = size_t{0};
+        for (const auto& chunk : chunks)
+        {
+            for (const auto& zone : chunk->zones())
+            {
+                // Invariant: No zone should ever be titled "detached_task"
+                EXPECT_NE(zone.name, "detached_task");
+
+                if (zone.name == "parallel_for_chunk")
+                {
+                    ++chunk_zone_count;
+                    // Provenance assertions
+                    EXPECT_GT(zone.spawned_by_coroutine_id, 0U);
+                    EXPECT_GT(zone.spawned_by_thread_id, 0U);
+                    EXPECT_NE(zone.location.function_name(), nullptr);
+                }
+            }
+        }
+
+        EXPECT_GT(chunk_zone_count, 0U);
+    }
 } // namespace tempest::job::tests

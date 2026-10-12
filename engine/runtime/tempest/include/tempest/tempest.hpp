@@ -350,6 +350,8 @@ namespace tempest
             }
 
             auto remaining = atomic<size_t>{passes.size()};
+            const auto caller_tid = this_thread::get_id().to_uint64();
+            const auto caller_cid = _profiler_session.get_or_register_thread().get_current_coroutine_id();
 
             auto launch_pass = [](job::job_allocator&, // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
                                   job::job_system&,    // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
@@ -364,6 +366,8 @@ namespace tempest
             {
                 auto task = launch_pass(_job_system->get_dispatch_allocator(), *_job_system,
                                         pass.record_fn, &remaining);
+                task.set_name(pass.pass_name);
+                task.set_provenance(caller_tid, caller_cid, caller_tid, caller_cid);
                 _job_system->schedule(task.handle, job::task_priority::high, job::core_class::performance);
             }
 

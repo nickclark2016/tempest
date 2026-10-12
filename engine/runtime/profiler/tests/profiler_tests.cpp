@@ -1,5 +1,11 @@
 #include <tempest/algorithm.hpp>
+#include <tempest/atomic.hpp>
 #include <tempest/chrono.hpp>
+#include <tempest/job/job_system.hpp>
+#include <tempest/job/task.hpp>
+#include <tempest/job/task_graph.hpp>
+#include <tempest/job/when_all.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/profiler/profiler.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
@@ -12,7 +18,6 @@
 
 #include <cmath>
 #include <cstdio>
-#include <utility>
 
 //==============================================================================
 // Single-Threaded & Hierarchical Profiler Tests
@@ -2689,5 +2694,142 @@ TEST(profiler_tests, telemetry_frame_coroutine_provenance_json_serialization)
     EXPECT_TRUE(tempest::contains(json_str, "\"spawned_by_coroutine_id\":101"));
     EXPECT_TRUE(tempest::contains(json_str, "\"awaited_by_thread_id\":5"));
     EXPECT_TRUE(tempest::contains(json_str, "\"awaited_by_coroutine_id\":101"));
+}
+
+//==============================================================================
+// Scheduler Coroutine Provenance and Naming Audit
+//==============================================================================
+
+/// @brief End-to-end audit verifying that jobs dispatched through async, schedule, parallel_for,
+///        when_all, and task_graph record meaningful names (never "detached_task" or empty)
+///        and populate thread and coroutine provenance.
+TEST(profiler_tests, scheduler_coroutine_provenance_and_naming_audit)
+{
+    // 1. Setup: Create logger, profiler session enabled, and job system
+    auto logger = tempest::logger{};
+    auto session = tempest::profiler::profiler_session{};
+    session.set_enabled(true);
+
+    auto js = tempest::job::job_system{logger, session, tempest::job::job_system_config{
+        .performance_worker_count = 2,
+        .efficiency_worker_count = 0,
+    }};
+
+    // 2. Act: Run async, parallel_for, when_all, and task_graph through job_system
+    auto ran_async = false;
+    [[maybe_unused]] auto async_job = js.async("AuditAsyncWorker", [&]() {
+        ran_async = true;
+    });
+
+    auto pfor_sum = tempest::atomic<uint32_t>{0};
+    auto alpha_ran = false;
+    auto beta_ran = false;
+
+    auto make_leaf = [](uint32_t factor) -> tempest::job::task<uint32_t> {
+        co_return factor * 2;
+    };
+
+    auto graph = tempest::job::task_graph{};
+    auto graph_node_ran = tempest::atomic<bool>{false};
+    graph.emplace("AuditGraphNode", [&]() {
+        graph_node_ran.store(true, tempest::memory_order::release);
+    });
+
+    auto master_task = [&]() -> tempest::job::task<void> {
+        // Parallel for execution
+        co_await js.parallel_for(16, [&](size_t) {
+            pfor_sum.fetch_add(1, tempest::memory_order::relaxed);
+        });
+
+        // When all execution
+        auto t1 = make_leaf(10).with_name("audit_leaf_alpha");
+        auto t2 = make_leaf(20).with_name("audit_leaf_beta");
+        auto [r1, r2] = co_await tempest::job::when_all(js, tempest::move(t1), tempest::move(t2));
+        if (r1.has_value() && r2.has_value())
+        {
+            alpha_ran = true;
+            beta_ran = true;
+        }
+
+        // Task graph execution
+        co_await js.execute(graph);
+    };
+
+    auto master_job = master_task().with_name("AuditMasterTask").with_profiler(session);
+    const auto master_cid = master_job.coroutine_id();
+    EXPECT_GT(master_cid, 0U);
+
+    js.schedule(master_job);
+    js.wait_idle();
+
+    EXPECT_TRUE(ran_async);
+    EXPECT_EQ(pfor_sum.load(), 16U);
+    EXPECT_TRUE(alpha_ran);
+    EXPECT_TRUE(beta_ran);
+    EXPECT_TRUE(graph_node_ran.load(tempest::memory_order::acquire));
+    EXPECT_TRUE(master_job.is_ready());
+
+    // 3. Assert: Drain completed chunks and audit all recorded zones
+    auto chunks = session.drain_completed_chunks();
+    ASSERT_FALSE(chunks.empty());
+
+    auto found_async_worker = false;
+    auto found_master_task = false;
+    auto found_pfor_chunk = false;
+    auto found_leaf_alpha = false;
+    auto found_leaf_beta = false;
+    auto found_graph_node = false;
+
+    for (const auto& chunk : chunks)
+    {
+        for (const auto& zone : chunk->zones())
+        {
+            // Invariant: No CPU zone should EVER be titled "detached_task" or empty
+            EXPECT_NE(zone.name, "detached_task");
+            EXPECT_FALSE(zone.name.empty());
+
+            // Coroutine provenance invariants
+            if (zone.coroutine_id > 0)
+            {
+                EXPECT_GT(zone.spawned_by_thread_id, 0U);
+            }
+
+            if (zone.name == "AuditAsyncWorker")
+            {
+                found_async_worker = true;
+            }
+            else if (zone.name == "AuditMasterTask")
+            {
+                found_master_task = true;
+            }
+            else if (zone.name == "parallel_for_chunk")
+            {
+                found_pfor_chunk = true;
+                EXPECT_GT(zone.spawned_by_coroutine_id, 0U);
+            }
+            else if (zone.name == "audit_leaf_alpha")
+            {
+                found_leaf_alpha = true;
+                EXPECT_EQ(zone.spawned_by_coroutine_id, master_cid);
+            }
+            else if (zone.name == "audit_leaf_beta")
+            {
+                found_leaf_beta = true;
+                EXPECT_EQ(zone.spawned_by_coroutine_id, master_cid);
+            }
+            else if (zone.name == "AuditGraphNode")
+            {
+                found_graph_node = true;
+                EXPECT_GT(zone.spawned_by_thread_id, 0U);
+            }
+        }
+    }
+
+    EXPECT_TRUE(found_async_worker);
+    EXPECT_TRUE(found_master_task);
+    EXPECT_TRUE(found_pfor_chunk);
+    EXPECT_TRUE(found_leaf_alpha);
+    EXPECT_TRUE(found_leaf_beta);
+    EXPECT_TRUE(found_graph_node);
 }
 

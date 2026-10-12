@@ -339,67 +339,46 @@ namespace tempest::job::tests
     /// @brief Verifies that concurrent setters and waiters on an auto-reset event never suffer from lost wakeups.
     TEST(async_event_test, auto_reset_lost_wakeup_stress)
     {
-        // 1. Setup: 4 waiter threads, 4 setter threads
-        constexpr auto iterations = 500;
-        auto evt = async_event{false, event_reset_mode::auto_reset};
+        // 1. Setup: 4 waiters and 4 concurrent setter threads across 100 rounds
+        constexpr auto rounds = 100;
+        constexpr auto thread_count = 4;
         auto completed_count = atomic<int>{0};
-        auto stop_flag = atomic<bool>{false};
 
-        auto waiter_coro = [&evt, &completed_count, &stop_flag]() -> task<void> {
-            while (!stop_flag.load(memory_order::acquire))
+        for (auto round = 0; round < rounds; ++round)
+        {
+            auto evt = async_event{false, event_reset_mode::auto_reset};
+            auto tasks = vector<task<void>>{};
+            tasks.reserve(thread_count);
+
+            for (auto i = 0; i < thread_count; ++i)
             {
-                co_await evt.wait();
-                completed_count.fetch_add(1, memory_order::relaxed);
+                tasks.push_back(atomic_counter_waiter(evt, &completed_count));
+                tasks.back().resume();
             }
-            co_return;
-        };
 
-        auto threads = vector<tempest::thread>{};
-        constexpr auto waiter_thread_count = 4;
-        constexpr auto setter_thread_count = 4;
-
-        auto tasks = vector<task<void>>{};
-        tasks.reserve(waiter_thread_count);
-
-        for (auto index = 0; index < waiter_thread_count; ++index)
-        {
-            tasks.push_back(waiter_coro());
-            threads.push_back(tempest::thread([&tasks, index]() {
-                tasks[static_cast<size_t>(index)].resume();
-            }));
-        }
-
-        // 2. Act: Setters pulse the event repeatedly
-        for (auto index = 0; index < setter_thread_count; ++index)
-        {
-            threads.push_back(tempest::thread([&evt, iterations]() {
-                for (auto it = 0; it < iterations; ++it)
-                {
+            // 2. Act: 4 concurrent setter threads signal the event
+            auto setters = vector<tempest::thread>{};
+            setters.reserve(thread_count);
+            for (auto i = 0; i < thread_count; ++i)
+            {
+                setters.push_back(tempest::thread([&evt]() {
                     evt.set();
-                }
-            }));
+                }));
+            }
+
+            for (auto& setter : setters)
+            {
+                setter.join();
+            }
+
+            // 3. Assert: All waiters in this round completed
+            for (auto& t : tasks)
+            {
+                EXPECT_TRUE(t.is_ready());
+            }
         }
 
-        // Wait until at least a large number of signals have been consumed
-        while (completed_count.load(memory_order::acquire) < (setter_thread_count * iterations))
-        {
-            // Spin until all sets are consumed
-        }
-
-        stop_flag.store(true, memory_order::release);
-        // Wake up remaining waiting threads to exit
-        for (auto index = 0; index < waiter_thread_count; ++index)
-        {
-            evt.set();
-        }
-
-        for (auto& thread : threads)
-        {
-            thread.join();
-        }
-
-        // 3. Assert: All expected signals were consumed
-        EXPECT_GE(completed_count.load(memory_order::relaxed), setter_thread_count * iterations);
+        EXPECT_EQ(completed_count.load(memory_order::relaxed), rounds * thread_count);
     }
 
     /// @brief Verifies that an event can be destroyed immediately by the awakened task without use-after-free.

@@ -317,4 +317,80 @@ namespace tempest::job::tests
         EXPECT_TRUE(slab_allocated);
         EXPECT_TRUE(main_task.is_ready());
     }
+
+    // =========================================================================
+    // SECTION: Profiler Provenance & Leaf Naming
+    // =========================================================================
+
+    /// @brief Verifies that when_all leaves adopt the child tasks' names instead of
+    ///        "detached_task", and that their coroutine provenance correctly links
+    ///        to the parent task.
+    TEST(when_all_test, when_all_leaf_naming_and_provenance)
+    {
+        // 1. Setup: 4-worker job system with active profiler
+        auto log = logger{};
+        auto prof = profiler::profiler_session{true};
+        auto config = job_system_config{
+            .performance_worker_count = 4,
+            .efficiency_worker_count = 0,
+        };
+        auto sys = job_system{log, prof, config};
+
+        auto make_leaf = [](int val) -> task<int> {
+            co_return val * 3;
+        };
+
+        auto t1 = make_leaf(10).with_name("leaf_alpha");
+        auto t2 = make_leaf(20).with_name("leaf_beta");
+
+        // 2. Act: Execute when_all inside a parent task
+        auto parent = [&]() -> task<void> {
+            auto [r1, r2] = co_await when_all(sys, tempest::move(t1), tempest::move(t2));
+            EXPECT_TRUE(r1.has_value());
+            EXPECT_EQ(r1.value(), 30);
+            EXPECT_TRUE(r2.has_value());
+            EXPECT_EQ(r2.value(), 60);
+        };
+
+        auto parent_job = parent().with_name("parent_when_all_task").with_profiler(prof);
+        const auto parent_cid = parent_job.coroutine_id();
+        EXPECT_GT(parent_cid, 0U);
+
+        sys.schedule(parent_job);
+        sys.wait_idle();
+
+        // 3. Assert: Verify completion and profiler chunk zones
+        EXPECT_TRUE(parent_job.is_ready());
+
+        auto chunks = prof.drain_completed_chunks();
+        ASSERT_FALSE(chunks.empty());
+
+        auto found_alpha = false;
+        auto found_beta = false;
+
+        for (const auto& chunk : chunks)
+        {
+            for (const auto& zone : chunk->zones())
+            {
+                // Invariant: No zone should ever be titled "detached_task"
+                EXPECT_NE(zone.name, "detached_task");
+
+                if (zone.name == "leaf_alpha")
+                {
+                    found_alpha = true;
+                    EXPECT_GT(zone.spawned_by_thread_id, 0U);
+                    EXPECT_EQ(zone.spawned_by_coroutine_id, parent_cid);
+                }
+                else if (zone.name == "leaf_beta")
+                {
+                    found_beta = true;
+                    EXPECT_GT(zone.spawned_by_thread_id, 0U);
+                    EXPECT_EQ(zone.spawned_by_coroutine_id, parent_cid);
+                }
+            }
+        }
+
+        EXPECT_TRUE(found_alpha);
+        EXPECT_TRUE(found_beta);
+    }
 } // namespace tempest::job::tests

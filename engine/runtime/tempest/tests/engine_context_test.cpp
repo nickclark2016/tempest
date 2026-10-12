@@ -2,6 +2,7 @@
 
 #include <tempest/atomic.hpp>
 #include <tempest/input.hpp>
+#include <tempest/render_graph/render_graph.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/thread.hpp>
 #include <tempest/window_manager.hpp>
@@ -530,5 +531,98 @@ namespace tempest::tests
         // 3. Assert: Task was dispatched and executed during the frame loop
         EXPECT_TRUE(ctx.task_executed);
         EXPECT_TRUE(ctx.get_main_thread_executor().empty());
+    }
+
+    class test_pass_engine_context final : public standalone_engine_context
+    {
+      public:
+        explicit test_pass_engine_context(const engine_config& config) : standalone_engine_context{config}
+        {
+            _profiler_session.set_enabled(true);
+        }
+
+        using standalone_engine_context::_with_pass_dispatcher;
+    };
+
+    /// @brief Verifies that standalone_engine_context::_with_pass_dispatcher gives worker slices
+    ///        the actual pass_name instead of "detached_task", and tags valid caller provenance.
+    TEST(engine_context_test, pass_dispatcher_worker_slice_provenance_and_naming)
+    {
+        // 1. Setup: Test context exposing _with_pass_dispatcher
+        const auto config = engine_config{
+            .headless = true,
+            .fixed_timestep = 1.0F / 60.0F,
+            .max_frame_delta = 0.1F,
+        };
+        auto ctx = test_pass_engine_context{config};
+
+        auto pass1_ran = false;
+        auto pass2_ran = false;
+        auto pass3_ran = false;
+
+        auto pass1_fn = [&pass1_ran]() { pass1_ran = true; };
+        auto pass2_fn = [&pass2_ran]() { pass2_ran = true; };
+        auto pass3_fn = [&pass3_ran]() { pass3_ran = true; };
+
+        auto passes = vector<render_graph::pass_record_item>{};
+        passes.push_back(render_graph::pass_record_item{
+            .record_fn = pass1_fn,
+            .pass_name = "ShadowPass",
+        });
+        passes.push_back(render_graph::pass_record_item{
+            .record_fn = pass2_fn,
+            .pass_name = "GBufferPass",
+        });
+        passes.push_back(render_graph::pass_record_item{
+            .record_fn = pass3_fn,
+            .pass_name = "LightingPass",
+        });
+
+        // 2. Act: Invoke pass dispatcher
+        ctx._with_pass_dispatcher([&passes](render_graph::pass_dispatcher_fn dispatcher) {
+            dispatcher(span<const render_graph::pass_record_item>{passes.data(), passes.size()});
+        });
+
+        // 3. Assert: All passes executed
+        EXPECT_TRUE(pass1_ran);
+        EXPECT_TRUE(pass2_ran);
+        EXPECT_TRUE(pass3_ran);
+
+        // Audit profiler zones
+        auto chunks = ctx.get_profiler_session().drain_completed_chunks();
+        ASSERT_FALSE(chunks.empty());
+
+        auto found_shadow = false;
+        auto found_gbuffer = false;
+        auto found_lighting = false;
+
+        for (const auto& chunk : chunks)
+        {
+            for (const auto& zone : chunk->zones())
+            {
+                // Invariant: No zone should ever be titled "detached_task"
+                EXPECT_NE(zone.name, "detached_task");
+
+                if (zone.name == "ShadowPass")
+                {
+                    found_shadow = true;
+                    EXPECT_GT(zone.spawned_by_thread_id, 0U);
+                }
+                else if (zone.name == "GBufferPass")
+                {
+                    found_gbuffer = true;
+                    EXPECT_GT(zone.spawned_by_thread_id, 0U);
+                }
+                else if (zone.name == "LightingPass")
+                {
+                    found_lighting = true;
+                    EXPECT_GT(zone.spawned_by_thread_id, 0U);
+                }
+            }
+        }
+
+        EXPECT_TRUE(found_shadow);
+        EXPECT_TRUE(found_gbuffer);
+        EXPECT_TRUE(found_lighting);
     }
 } // namespace tempest::tests
