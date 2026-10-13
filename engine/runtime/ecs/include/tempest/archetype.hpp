@@ -1185,11 +1185,15 @@ namespace tempest::ecs
             _entity_archetype_mapping[entity] = new_key;
         }
 
-        _event_registry->dispatcher<component_added_event<basic_archetype_registry::entity_type, component_type>>()
-            .publish({
-                .entity = entity,
-                .component = *result_ptr,
-            });
+        if constexpr (event::event_type<component_added_event<basic_archetype_registry::entity_type, component_type>>)
+        {
+            _event_registry
+                ->dispatcher<component_added_event<basic_archetype_registry::entity_type, component_type>>()
+                .publish({
+                    .entity = entity,
+                    .component = *result_ptr,
+                });
+        }
 
         return *result_ptr;
     }
@@ -1212,12 +1216,16 @@ namespace tempest::ecs
 
         auto* res = construct_at(reinterpret_cast<component_type*>(data), value);
 
-        _event_registry->dispatcher<component_replaced_event<basic_archetype_registry::entity_type, component_type>>()
-            .publish({
-                .entity = entity,
-                .old_component = old_value,
-                .new_component = *res,
-            });
+        if constexpr (event::event_type<component_replaced_event<basic_archetype_registry::entity_type, component_type>>)
+        {
+            _event_registry
+                ->dispatcher<component_replaced_event<basic_archetype_registry::entity_type, component_type>>()
+                .publish({
+                    .entity = entity,
+                    .old_component = old_value,
+                    .new_component = *res,
+                });
+        }
 
         return *res;
     }
@@ -1334,11 +1342,15 @@ namespace tempest::ecs
 
         _entity_archetype_mapping[entity] = entity_key;
 
-        _event_registry->dispatcher<component_removed_event<basic_archetype_registry::entity_type, component_type>>()
-            .publish({
-                .entity = entity,
-                .component = old_value,
-            });
+        if constexpr (event::event_type<component_removed_event<basic_archetype_registry::entity_type, component_type>>)
+        {
+            _event_registry
+                ->dispatcher<component_removed_event<basic_archetype_registry::entity_type, component_type>>()
+                .publish({
+                    .entity = entity,
+                    .component = old_value,
+                });
+        }
     }
 
     template <typename T>
