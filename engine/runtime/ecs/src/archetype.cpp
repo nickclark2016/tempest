@@ -1060,4 +1060,198 @@ namespace tempest::ecs
     {
         reg.reparent(child, parent, tombstone);
     }
+
+    auto basic_archetype_registry::_has_raw(entity_type entity, uint32_t type_index) const noexcept -> bool
+    {
+        return _get_component_raw(entity, type_index) != nullptr;
+    }
+
+    auto basic_archetype_registry::_get_component_raw(entity_type entity, uint32_t type_index) const noexcept
+        -> const void*
+    {
+        const auto it = _entity_archetype_mapping.find(entity);
+        if (it == _entity_archetype_mapping.end())
+        {
+            return nullptr;
+        }
+        const auto key = it->second;
+        if (key.archetype_index >= _hashes.size() || type_index >= max_component_types)
+        {
+            return nullptr;
+        }
+        const auto& hash = _hashes[key.archetype_index];
+        if ((hash.hash[type_index / char_bit] & static_cast<byte>(1 << (type_index % char_bit))) == static_cast<byte>(0))
+        {
+            return nullptr;
+        }
+        const auto storage_index = _index_of_component_in_archetype(key.archetype_index, type_index);
+        const auto& arch = _archetypes[key.archetype_index];
+        return arch.element_at(key.archetype_key, storage_index);
+    }
+
+    auto basic_archetype_registry::_get_component_raw(entity_type entity, uint32_t type_index) noexcept -> void*
+    {
+        const auto it = _entity_archetype_mapping.find(entity);
+        if (it == _entity_archetype_mapping.end())
+        {
+            return nullptr;
+        }
+        const auto key = it->second;
+        if (key.archetype_index >= _hashes.size() || type_index >= max_component_types)
+        {
+            return nullptr;
+        }
+        const auto& hash = _hashes[key.archetype_index];
+        if ((hash.hash[type_index / char_bit] & static_cast<byte>(1 << (type_index % char_bit))) == static_cast<byte>(0))
+        {
+            return nullptr;
+        }
+        const auto storage_index = _index_of_component_in_archetype(key.archetype_index, type_index);
+        auto& arch = _archetypes[key.archetype_index];
+        return arch.element_at(key.archetype_key, storage_index);
+    }
+
+    auto basic_archetype_registry::_get_component_types(entity_type entity) const -> vector<component_type_info>
+    {
+        const auto it = _entity_archetype_mapping.find(entity);
+        if (it == _entity_archetype_mapping.end())
+        {
+            return {};
+        }
+        const auto key = it->second;
+        if (key.archetype_index >= _archetypes.size())
+        {
+            return {};
+        }
+        const auto& arch = _archetypes[key.archetype_index];
+        auto result = vector<component_type_info>{};
+        const auto storages_span = arch.storages();
+        result.reserve(storages_span.size());
+        for (const auto& storage : storages_span)
+        {
+            result.push_back(storage.type_info());
+        }
+        return result;
+    }
+
+    auto basic_archetype_registry::_assign_raw(entity_type entity, const component_type_info& type_info,
+                                               const void* src_data) -> void*
+    {
+        auto* existing = _get_component_raw(entity, type_info.index);
+        if (existing != nullptr)
+        {
+            if (src_data != nullptr)
+            {
+                tempest::memcpy(existing, src_data, type_info.size);
+            }
+            return existing;
+        }
+
+        const auto archetype_key_iter = _entity_archetype_mapping.find(entity);
+        const auto is_empty_entity = (archetype_key_iter == _entity_archetype_mapping.end());
+        const auto type_index = type_info.index;
+
+        const auto type_hash = [&]() -> types_hash_type {
+            if (is_empty_entity)
+            {
+                auto hash = types_hash_type{};
+                hash.hash[type_index / char_bit] |= static_cast<byte>(1 << (type_index % char_bit));
+                return hash;
+            }
+
+            const auto existing_key = archetype_key_iter->second;
+            const auto existing_archetype_index = existing_key.archetype_index;
+
+            auto existing_hash = _hashes[existing_archetype_index];
+            existing_hash.hash[type_index / char_bit] |= static_cast<byte>(1 << (type_index % char_bit));
+
+            return existing_hash;
+        }();
+
+        auto hash_iter = tempest::find(_hashes.begin(), _hashes.end(), type_hash);
+        if (hash_iter == _hashes.end())
+        {
+            auto new_types = vector<basic_archetype_type_info>{};
+            new_types.push_back(type_info);
+
+            if (!is_empty_entity)
+            {
+                const auto& existing_arch = _archetypes[archetype_key_iter->second.archetype_index];
+                const auto existing_storage_view = existing_arch.storages();
+
+                for (const auto& storage : existing_storage_view)
+                {
+                    new_types.push_back(storage.type_info());
+                }
+
+                tempest::sort(new_types.begin(), new_types.end(),
+                              [](const auto& lhs, const auto& rhs) -> bool { return lhs.index < rhs.index; });
+            }
+
+            _hashes.push_back(type_hash);
+            hash_iter = _hashes.end() - 1;
+            _archetypes.emplace_back(new_types);
+        }
+
+        const auto target_archetype_index = static_cast<size_t>(tempest::distance(_hashes.begin(), hash_iter));
+        auto& target_arch = _archetypes[target_archetype_index];
+        const auto target_arch_key = target_arch.allocate();
+
+        if (!is_empty_entity)
+        {
+            const auto existing_arch_index = archetype_key_iter->second.archetype_index;
+            auto& existing_arch = _archetypes[existing_arch_index];
+
+            for (size_t storage_idx = 0; storage_idx < existing_arch.storages().size(); ++storage_idx)
+            {
+                const auto storage_ti = existing_arch.storages()[storage_idx].type_info();
+                const auto comp_storage_index = storage_ti.index;
+                const auto existing_component_index =
+                    _index_of_component_in_archetype(existing_arch_index, comp_storage_index);
+                const auto new_component_index =
+                    _index_of_component_in_archetype(target_archetype_index, comp_storage_index);
+
+                auto* existing_data =
+                    existing_arch.element_at(archetype_key_iter->second.archetype_key, existing_component_index);
+                auto* new_data = target_arch.element_at(target_arch_key, new_component_index);
+
+                tempest::copy_n(existing_data, storage_ti.size, new_data);
+            }
+
+            existing_arch.erase(archetype_key_iter->second.archetype_key);
+        }
+
+        const auto new_component_index = _index_of_component_in_archetype(target_archetype_index, type_info.index);
+        auto* new_component_ptr = target_arch.element_at(target_arch_key, new_component_index);
+        if (src_data != nullptr)
+        {
+            tempest::memcpy(new_component_ptr, src_data, type_info.size);
+        }
+        else
+        {
+            tempest::memset(new_component_ptr, 0, type_info.size);
+        }
+
+        const auto new_key = ecs::basic_archetype_entity{
+            .archetype_key = target_arch_key,
+            .archetype_index = static_cast<uint64_t>(target_archetype_index),
+        };
+
+        if (is_empty_entity)
+        {
+            _entity_archetype_mapping.insert(entity, new_key);
+        }
+        else
+        {
+            _entity_archetype_mapping[entity] = new_key;
+        }
+
+        return new_component_ptr;
+    }
+
+    auto basic_archetype_registry::_assign_raw(entity_type entity, uint32_t type_index, const void* src_data)
+        -> void*
+    {
+        return _assign_raw(entity, _type_registry->type_info(type_index), src_data);
+    }
 } // namespace tempest::ecs

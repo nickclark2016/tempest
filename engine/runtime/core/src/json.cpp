@@ -760,6 +760,32 @@ namespace tempest
         yyjson_mut_obj_add(obj, k, v);
     }
 
+    void json_object_mut::set(string_view key, json_value val)
+    {
+        if (_doc == nullptr || _val == nullptr || !val.is_valid())
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = yyjson_val_mut_copy(doc, cast_val(val._val));
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
+    void json_object_mut::set_raw(string_view key, string_view raw_json)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* obj = to_mut_val(_val);
+        auto* k = yyjson_mut_strncpy(doc, key.data(), key.size());
+        auto* v = yyjson_mut_rawncpy(doc, raw_json.data(), raw_json.size());
+        yyjson_mut_obj_add(obj, k, v);
+    }
+
     void json_object_mut::set_null(string_view key)
     {
         if (_doc == nullptr || _val == nullptr)
@@ -920,6 +946,30 @@ namespace tempest
         }
         auto* arr = to_mut_val(_val);
         auto* v = to_mut_val(val._val);
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    void json_array_mut::push_back(json_value val)
+    {
+        if (_doc == nullptr || _val == nullptr || !val.is_valid())
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* v = yyjson_val_mut_copy(doc, cast_val(val._val));
+        yyjson_mut_arr_append(arr, v);
+    }
+
+    void json_array_mut::push_back_raw(string_view raw_json)
+    {
+        if (_doc == nullptr || _val == nullptr)
+        {
+            return;
+        }
+        auto* doc = to_mut_doc(_doc);
+        auto* arr = to_mut_val(_val);
+        auto* v = yyjson_mut_rawncpy(doc, raw_json.data(), raw_json.size());
         yyjson_mut_arr_append(arr, v);
     }
 
@@ -1125,6 +1175,37 @@ namespace tempest
     auto json_writer::to_string(json_format fmt) const -> string
     {
         return _impl ? _impl->to_string(fmt) : string{};
+    }
+
+    auto json_writer::to_string(json_value val, json_format fmt) -> string
+    {
+        if (!val.is_valid())
+        {
+            return string{};
+        }
+
+        auto alloc = system_allocator{};
+        auto alc = yyjson_alc{
+            .malloc = yyjson_malloc_cb,
+            .realloc = yyjson_realloc_cb,
+            .free = yyjson_free_cb,
+            .ctx = &alloc,
+        };
+
+        const auto flags = (fmt == json_format::pretty) ? yyjson_write_flag{YYJSON_WRITE_PRETTY_TWO_SPACES}
+                                                        : yyjson_write_flag{YYJSON_WRITE_NOFLAG};
+
+        auto len = size_t{0};
+        auto err = yyjson_write_err{};
+        auto* buf = yyjson_val_write_opts(cast_val(val._val), flags, &alc, &len, &err);
+        if (buf == nullptr)
+        {
+            return string{};
+        }
+
+        auto result = string{buf, len};
+        alc.free(alc.ctx, buf);
+        return result;
     }
 
     auto json_writer::to_bytes(json_format fmt) const -> vector<byte>

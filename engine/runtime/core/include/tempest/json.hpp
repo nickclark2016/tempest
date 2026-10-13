@@ -108,6 +108,9 @@ namespace tempest
         friend class json_object;
         friend class json_array;
         friend class json_document;
+        friend class json_object_mut;
+        friend class json_array_mut;
+        friend class json_writer;
 
         const void* _val{nullptr};
     };
@@ -342,6 +345,8 @@ namespace tempest
         }
         void set(string_view key, json_object_mut val);
         void set(string_view key, json_array_mut val);
+        void set(string_view key, json_value val);
+        void set_raw(string_view key, string_view raw_json);
         void set_null(string_view key);
         auto create_child_object(string_view key) -> json_object_mut;
         auto create_child_array(string_view key) -> json_array_mut;
@@ -390,6 +395,8 @@ namespace tempest
         }
         void push_back(json_object_mut val);
         void push_back(json_array_mut val);
+        void push_back(json_value val);
+        void push_back_raw(string_view raw_json);
         void push_back_null();
         auto create_child_object() -> json_object_mut;
         auto create_child_array() -> json_array_mut;
@@ -423,6 +430,7 @@ namespace tempest
         void set_root(json_array_mut arr);
 
         [[nodiscard]] auto to_string(json_format fmt = json_format::compact) const -> string;
+        [[nodiscard]] static auto to_string(json_value val, json_format fmt = json_format::compact) -> string;
         [[nodiscard]] auto to_bytes(json_format fmt = json_format::compact) const -> vector<byte>;
 
       private:

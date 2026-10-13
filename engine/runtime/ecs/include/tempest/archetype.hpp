@@ -817,6 +817,8 @@ namespace tempest::ecs
         auto _acquire_next_entity(/*inout*/ size_t& archetype_index, /*intout*/ size_t& entity_index) const -> void;
     };
 
+    class raw_registry_access;
+
     class TEMPEST_API basic_archetype_registry
     {
       public:
@@ -943,6 +945,67 @@ namespace tempest::ecs
 
         template <typename... Ts>
         friend class basic_archetype_with_components_view;
+
+        friend class raw_registry_access;
+
+        [[nodiscard]] auto _has_raw(entity_type entity, uint32_t type_index) const noexcept -> bool;
+        [[nodiscard]] auto _get_component_raw(entity_type entity, uint32_t type_index) const noexcept -> const void*;
+        [[nodiscard]] auto _get_component_raw(entity_type entity, uint32_t type_index) noexcept -> void*;
+        [[nodiscard]] auto _get_component_types(entity_type entity) const -> vector<component_type_info>;
+        auto _assign_raw(entity_type entity, const component_type_info& type_info, const void* src_data = nullptr)
+            -> void*;
+        auto _assign_raw(entity_type entity, uint32_t type_index, const void* src_data = nullptr) -> void*;
+    };
+
+    /// @brief Friended system-level accessor for type-erased component manipulation.
+    /// Exposes raw storage operations needed by serializers, inspectors, and tools
+    /// without polluting the type-safe public interface of basic_archetype_registry.
+    class TEMPEST_API raw_registry_access
+    {
+      public:
+        [[nodiscard]] static auto has(const basic_archetype_registry& registry,
+                                      basic_archetype_registry::entity_type entity,
+                                      uint32_t type_index) noexcept -> bool
+        {
+            return registry._has_raw(entity, type_index);
+        }
+
+        [[nodiscard]] static auto get_component_raw(const basic_archetype_registry& registry,
+                                                    basic_archetype_registry::entity_type entity,
+                                                    uint32_t type_index) noexcept -> const void*
+        {
+            return registry._get_component_raw(entity, type_index);
+        }
+
+        [[nodiscard]] static auto get_component_raw(basic_archetype_registry& registry,
+                                                    basic_archetype_registry::entity_type entity,
+                                                    uint32_t type_index) noexcept -> void*
+        {
+            return registry._get_component_raw(entity, type_index);
+        }
+
+        [[nodiscard]] static auto get_component_types(const basic_archetype_registry& registry,
+                                                      basic_archetype_registry::entity_type entity)
+            -> vector<component_type_info>
+        {
+            return registry._get_component_types(entity);
+        }
+
+        static auto assign_raw(basic_archetype_registry& registry,
+                               basic_archetype_registry::entity_type entity,
+                               const component_type_info& type_info,
+                               const void* src_data = nullptr) -> void*
+        {
+            return registry._assign_raw(entity, type_info, src_data);
+        }
+
+        static auto assign_raw(basic_archetype_registry& registry,
+                               basic_archetype_registry::entity_type entity,
+                               uint32_t type_index,
+                               const void* src_data = nullptr) -> void*
+        {
+            return registry._assign_raw(entity, type_index, src_data);
+        }
     };
 
     struct TEMPEST_API self_component
