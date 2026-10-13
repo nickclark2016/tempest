@@ -176,6 +176,7 @@ scoped.project('tempest', function()
             'render-system:includedirs',
             'rhi-api:includedirs',
             'rhi-vk:includedirs',
+            'scene:includedirs',
             'serialization:includedirs',
             'units:includedirs',
         }
@@ -202,6 +203,7 @@ scoped.project('tempest', function()
                 'physics',
                 'profiler',
                 'rhi-api',
+                'scene',
                 'serialization',
 
                 'glfw',

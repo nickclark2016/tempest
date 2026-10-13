@@ -625,4 +625,38 @@ namespace tempest::tests
         EXPECT_TRUE(found_gbuffer);
         EXPECT_TRUE(found_lighting);
     }
+
+    /// @brief Verifies that engine_context exposes the scene_manager and permits entity creation and scene management.
+    TEST(engine_context_test, scene_manager_lifecycle)
+    {
+        // 1. Setup: Headless engine context
+        const auto config = engine_config{
+            .headless = true,
+            .fixed_timestep = 1.0F / 60.0F,
+            .max_frame_delta = 0.1F,
+        };
+        auto ctx = standalone_engine_context{config};
+
+        // 2. Act: Retrieve scene manager and manage a scene
+        auto& sm = ctx.get_scene_manager();
+        EXPECT_EQ(sm.get_scene_count(), 0U);
+
+        const auto scene_json = string_view{R"({ "version": 1, "entities": [] })"};
+        const auto handle_res = sm.load_from_string_sync(scene_json, "EngineScene");
+        ASSERT_TRUE(handle_res.has_value());
+        const auto handle = *handle_res;
+
+        const auto ent = sm.create_entity(handle, "Player");
+        EXPECT_TRUE(ctx.get_entities().is_valid(ent));
+        ASSERT_TRUE(ctx.get_entities().name(ent).has_value());
+        EXPECT_EQ(*ctx.get_entities().name(ent), "Player");
+
+        // 3. Assert: Scene count and active scene
+        EXPECT_EQ(sm.get_scene_count(), 1U);
+        EXPECT_EQ(sm.get_active_scene(), handle);
+
+        sm.unload(handle);
+        EXPECT_EQ(sm.get_scene_count(), 0U);
+        EXPECT_FALSE(ctx.get_entities().is_valid(ent));
+    }
 } // namespace tempest::tests

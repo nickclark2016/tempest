@@ -60,6 +60,8 @@ namespace tempest
 
         register_engine_types(_component_types);
 
+        _scene_manager = make_unique<scene::scene_manager>(_entity_registry);
+
         assets::register_default_importers(_asset_database, &_mesh_reg, &_texture_reg, &_material_reg);
         assets::mount_default_shader_roots(_asset_database);
         _asset_database.scan_and_index();
@@ -121,6 +123,8 @@ namespace tempest
 
     standalone_engine_context::~standalone_engine_context()
     {
+        _scene_manager.reset();
+
         if (_device)
         {
             _device->wait_idle();

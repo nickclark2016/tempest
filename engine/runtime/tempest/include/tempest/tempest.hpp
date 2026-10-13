@@ -15,6 +15,7 @@
 #include <tempest/profiler/profiler.hpp>
 #include <tempest/render_system/renderer.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/scene/scene_manager.hpp>
 #include <tempest/span.hpp>
 #include <tempest/thread.hpp>
 #include <tempest/vector.hpp>
@@ -69,6 +70,9 @@ namespace tempest
 
         [[nodiscard]] virtual auto get_entities() -> ecs::archetype_registry& = 0;
         [[nodiscard]] virtual auto get_entities() const -> const ecs::archetype_registry& = 0;
+
+        [[nodiscard]] virtual auto get_scene_manager() -> scene::scene_manager& = 0;
+        [[nodiscard]] virtual auto get_scene_manager() const -> const scene::scene_manager& = 0;
 
         [[nodiscard]] virtual auto get_events() -> event::event_registry& = 0;
         [[nodiscard]] virtual auto get_events() const -> const event::event_registry& = 0;
@@ -223,6 +227,16 @@ namespace tempest
         [[nodiscard]] auto get_entities() -> ecs::archetype_registry& override;
         [[nodiscard]] auto get_entities() const -> const ecs::archetype_registry& override;
 
+        [[nodiscard]] auto get_scene_manager() -> scene::scene_manager& override
+        {
+            return *_scene_manager;
+        }
+
+        [[nodiscard]] auto get_scene_manager() const -> const scene::scene_manager& override
+        {
+            return *_scene_manager;
+        }
+
         [[nodiscard]] auto get_events() -> event::event_registry& override;
         [[nodiscard]] auto get_events() const -> const event::event_registry& override;
 
@@ -313,6 +327,7 @@ namespace tempest
         core::texture_registry _texture_reg;
         assets::asset_type_registry _asset_type_reg;
         assets::asset_database _asset_database;
+        unique_ptr<scene::scene_manager> _scene_manager;
 
         window_manager _window_manager;
         unique_ptr<rhi::context> _rhi_context;
