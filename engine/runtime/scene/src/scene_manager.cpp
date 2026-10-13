@@ -25,13 +25,16 @@ namespace tempest::scene
     } // namespace
 
     scene_manager::scene_manager(ecs::archetype_registry& registry)
-        : scene_manager(registry, nullptr)
+        : scene_manager(registry, nullptr, nullptr)
     {
     }
 
-    scene_manager::scene_manager(ecs::archetype_registry& registry, assets::asset_database* assets)
-        : _registry{registry}, _assets{assets}
+    scene_manager::scene_manager(ecs::archetype_registry& registry, assets::asset_database* assets,
+                                 job::job_system* jobs)
+        : _registry{registry}, _assets{assets}, _jobs{jobs}
     {
+        _registry->type_registry().ensure<scene_inactive_tag>();
+        _registry->type_registry().ensure<scene_entity_component>();
     }
 
     scene_manager::~scene_manager()
@@ -321,6 +324,20 @@ namespace tempest::scene
 
     auto scene_manager::unload_all() -> void
     {
+        for (auto i = 0U; i < static_cast<uint32_t>(_async_ops.size()); ++i)
+        {
+            if (_async_ops[i].occupied && (_async_ops[i].state == scene_load_state::decoding ||
+                                           _async_ops[i].state == scene_load_state::resolving_assets ||
+                                           _async_ops[i].state == scene_load_state::committing))
+            {
+                cancel_load(scene_load_handle{
+                    .index = i,
+                    .generation = _async_ops[i].generation,
+                    .manager = this,
+                });
+            }
+        }
+
         for (auto slot_index = 0U; slot_index < static_cast<uint32_t>(_scenes.size()); ++slot_index)
         {
             if (_scenes[slot_index].occupied)

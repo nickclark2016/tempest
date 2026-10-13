@@ -38,8 +38,10 @@ scoped.project('scene', function()
     scoped.usage("PUBLIC", function()
         uses {
             'api',
+            'assets',
             'core',
             'ecs',
+            'job',
             'logger',
             'serialization',
         }

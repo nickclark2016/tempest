@@ -60,8 +60,6 @@ namespace tempest
 
         register_engine_types(_component_types);
 
-        _scene_manager = make_unique<scene::scene_manager>(_entity_registry);
-
         assets::register_default_importers(_asset_database, &_mesh_reg, &_texture_reg, &_material_reg);
         assets::mount_default_shader_roots(_asset_database);
         _asset_database.scan_and_index();
@@ -97,6 +95,9 @@ namespace tempest
             .enable_core_pinning = true,
             .topology = job::discover_cpu_topology(),
         });
+
+        _scene_manager =
+            make_unique<scene::scene_manager>(_entity_registry, &_asset_database, _job_system.get());
 
         if (_device && !_config.headless)
         {
@@ -318,6 +319,7 @@ namespace tempest
             }
 
             get_main_thread_executor().dispatch_pending();
+            get_scene_manager().tick();
 
             // 2. Fixed Timestep Simulation
             _accumulator.accumulate(delta_ns);
