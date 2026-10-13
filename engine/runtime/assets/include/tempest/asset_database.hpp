@@ -34,12 +34,6 @@ namespace tempest
 
 namespace tempest::assets
 {
-    struct TEMPEST_API prefab_tag_t
-    {
-    };
-
-    inline constexpr prefab_tag_t prefab_tag{};
-
     struct TEMPEST_API content_hash
     {
         static constexpr size_t hash_size = 32;
@@ -330,12 +324,5 @@ namespace tempest::assets
     };
 } // namespace tempest::assets
 
-namespace tempest::ecs
-{
-    template <>
-    struct is_duplicatable<assets::prefab_tag_t> : false_type
-    {
-    };
-} // namespace tempest::ecs
 
 #endif // tempest_assets_asset_database_hpp

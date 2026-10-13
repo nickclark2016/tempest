@@ -1,6 +1,5 @@
 #include <tempest/windows/scene_hierarchy_window.hpp>
 
-#include <tempest/asset_database.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/iterator.hpp>
 #include <tempest/string.hpp>
@@ -15,11 +14,6 @@ namespace tempest::editor
     {
         auto render_entity_node(ecs::entity entity, const ecs::archetype_registry& reg, ecs::entity& select) -> void
         {
-            if (reg.has<assets::prefab_tag_t>(entity))
-            {
-                return;
-            }
-
             const auto* rel_comp = reg.try_get<ecs::relationship_component<ecs::entity>>(entity);
             const bool has_children = rel_comp != nullptr && rel_comp->first_child != ecs::tombstone;
 

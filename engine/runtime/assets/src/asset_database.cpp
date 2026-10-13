@@ -1894,8 +1894,6 @@ namespace tempest::assets
                             }
                         }
 
-                        registry.assign(ent, prefab_tag);
-
                         // Build parent-child relationships
                         for (auto child_idx : record.child_indices)
                         {
@@ -1910,10 +1908,6 @@ namespace tempest::assets
 
         // If no entity hierarchy blob found, just return a placeholder
         auto root = registry.create<>();
-        if (!registry.has<prefab_tag_t>(root))
-        {
-            registry.assign(root, prefab_tag);
-        }
         return root;
     }
 
@@ -1960,11 +1954,6 @@ namespace tempest::assets
         {
             auto placeholder_type = asset_type_id::from_hash(0);
             register_asset(placeholder_type, source_path);
-        }
-
-        if (!registry.has<prefab_tag_t>(ent))
-        {
-            registry.assign(ent, prefab_tag);
         }
 
         // Serialize the entity hierarchy into a blob so it can be reconstructed

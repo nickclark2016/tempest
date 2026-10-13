@@ -250,11 +250,6 @@ namespace tempest::editor::tests
                                    .first_child = ecs::tombstone,
                                });
 
-            // Add a prefab entity which should be filtered out
-            auto prefab_ent = reg.create();
-            reg.name(prefab_ent, "Prefab Template");
-            reg.assign(prefab_ent, assets::prefab_tag_t{});
-
             auto hierarchy = scene_hierarchy_window{reg};
             EXPECT_EQ(hierarchy.desired_initial_dock(), editor_window::dock_location::left);
             EXPECT_EQ(hierarchy.window_name(), "Scene Hierarchy");

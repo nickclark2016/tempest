@@ -1477,7 +1477,6 @@ namespace tempest::assets
                                                 core::material_component{.material_id = *prim.material_id});
                             }
 
-                            registry.assign(child_mesh_ent, prefab_tag);
                             ecs::create_parent_child_relationship(registry, parent_ent, child_mesh_ent);
                         }
 
@@ -1509,7 +1508,6 @@ namespace tempest::assets
                 {
                     registry.assign(parent_ent, ecs::transform_component{});
                 }
-                registry.assign(parent_ent, prefab_tag);
 
                 node_entities.insert({node_id, parent_ent});
                 ++node_id;
@@ -1608,8 +1606,6 @@ namespace tempest::assets
                 return child;
             }
         }
-
-        registry.assign_or_replace(ent, prefab_tag);
 
         return ent;
     }
