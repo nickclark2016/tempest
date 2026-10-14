@@ -194,6 +194,17 @@ namespace tempest
             return hash<uint64_t>{}(id.value);
         }
     };
+
+    template <>
+    struct hash<scene::scene_handle>
+    {
+        auto operator()(const scene::scene_handle& handle) const noexcept -> size_t
+        {
+            auto h1 = hash<uint32_t>{}(handle.index);
+            auto h2 = hash<uint32_t>{}(handle.generation);
+            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+        }
+    };
 }
 
 #endif // tempest_scene_scene_types_hpp

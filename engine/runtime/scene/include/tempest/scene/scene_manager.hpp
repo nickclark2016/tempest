@@ -77,9 +77,11 @@ namespace tempest::scene
     {
         static constexpr uint32_t default_generation = 1;
         static constexpr bool default_occupied = false;
+        static constexpr bool default_dirty = false;
 
         uint32_t generation = default_generation;
         bool occupied = default_occupied;
+        bool is_dirty = default_dirty;
         string path;
         string name;
         vector<ecs::entity> root_entities;
@@ -89,7 +91,12 @@ namespace tempest::scene
     /// @brief Type-erased base interface for asynchronous decoding and asset resolution background tasks.
     struct async_load_task_base
     {
+        async_load_task_base() = default;
+        async_load_task_base(const async_load_task_base&) = delete;
+        async_load_task_base(async_load_task_base&&) = delete;
         virtual ~async_load_task_base() = default;
+        auto operator=(const async_load_task_base&) -> async_load_task_base& = delete;
+        auto operator=(async_load_task_base&&) -> async_load_task_base& = delete;
         virtual auto is_ready() -> bool = 0;
         virtual auto get_result() -> scene_staging = 0;
     };
@@ -122,7 +129,8 @@ namespace tempest::scene
         unique_ptr<async_load_task_base> background_task{};
     };
 
-    /// @brief Synchronous and asynchronous scene lifecycle manager responsible for loading, unloading, saving, and entity creation.
+    /// @brief Synchronous and asynchronous scene lifecycle manager responsible for loading, unloading, saving, and
+    /// entity creation.
     class TEMPEST_API scene_manager
     {
       public:
@@ -150,6 +158,9 @@ namespace tempest::scene
         auto set_active_scene(scene_handle handle) -> bool;
         [[nodiscard]] auto get_active_scene() const noexcept -> scene_handle;
 
+        [[nodiscard]] auto is_dirty(scene_handle handle) const noexcept -> bool;
+        auto set_dirty(scene_handle handle, bool dirty) -> bool;
+
         auto create_entity(scene_handle handle, string_view name = {}) -> ecs::entity;
 
         auto load_sync(const filesystem::path& path, const scene_load_options& options = {})
@@ -174,8 +185,8 @@ namespace tempest::scene
         auto unload(scene_handle handle) -> bool;
         auto unload_all() -> void;
 
-        auto save_sync(scene_handle handle, const filesystem::path& path,
-                       const scene_serialize_options& options = {}) -> expected<void, scene_error>;
+        auto save_sync(scene_handle handle, const filesystem::path& path, const scene_serialize_options& options = {})
+            -> expected<void, scene_error>;
         auto save_to_string(scene_handle handle, const scene_serialize_options& options = {})
             -> expected<string, scene_error>;
 

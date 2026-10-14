@@ -118,6 +118,25 @@ namespace tempest::scene
         return _active_scene;
     }
 
+    auto scene_manager::is_dirty(scene_handle handle) const noexcept -> bool
+    {
+        if (!is_valid(handle))
+        {
+            return false;
+        }
+        return _scenes[handle.index].is_dirty;
+    }
+
+    auto scene_manager::set_dirty(scene_handle handle, bool dirty) -> bool
+    {
+        if (!is_valid(handle))
+        {
+            return false;
+        }
+        _scenes[handle.index].is_dirty = dirty;
+        return true;
+    }
+
     auto scene_manager::create_entity(scene_handle handle, string_view name) -> ecs::entity
     {
         if (!is_valid(handle))
@@ -149,6 +168,7 @@ namespace tempest::scene
             _free_slots.pop_back();
             auto& slot = _scenes[slot_index];
             slot.occupied = true;
+            slot.is_dirty = scene_record::default_dirty;
             ++_occupied_count;
             return scene_handle{
                 .index = slot_index,
@@ -160,6 +180,7 @@ namespace tempest::scene
         auto& slot = _scenes.emplace_back();
         slot.occupied = true;
         slot.generation = 1;
+        slot.is_dirty = scene_record::default_dirty;
         ++_occupied_count;
         return scene_handle{
             .index = slot_index,
@@ -172,6 +193,7 @@ namespace tempest::scene
         auto& slot = _scenes[index];
         slot.occupied = false;
         slot.generation++;
+        slot.is_dirty = scene_record::default_dirty;
         slot.path.clear();
         slot.name.clear();
         slot.root_entities.clear();
@@ -365,6 +387,7 @@ namespace tempest::scene
         const auto write_res = write_file_from_bytes(path, byte_span);
         if (!write_res.has_value())
         {
+            _scenes[handle.index].is_dirty = true;
             return unexpected(scene_error::io_error);
         }
 
@@ -373,6 +396,7 @@ namespace tempest::scene
         {
             _scenes[handle.index].name = path.stem().string();
         }
+        _scenes[handle.index].is_dirty = false;
 
         return {};
     }
@@ -385,7 +409,7 @@ namespace tempest::scene
             return unexpected(scene_error::invalid_handle);
         }
 
-        const auto& record = _scenes[handle.index];
+        auto& record = _scenes[handle.index];
 
         auto valid_roots = vector<ecs::entity>{};
         for (const auto root : record.root_entities)
@@ -402,6 +426,7 @@ namespace tempest::scene
         }
 
         auto serialized = scene_codec::serialize(*_registry, valid_roots, record.unrecognized_data, options);
+        record.is_dirty = false;
         return serialized;
     }
 } // namespace tempest::scene
