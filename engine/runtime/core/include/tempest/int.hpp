@@ -15,6 +15,13 @@ namespace tempest
     /// @brief 64 bit floating point type.
     using float64_t = double;
 
+    /// @brief Type whose alignment requirement is at least as strict as that of every scalar type.
+    struct max_align_t
+    {
+        alignas(alignof(long double)) alignas(alignof(long long)) alignas(alignof(void*)) alignas(
+            alignof(float64_t)) alignas(max_align_t*) char dummy;
+    };
+
 #ifdef _MSC_VER
 
     /// @brief 8 bit signed integer type.

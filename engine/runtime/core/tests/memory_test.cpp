@@ -142,3 +142,24 @@ TEST(memory_tests, stack_allocator_allocation_and_move)
     stack3.reset();
     EXPECT_EQ(stack3.get_marker(), 0U);
 }
+
+//==============================================================================
+// max_align_t Tests
+//==============================================================================
+
+/// @brief Verify tempest::max_align_t alignment satisfies scalar and pointer alignment requirements.
+TEST(memory_tests, max_align_t_alignment_invariants)
+{
+    // Assert: max_align_t alignment is at least as strict as all fundamental scalar types
+    EXPECT_GE(alignof(tempest::max_align_t), alignof(char));
+    EXPECT_GE(alignof(tempest::max_align_t), alignof(short));
+    EXPECT_GE(alignof(tempest::max_align_t), alignof(int));
+    EXPECT_GE(alignof(tempest::max_align_t), alignof(long));
+    EXPECT_GE(alignof(tempest::max_align_t), alignof(long long));
+    EXPECT_GE(alignof(tempest::max_align_t), alignof(float));
+    EXPECT_GE(alignof(tempest::max_align_t), alignof(double));
+    EXPECT_GE(alignof(tempest::max_align_t), alignof(long double));
+    EXPECT_GE(alignof(tempest::max_align_t), alignof(void*));
+    EXPECT_GE(alignof(tempest::max_align_t), alignof(tempest::max_align_t*));
+}
+
