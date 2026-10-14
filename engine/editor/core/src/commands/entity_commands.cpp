@@ -846,10 +846,9 @@ namespace tempest::editor
         const auto parent_ent = _prev_parent_addr.has_value()
                                     ? resolve_entity_address(*ctx.registry, *ctx.scene_manager, *_prev_parent_addr)
                                     : ecs::tombstone;
-        const auto sib_ent =
-            _prev_insert_before_addr.has_value()
-                ? resolve_entity_address(*ctx.registry, *ctx.scene_manager, *_prev_insert_before_addr)
-                : ecs::tombstone;
+        const auto sib_ent = _prev_insert_before_addr.has_value()
+                                 ? resolve_entity_address(*ctx.registry, *ctx.scene_manager, *_prev_insert_before_addr)
+                                 : ecs::tombstone;
 
         const auto restored_ent = restore_snapshot(*ctx.registry, _snapshot);
 

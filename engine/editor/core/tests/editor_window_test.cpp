@@ -432,6 +432,46 @@ namespace tempest::editor::tests
         EXPECT_NO_THROW(engine_ctx.clear_editor_callbacks());
     }
 
+    /// @brief Verifies that editor_context exposes editor_selection service and connects it
+    /// to the engine context's event registry for automatic entity destruction eviction.
+    TEST(editor_window_test, editor_context_selection_service_integration)
+    {
+        auto engine_ctx = editor_engine_context{};
+        auto desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Editor Selection Test",
+        };
+
+        auto reg_info = engine_ctx.register_window(desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+
+        auto ed_ctx = editor_context(engine_ctx, reg_info.handle, ui_ctx);
+
+        auto& sel = ed_ctx.get_selection();
+        const auto& const_ed_ctx = ed_ctx;
+        const auto& const_sel = const_ed_ctx.get_selection();
+        EXPECT_TRUE(sel.is_empty());
+        EXPECT_TRUE(const_sel.is_empty());
+
+        auto& entities = engine_ctx.get_entities();
+        const auto ent = entities.create();
+        const auto addr = compute_entity_address(entities, ent);
+
+        sel.set_selection(addr, ent);
+        EXPECT_FALSE(sel.is_empty());
+        EXPECT_TRUE(sel.is_selected(ent));
+        EXPECT_EQ(sel.get_primary_entity(), ent);
+
+        // Destroy entity in ECS registry - selection should automatically evict via attached event registry
+        entities.destroy(ent);
+        EXPECT_FALSE(sel.is_selected(ent));
+        EXPECT_EQ(sel.get_primary_entity(), static_cast<ecs::entity>(ecs::tombstone));
+    }
+
     /// @brief Verifies that renderer.resize() properly sets configured dimensions
     /// used for viewport offscreen rendering.
     TEST(editor_window_test, renderer_viewport_resize_sync)

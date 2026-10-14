@@ -3,6 +3,7 @@
 
 #include <tempest/api.hpp>
 #include <tempest/concepts.hpp>
+#include <tempest/editor_selection.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/menus/menu_item.hpp>
@@ -69,6 +70,16 @@ namespace tempest::editor
             return _log_view;
         }
 
+        [[nodiscard]] auto get_selection() noexcept -> editor_selection&
+        {
+            return _selection;
+        }
+
+        [[nodiscard]] auto get_selection() const noexcept -> const editor_selection&
+        {
+            return _selection;
+        }
+
       private:
         auto _process_shortcuts() -> void;
         auto _draw_status_bar() -> void;
@@ -82,6 +93,7 @@ namespace tempest::editor
         window_handle _win;
         ui_context* _ui_ctx;
 
+        editor_selection _selection;
         vector<unique_ptr<editor_window>> _windows;
         entity_view_window* _entity_view = nullptr;
         scene_hierarchy_window* _scene_hierarchy_view = nullptr;

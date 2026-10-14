@@ -262,6 +262,7 @@ namespace tempest::editor
           _log_view(register_window(make_unique<log_view_window>(ctx.get_log_store())))
     {
         ctx.set_ui_context(&ui_ctx);
+        _selection.attach_event_registry(ctx.get_events());
 
         register_engine_component_view_providers(*this);
 
