@@ -181,7 +181,7 @@ TEST(swapchain_test, acquire_render_and_present)
     auto acquire_sem = dev->create_binary_semaphore();
     auto render_sem = dev->create_binary_semaphore();
 
-    // 1. Acquire swapchain image
+    // Acquire swapchain image
     auto acquire_res = surf->acquire_next_image(device_sync_point{
         .semaphore = acquire_sem,
         .value = 0,
@@ -190,7 +190,7 @@ TEST(swapchain_test, acquire_render_and_present)
     ASSERT_TRUE(acquire_res.has_value());
     auto sc_img = acquire_res.value();
 
-    // 2. Clear swapchain image to solid blue and transition to present layout
+    // Clear swapchain image to solid blue and transition to present layout
     auto& graphics_port = dev->get_graphics_execution_port();
     auto& cmd = graphics_port.acquire_command_list(0, command_list_lifetime::transient);
 
@@ -247,7 +247,7 @@ TEST(swapchain_test, acquire_render_and_present)
 
     cmd.end();
 
-    // 3. Submit command buffer waiting on acquire_sem and signaling render_sem
+    // Submit command buffer waiting on acquire_sem and signaling render_sem
     auto wait_point = device_sync_point{
         .semaphore = acquire_sem,
         .value = 0,
@@ -265,7 +265,7 @@ TEST(swapchain_test, acquire_render_and_present)
                              span<const device_sync_point>{&signal_point, 1});
     ASSERT_TRUE(submit_res.has_value());
 
-    // 4. Present image
+    // Present image
     auto present_res = surf->present(device_sync_point{
         .semaphore = render_sem,
         .value = 0,
@@ -314,7 +314,7 @@ TEST(swapchain_test, swapchain_recreation_handover)
 
     auto caps = dev->get_surface_capabilities(raw_surf);
 
-    // 1. Create Surface A (640x480)
+    // Create Surface A (640x480)
     auto surf_desc_a = render_surface_desc{
         .raw_surface = raw_surf,
         .present_mode = caps.supported_present_modes[0],
@@ -327,7 +327,7 @@ TEST(swapchain_test, swapchain_recreation_handover)
     auto surf_a = dev->create_render_surface(surf_desc_a);
     ASSERT_NE(surf_a, nullptr);
 
-    // 2. Resize window and create Surface B (800x600) handing over Surface A as old_surface
+    // Resize window and create Surface B (800x600) handing over Surface A as old_surface
     glfwSetWindowSize(window, 800, 600);
     glfwPollEvents();
 
@@ -355,10 +355,10 @@ TEST(swapchain_test, swapchain_recreation_handover)
     EXPECT_EQ(surf_b->get_width(), fb_width);
     EXPECT_EQ(surf_b->get_height(), fb_height);
 
-    // 3. Destroy Surface A (simulating higher-level deletion queue retirement)
+    // Destroy Surface A (simulating higher-level deletion queue retirement)
     dev->destroy_render_surface(tempest::move(surf_a));
 
-    // 4. Acquire, render, and present with Surface B
+    // Acquire, render, and present with Surface B
     auto acquire_sem = dev->create_binary_semaphore();
     auto render_sem = dev->create_binary_semaphore();
 

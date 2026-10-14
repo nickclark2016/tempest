@@ -398,7 +398,7 @@ namespace
 /// takes the synchronous fast-path (await_ready returns true) without suspending.
 TEST(gpu_timeline_monitor_test, immediate_fast_path_already_signaled)
 {
-    // 1. Setup
+    // Setup
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -412,7 +412,7 @@ TEST(gpu_timeline_monitor_test, immediate_fast_path_already_signaled)
     const auto sem = dev.create_timeline_semaphore();
     dev.signal_semaphore(sem, 100);
 
-    // 2. Act
+    // Act
     auto executed = atomic<bool>{false};
     auto t = js.async([&]() -> job::task<void> {
         auto wait_res = co_await monitor.wait(rhi::host_sync_point{.semaphore = sem, .value = 100});
@@ -425,7 +425,7 @@ TEST(gpu_timeline_monitor_test, immediate_fast_path_already_signaled)
 
     js.wait_idle();
 
-    // 3. Assert
+    // Assert
     EXPECT_TRUE(executed.load(memory_order::acquire));
 }
 
@@ -433,7 +433,7 @@ TEST(gpu_timeline_monitor_test, immediate_fast_path_already_signaled)
 /// gpu_sync_error::invalid_semaphore.
 TEST(gpu_timeline_monitor_test, invalid_semaphore_error)
 {
-    // 1. Setup
+    // Setup
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -444,7 +444,7 @@ TEST(gpu_timeline_monitor_test, invalid_semaphore_error)
     auto js = job::job_system{log, prof, config};
     auto monitor = gpu_timeline_monitor{dev, js, log};
 
-    // 2. Act
+    // Act
     auto received_error = atomic<gpu_sync_error>{gpu_sync_error::none};
     auto t = js.async([&]() -> job::task<void> {
         auto wait_res = co_await monitor.wait(rhi::host_sync_point{.semaphore = rhi::semaphore_handle{0}, .value = 1});
@@ -457,7 +457,7 @@ TEST(gpu_timeline_monitor_test, invalid_semaphore_error)
 
     js.wait_idle();
 
-    // 3. Assert
+    // Assert
     EXPECT_EQ(received_error.load(memory_order::acquire), gpu_sync_error::invalid_semaphore);
 }
 
@@ -465,7 +465,7 @@ TEST(gpu_timeline_monitor_test, invalid_semaphore_error)
 /// wakes up and resumes when the semaphore is signaled by another thread.
 TEST(gpu_timeline_monitor_test, cross_thread_gpu_signal_wakeup)
 {
-    // 1. Setup
+    // Setup
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -479,7 +479,7 @@ TEST(gpu_timeline_monitor_test, cross_thread_gpu_signal_wakeup)
     const auto sem = dev.create_timeline_semaphore();
     auto completed = atomic<bool>{false};
 
-    // 2. Act: launch coroutine awaiting milestone 50
+    // Act: launch coroutine awaiting milestone 50
     auto t = js.async([&]() -> job::task<void> {
         auto wait_res = co_await monitor.wait(rhi::host_sync_point{.semaphore = sem, .value = 50});
         if (wait_res)
@@ -509,7 +509,7 @@ TEST(gpu_timeline_monitor_test, cross_thread_gpu_signal_wakeup)
 
     js.wait_idle();
 
-    // 3. Assert
+    // Assert
     EXPECT_TRUE(completed.load(memory_order::acquire));
 }
 
@@ -517,7 +517,7 @@ TEST(gpu_timeline_monitor_test, cross_thread_gpu_signal_wakeup)
 /// complete in their correct sequence as milestones are signaled.
 TEST(gpu_timeline_monitor_test, multiple_waiters_single_semaphore)
 {
-    // 1. Setup
+    // Setup
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -532,7 +532,7 @@ TEST(gpu_timeline_monitor_test, multiple_waiters_single_semaphore)
     auto coro1_done = atomic<bool>{false};
     auto coro2_done = atomic<bool>{false};
 
-    // 2. Act: Coroutine 1 waits for 10, Coroutine 2 waits for 20
+    // Act: Coroutine 1 waits for 10, Coroutine 2 waits for 20
     auto t1 = js.async([&]() -> job::task<void> {
         auto wait_res = co_await monitor.wait(rhi::host_sync_point{.semaphore = sem, .value = 10});
         if (wait_res)
@@ -577,7 +577,7 @@ TEST(gpu_timeline_monitor_test, multiple_waiters_single_semaphore)
 
     js.wait_idle();
 
-    // 3. Assert
+    // Assert
     EXPECT_TRUE(coro2_done.load(memory_order::acquire));
 }
 
@@ -585,7 +585,7 @@ TEST(gpu_timeline_monitor_test, multiple_waiters_single_semaphore)
 /// are resumed with gpu_sync_error::cancelled rather than being leaked.
 TEST(gpu_timeline_monitor_test, monitor_destruction_cancellation)
 {
-    // 1. Setup
+    // Setup
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -599,7 +599,7 @@ TEST(gpu_timeline_monitor_test, monitor_destruction_cancellation)
     auto error_received = atomic<gpu_sync_error>{gpu_sync_error::none};
     auto done = atomic<bool>{false};
 
-    // 2. Act
+    // Act
     auto t = job::task<void>{};
     {
         auto monitor = gpu_timeline_monitor{dev, js, log};
@@ -628,7 +628,7 @@ TEST(gpu_timeline_monitor_test, monitor_destruction_cancellation)
 
     js.wait_idle();
 
-    // 3. Assert
+    // Assert
     EXPECT_TRUE(done.load(memory_order::acquire));
     EXPECT_EQ(error_received.load(memory_order::acquire), gpu_sync_error::cancelled);
 }
@@ -637,7 +637,7 @@ TEST(gpu_timeline_monitor_test, monitor_destruction_cancellation)
 /// with gpu_sync_error::device_lost.
 TEST(gpu_timeline_monitor_test, device_lost_cancellation)
 {
-    // 1. Setup
+    // Setup
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -652,7 +652,7 @@ TEST(gpu_timeline_monitor_test, device_lost_cancellation)
     auto error_received = atomic<gpu_sync_error>{gpu_sync_error::none};
     auto done = atomic<bool>{false};
 
-    // 2. Act
+    // Act
     auto t = js.async([&]() -> job::task<void> {
         auto wait_res = co_await monitor.wait(rhi::host_sync_point{.semaphore = sem, .value = 500});
         if (!wait_res)
@@ -677,7 +677,7 @@ TEST(gpu_timeline_monitor_test, device_lost_cancellation)
 
     js.wait_idle();
 
-    // 3. Assert
+    // Assert
     EXPECT_TRUE(done.load(memory_order::acquire));
     EXPECT_EQ(error_received.load(memory_order::acquire), gpu_sync_error::device_lost);
 }
@@ -687,7 +687,7 @@ TEST(gpu_timeline_monitor_test, device_lost_cancellation)
 /// and resume successfully when their GPU milestone is signaled.
 TEST(gpu_timeline_monitor_test, high_contention_concurrent_waiters)
 {
-    // 1. Setup
+    // Setup
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -702,7 +702,7 @@ TEST(gpu_timeline_monitor_test, high_contention_concurrent_waiters)
     constexpr auto waiter_count = uint32_t{48};
     auto completion_count = atomic<uint32_t>{0};
 
-    // 2. Act: launch concurrent coroutines awaiting milestone 10
+    // Act: launch concurrent coroutines awaiting milestone 10
     auto tasks = vector<job::task<void>>{};
     tasks.reserve(waiter_count);
 
@@ -733,7 +733,7 @@ TEST(gpu_timeline_monitor_test, high_contention_concurrent_waiters)
 
     js.wait_idle();
 
-    // 3. Assert
+    // Assert
     EXPECT_EQ(completion_count.load(memory_order::acquire), waiter_count);
 }
 
@@ -741,7 +741,7 @@ TEST(gpu_timeline_monitor_test, high_contention_concurrent_waiters)
 /// are all safely cancelled and resumed when the monitor is explicitly stopped.
 TEST(gpu_timeline_monitor_test, concurrent_waiters_cancelled_on_stop)
 {
-    // 1. Setup
+    // Setup
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -756,7 +756,7 @@ TEST(gpu_timeline_monitor_test, concurrent_waiters_cancelled_on_stop)
     constexpr auto waiter_count = uint32_t{48};
     auto cancel_count = atomic<uint32_t>{0};
 
-    // 2. Act: launch coroutines awaiting an unreachable milestone
+    // Act: launch coroutines awaiting an unreachable milestone
     auto tasks = vector<job::task<void>>{};
     tasks.reserve(waiter_count);
 
@@ -787,7 +787,7 @@ TEST(gpu_timeline_monitor_test, concurrent_waiters_cancelled_on_stop)
 
     js.wait_idle();
 
-    // 3. Assert
+    // Assert
     EXPECT_EQ(cancel_count.load(memory_order::acquire), waiter_count);
 }
 
@@ -795,7 +795,7 @@ TEST(gpu_timeline_monitor_test, concurrent_waiters_cancelled_on_stop)
 /// safely marks the embedded entry as cancelled and prevents UAF during monitor loop execution.
 TEST(gpu_timeline_monitor_test, frame_destruction_cancels_waiter)
 {
-    // 1. Setup
+    // Setup
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -808,7 +808,7 @@ TEST(gpu_timeline_monitor_test, frame_destruction_cancels_waiter)
 
     const auto sem = dev.create_timeline_semaphore();
 
-    // 2. Act: Spawn a task that suspends on monitor.wait(), then destroy the task object
+    // Act: Spawn a task that suspends on monitor.wait(), then destroy the task object
     {
         auto coro = [&]() -> job::task<void> {
             co_await monitor.wait(rhi::host_sync_point{.semaphore = sem, .value = 5});
@@ -826,14 +826,14 @@ TEST(gpu_timeline_monitor_test, frame_destruction_cancels_waiter)
     // Give time for monitor to loop and observe completion of the now-cancelled entry
     this_thread::sleep_for(chrono::milliseconds(30));
 
-    // 3. Assert: Monitor loop did not crash or dereference freed frame memory
+    // Assert: Monitor loop did not crash or dereference freed frame memory
     SUCCEED();
 }
 
 /// @brief Verify that registering a wait on an already stopped monitor completes immediately with cancelled status.
 TEST(gpu_timeline_monitor_test, register_wait_after_stop_immediate_completion)
 {
-    // 1. Setup
+    // Setup
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -846,7 +846,7 @@ TEST(gpu_timeline_monitor_test, register_wait_after_stop_immediate_completion)
 
     const auto sem = dev.create_timeline_semaphore();
 
-    // 2. Act: Stop the monitor before registering waits
+    // Act: Stop the monitor before registering waits
     monitor.stop();
 
     auto error_received = gpu_sync_error::none;
@@ -863,14 +863,14 @@ TEST(gpu_timeline_monitor_test, register_wait_after_stop_immediate_completion)
     t.resume();
     js.wait_idle();
 
-    // 3. Assert: Immediately received cancelled error without hanging
+    // Assert: Immediately received cancelled error without hanging
     EXPECT_EQ(error_received, gpu_sync_error::cancelled);
 }
 
 /// @brief Verify that more than 32 unique semaphores can be waited on concurrently without dropping any.
 TEST(gpu_timeline_monitor_test, large_unique_semaphore_count_handling)
 {
-    // 1. Setup
+    // Setup
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -891,7 +891,7 @@ TEST(gpu_timeline_monitor_test, large_unique_semaphore_count_handling)
 
     auto completed_count = atomic<size_t>{0};
 
-    // 2. Act: Launch 48 tasks waiting on 48 distinct semaphores
+    // Act: Launch 48 tasks waiting on 48 distinct semaphores
     auto tasks = vector<job::task<void>>{};
     tasks.reserve(sem_count);
 
@@ -925,7 +925,7 @@ TEST(gpu_timeline_monitor_test, large_unique_semaphore_count_handling)
 
     js.wait_idle();
 
-    // 3. Assert: All 48 unique semaphores woke up successfully without truncation
+    // Assert: All 48 unique semaphores woke up successfully without truncation
     EXPECT_EQ(completed_count.load(memory_order::acquire), sem_count);
 }
 
@@ -933,7 +933,7 @@ TEST(gpu_timeline_monitor_test, large_unique_semaphore_count_handling)
 ///        properly with strictly monotonically increasing sequence values and zero out-of-order signals.
 TEST(gpu_timeline_monitor_test, high_contention_wake_serialization)
 {
-    // 1. Setup: Mock timeline device and 16 concurrent threads
+    // Setup: Mock timeline device and 16 concurrent threads
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -947,7 +947,7 @@ TEST(gpu_timeline_monitor_test, high_contention_wake_serialization)
     constexpr auto thread_count = size_t{16};
     constexpr auto wake_iterations = size_t{200};
 
-    // 2. Act: Concurrently invoke wake() from 16 threads
+    // Act: Concurrently invoke wake() from 16 threads
     auto threads = vector<tempest::thread>{};
     threads.reserve(thread_count);
 
@@ -968,7 +968,7 @@ TEST(gpu_timeline_monitor_test, high_contention_wake_serialization)
 
     monitor.stop();
 
-    // 3. Assert: Zero out-of-order signals occurred on the control semaphore
+    // Assert: Zero out-of-order signals occurred on the control semaphore
     EXPECT_EQ(dev.out_of_order_signals.load(memory_order::acquire), 0U);
     EXPECT_GE(dev.signal_call_count.load(memory_order::acquire), thread_count * wake_iterations);
 }
@@ -977,7 +977,7 @@ TEST(gpu_timeline_monitor_test, high_contention_wake_serialization)
 ///        eliminating periodic idle CPU polling wakeups.
 TEST(gpu_timeline_monitor_test, idle_zero_polling)
 {
-    // 1. Setup: Start monitor with zero active entries
+    // Setup: Start monitor with zero active entries
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -993,18 +993,18 @@ TEST(gpu_timeline_monitor_test, idle_zero_polling)
     const auto initial_waits = dev.wait_call_count.load(memory_order::acquire);
     EXPECT_GE(initial_waits, 1U);
 
-    // 2. Act: Sleep for 120ms (more than 2x old 50ms polling interval)
+    // Act: Sleep for 120ms (more than 2x old 50ms polling interval)
     this_thread::sleep_for(chrono::milliseconds(120));
     const auto waits_after_sleep = dev.wait_call_count.load(memory_order::acquire);
 
-    // 3. Assert: Monitor did not wake up or re-enter wait_semaphores while idle
+    // Assert: Monitor did not wake up or re-enter wait_semaphores while idle
     EXPECT_EQ(waits_after_sleep, initial_waits);
 
-    // 4. Act: Signaling wake unblocks the wait
+    // Act: Signaling wake unblocks the wait
     monitor.wake();
     this_thread::sleep_for(chrono::milliseconds(20));
 
-    // 5. Assert: Monitor woke up and called wait_semaphores again
+    // Assert: Monitor woke up and called wait_semaphores again
     EXPECT_GT(dev.wait_call_count.load(memory_order::acquire), initial_waits);
 
     monitor.stop();
@@ -1015,7 +1015,7 @@ TEST(gpu_timeline_monitor_test, idle_zero_polling)
 ///        issuing redundant Vulkan/RHI driver queries per waiter.
 TEST(gpu_timeline_monitor_test, query_deduplication_single_semaphore_many_waiters)
 {
-    // 1. Setup: 50 tasks waiting on a single timeline semaphore
+    // Setup: 50 tasks waiting on a single timeline semaphore
     auto dev = mock_timeline_device{};
     auto log = logger{};
     auto prof = profiler::profiler_session{false};
@@ -1030,7 +1030,7 @@ TEST(gpu_timeline_monitor_test, query_deduplication_single_semaphore_many_waiter
     constexpr auto waiter_count = size_t{50};
     auto completed_count = atomic<size_t>{0};
 
-    // 2. Act: Register 50 waits for milestone 1 on the same semaphore
+    // Act: Register 50 waits for milestone 1 on the same semaphore
     auto tasks = vector<job::task<void>>{};
     tasks.reserve(waiter_count);
 
@@ -1075,7 +1075,7 @@ TEST(gpu_timeline_monitor_test, query_deduplication_single_semaphore_many_waiter
 
     js.wait_idle();
 
-    // 3. Assert: All 50 waiters completed successfully
+    // Assert: All 50 waiters completed successfully
     EXPECT_EQ(completed_count.load(memory_order::acquire), waiter_count);
 
     // Assert: Queries for the user semaphore were deduplicated per tick (far less than 50 queries)

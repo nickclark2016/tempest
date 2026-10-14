@@ -28,7 +28,7 @@ namespace tempest::render_graph
             }
         }
 
-        // 1. Allocate / Recycle Textures
+        // Allocate / Recycle Textures
         struct texture_alloc_req
         {
             uint32_t id;
@@ -202,7 +202,7 @@ namespace tempest::render_graph
             }
         }
 
-        // 2. Allocate / Recycle Buffers
+        // Allocate / Recycle Buffers
         struct buffer_alloc_req
         {
             uint32_t id;
@@ -314,7 +314,7 @@ namespace tempest::render_graph
             }
         }
 
-        // 3. Propagate Aliases
+        // Propagate Aliases
         for (const auto& [alias_id, target_id] : dag.resolved_texture_aliases)
         {
             if (_active_textures.contains(target_id.id))
@@ -331,7 +331,7 @@ namespace tempest::render_graph
             }
         }
 
-        // 4. Evict Stale Resources for current _frame_slot
+        // Evict Stale Resources for current _frame_slot
         // Resources for this flight slot have completed GPU execution and are safe to destroy if unused.
         auto remaining_textures = vector<pooled_texture>{};
         remaining_textures.reserve(_texture_pool.size());

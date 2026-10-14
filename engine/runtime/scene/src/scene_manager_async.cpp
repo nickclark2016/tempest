@@ -867,7 +867,7 @@ namespace tempest::scene
                 continue;
             }
 
-            // 1. Stage 1 Check / Completion
+            // Stage 1 Check / Completion
             if (op.state == scene_load_state::decoding || op.state == scene_load_state::resolving_assets)
             {
                 if (op.background_task)
@@ -904,7 +904,7 @@ namespace tempest::scene
                 op.progress = 0.4f;
             }
 
-            // 2. Stage 2 (Commit Stage): Time-sliced entity instantiation
+            // Stage 2 (Commit Stage): Time-sliced entity instantiation
             if (op.state == scene_load_state::committing)
             {
                 const auto total_entities = op.staging.entities.size();
@@ -956,7 +956,7 @@ namespace tempest::scene
                                           : 1.0f;
                 op.progress = 0.4f + 0.6f * fraction;
 
-                // 3. Finalize scene if commit is complete
+                // Finalize scene if commit is complete
                 if (op.commit_cursor >= total_entities)
                 {
                     for (const auto entity : op.committed_entities)

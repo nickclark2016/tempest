@@ -282,7 +282,7 @@ namespace tempest::render_system::tests
             auto rend = builder.build(*dev, log);
             ASSERT_NE(rend, nullptr);
 
-            // 1. Setup Camera Entity
+            // Setup Camera Entity
             auto cam_ent = registry.create();
             registry.assign(cam_ent, camera_component{
                                          .aspect_ratio = 1280.0F / 720.0F,
@@ -293,7 +293,7 @@ namespace tempest::render_system::tests
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
 
-            // 2. Setup Sun Light Entity
+            // Setup Sun Light Entity
             auto sun_ent = registry.create();
             registry.assign(sun_ent, directional_light_component{
                                          .color = {1.0F, 1.0F, 1.0F},
@@ -301,7 +301,7 @@ namespace tempest::render_system::tests
                                      });
             registry.assign(sun_ent, ecs::transform_component{});
 
-            // 3. Setup Renderable Geometry Entity
+            // Setup Renderable Geometry Entity
             auto mesh_id = meshes.register_mesh(create_test_mesh());
             auto mat = core::material{};
             mat.set_vec4(core::material::base_color_factor_name, {0.8F, 0.2F, 0.2F, 1.0F});
@@ -314,16 +314,16 @@ namespace tempest::render_system::tests
             registry.assign(geom_ent, core::material_component{.material_id = mat_id});
             registry.assign(geom_ent, ecs::transform_component{});
 
-            // 4. Prepare Frame
+            // Prepare Frame
             rend->prepare_frame(1280, 720);
 
-            // 5. Render execution
+            // Render execution
             auto render_res = rend->render();
             EXPECT_TRUE(render_res.has_value());
 
             dev->wait_idle();
 
-            // 6. Readback the rendered frame
+            // Readback the rendered frame
             auto readback_buf = dev->create_buffer(rhi::buffer_desc{
                 .size = 1280 * 720 * 4,
                 .memory_usage = rhi::memory_usage::readback,
@@ -739,7 +739,7 @@ namespace tempest::render_system::tests
     /// non-standard aspect ratios cover the full viewport symmetrically without gaps.
     TEST(render_system_tests, light_clustering_quadrants_and_dynamic_near_plane)
     {
-        // 1. Setup test device and rendering context
+        // Setup test device and rendering context
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
@@ -780,7 +780,7 @@ namespace tempest::render_system::tests
             .name = "ClusterBoundsBuffer_QuadrantsTest",
         });
 
-        // 2. Act: add clustering pass with explicit near and far planes
+        // Act: add clustering pass with explicit near and far planes
         const auto& cluster_data = add_light_clustering_pass(graph, pool, shaders, cluster_bounds_buf, cam,
                                                              screen_width, screen_height, test_near, test_far);
 
@@ -802,7 +802,7 @@ namespace tempest::render_system::tests
         EXPECT_TRUE(res.has_value());
         dev->wait_idle();
 
-        // 3. Assert: read back cluster bounds and verify depth range and quadrant symmetry
+        // Assert: read back cluster bounds and verify depth range and quadrant symmetry
         auto cluster_readback = dev->create_buffer(rhi::buffer_desc{
             .size = total_clusters * sizeof(cluster_bounds),
             .memory_usage = rhi::memory_usage::readback,
@@ -1478,7 +1478,7 @@ namespace tempest::render_system::tests
             .name = "ShadowAtlasTarget",
         });
 
-        // 1. Setup Camera
+        // Setup Camera
         auto cam_ent = registry.create();
         registry.assign(cam_ent, camera_component{
                                      .aspect_ratio = 16.0F / 9.0F,
@@ -1489,7 +1489,7 @@ namespace tempest::render_system::tests
         cam_tx.position({0.0F, 2.0F, -10.0F});
         registry.assign(cam_ent, cam_tx);
 
-        // 2. Setup Sun Light with shadow_caster_component
+        // Setup Sun Light with shadow_caster_component
         auto sun_ent = registry.create();
         registry.assign(sun_ent, directional_light_component{
                                      .color = {1.0F, 1.0F, 1.0F},
@@ -1563,7 +1563,7 @@ namespace tempest::render_system::tests
         auto graph = render_graph::render_graph{1280, 720};
         auto allocator = shelf_allocator{8192, 8192, 4};
 
-        // 1. Setup Camera
+        // Setup Camera
         auto cam_ent = registry.create();
         registry.assign(cam_ent, camera_component{
                                      .aspect_ratio = 16.0F / 9.0F,
@@ -1574,7 +1574,7 @@ namespace tempest::render_system::tests
         cam_tx.position({0.0F, 0.0F, -5.0F});
         registry.assign(cam_ent, cam_tx);
 
-        // 2. Setup Sun Light
+        // Setup Sun Light
         auto sun_ent = registry.create();
         registry.assign(sun_ent, directional_light_component{
                                      .color = {1.0F, 1.0F, 1.0F},
@@ -1593,7 +1593,7 @@ namespace tempest::render_system::tests
         sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
         registry.assign(sun_ent, sun_tx);
 
-        // 3. Setup Mesh
+        // Setup Mesh
         auto meshes = core::mesh_registry{};
         auto materials = core::material_registry{};
         auto textures = core::texture_registry{};
@@ -1714,7 +1714,7 @@ namespace tempest::render_system::tests
     ///        and that execution cleanly dispatches vkCmdClearAttachments per active cascade scissor.
     TEST(render_system_tests, shadow_pass_scissor_clear_and_dont_care_depth_attachment)
     {
-        // 1. Setup: Test device, minimal registry, sun light with 4 cascades, and render graph
+        // Setup: Test device, minimal registry, sun light with 4 cascades, and render graph
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
@@ -1767,7 +1767,7 @@ namespace tempest::render_system::tests
 
         add_frame_upload_pass(graph, pool);
 
-        // 2. Act: Add shadow pass (with 0 draw calls to verify scissor clears on 0-caster frames)
+        // Act: Add shadow pass (with 0 draw calls to verify scissor clears on 0-caster frames)
         const auto shadow_res = add_shadow_pass(shadow_pass_params{
             .graph = graph,
             .pool = pool,
@@ -1782,7 +1782,7 @@ namespace tempest::render_system::tests
             .alpha_masked_draw_offset = 0,
         });
 
-        // 3. Assert: Verify depth attachment load op is dont_care
+        // Assert: Verify depth attachment load op is dont_care
         EXPECT_EQ(shadow_res.shadow_data.cascade_count, 4U);
         EXPECT_TRUE(shadow_res.shadow_atlas.is_valid());
 
@@ -1823,10 +1823,10 @@ namespace tempest::render_system::tests
             []([[maybe_unused]] const shadow_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
                [[maybe_unused]] rhi::command_list&) -> void {});
 
-        // 4. Act: Compile and execute render graph
+        // Act: Compile and execute render graph
         auto exec_res = graph.execute_sync(*dev);
 
-        // 5. Assert: Execution succeeds cleanly (dispatched vkCmdClearAttachments for all 4 cascades)
+        // Assert: Execution succeeds cleanly (dispatched vkCmdClearAttachments for all 4 cascades)
         EXPECT_TRUE(exec_res.has_value());
 
         dev->wait_idle();
@@ -1841,7 +1841,7 @@ namespace tempest::render_system::tests
     /// binds them in sequence with their respective draw offsets/counts, and successfully executes on the GPU.
     TEST(render_system_tests, shadow_pass_dual_pipeline_opaque_and_masked_execution)
     {
-        // 1. Setup: Test Device, Asset Database, and Contexts
+        // Setup: Test Device, Asset Database, and Contexts
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
@@ -1943,7 +1943,7 @@ namespace tempest::render_system::tests
         pool.write_instances(span<const uint32_t>{instances.data(), instances.size()});
         pool.write_draw_commands(span<const indexed_indirect_command>{commands.data(), commands.size()});
 
-        // 2. Act: Record Frame Upload and Dual-Pipeline Shadow Pass
+        // Act: Record Frame Upload and Dual-Pipeline Shadow Pass
         add_frame_upload_pass(graph, pool);
         const auto shadow_res = add_shadow_pass(shadow_pass_params{
             .graph = graph,
@@ -1959,7 +1959,7 @@ namespace tempest::render_system::tests
             .alpha_masked_draw_offset = 1,
         });
 
-        // 3. Assert: Verify Pipeline Registration and Render Graph Execution
+        // Assert: Verify Pipeline Registration and Render Graph Execution
         EXPECT_EQ(shadow_res.shadow_data.cascade_count, 2U);
         EXPECT_TRUE(shadow_res.shadow_atlas.is_valid());
 
@@ -2125,17 +2125,17 @@ namespace tempest::render_system::tests
     /// @brief Verifies memory layout, field offsets, and total byte size of pbr_opaque_push_constants.
     TEST(render_system_tests, pbr_opaque_push_constants_layout)
     {
-        // 1. Assert: verify struct size is exactly 48 bytes
+        // Assert: verify struct size is exactly 48 bytes
         EXPECT_EQ(sizeof(pbr_opaque_push_constants), 48U);
 
-        // 2. Assert: verify 64-bit BDA buffer addresses
+        // Assert: verify 64-bit BDA buffer addresses
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, scene_constants_address), 0U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, objects_address), 8U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, instance_indices_address), 16U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, directional_shadow_address), 24U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, light_bitmask_address), 32U);
 
-        // 3. Assert: verify descriptor table indices
+        // Assert: verify descriptor table indices
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, linear_sampler_index), 40U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, shadow_atlas_index), 44U);
     }
@@ -2143,17 +2143,17 @@ namespace tempest::render_system::tests
     /// @brief Verifies memory layout, field offsets, and total byte size of pbr_masked_push_constants.
     TEST(render_system_tests, pbr_masked_push_constants_layout)
     {
-        // 1. Assert: verify struct size matches 48 bytes
+        // Assert: verify struct size matches 48 bytes
         EXPECT_EQ(sizeof(pbr_masked_push_constants), 48U);
 
-        // 2. Assert: verify 64-bit BDA buffer addresses
+        // Assert: verify 64-bit BDA buffer addresses
         EXPECT_EQ(offsetof(pbr_masked_push_constants, scene_constants_address), 0U);
         EXPECT_EQ(offsetof(pbr_masked_push_constants, objects_address), 8U);
         EXPECT_EQ(offsetof(pbr_masked_push_constants, instance_indices_address), 16U);
         EXPECT_EQ(offsetof(pbr_masked_push_constants, directional_shadow_address), 24U);
         EXPECT_EQ(offsetof(pbr_masked_push_constants, light_bitmask_address), 32U);
 
-        // 3. Assert: verify descriptor table indices
+        // Assert: verify descriptor table indices
         EXPECT_EQ(offsetof(pbr_masked_push_constants, linear_sampler_index), 40U);
         EXPECT_EQ(offsetof(pbr_masked_push_constants, shadow_atlas_index), 44U);
     }
@@ -2161,10 +2161,10 @@ namespace tempest::render_system::tests
     /// @brief Verifies memory layout, field offsets, and total byte size of scene_constants.
     TEST(render_system_tests, scene_constants_layout)
     {
-        // 1. Assert: verify struct size matches 400 bytes exactly
+        // Assert: verify struct size matches 400 bytes exactly
         EXPECT_EQ(sizeof(scene_constants), 400U);
 
-        // 2. Assert: verify camera and lighting field offsets
+        // Assert: verify camera and lighting field offsets
         EXPECT_EQ(offsetof(scene_constants, projection), 0U);
         EXPECT_EQ(offsetof(scene_constants, camera_position), 256U);
         EXPECT_EQ(offsetof(scene_constants, ambient_light), 272U);
@@ -2177,7 +2177,7 @@ namespace tempest::render_system::tests
         EXPECT_EQ(offsetof(scene_constants, light_count), 352U);
         EXPECT_EQ(offsetof(scene_constants, words_per_cluster), 356U);
 
-        // 3. Assert: verify shadow comparison sampler index and padding offsets
+        // Assert: verify shadow comparison sampler index and padding offsets
         EXPECT_EQ(offsetof(scene_constants, shadow_comparison_sampler_index), 360U);
         EXPECT_EQ(offsetof(scene_constants, padding), 364U);
         EXPECT_EQ(offsetof(scene_constants, cluster_counts_tile_size), 368U);
@@ -2187,10 +2187,10 @@ namespace tempest::render_system::tests
     /// @brief Verifies memory layout, field offsets, and total byte size of directional_shadow_data.
     TEST(render_system_tests, directional_shadow_data_debug_mode_layout)
     {
-        // 1. Assert: verify struct size is 416 bytes with 16-byte alignment
+        // Assert: verify struct size is 416 bytes with 16-byte alignment
         EXPECT_EQ(sizeof(directional_shadow_data), 416ULL);
 
-        // 2. Assert: verify shadow bias, debug mode, and precomputed texel size offsets
+        // Assert: verify shadow bias, debug mode, and precomputed texel size offsets
         EXPECT_EQ(offsetof(directional_shadow_data, debug_mode), 396ULL);
         EXPECT_EQ(offsetof(directional_shadow_data, atlas_texel_size), 400ULL);
         EXPECT_EQ(offsetof(directional_shadow_data, padding), 408ULL);
@@ -2200,15 +2200,15 @@ namespace tempest::render_system::tests
     /// and allocates its descriptor in the global sampler heap.
     TEST(render_system_tests, resource_pool_shadow_comparison_sampler)
     {
-        // 1. Setup: create test Vulkan device
+        // Setup: create test Vulkan device
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
 
-        // 2. Act: construct resource_pool which initializes linear, point, and shadow comparison samplers
+        // Act: construct resource_pool which initializes linear, point, and shadow comparison samplers
         auto pool = resource_pool{*dev};
 
-        // 3. Assert: verify shadow comparison sampler handle and descriptor slot
+        // Assert: verify shadow comparison sampler handle and descriptor slot
         const auto sampler = pool.get_shadow_comparison_sampler();
         EXPECT_NE(sampler.handle, 0ULL);
 
@@ -2251,7 +2251,7 @@ namespace tempest::render_system::tests
             ASSERT_NE(rend, nullptr);
             EXPECT_EQ(rend->get_shadow_debug_mode(), shadow_debug_mode::cascades);
 
-            // 1. Setup Camera Entity
+            // Setup Camera Entity
             auto cam_ent = registry.create();
             registry.assign(cam_ent, camera_component{
                                          .aspect_ratio = 1280.0F / 720.0F,
@@ -2262,7 +2262,7 @@ namespace tempest::render_system::tests
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
 
-            // 2. Setup Sun Light Entity
+            // Setup Sun Light Entity
             auto sun_ent = registry.create();
             registry.assign(sun_ent, directional_light_component{
                                          .color = {1.0F, 1.0F, 1.0F},
@@ -2282,7 +2282,7 @@ namespace tempest::render_system::tests
             sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
             registry.assign(sun_ent, sun_tx);
 
-            // 3. Setup Renderable Geometry Entity (Green surface material)
+            // Setup Renderable Geometry Entity (Green surface material)
             auto mesh_id = meshes.register_mesh(create_test_mesh());
             auto mat = core::material{};
             mat.set_vec4(core::material::base_color_factor_name, {0.0F, 1.0F, 0.0F, 1.0F});
@@ -2295,7 +2295,7 @@ namespace tempest::render_system::tests
             registry.assign(geom_ent, core::material_component{.material_id = mat_id});
             registry.assign(geom_ent, ecs::transform_component{});
 
-            // 4. Prepare Frame with Cascades debug mode
+            // Prepare Frame with Cascades debug mode
             rend->prepare_frame(1280, 720);
 
             auto render_res = rend->render();
@@ -4001,7 +4001,7 @@ namespace tempest::render_system::tests
         auto rend = builder.build(*dev, log);
         ASSERT_NE(rend, nullptr);
 
-        // 1. Setup Camera Entity
+        // Setup Camera Entity
         auto cam_ent = registry.create();
         registry.assign(cam_ent, camera_component{
                                      .aspect_ratio = 1.0F,
@@ -4012,7 +4012,7 @@ namespace tempest::render_system::tests
         cam_tx.position({0.0F, 0.0F, -4.0F});
         registry.assign(cam_ent, cam_tx);
 
-        // 2. Setup Sun Light Entity
+        // Setup Sun Light Entity
         auto sun_ent = registry.create();
         registry.assign(sun_ent, directional_light_component{
                                      .color = {1.0F, 1.0F, 1.0F},
@@ -4028,7 +4028,7 @@ namespace tempest::render_system::tests
         sun_tx.rotation({math::as_radians(70.0F), math::as_radians(15.0F), 0.0F});
         registry.assign(sun_ent, sun_tx);
 
-        // 3. Setup Registries and Materials for 3 Layers:
+        // Setup Registries and Materials for 3 Layers:
         //    Layer 1: Opaque background (Blue) at z = 1.0
         //    Layer 2: Transmissive middle quad (Green tint) at z = 0.5
         //    Layer 3: Alpha-blended foreground quad (Semi-transparent Red) at z = 0.0
@@ -4083,19 +4083,19 @@ namespace tempest::render_system::tests
         tx_blend.position({0.0F, 0.0F, 0.0F});
         registry.assign(ent_blend, tx_blend);
 
-        // 4. Prepare Frame
+        // Prepare Frame
         rend->prepare_frame(width, height);
 
         EXPECT_TRUE(rend->get_moments_texture().is_valid());
         EXPECT_TRUE(rend->get_zeroth_moment_texture().is_valid());
         EXPECT_TRUE(rend->get_transparency_accum_texture().is_valid());
 
-        // 5. Execute Full Renderer Pipeline
+        // Execute Full Renderer Pipeline
         auto render_res = rend->render();
         EXPECT_TRUE(render_res.has_value());
         dev->wait_idle();
 
-        // 6. Readback Tonemapped Output Buffer
+        // Readback Tonemapped Output Buffer
         auto readback_buf = dev->create_buffer(rhi::buffer_desc{
             .size = width * height * 4,
             .memory_usage = rhi::memory_usage::readback,
@@ -4185,7 +4185,7 @@ namespace tempest::render_system::tests
         auto rend = builder.build(*dev, log);
         ASSERT_NE(rend, nullptr);
 
-        // 1. Setup Camera Entity pointing at Chessboard
+        // Setup Camera Entity pointing at Chessboard
         auto cam_ent = registry.create();
         registry.assign(cam_ent, camera_component{
                                      .aspect_ratio = static_cast<float>(width) / static_cast<float>(height),
@@ -4197,7 +4197,7 @@ namespace tempest::render_system::tests
         cam_tx.rotation({math::as_radians(28.0F), 0.0F, 0.0F});
         registry.assign(cam_ent, cam_tx);
 
-        // 2. Setup Sun Light Entity
+        // Setup Sun Light Entity
         auto sun_ent = registry.create();
         registry.assign(sun_ent, directional_light_component{
                                      .color = {1.0F, 0.98F, 0.92F},
@@ -4215,7 +4215,7 @@ namespace tempest::render_system::tests
         sun_tx.rotation({math::as_radians(65.0F), math::as_radians(25.0F), 0.0F});
         registry.assign(sun_ent, sun_tx);
 
-        // 3. Load ABeautifulGame.gltf
+        // Load ABeautifulGame.gltf
         auto asset_type_reg = assets::asset_type_registry{};
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &meshes, &textures, &materials);
@@ -4228,19 +4228,19 @@ namespace tempest::render_system::tests
             ASSERT_TRUE(prefab_root != ecs::tombstone);
         }
 
-        // 4. Prepare Frame
+        // Prepare Frame
         rend->prepare_frame(width, height);
 
         EXPECT_TRUE(rend->get_moments_texture().is_valid());
         EXPECT_TRUE(rend->get_zeroth_moment_texture().is_valid());
         EXPECT_TRUE(rend->get_transparency_accum_texture().is_valid());
 
-        // 5. Execute Full Renderer Pipeline
+        // Execute Full Renderer Pipeline
         auto render_res = rend->render();
         EXPECT_TRUE(render_res.has_value());
         dev->wait_idle();
 
-        // 6. Readback Tonemapped Output Buffer
+        // Readback Tonemapped Output Buffer
         auto readback_buf = dev->create_buffer(rhi::buffer_desc{
             .size = width * height * 4,
             .memory_usage = rhi::memory_usage::readback,
@@ -4387,7 +4387,7 @@ namespace tempest::render_system::tests
             auto rend = builder.build(*dev, log);
             ASSERT_NE(rend, nullptr);
 
-            // 1. Verify pre-existing light discovered
+            // Verify pre-existing light discovered
             EXPECT_EQ(rend->get_tracked_point_light_count(), 1U);
 
             rend->prepare_frame(1280, 720);
@@ -4404,7 +4404,7 @@ namespace tempest::render_system::tests
             EXPECT_EQ(cached[0].type, 1U);
             EXPECT_EQ(cached[0].enabled, 1U);
 
-            // 2. Add second point light dynamically
+            // Add second point light dynamically
             auto light2 = registry.create();
             registry.assign(light2, point_light_component{
                                         .color = {0.0F, 1.0F, 0.0F},
@@ -4423,7 +4423,7 @@ namespace tempest::render_system::tests
             EXPECT_FLOAT_EQ(cached[1].color_intensity.y, 1.0F);
             EXPECT_FLOAT_EQ(cached[1].position_falloff.x, -5.0F);
 
-            // 3. Mutate transform of light2
+            // Mutate transform of light2
             tx2.position({15.0F, 25.0F, 35.0F});
             registry.replace(light2, tx2);
 
@@ -4434,7 +4434,7 @@ namespace tempest::render_system::tests
             EXPECT_FLOAT_EQ(cached[1].position_falloff.y, 25.0F);
             EXPECT_FLOAT_EQ(cached[1].position_falloff.z, 35.0F);
 
-            // 4. Mutate point light component
+            // Mutate point light component
             registry.replace(light2, point_light_component{
                                          .color = {0.0F, 0.0F, 1.0F},
                                          .intensity = 12.0F,
@@ -4448,7 +4448,7 @@ namespace tempest::render_system::tests
             EXPECT_FLOAT_EQ(cached[1].color_intensity.w, 12.0F);
             EXPECT_FLOAT_EQ(cached[1].position_falloff.w, 30.0F);
 
-            // 5. Remove component or destroy entity
+            // Remove component or destroy entity
             registry.destroy(pre_light);
             EXPECT_EQ(rend->get_tracked_point_light_count(), 1U);
 
@@ -4494,7 +4494,7 @@ namespace tempest::render_system::tests
             auto rend = builder.build(*dev, log);
             ASSERT_NE(rend, nullptr);
 
-            // 1. Setup Camera Entity at (0, 0, -5) looking towards +Z
+            // Setup Camera Entity at (0, 0, -5) looking towards +Z
             auto cam_ent = registry.create();
             registry.assign(cam_ent, camera_component{
                                          .aspect_ratio = 1280.0F / 720.0F,
@@ -4505,7 +4505,7 @@ namespace tempest::render_system::tests
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
 
-            // 2. Setup Point Light Entity (between camera and quad, at (0, 0, -2))
+            // Setup Point Light Entity (between camera and quad, at (0, 0, -2))
             auto light_ent = registry.create();
             registry.assign(light_ent, point_light_component{
                                            .color = {1.0F, 0.2F, 0.2F},
@@ -4516,7 +4516,7 @@ namespace tempest::render_system::tests
             light_tx.position({0.0F, 0.0F, -2.0F});
             registry.assign(light_ent, light_tx);
 
-            // 3. Setup Renderable Geometry Entity (Quad at z=0)
+            // Setup Renderable Geometry Entity (Quad at z=0)
             auto mesh_id = meshes.register_mesh(create_test_mesh());
             auto mat = core::material{};
             mat.set_vec4(core::material::base_color_factor_name, {0.9F, 0.9F, 0.9F, 1.0F});
@@ -4529,16 +4529,16 @@ namespace tempest::render_system::tests
             registry.assign(geom_ent, core::material_component{.material_id = mat_id});
             registry.assign(geom_ent, ecs::transform_component{});
 
-            // 4. Prepare Frame
+            // Prepare Frame
             rend->prepare_frame(1280, 720);
 
-            // 5. Render execution
+            // Render execution
             auto render_res = rend->render();
             EXPECT_TRUE(render_res.has_value());
 
             dev->wait_idle();
 
-            // 6. Readback the rendered frame
+            // Readback the rendered frame
             auto readback_buf = dev->create_buffer(rhi::buffer_desc{
                 .size = 1280 * 720 * 4,
                 .memory_usage = rhi::memory_usage::readback,
@@ -4629,7 +4629,7 @@ namespace tempest::render_system::tests
             auto rend = builder.build(*dev, log);
             ASSERT_NE(rend, nullptr);
 
-            // 1. Setup Camera Entity at (0, 0, -5) looking towards +Z
+            // Setup Camera Entity at (0, 0, -5) looking towards +Z
             auto cam_ent = registry.create();
             registry.assign(cam_ent, camera_component{
                                          .aspect_ratio = 1280.0F / 720.0F,
@@ -4640,7 +4640,7 @@ namespace tempest::render_system::tests
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
 
-            // 2. Setup Point Light Entity with green color
+            // Setup Point Light Entity with green color
             auto light_ent = registry.create();
             registry.assign(light_ent, point_light_component{
                                            .color = {0.1F, 1.0F, 0.1F},
@@ -4651,7 +4651,7 @@ namespace tempest::render_system::tests
             light_tx.position({0.0F, 0.0F, -2.0F});
             registry.assign(light_ent, light_tx);
 
-            // 3. Setup Transparent Renderable Geometry Entity (Blend quad at z=0)
+            // Setup Transparent Renderable Geometry Entity (Blend quad at z=0)
             auto mesh_id = meshes.register_mesh(create_test_mesh());
             auto mat = core::material{};
             mat.set_vec4(core::material::base_color_factor_name, {0.1F, 0.9F, 0.1F, 0.8F});
@@ -4665,16 +4665,16 @@ namespace tempest::render_system::tests
             registry.assign(geom_ent, core::material_component{.material_id = mat_id});
             registry.assign(geom_ent, ecs::transform_component{});
 
-            // 4. Prepare Frame
+            // Prepare Frame
             rend->prepare_frame(1280, 720);
 
-            // 5. Render execution
+            // Render execution
             auto render_res = rend->render();
             EXPECT_TRUE(render_res.has_value());
 
             dev->wait_idle();
 
-            // 6. Readback the rendered frame
+            // Readback the rendered frame
             auto readback_buf = dev->create_buffer(rhi::buffer_desc{
                 .size = 1280 * 720 * 4,
                 .memory_usage = rhi::memory_usage::readback,
@@ -4758,7 +4758,7 @@ namespace tempest::render_system::tests
         mat_blend.set_string(core::material::alpha_mode_name, "BLEND");
         auto mat_blend_id = materials.register_material(tempest::move(mat_blend));
 
-        // 1. Create pre-existing entity before renderer initialization
+        // Create pre-existing entity before renderer initialization
         auto pre_ent = registry.create();
         registry.assign(pre_ent, core::mesh_component{.mesh_id = mesh_id});
         registry.assign(pre_ent, core::material_component{.material_id = mat_opaque_id});
@@ -4781,7 +4781,7 @@ namespace tempest::render_system::tests
             auto rend = builder.build(*dev, log);
             ASSERT_NE(rend, nullptr);
 
-            // 1. Verify pre-existing entity is automatically discovered on startup
+            // Verify pre-existing entity is automatically discovered on startup
             EXPECT_EQ(rend->get_tracked_renderable_count(), 1U);
 
             rend->prepare_frame(1280, 720);
@@ -4789,7 +4789,7 @@ namespace tempest::render_system::tests
             EXPECT_EQ(rend->get_opaque_draw_count(), 1U);
             EXPECT_EQ(rend->get_transparent_draw_count(), 0U);
 
-            // 2. Add second entity dynamically
+            // Add second entity dynamically
             auto ent2 = registry.create();
             registry.assign(ent2, core::mesh_component{.mesh_id = mesh_id});
             registry.assign(ent2, core::material_component{.material_id = mat_blend_id});
@@ -4802,7 +4802,7 @@ namespace tempest::render_system::tests
             EXPECT_EQ(rend->get_opaque_draw_count(), 1U);
             EXPECT_EQ(rend->get_transparent_draw_count(), 1U);
 
-            // 3. Mutate material on pre_ent from opaque to blend
+            // Mutate material on pre_ent from opaque to blend
             registry.replace(pre_ent, core::material_component{.material_id = mat_blend_id});
 
             rend->prepare_frame(1280, 720);
@@ -4810,7 +4810,7 @@ namespace tempest::render_system::tests
             EXPECT_EQ(rend->get_opaque_draw_count(), 0U);
             EXPECT_EQ(rend->get_transparent_draw_count(), 2U);
 
-            // 4. Remove mesh_component from pre_ent
+            // Remove mesh_component from pre_ent
             registry.remove<core::mesh_component>(pre_ent);
             EXPECT_EQ(rend->get_tracked_renderable_count(), 1U);
 
@@ -4818,7 +4818,7 @@ namespace tempest::render_system::tests
             EXPECT_EQ(rend->get_active_draw_count(), 1U);
             EXPECT_EQ(rend->get_transparent_draw_count(), 1U);
 
-            // 5. Destroy ent2
+            // Destroy ent2
             registry.destroy(ent2);
             EXPECT_EQ(rend->get_tracked_renderable_count(), 0U);
 
@@ -4929,7 +4929,7 @@ namespace tempest::render_system::tests
             auto rend = builder.build(*dev, log);
             ASSERT_NE(rend, nullptr);
 
-            // 1. Setup Scene Geometry without ANY Camera Entity in Registry
+            // Setup Scene Geometry without ANY Camera Entity in Registry
             auto mesh_id = meshes.register_mesh(create_test_mesh());
             auto mat_id = materials.register_material(core::material{});
 
@@ -4938,7 +4938,7 @@ namespace tempest::render_system::tests
             registry.assign(geom_ent, core::material_component{.material_id = mat_id});
             registry.assign(geom_ent, ecs::transform_component{});
 
-            // 2. Build Direct render_camera Override
+            // Build Direct render_camera Override
             const auto proj = math::perspective(16.0F / 9.0F, math::as_radians(75.0F), 0.05F);
             const auto eye = math::vec3<float>{0.0F, 10.0F, -20.0F};
             const auto view =
@@ -4951,10 +4951,10 @@ namespace tempest::render_system::tests
                 .eye_position = {eye.x, eye.y, eye.z, 1.0F},
             };
 
-            // 3. Prepare Frame with Camera Override
+            // Prepare Frame with Camera Override
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
 
-            // 4. Assert GPU Scene Constants Reflect Override Camera Matrices
+            // Assert GPU Scene Constants Reflect Override Camera Matrices
             const auto slot = rend->get_resource_pool().get_frame_slot();
             const auto* scene = static_cast<const scene_constants*>(
                                     rend->get_resource_pool().get_scene_constants_buffer().cpu_address) +
@@ -4963,7 +4963,7 @@ namespace tempest::render_system::tests
             EXPECT_FLOAT_EQ(scene->camera_position.y, 10.0F);
             EXPECT_FLOAT_EQ(scene->camera_position.z, -20.0F);
 
-            // 5. Execute Render Graph
+            // Execute Render Graph
             auto render_res = rend->render();
             EXPECT_TRUE(render_res.has_value());
         }
@@ -5006,7 +5006,7 @@ namespace tempest::render_system::tests
             auto rend = builder.build(*dev, log);
             ASSERT_NE(rend, nullptr);
 
-            // 1. Setup Sun Light with 4 Shadow Cascades
+            // Setup Sun Light with 4 Shadow Cascades
             auto sun_ent = registry.create();
             registry.assign(sun_ent, directional_light_component{
                                          .color = {1.0F, 1.0F, 1.0F},
@@ -5022,7 +5022,7 @@ namespace tempest::render_system::tests
             sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
             registry.assign(sun_ent, sun_tx);
 
-            // 2. Standalone render_camera Override
+            // Standalone render_camera Override
             const auto proj = math::perspective(16.0F / 9.0F, math::as_radians(60.0F), 0.1F);
             const auto eye = math::vec3<float>{0.0F, 2.0F, -10.0F};
             const auto view =
@@ -5035,10 +5035,10 @@ namespace tempest::render_system::tests
                 .eye_position = {eye.x, eye.y, eye.z, 1.0F},
             };
 
-            // 3. Prepare Frame
+            // Prepare Frame
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
 
-            // 4. Assert Shadow Data Contains 4 Computed Cascades
+            // Assert Shadow Data Contains 4 Computed Cascades
             const auto slot = rend->get_resource_pool().get_frame_slot();
             const auto* shadow_data = static_cast<const directional_shadow_data*>(
                                           rend->get_resource_pool().get_directional_shadow_buffer().cpu_address) +
@@ -5046,7 +5046,7 @@ namespace tempest::render_system::tests
             ASSERT_NE(shadow_data, nullptr);
             EXPECT_EQ(shadow_data->cascade_count, 4U);
 
-            // 5. Execute Render
+            // Execute Render
             auto render_res = rend->render();
             EXPECT_TRUE(render_res.has_value());
         }
@@ -5083,10 +5083,10 @@ namespace tempest::render_system::tests
             auto rend = builder.build(*dev, log);
             ASSERT_NE(rend, nullptr);
 
-            // 1. Calling prepare_frame with NO camera entity and NO camera override
+            // Calling prepare_frame with NO camera entity and NO camera override
             rend->prepare_frame(1280, 720);
 
-            // 2. Assert Render Completes Cleanly
+            // Assert Render Completes Cleanly
             auto render_res = rend->render();
             EXPECT_TRUE(render_res.has_value());
         }
@@ -5130,7 +5130,7 @@ namespace tempest::render_system::tests
             auto rend = builder.build(*dev, log);
             ASSERT_NE(rend, nullptr);
 
-            // 1. Add ECS camera entity at Y = 100.0
+            // Add ECS camera entity at Y = 100.0
             auto ecs_cam_ent = registry.create();
             registry.assign(ecs_cam_ent, camera_component{
                                              .aspect_ratio = 16.0F / 9.0F,
@@ -5141,7 +5141,7 @@ namespace tempest::render_system::tests
             ecs_tx.position({0.0F, 100.0F, 0.0F});
             registry.assign(ecs_cam_ent, ecs_tx);
 
-            // 2. Prepare frame with direct camera override at Y = 5.0
+            // Prepare frame with direct camera override at Y = 5.0
             const auto proj = math::perspective(16.0F / 9.0F, 1.0F, 0.1F);
             const auto eye = math::vec3<float>{0.0F, 5.0F, -20.0F};
             const auto view =
@@ -5165,7 +5165,7 @@ namespace tempest::render_system::tests
             EXPECT_FLOAT_EQ(scene->camera_position.y, 5.0F);
             EXPECT_FLOAT_EQ(scene->camera_position.z, -20.0F);
 
-            // 3. Prepare next frame with nullopt override -> falls back to ECS camera
+            // Prepare next frame with nullopt override -> falls back to ECS camera
             rend->prepare_frame(1280, 720, nullopt, nullopt, nullopt);
 
             slot = rend->get_resource_pool().get_frame_slot();
@@ -5216,7 +5216,7 @@ namespace tempest::render_system::tests
             auto rend = builder.build(*dev, log);
             ASSERT_NE(rend, nullptr);
 
-            // 1. Setup Sun Light with 4 Shadow Cascades
+            // Setup Sun Light with 4 Shadow Cascades
             auto sun_ent = registry.create();
             registry.assign(sun_ent, directional_light_component{
                                          .color = {1.0F, 1.0F, 1.0F},
@@ -5232,7 +5232,7 @@ namespace tempest::render_system::tests
             sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
             registry.assign(sun_ent, sun_tx);
 
-            // 2. Build Camera Override with 4:3 Aspect, 90 deg FOV, 0.5 near plane
+            // Build Camera Override with 4:3 Aspect, 90 deg FOV, 0.5 near plane
             const auto proj = math::perspective(4.0F / 3.0F, math::as_radians(90.0F), 0.5F);
             const auto eye = math::vec3<float>{0.0F, 10.0F, -30.0F};
             const auto view =
@@ -5245,10 +5245,10 @@ namespace tempest::render_system::tests
                 .eye_position = {eye.x, eye.y, eye.z, 1.0F},
             };
 
-            // 3. Prepare Frame
+            // Prepare Frame
             rend->prepare_frame(800, 600, nullopt, nullopt, override_camera);
 
-            // 4. Assert Shadow Data Contains 4 Cascades Computed with Custom Frustum
+            // Assert Shadow Data Contains 4 Cascades Computed with Custom Frustum
             const auto slot = rend->get_resource_pool().get_frame_slot();
             const auto* shadow_data = static_cast<const directional_shadow_data*>(
                                           rend->get_resource_pool().get_directional_shadow_buffer().cpu_address) +
@@ -5256,7 +5256,7 @@ namespace tempest::render_system::tests
             ASSERT_NE(shadow_data, nullptr);
             EXPECT_EQ(shadow_data->cascade_count, 4U);
 
-            // 5. Execute Render Graph
+            // Execute Render Graph
             auto render_res = rend->render();
             EXPECT_TRUE(render_res.has_value());
         }
@@ -5267,7 +5267,7 @@ namespace tempest::render_system::tests
     /// @brief Verify renderer pipeline statistics configuration and dynamic runtime mutation.
     TEST(render_system_tests, renderer_pipeline_statistics_configuration_and_mutation)
     {
-        // 1. Setup: Create test fixture and registry
+        // Setup: Create test fixture and registry
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         if (dev == nullptr)
@@ -5288,7 +5288,7 @@ namespace tempest::render_system::tests
                                 rhi::pipeline_statistic_flags::fragment_shader_invocations |
                                 rhi::pipeline_statistic_flags::compute_shader_invocations;
 
-        // 2. Act & Assert: Verify renderer built with custom statistics mask
+        // Act & Assert: Verify renderer built with custom statistics mask
         auto builder = renderer::builder{};
         builder.set_config(renderer_config{
             .render_width = 800,
@@ -5308,12 +5308,12 @@ namespace tempest::render_system::tests
             ASSERT_NE(rend, nullptr);
             EXPECT_EQ(rend->get_pipeline_statistics(), stats_mask);
 
-            // 3. Act: Dynamically update pipeline statistics
+            // Act: Dynamically update pipeline statistics
             const auto updated_stats = rhi::pipeline_statistic_flags::vertex_shader_invocations |
                                        rhi::pipeline_statistic_flags::clipping_input_primitives;
             rend->set_pipeline_statistics(updated_stats);
 
-            // 4. Assert: Active statistics updated
+            // Assert: Active statistics updated
             EXPECT_EQ(rend->get_pipeline_statistics(), updated_stats);
 
             rend->set_pipeline_statistics(rhi::pipeline_statistic_flags::none);
@@ -5327,7 +5327,7 @@ namespace tempest::render_system::tests
     /// disabled cleanly.
     TEST(render_system_tests, renderer_pipeline_statistics_frame_execution)
     {
-        // 1. Setup: Create test fixture and renderer
+        // Setup: Create test fixture and renderer
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         if (dev == nullptr)
@@ -5366,19 +5366,19 @@ namespace tempest::render_system::tests
             auto rend = builder.build(*dev, log);
             ASSERT_NE(rend, nullptr);
 
-            // 2. Act: Prepare and render frame with pipeline statistics active
+            // Act: Prepare and render frame with pipeline statistics active
             rend->prepare_frame(800, 600);
             auto render_res = rend->render();
 
-            // 3. Assert: Frame execution succeeded
+            // Assert: Frame execution succeeded
             EXPECT_TRUE(render_res.has_value());
 
-            // 4. Act: Disable statistics and render subsequent frame
+            // Act: Disable statistics and render subsequent frame
             rend->set_pipeline_statistics(rhi::pipeline_statistic_flags::none);
             rend->prepare_frame(800, 600);
             auto disabled_res = rend->render();
 
-            // 5. Assert: Frame execution succeeded after disabling statistics
+            // Assert: Frame execution succeeded after disabling statistics
             EXPECT_TRUE(disabled_res.has_value());
         }
 
@@ -5394,7 +5394,7 @@ namespace tempest::render_system::tests
     /// shader manager, and that the render graph pass executes cleanly with separate opaque and masked batches.
     TEST(render_system_tests, depth_prepass_opaque_and_masked_pipelines_and_execution)
     {
-        // 1. Setup: Initialize test device, resource pool, shader manager, and render graph
+        // Setup: Initialize test device, resource pool, shader manager, and render graph
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
@@ -5418,10 +5418,10 @@ namespace tempest::render_system::tests
 
         add_frame_upload_pass(graph, pool);
 
-        // 2. Act: Add depth prepass with distinct opaque and alpha-masked draw counts and offsets
+        // Act: Add depth prepass with distinct opaque and alpha-masked draw counts and offsets
         const auto& depth_data = add_depth_prepass(graph, pool, shaders, depth_tex, 2, 0, 1, 2);
 
-        // 3. Assert: Verify depth texture validity and pipeline registration
+        // Assert: Verify depth texture validity and pipeline registration
         EXPECT_TRUE(depth_data.depth_texture.is_valid());
         EXPECT_EQ(depth_data.opaque_draw_count, 2U);
         EXPECT_EQ(depth_data.opaque_draw_offset, 0U);
@@ -5452,10 +5452,10 @@ namespace tempest::render_system::tests
             []([[maybe_unused]] const depth_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
                [[maybe_unused]] rhi::command_list&) -> void {});
 
-        // 4. Act: Compile and execute render graph
+        // Act: Compile and execute render graph
         auto exec_res = graph.execute_sync(*dev);
 
-        // 5. Assert: Graph execution completes successfully
+        // Assert: Graph execution completes successfully
         EXPECT_TRUE(exec_res.has_value());
 
         dev->wait_idle();
@@ -5470,7 +5470,7 @@ namespace tempest::render_system::tests
     /// cleanly executes through the render graph.
     TEST(render_system_tests, pbr_opaque_pass_pipeline_registration_and_execution)
     {
-        // 1. Setup: Initialize test device, resource pool, shader manager, and render graph
+        // Setup: Initialize test device, resource pool, shader manager, and render graph
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
@@ -5512,11 +5512,11 @@ namespace tempest::render_system::tests
 
         add_frame_upload_pass(graph, pool);
 
-        // 2. Act: Add PBR opaque pass with draw commands
+        // Act: Add PBR opaque pass with draw commands
         const auto& opaque_data =
             add_pbr_opaque_pass(graph, pool, shaders, hdr_tex, depth_tex, shadow_atlas, 1, 0);
 
-        // 3. Assert: Output texture and draw parameters are valid
+        // Assert: Output texture and draw parameters are valid
         EXPECT_TRUE(opaque_data.hdr_color.is_valid());
         EXPECT_TRUE(opaque_data.depth_texture.is_valid());
         EXPECT_EQ(opaque_data.draw_count, 1U);
@@ -5542,10 +5542,10 @@ namespace tempest::render_system::tests
             []([[maybe_unused]] const color_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
                [[maybe_unused]] rhi::command_list&) -> void {});
 
-        // 4. Act: Compile and execute render graph
+        // Act: Compile and execute render graph
         auto exec_res = graph.execute_sync(*dev);
 
-        // 5. Assert: Graph execution completes successfully
+        // Assert: Graph execution completes successfully
         EXPECT_TRUE(exec_res.has_value());
 
         dev->wait_idle();
@@ -5556,7 +5556,7 @@ namespace tempest::render_system::tests
     /// cleanly executes through the render graph.
     TEST(render_system_tests, pbr_masked_pass_pipeline_registration_and_execution)
     {
-        // 1. Setup: Initialize test device, resource pool, shader manager, and render graph
+        // Setup: Initialize test device, resource pool, shader manager, and render graph
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
@@ -5598,11 +5598,11 @@ namespace tempest::render_system::tests
 
         add_frame_upload_pass(graph, pool);
 
-        // 2. Act: Add PBR masked pass with draw commands
+        // Act: Add PBR masked pass with draw commands
         const auto& masked_data =
             add_pbr_masked_pass(graph, pool, shaders, hdr_tex, depth_tex, shadow_atlas, 1, 0);
 
-        // 3. Assert: Output texture and draw parameters are valid
+        // Assert: Output texture and draw parameters are valid
         EXPECT_TRUE(masked_data.hdr_color.is_valid());
         EXPECT_TRUE(masked_data.depth_texture.is_valid());
         EXPECT_EQ(masked_data.draw_count, 1U);
@@ -5628,10 +5628,10 @@ namespace tempest::render_system::tests
             []([[maybe_unused]] const color_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
                [[maybe_unused]] rhi::command_list&) -> void {});
 
-        // 4. Act: Compile and execute render graph
+        // Act: Compile and execute render graph
         auto exec_res = graph.execute_sync(*dev);
 
-        // 5. Assert: Graph execution completes successfully
+        // Assert: Graph execution completes successfully
         EXPECT_TRUE(exec_res.has_value());
 
         dev->wait_idle();
@@ -5642,7 +5642,7 @@ namespace tempest::render_system::tests
     ///        and that ShadowPass is correctly scheduled and retained in the DAG.
     TEST(render_system_tests, renderer_single_persistent_shadow_atlas_lifecycle)
     {
-        // 1. Setup: Initialize test device, ECS registry with sun light and camera override
+        // Setup: Initialize test device, ECS registry with sun light and camera override
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
@@ -5719,7 +5719,7 @@ namespace tempest::render_system::tests
                 return false;
             };
 
-            // 2. Act: Prepare and render Frame 0 (Initial allocation)
+            // Act: Prepare and render Frame 0 (Initial allocation)
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
             const auto atlas_tex_0 = rend->get_directional_shadow_atlas_physical_texture();
             EXPECT_NE(atlas_tex_0.handle, 0ULL);
@@ -5730,7 +5730,7 @@ namespace tempest::render_system::tests
             auto res0 = rend->render();
             EXPECT_TRUE(res0.has_value());
 
-            // 3. Act: Prepare and render Frame 1 (Single persistent texture must be retained, no double-buffering)
+            // Act: Prepare and render Frame 1 (Single persistent texture must be retained, no double-buffering)
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
             const auto atlas_tex_1 = rend->get_directional_shadow_atlas_physical_texture();
             EXPECT_EQ(atlas_tex_1.handle, atlas_tex_0.handle);
@@ -5739,7 +5739,7 @@ namespace tempest::render_system::tests
             auto res1 = rend->render();
             EXPECT_TRUE(res1.has_value());
 
-            // 4. Act: Prepare and render Frame 2 (Texture handle continues to remain identical)
+            // Act: Prepare and render Frame 2 (Texture handle continues to remain identical)
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
             const auto atlas_tex_2 = rend->get_directional_shadow_atlas_physical_texture();
             EXPECT_EQ(atlas_tex_2.handle, atlas_tex_0.handle);
@@ -5748,7 +5748,7 @@ namespace tempest::render_system::tests
             auto res2 = rend->render();
             EXPECT_TRUE(res2.has_value());
 
-            // 5. Assert: No textures retired when resolution is constant
+            // Assert: No textures retired when resolution is constant
             EXPECT_EQ(rend->get_retired_texture_count(), 0U);
         }
 
@@ -5760,7 +5760,7 @@ namespace tempest::render_system::tests
     ///        and safely drained only after timeline completion.
     TEST(render_system_tests, renderer_shadow_map_resize_deferred_retirement)
     {
-        // 1. Setup: Initialize device, registries, and renderer
+        // Setup: Initialize device, registries, and renderer
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
@@ -5820,7 +5820,7 @@ namespace tempest::render_system::tests
                 .eye_position = {eye.x, eye.y, eye.z, 1.0F},
             };
 
-            // 2. Act: Prepare and render Frame 0 at 1024 resolution
+            // Act: Prepare and render Frame 0 at 1024 resolution
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
             const auto old_tex = rend->get_directional_shadow_atlas_physical_texture();
             EXPECT_NE(old_tex.handle, 0U);
@@ -5829,7 +5829,7 @@ namespace tempest::render_system::tests
             auto res0 = rend->render();
             EXPECT_TRUE(res0.has_value());
 
-            // 3. Act: Dynamically change shadow caster resolution to 2048
+            // Act: Dynamically change shadow caster resolution to 2048
             registry.replace(sun_ent, shadow_caster_component{
                                           .resolution = 2048,
                                           .num_cascades = 4,
@@ -5840,7 +5840,7 @@ namespace tempest::render_system::tests
             // Prepare Frame 1: must detect dimension mismatch and enqueue old resources for retirement
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
 
-            // 4. Assert: Old resources were extracted into _retired_textures rather than destroyed immediately
+            // Assert: Old resources were extracted into _retired_textures rather than destroyed immediately
             EXPECT_EQ(rend->get_retired_texture_count(), 1U);
             const auto new_tex = rend->get_directional_shadow_atlas_physical_texture();
             EXPECT_NE(new_tex.handle, 0U);
@@ -5849,7 +5849,7 @@ namespace tempest::render_system::tests
             auto res1 = rend->render();
             EXPECT_TRUE(res1.has_value());
 
-            // 5. Act: Render subsequent frames allowing timeline semaphores to complete and drain retired textures
+            // Act: Render subsequent frames allowing timeline semaphores to complete and drain retired textures
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
             auto res2 = rend->render();
             EXPECT_TRUE(res2.has_value());
@@ -5873,7 +5873,7 @@ namespace tempest::render_system::tests
     /// pass_dispatcher to the underlying render graph executor for pass recording.
     TEST(render_system_tests, renderer_pass_dispatcher_forwarding)
     {
-        // 1. Setup: initialize RHI device, registries, and renderer
+        // Setup: initialize RHI device, registries, and renderer
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
@@ -5935,7 +5935,7 @@ namespace tempest::render_system::tests
             registry.assign(geom_ent, core::material_component{.material_id = mat_id});
             registry.assign(geom_ent, ecs::transform_component{});
 
-            // 2. Act: Prepare frame and execute render() with custom pass dispatcher
+            // Act: Prepare frame and execute render() with custom pass dispatcher
             rend->prepare_frame(1280, 720);
 
             auto render_dispatched_count = size_t{0};
@@ -5952,13 +5952,13 @@ namespace tempest::render_system::tests
             };
             const auto render_res = rend->render(sync_opts);
 
-            // 3. Assert: render() completed successfully and invoked the custom pass dispatcher
+            // Assert: render() completed successfully and invoked the custom pass dispatcher
             EXPECT_TRUE(render_res.has_value());
             EXPECT_GT(render_dispatched_count, 1U);
 
             dev->wait_idle();
 
-            // 4. Act: Execute complete frame via render_frame() with custom pass dispatcher
+            // Act: Execute complete frame via render_frame() with custom pass dispatcher
             auto frame_dispatched_count = size_t{0};
             auto frame_mock = [&frame_dispatched_count](span<const render_graph::pass_record_item> items) {
                 frame_dispatched_count = items.size();
@@ -5971,7 +5971,7 @@ namespace tempest::render_system::tests
             const auto frame_res = rend->render_frame(null_window_handle, nullopt, nullptr, nullopt,
                                                       render_graph::pass_dispatcher_fn{frame_mock});
 
-            // 5. Assert: render_frame() completed successfully and forwarded the pass dispatcher
+            // Assert: render_frame() completed successfully and forwarded the pass dispatcher
             EXPECT_TRUE(frame_res.has_value());
             EXPECT_GT(frame_dispatched_count, 1U);
         }
@@ -5984,7 +5984,7 @@ namespace tempest::render_system::tests
     /// successfully without Vulkan renderArea or attachment extent mismatches.
     TEST(render_system_tests, renderer_frame_resize_ui_pass_dimensions)
     {
-        // 1. Setup: test fixture, logger, and registry
+        // Setup: test fixture, logger, and registry
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
@@ -6057,7 +6057,7 @@ namespace tempest::render_system::tests
                 ui_height = h;
             };
 
-            // 2. Act: Render at initial 1920x1080
+            // Act: Render at initial 1920x1080
             rend->prepare_frame(1920, 1080, target_1920x1080.tex, target_1920x1080.view, nullopt, ui_cb);
             auto res = rend->render();
             EXPECT_TRUE(res.has_value());
@@ -6067,7 +6067,7 @@ namespace tempest::render_system::tests
 
             dev->wait_idle();
 
-            // 3. Act: Resize up to ultrawide 5120x1417
+            // Act: Resize up to ultrawide 5120x1417
             ui_called = false;
             rend->prepare_frame(5120, 1417, target_5120x1417.tex, target_5120x1417.view, nullopt, ui_cb);
             res = rend->render();
@@ -6078,7 +6078,7 @@ namespace tempest::render_system::tests
 
             dev->wait_idle();
 
-            // 4. Act: Resize down from 5120x1417 to 1920x1080 (shrink cycle)
+            // Act: Resize down from 5120x1417 to 1920x1080 (shrink cycle)
             ui_called = false;
             rend->prepare_frame(1920, 1080, target_shrink_1920.tex, target_shrink_1920.view, nullopt, ui_cb);
             res = rend->render();
@@ -6089,7 +6089,7 @@ namespace tempest::render_system::tests
 
             dev->wait_idle();
 
-            // 5. Cleanup test targets
+            // Cleanup test targets
             dev->destroy_texture_view(target_1920x1080.view);
             dev->destroy_texture(target_1920x1080.tex);
             dev->destroy_texture_view(target_5120x1417.view);

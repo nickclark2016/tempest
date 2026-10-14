@@ -213,7 +213,7 @@ namespace tempest::render_graph
     {
         while (!_stop_requested.load(memory_order::acquire))
         {
-            // 1. Drain pending requests
+            // Drain pending requests
             auto* pending_head = _pending_requests.drain();
             while (pending_head != nullptr)
             {
@@ -230,7 +230,7 @@ namespace tempest::render_graph
                 pending_head = next_node;
             }
 
-            // 2. Check completions (zero-allocation in-place compaction with query cache)
+            // Check completions (zero-allocation in-place compaction with query cache)
             _semaphore_query_cache.clear();
             auto write_index = size_t{0};
             for (size_t read_index = 0; read_index < _active_entries.size(); ++read_index)
@@ -291,7 +291,7 @@ namespace tempest::render_graph
                 break;
             }
 
-            // 3. Build unique sync points (zero-allocation stack buffer)
+            // Build unique sync points (zero-allocation stack buffer)
             _last_seen_control_val = _device.get_semaphore_value(_control_semaphore);
 
             if (_stop_requested.load(memory_order::acquire))
@@ -336,7 +336,7 @@ namespace tempest::render_graph
                 break;
             }
 
-            // 4. Wait
+            // Wait
             const auto wait_timeout_ns =
                 _active_entries.empty() ? ~uint64_t{0} : uint64_t{2'000'000'000ULL}; // 2 s watchdog
             const auto status = _device.wait_semaphores(

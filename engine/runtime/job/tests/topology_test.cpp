@@ -16,10 +16,10 @@ namespace tempest::job::tests
     ///        classifies at least one core as performance, and assigns valid affinity masks.
     TEST(topology_test, real_topology_discovery)
     {
-        // 1. Setup & Act: Discover host hardware topology
+        // Setup & Act: Discover host hardware topology
         auto topo = discover_cpu_topology();
 
-        // 2. Assert: Host must have at least one core and at least one performance core
+        // Assert: Host must have at least one core and at least one performance core
         EXPECT_GT(topo.total_core_count(), 0u);
         EXPECT_GE(topo.performance_core_count(), 1u);
         EXPECT_EQ(topo.total_core_count(), topo.performance_core_count() + topo.efficiency_core_count());
@@ -43,7 +43,7 @@ namespace tempest::job::tests
     ///        correctly tracking simulated P-core and E-core counts and 1024-bit cpu_masks.
     TEST(topology_test, simulated_topology_injection)
     {
-        // 1. Setup: Construct synthetic heterogeneous topology (4 P-cores + 4 E-cores)
+        // Setup: Construct synthetic heterogeneous topology (4 P-cores + 4 E-cores)
         auto sim_topo = cpu_topology{};
         for (auto i = 0u; i < 4u; ++i)
         {
@@ -76,10 +76,10 @@ namespace tempest::job::tests
             .topology = sim_topo,
         };
 
-        // 2. Act: Initialize job system with injected topology
+        // Act: Initialize job system with injected topology
         auto sys = job_system{log, prof, config};
 
-        // 3. Assert: Verify topology was retained and queried accurately
+        // Assert: Verify topology was retained and queried accurately
         const auto& loaded_topo = sys.get_topology();
         EXPECT_EQ(loaded_topo.total_core_count(), 8u);
         EXPECT_EQ(loaded_topo.performance_core_count(), 4u);
@@ -92,7 +92,7 @@ namespace tempest::job::tests
     ///        is properly represented in cpu_topology with accurate multi-group masks.
     TEST(topology_test, simulated_128_core_topology_injection)
     {
-        // 1. Setup: Construct synthetic 128-core topology (64 P-cores in Group 0 + 64 E-cores in Group 1)
+        // Setup: Construct synthetic 128-core topology (64 P-cores in Group 0 + 64 E-cores in Group 1)
         auto sim_topo = cpu_topology{};
         for (auto i = 0u; i < 64u; ++i)
         {
@@ -125,10 +125,10 @@ namespace tempest::job::tests
             .topology = sim_topo,
         };
 
-        // 2. Act: Initialize job system with injected 128-core topology
+        // Act: Initialize job system with injected 128-core topology
         auto sys = job_system{log, prof, config};
 
-        // 3. Assert: Verify 128-core topology queries across both groups
+        // Assert: Verify 128-core topology queries across both groups
         const auto& loaded_topo = sys.get_topology();
         EXPECT_EQ(loaded_topo.total_core_count(), 128u);
         EXPECT_EQ(loaded_topo.performance_core_count(), 64u);
@@ -157,7 +157,7 @@ namespace tempest::job::tests
     /// @brief Verifies thread affinity pinning helper sets affinity mask without error using core_info and cpu_mask.
     TEST(topology_test, thread_affinity_pinning)
     {
-        // 1. Setup: Discover host topology and launch a background thread
+        // Setup: Discover host topology and launch a background thread
         auto topo = discover_cpu_topology();
         auto executed = false;
         auto t = tempest::thread{[&topo, &executed] {
@@ -168,12 +168,12 @@ namespace tempest::job::tests
             executed = true;
         }};
 
-        // 2. Act: Pin the background thread to the first core via core_info and cpu_mask
+        // Act: Pin the background thread to the first core via core_info and cpu_mask
         auto pin_ok = set_thread_affinity(t, topo.cores[0]);
         auto mask_pin_ok = set_thread_affinity(t, topo.performance_mask());
         t.join();
 
-        // 3. Assert: Both external and self pinning succeeded
+        // Assert: Both external and self pinning succeeded
         EXPECT_TRUE(pin_ok);
         EXPECT_TRUE(mask_pin_ok);
         EXPECT_TRUE(executed);

@@ -93,13 +93,13 @@ namespace tempest::job::tests
     ///        and delivers its expected value upon direct resumption.
     TEST(task_test, success_value_unwrapping)
     {
-        // 1. Setup
+        // Setup
         auto t = simple_success_task();
 
-        // 2. Act
+        // Act
         const auto finished = t.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(finished);
         EXPECT_TRUE(t.is_ready());
         EXPECT_TRUE(t.has_value());
@@ -111,14 +111,14 @@ namespace tempest::job::tests
     ///        and marks its expected value as valid.
     TEST(task_test, success_void_task)
     {
-        // 1. Setup
+        // Setup
         bool executed = false;
         auto t = simple_void_task(&executed);
 
-        // 2. Act
+        // Act
         const auto finished = t.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(finished);
         EXPECT_TRUE(executed);
         EXPECT_TRUE(t.is_ready());
@@ -129,16 +129,16 @@ namespace tempest::job::tests
     ///        cleanly without error overhead.
     TEST(task_test, non_fallible_tasks)
     {
-        // 1. Setup
+        // Setup
         auto t1 = non_fallible_task();
         bool executed = false;
         auto t2 = non_fallible_void_task(&executed);
 
-        // 2. Act
+        // Act
         t1.resume();
         t2.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(t1.is_ready());
         EXPECT_EQ(t1.value(), 99);
         EXPECT_TRUE(t2.is_ready());
@@ -153,13 +153,13 @@ namespace tempest::job::tests
     ///        immediately and sets the task error code.
     TEST(task_test, direct_unexpected_short_circuit)
     {
-        // 1. Setup
+        // Setup
         auto t = child_fail_task();
 
-        // 2. Act
+        // Act
         t.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(t.is_ready());
         EXPECT_FALSE(t.has_value());
         EXPECT_EQ(t.error(), job_error::canceled);
@@ -170,15 +170,15 @@ namespace tempest::job::tests
     ///        for all in-scope local frame variables.
     TEST(task_test, parent_short_circuit_and_raii_unwinding)
     {
-        // 1. Setup
+        // Setup
         int parent_dtor_count = 0;
         int executed_after = 0;
         auto parent = parent_short_circuit_task(&parent_dtor_count, &executed_after);
 
-        // 2. Act
+        // Act
         parent.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(parent.is_ready());
         EXPECT_FALSE(parent.has_value());
         EXPECT_EQ(parent.error(), job_error::canceled);
@@ -194,16 +194,16 @@ namespace tempest::job::tests
     ///        using expected's monadic operators (.transform, .and_then, .or_else).
     TEST(task_test, monadic_chaining_on_task_result)
     {
-        // 1. Setup
+        // Setup
         auto t = simple_success_task();
 
-        // 2. Act
+        // Act
         t.resume();
         auto transformed = t.result()
                                .transform([](int x) { return x * 2; })
                                .and_then([](int x) -> expected<int, job_error> { return x + 10; });
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(transformed.has_value());
         EXPECT_EQ(transformed.value(), 94);
     }
@@ -211,7 +211,7 @@ namespace tempest::job::tests
     /// @brief Verifies that monadic operations chain correctly inside a coroutine body.
     TEST(task_test, monadic_chaining_inside_coroutine)
     {
-        // 1. Setup
+        // Setup
         auto coroutine_monadic = []() -> task<expected<int, job_error>> {
             auto step = []() -> expected<int, job_error> { return 20; };
             auto res = step()
@@ -220,11 +220,11 @@ namespace tempest::job::tests
             co_return res;
         };
 
-        // 2. Act
+        // Act
         auto t = coroutine_monadic();
         t.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(t.is_ready());
         EXPECT_TRUE(t.has_value());
         auto inner = t.value();
@@ -235,7 +235,7 @@ namespace tempest::job::tests
     /// @brief Verifies that an error in a monadic chain is propagated and skips downstream transforms.
     TEST(task_test, monadic_chaining_error_propagation_inside_coroutine)
     {
-        // 1. Setup
+        // Setup
         auto coroutine_fail = []() -> task<expected<int, job_error>> {
             auto step = []() -> expected<int, job_error> { return unexpected(job_error::timeout); };
             auto res = step()
@@ -244,11 +244,11 @@ namespace tempest::job::tests
             co_return res;
         };
 
-        // 2. Act
+        // Act
         auto t = coroutine_fail();
         t.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(t.is_ready());
         EXPECT_TRUE(t.has_value());
         auto inner = t.value();
@@ -264,14 +264,14 @@ namespace tempest::job::tests
     ///        producing a new task with the transformed value.
     TEST(task_test, continuation_value_transform)
     {
-        // 1. Setup
+        // Setup
         auto t = simple_success_task();
 
-        // 2. Act
+        // Act
         auto cont = t.then([](int x) { return x * 2; });
         const auto finished = cont.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(finished);
         EXPECT_TRUE(cont.is_ready());
         EXPECT_TRUE(cont.has_value());
@@ -282,14 +282,14 @@ namespace tempest::job::tests
     ///        another coroutine task and unwraps the nested task result seamlessly.
     TEST(task_test, continuation_async_task)
     {
-        // 1. Setup
+        // Setup
         auto t = simple_success_task();
 
-        // 2. Act
+        // Act
         auto cont = t.then([](int x) -> task<int> { co_return x + 100; });
         const auto finished = cont.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(finished);
         EXPECT_TRUE(cont.is_ready());
         EXPECT_TRUE(cont.has_value());
@@ -300,18 +300,18 @@ namespace tempest::job::tests
     ///        and completes as task<void, E>.
     TEST(task_test, continuation_void_return)
     {
-        // 1. Setup
+        // Setup
         auto t = simple_success_task();
         bool executed = false;
 
-        // 2. Act
+        // Act
         auto cont = t.then([&](int x) {
             EXPECT_EQ(x, 42);
             executed = true;
         });
         const auto finished = cont.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(finished);
         EXPECT_TRUE(executed);
         EXPECT_TRUE(cont.is_ready());
@@ -322,15 +322,15 @@ namespace tempest::job::tests
     ///        with no arguments and returns a valued task.
     TEST(task_test, continuation_on_void_task)
     {
-        // 1. Setup
+        // Setup
         bool executed1 = false;
         auto t = simple_void_task(&executed1);
 
-        // 2. Act
+        // Act
         auto cont = t.then([]() { return 777; });
         const auto finished = cont.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(finished);
         EXPECT_TRUE(executed1);
         EXPECT_TRUE(cont.is_ready());
@@ -341,16 +341,16 @@ namespace tempest::job::tests
     /// @brief Verifies that task::then on a task<void> with a void callable completes cleanly.
     TEST(task_test, continuation_on_void_task_to_void)
     {
-        // 1. Setup
+        // Setup
         bool executed1 = false;
         bool executed2 = false;
         auto t = simple_void_task(&executed1);
 
-        // 2. Act
+        // Act
         auto cont = t.then([&]() { executed2 = true; });
         const auto finished = cont.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(finished);
         EXPECT_TRUE(executed1);
         EXPECT_TRUE(executed2);
@@ -361,16 +361,16 @@ namespace tempest::job::tests
     /// @brief Verifies that multiple .then() continuations can be chained in sequence.
     TEST(task_test, continuation_multi_chain)
     {
-        // 1. Setup
+        // Setup
         auto t = simple_success_task();
 
-        // 2. Act: (42 + 8) * 2 - 10 = 90
+        // Act: (42 + 8) * 2 - 10 = 90
         auto chained = t.then([](int x) { return x + 8; })
                            .then([](int x) { return x * 2; })
                            .then([](int x) { return x - 10; });
         const auto finished = chained.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(finished);
         EXPECT_TRUE(chained.is_ready());
         EXPECT_TRUE(chained.has_value());
@@ -381,18 +381,18 @@ namespace tempest::job::tests
     ///        never invoked and the error propagates to the resulting task.
     TEST(task_test, continuation_error_short_circuit)
     {
-        // 1. Setup
+        // Setup
         auto t = child_fail_task();
         bool continuation_called = false;
 
-        // 2. Act
+        // Act
         auto cont = t.then([&](int x) {
             continuation_called = true;
             return x * 2;
         });
         const auto finished = cont.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(finished);
         EXPECT_TRUE(cont.is_ready());
         EXPECT_FALSE(cont.has_value());
@@ -403,14 +403,14 @@ namespace tempest::job::tests
     /// @brief Verifies that non-fallible task<T, void> supports .then() continuation.
     TEST(task_test, continuation_non_fallible_task)
     {
-        // 1. Setup
+        // Setup
         auto t = non_fallible_task();
 
-        // 2. Act
+        // Act
         auto cont = t.then([](int x) { return x + 1; });
         const auto finished = cont.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(finished);
         EXPECT_TRUE(cont.is_ready());
         EXPECT_EQ(cont.value(), 100);
@@ -419,16 +419,16 @@ namespace tempest::job::tests
     /// @brief Verifies that non-fallible task<void, void> supports .then() continuation.
     TEST(task_test, continuation_non_fallible_void_task)
     {
-        // 1. Setup
+        // Setup
         bool step1 = false;
         bool step2 = false;
         auto t = non_fallible_void_task(&step1);
 
-        // 2. Act
+        // Act
         auto cont = t.then([&]() { step2 = true; });
         const auto finished = cont.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(finished);
         EXPECT_TRUE(step1);
         EXPECT_TRUE(step2);
@@ -438,7 +438,7 @@ namespace tempest::job::tests
     /// @brief Verify that task execution records coroutine execution slices when profiler is enabled
     TEST(task_test, coroutine_execution_slices_recorded)
     {
-        // 1. Setup
+        // Setup
         auto prof = profiler::profiler_session{true};
 
         auto evt = async_event{false};
@@ -450,7 +450,7 @@ namespace tempest::job::tests
             co_return 42;
         };
 
-        // 2. Act: Start coroutine (slice 0 runs until co_await evt suspends)
+        // Act: Start coroutine (slice 0 runs until co_await evt suspends)
         auto t = test_coroutine().with_profiler(prof);
         const auto coro_id = t.coroutine_id();
         EXPECT_GT(coro_id, 0U);
@@ -466,7 +466,7 @@ namespace tempest::job::tests
         EXPECT_TRUE(resumed);
         EXPECT_EQ(t.value(), 42);
 
-        // 3. Assert: Verify profiler captured 2 slices with matching coroutine_id
+        // Assert: Verify profiler captured 2 slices with matching coroutine_id
         auto chunks = prof.drain_completed_chunks();
         ASSERT_FALSE(chunks.empty());
 
@@ -496,14 +496,14 @@ namespace tempest::job::tests
     /// @brief Verify that task naming via with_name() and set_name() updates task name and profiler slice zone names
     TEST(task_test, task_custom_naming_fluent)
     {
-        // 1. Setup profiler
+        // Setup profiler
         auto prof = profiler::profiler_session{true};
 
         auto test_coro = []() -> task<int> {
             co_return 99;
         };
 
-        // 2. Act: Name coroutine fluently before running
+        // Act: Name coroutine fluently before running
         auto t = test_coro().with_profiler(prof).with_name("MyCustomRenderPass");
         EXPECT_EQ(t.name(), "MyCustomRenderPass");
         const auto coro_id = t.coroutine_id();
@@ -512,7 +512,7 @@ namespace tempest::job::tests
         EXPECT_TRUE(completed);
         EXPECT_EQ(t.value(), 99);
 
-        // 3. Assert: Verify profiler slice zone has custom name
+        // Assert: Verify profiler slice zone has custom name
         auto chunks = prof.drain_completed_chunks();
         ASSERT_FALSE(chunks.empty());
 
@@ -533,7 +533,7 @@ namespace tempest::job::tests
     /// @brief Verify that co_await set_task_name dynamically renames the task and active profiler slice
     TEST(task_test, task_custom_naming_co_await_set_task_name)
     {
-        // 1. Setup profiler
+        // Setup profiler
         auto prof = profiler::profiler_session{true};
 
         auto test_coro = []() -> task<void> {
@@ -541,7 +541,7 @@ namespace tempest::job::tests
             co_return;
         };
 
-        // 2. Act: Run coroutine that self-renames
+        // Act: Run coroutine that self-renames
         auto t = test_coro().with_profiler(prof);
         const auto coro_id = t.coroutine_id();
 
@@ -549,7 +549,7 @@ namespace tempest::job::tests
         EXPECT_TRUE(completed);
         EXPECT_EQ(t.name(), "DynamicPassName");
 
-        // 3. Assert: Verify profiler recorded zone with DynamicPassName
+        // Assert: Verify profiler recorded zone with DynamicPassName
         auto chunks = prof.drain_completed_chunks();
         ASSERT_FALSE(chunks.empty());
 
@@ -570,7 +570,7 @@ namespace tempest::job::tests
     /// @brief Verify that child coroutines track both their spawning origin and awaiter consumer in profiler slices
     TEST(task_test, coroutine_spawn_and_await_provenance_tracking)
     {
-        // 1. Setup profiler session
+        // Setup profiler session
         auto prof = profiler::profiler_session{true};
         auto& ctx = prof.get_or_register_thread();
         const auto tid = ctx.get_thread_id();
@@ -587,7 +587,7 @@ namespace tempest::job::tests
             co_return val * 2;
         };
 
-        // 2. Act: Spawn parent and execute to completion
+        // Act: Spawn parent and execute to completion
         auto p = parent_task().with_profiler(prof);
         const auto parent_coro_id = p.coroutine_id();
         const auto completed = p.resume();
@@ -595,7 +595,7 @@ namespace tempest::job::tests
         EXPECT_EQ(p.value(), 84);
         ASSERT_NE(child_coro_id, 0U);
 
-        // 3. Assert: Verify profiler slice zones for child and parent contain correct provenance
+        // Assert: Verify profiler slice zones for child and parent contain correct provenance
         auto chunks = prof.drain_completed_chunks();
         ASSERT_FALSE(chunks.empty());
 
@@ -630,12 +630,12 @@ namespace tempest::job::tests
     /// @brief Verify that unprofiled tasks initialize coroutine_id to 0 and execute without atomic allocation overhead
     TEST(task_test, task_unprofiled_has_zero_coroutine_id)
     {
-        // 1. Setup unprofiled task
+        // Setup unprofiled task
         auto simple_task = []() -> task<int> {
             co_return 123;
         };
 
-        // 2. Act: Construct and inspect coroutine_id before and after execution
+        // Act: Construct and inspect coroutine_id before and after execution
         auto t = simple_task();
         EXPECT_EQ(t.coroutine_id(), 0U);
 
@@ -643,24 +643,24 @@ namespace tempest::job::tests
         EXPECT_TRUE(completed);
         EXPECT_EQ(t.value(), 123);
 
-        // 3. Assert: coroutine_id remains 0 across unprofiled lifecycle
+        // Assert: coroutine_id remains 0 across unprofiled lifecycle
         EXPECT_EQ(t.coroutine_id(), 0U);
     }
 
     /// @brief Verify that attaching a disabled profiler session does not allocate a coroutine ID
     TEST(task_test, task_profiler_disabled_has_zero_coroutine_id)
     {
-        // 1. Setup disabled profiler session
+        // Setup disabled profiler session
         auto prof = profiler::profiler_session{false};
 
         auto simple_task = []() -> task<int> {
             co_return 456;
         };
 
-        // 2. Act: Construct task with disabled profiler
+        // Act: Construct task with disabled profiler
         auto t = simple_task().with_profiler(prof);
 
-        // 3. Assert: coroutine_id remains 0 when session is disabled
+        // Assert: coroutine_id remains 0 when session is disabled
         EXPECT_EQ(t.coroutine_id(), 0U);
 
         const auto completed = t.resume();
@@ -672,7 +672,7 @@ namespace tempest::job::tests
     /// @brief Verify that independent profiler sessions manage distinct, isolated 1-based coroutine ID sequences
     TEST(task_test, task_session_isolation_coroutine_id)
     {
-        // 1. Setup two independent enabled profiler sessions
+        // Setup two independent enabled profiler sessions
         auto prof_a = profiler::profiler_session{true};
         auto prof_b = profiler::profiler_session{true};
 
@@ -680,13 +680,13 @@ namespace tempest::job::tests
             co_return;
         };
 
-        // 2. Act: Allocate tasks across sessions
+        // Act: Allocate tasks across sessions
         auto t_a1 = make_task().with_profiler(prof_a);
         auto t_a2 = make_task().with_profiler(prof_a);
         auto t_b1 = make_task().with_profiler(prof_b);
         auto t_b2 = make_task().with_profiler(prof_b);
 
-        // 3. Assert: Both sessions start from 1 and increment independently
+        // Assert: Both sessions start from 1 and increment independently
         EXPECT_EQ(t_a1.coroutine_id(), 1U);
         EXPECT_EQ(t_a2.coroutine_id(), 2U);
         EXPECT_EQ(t_b1.coroutine_id(), 1U);
@@ -702,7 +702,7 @@ namespace tempest::job::tests
     ///        accurately reflects the assigned provenance and naming metadata.
     TEST(task_test, detached_task_naming_and_provenance)
     {
-        // 1. Setup: Enabled profiler session
+        // Setup: Enabled profiler session
         auto prof = profiler::profiler_session{true};
         auto executed = false;
 
@@ -711,7 +711,7 @@ namespace tempest::job::tests
             co_return;
         };
 
-        // 2. Act: Create task, assign custom naming, source location, and provenance
+        // Act: Create task, assign custom naming, source location, and provenance
         auto dtask = make_detached();
         dtask.set_profiler(&prof);
 
@@ -732,7 +732,7 @@ namespace tempest::job::tests
         // Resume the detached task
         dtask.handle.resume();
 
-        // 3. Assert: Verify execution and recorded slice metadata in profiler session
+        // Assert: Verify execution and recorded slice metadata in profiler session
         EXPECT_TRUE(executed);
 
         auto chunks = prof.drain_completed_chunks();
@@ -761,7 +761,7 @@ namespace tempest::job::tests
     ///        when unassigned, and that job_system::async sets task name, source_location, and profiler session.
     TEST(task_test, source_location_automatic_naming_in_async_and_schedule)
     {
-        // 1. Setup: 2-worker job system with active profiler
+        // Setup: 2-worker job system with active profiler
         auto log = logger{};
         auto prof = profiler::profiler_session{true};
         auto config = job_system_config{
@@ -770,7 +770,7 @@ namespace tempest::job::tests
         };
         auto sys = job_system{log, prof, config};
 
-        // 2. Act: Test automatic naming via schedule
+        // Act: Test automatic naming via schedule
         auto default_named_coro = []() -> task<void> {
             co_return;
         };
@@ -798,7 +798,7 @@ namespace tempest::job::tests
 
         sys.wait_idle();
 
-        // 3. Assert: Verify completion and recorded profiler zones
+        // Assert: Verify completion and recorded profiler zones
         EXPECT_TRUE(scheduled_task.is_ready());
         EXPECT_TRUE(auto_async_task.is_ready());
         EXPECT_EQ(auto_async_task.value(), 42);

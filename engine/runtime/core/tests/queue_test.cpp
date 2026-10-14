@@ -8,16 +8,16 @@
 #include <tempest/vector.hpp>
 
 //=============================================================================
-// 1. Construction and Basic State Tests
+// Construction and Basic State Tests
 //=============================================================================
 
 /// @brief Verifies that default construction creates an empty queue with size 0.
 TEST(queue_test, default_constructor)
 {
-    // 1. Setup & Act
+    // Setup & Act
     auto test_queue = tempest::queue<int>{};
 
-    // 2. Assert
+    // Assert
     EXPECT_TRUE(test_queue.empty());
     EXPECT_EQ(test_queue.size(), 0U);
 }
@@ -25,27 +25,27 @@ TEST(queue_test, default_constructor)
 /// @brief Verifies construction from an existing container by copy and move.
 TEST(queue_test, container_constructors)
 {
-    // 1. Setup
+    // Setup
     auto test_deque = tempest::deque<int>{};
     // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
     test_deque.push_back(10);
     test_deque.push_back(20);
     test_deque.push_back(30);
 
-    // 2. Act - Copy construction from container
+    // Act - Copy construction from container
     auto queue_copied = tempest::queue<int>{test_deque};
 
-    // 3. Assert
+    // Assert
     EXPECT_FALSE(queue_copied.empty());
     EXPECT_EQ(queue_copied.size(), 3U);
     EXPECT_EQ(queue_copied.front(), 10);
     EXPECT_EQ(queue_copied.back(), 30);
     EXPECT_EQ(test_deque.size(), 3U);
 
-    // 4. Act - Move construction from container
+    // Act - Move construction from container
     auto queue_moved = tempest::queue<int>{tempest::move(test_deque)};
 
-    // 5. Assert
+    // Assert
     EXPECT_FALSE(queue_moved.empty());
     EXPECT_EQ(queue_moved.size(), 3U);
     EXPECT_EQ(queue_moved.front(), 10);
@@ -56,60 +56,60 @@ TEST(queue_test, container_constructors)
 /// @brief Verifies queue copy and move construction and assignment.
 TEST(queue_test, copy_and_move_semantics)
 {
-    // 1. Setup
+    // Setup
     auto queue_one = tempest::queue<int>{};
     queue_one.push(1);
     queue_one.push(2);
     queue_one.push(3);
 
-    // 2. Act - Copy constructor
+    // Act - Copy constructor
     auto queue_two = queue_one;
 
-    // 3. Assert
+    // Assert
     EXPECT_EQ(queue_two.size(), 3U);
     EXPECT_EQ(queue_two.front(), 1);
     EXPECT_EQ(queue_two.back(), 3);
     EXPECT_EQ(queue_one.size(), 3U);
 
-    // 4. Act - Move constructor
+    // Act - Move constructor
     auto queue_three = tempest::move(queue_one);
 
-    // 5. Assert
+    // Assert
     EXPECT_EQ(queue_three.size(), 3U);
     EXPECT_EQ(queue_three.front(), 1);
     EXPECT_EQ(queue_three.back(), 3);
 
-    // 6. Act - Copy assignment
+    // Act - Copy assignment
     auto queue_four = tempest::queue<int>{};
     queue_four = queue_two;
 
-    // 7. Assert
+    // Assert
     EXPECT_EQ(queue_four.size(), 3U);
     EXPECT_EQ(queue_four.front(), 1);
     EXPECT_EQ(queue_four.back(), 3);
 
-    // 8. Act - Move assignment
+    // Act - Move assignment
     auto queue_five = tempest::queue<int>{};
     queue_five = tempest::move(queue_three);
 
-    // 9. Assert
+    // Assert
     EXPECT_EQ(queue_five.size(), 3U);
     EXPECT_EQ(queue_five.front(), 1);
     EXPECT_EQ(queue_five.back(), 3);
 }
 
 //=============================================================================
-// 2. FIFO Ordering and Push/Pop Operations
+// FIFO Ordering and Push/Pop Operations
 //=============================================================================
 
 // NOLINTBEGIN(readability-function-cognitive-complexity)
 /// @brief Verifies that elements are strictly popped in first-in, first-out order.
 TEST(queue_test, fifo_ordering)
 {
-    // 1. Setup
+    // Setup
     auto test_queue = tempest::queue<int>{};
 
-    // 2. Act - Push large sequence of integers
+    // Act - Push large sequence of integers
     constexpr auto element_count = 1000;
     for (auto idx = 0; idx < element_count; ++idx)
     {
@@ -119,7 +119,7 @@ TEST(queue_test, fifo_ordering)
         EXPECT_EQ(test_queue.size(), static_cast<size_t>(idx + 1));
     }
 
-    // 3. Assert - Pop and verify sequential FIFO ordering
+    // Assert - Pop and verify sequential FIFO ordering
     for (auto idx = 0; idx < element_count; ++idx)
     {
         EXPECT_FALSE(test_queue.empty());
@@ -137,17 +137,17 @@ TEST(queue_test, fifo_ordering)
 /// @brief Verifies front() and back() mutability on non-const queues.
 TEST(queue_test, front_back_mutability)
 {
-    // 1. Setup
+    // Setup
     auto test_queue = tempest::queue<int>{};
     // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
     test_queue.push(10);
     test_queue.push(20);
 
-    // 2. Act - Mutate front and back via references
+    // Act - Mutate front and back via references
     test_queue.front() = 100;
     test_queue.back() = 200;
 
-    // 3. Assert
+    // Assert
     EXPECT_EQ(test_queue.front(), 100);
     EXPECT_EQ(test_queue.back(), 200);
 
@@ -159,7 +159,7 @@ TEST(queue_test, front_back_mutability)
 }
 
 //=============================================================================
-// 3. Emplace and In-Place Construction
+// Emplace and In-Place Construction
 //=============================================================================
 
 namespace
@@ -179,14 +179,14 @@ namespace
 /// @brief Verifies in-place emplace forward-constructs elements and returns reference.
 TEST(queue_test, emplace_in_place)
 {
-    // 1. Setup
+    // Setup
     auto test_queue = tempest::queue<test_composite>{};
 
-    // 2. Act - Emplace with multiple constructor parameters
+    // Act - Emplace with multiple constructor parameters
     // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
     auto& ref1 = test_queue.emplace(42, 3.14, "first");
 
-    // 3. Assert
+    // Assert
     EXPECT_EQ(test_queue.size(), 1U);
     EXPECT_EQ(ref1.a, 42);
     EXPECT_DOUBLE_EQ(ref1.b, 3.14);
@@ -194,11 +194,11 @@ TEST(queue_test, emplace_in_place)
     EXPECT_EQ(&ref1, &test_queue.front());
     EXPECT_EQ(&ref1, &test_queue.back());
 
-    // 4. Act - Emplace second element
+    // Act - Emplace second element
     constexpr auto test_e_approx = 2.718281828459045;
     auto& ref2 = test_queue.emplace(99, test_e_approx, "second");
 
-    // 5. Assert
+    // Assert
     EXPECT_EQ(test_queue.size(), 2U);
     EXPECT_EQ(ref2.a, 99);
     EXPECT_DOUBLE_EQ(ref2.b, test_e_approx);
@@ -209,34 +209,34 @@ TEST(queue_test, emplace_in_place)
 }
 
 //=============================================================================
-// 4. Move-Only Types Support
+// Move-Only Types Support
 //=============================================================================
 
 /// @brief Verifies tempest::queue supports move-only elements (tempest::unique_ptr).
 TEST(queue_test, move_only_elements)
 {
-    // 1. Static assertion that copy constructor is disabled for move-only queue
+    // Static assertion that copy constructor is disabled for move-only queue
     static_assert(!tempest::is_copy_constructible_v<tempest::queue<tempest::unique_ptr<int>>>);
     static_assert(tempest::is_move_constructible_v<tempest::queue<tempest::unique_ptr<int>>>);
 
-    // 2. Setup
+    // Setup
     auto test_queue = tempest::queue<tempest::unique_ptr<int>>{};
 
-    // 3. Act - Push rvalues
+    // Act - Push rvalues
     // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
     test_queue.push(tempest::make_unique<int>(10));
     test_queue.push(tempest::make_unique<int>(20));
 
-    // 4. Act - Emplace
+    // Act - Emplace
     auto& emplaced = test_queue.emplace(tempest::make_unique<int>(30));
     EXPECT_EQ(*emplaced, 30);
 
-    // 5. Assert
+    // Assert
     EXPECT_EQ(test_queue.size(), 3U);
     EXPECT_EQ(*test_queue.front(), 10);
     EXPECT_EQ(*test_queue.back(), 30);
 
-    // 6. Act - Transfer ownership out from front() and pop
+    // Act - Transfer ownership out from front() and pop
     auto extracted = tempest::move(test_queue.front());
     EXPECT_EQ(*extracted, 10);
     test_queue.pop();
@@ -244,7 +244,7 @@ TEST(queue_test, move_only_elements)
     EXPECT_EQ(test_queue.size(), 2U);
     EXPECT_EQ(*test_queue.front(), 20);
 
-    // 7. Act - Move the entire queue
+    // Act - Move the entire queue
     auto moved_queue = tempest::move(test_queue);
     EXPECT_EQ(moved_queue.size(), 2U);
     EXPECT_EQ(*moved_queue.front(), 20);
@@ -253,13 +253,13 @@ TEST(queue_test, move_only_elements)
 }
 
 //=============================================================================
-// 5. Swap Semantics
+// Swap Semantics
 //=============================================================================
 
 /// @brief Verifies member and non-member swap between queues of different sizes.
 TEST(queue_test, member_and_non_member_swap)
 {
-    // 1. Setup
+    // Setup
     auto queue_one = tempest::queue<int>{};
     queue_one.push(1);
     queue_one.push(2);
@@ -270,10 +270,10 @@ TEST(queue_test, member_and_non_member_swap)
     queue_two.push(20);
     queue_two.push(30);
 
-    // 2. Act - Member swap
+    // Act - Member swap
     queue_one.swap(queue_two);
 
-    // 3. Assert
+    // Assert
     EXPECT_EQ(queue_one.size(), 3U);
     EXPECT_EQ(queue_one.front(), 10);
     EXPECT_EQ(queue_one.back(), 30);
@@ -282,10 +282,10 @@ TEST(queue_test, member_and_non_member_swap)
     EXPECT_EQ(queue_two.front(), 1);
     EXPECT_EQ(queue_two.back(), 2);
 
-    // 4. Act - Non-member swap (tempest::swap / ADL)
+    // Act - Non-member swap (tempest::swap / ADL)
     swap(queue_one, queue_two);
 
-    // 5. Assert
+    // Assert
     EXPECT_EQ(queue_one.size(), 2U);
     EXPECT_EQ(queue_one.front(), 1);
     EXPECT_EQ(queue_one.back(), 2);
@@ -299,7 +299,7 @@ TEST(queue_test, member_and_non_member_swap)
 /// @brief Verifies swap with an empty queue.
 TEST(queue_test, swap_with_empty)
 {
-    // 1. Setup
+    // Setup
     auto queue_filled = tempest::queue<int>{};
     // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
     queue_filled.push(42);
@@ -307,10 +307,10 @@ TEST(queue_test, swap_with_empty)
 
     auto queue_empty = tempest::queue<int>{};
 
-    // 2. Act
+    // Act
     queue_filled.swap(queue_empty);
 
-    // 3. Assert
+    // Assert
     EXPECT_TRUE(queue_filled.empty());
     EXPECT_EQ(queue_filled.size(), 0U);
 
@@ -322,13 +322,13 @@ TEST(queue_test, swap_with_empty)
 }
 
 //=============================================================================
-// 6. Comparison Operators
+// Comparison Operators
 //=============================================================================
 
 /// @brief Verifies equality and relational comparison operators.
 TEST(queue_test, comparison_operators)
 {
-    // 1. Setup
+    // Setup
     auto queue_one = tempest::queue<int>{};
     queue_one.push(1);
     queue_one.push(2);
@@ -349,7 +349,7 @@ TEST(queue_test, comparison_operators)
     queue_four.push(1);
     queue_four.push(2);
 
-    // 2. Assert - Equality & Inequality
+    // Assert - Equality & Inequality
     EXPECT_TRUE(queue_one == queue_two);
     EXPECT_FALSE(queue_one != queue_two);
     EXPECT_FALSE(queue_one == queue_three);
@@ -357,7 +357,7 @@ TEST(queue_test, comparison_operators)
     EXPECT_FALSE(queue_one == queue_four);
     EXPECT_TRUE(queue_one != queue_four);
 
-    // 3. Assert - Ordering comparisons
+    // Assert - Ordering comparisons
     EXPECT_TRUE(queue_one < queue_three);
     EXPECT_TRUE(queue_one <= queue_three);
     EXPECT_FALSE(queue_one > queue_three);
@@ -374,22 +374,22 @@ TEST(queue_test, comparison_operators)
 }
 
 //=============================================================================
-// 7. CTAD & Edge Cases
+// CTAD & Edge Cases
 //=============================================================================
 
 /// @brief Verifies Class Template Argument Deduction (CTAD) from underlying container.
 TEST(queue_test, deduction_guide)
 {
-    // 1. Setup
+    // Setup
     auto test_deque = tempest::deque<int>{};
     // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
     test_deque.push_back(100);
     test_deque.push_back(200);
 
-    // 2. Act - Deduce queue<int, deque<int>> from deque<int>
+    // Act - Deduce queue<int, deque<int>> from deque<int>
     auto deduced_queue = tempest::queue(test_deque);
 
-    // 3. Assert
+    // Assert
     EXPECT_EQ(deduced_queue.size(), 2U);
     EXPECT_EQ(deduced_queue.front(), 100);
     EXPECT_EQ(deduced_queue.back(), 200);
@@ -400,7 +400,7 @@ TEST(queue_test, deduction_guide)
 /// @brief Verifies ring-buffer wrap-around and memory safety under sustained push/pop cycle.
 TEST(queue_test, circular_buffer_wrap_around)
 {
-    // 1. Setup
+    // Setup
     auto test_queue = tempest::queue<int>{};
 
     // Pre-populate with a working window of elements
@@ -410,7 +410,7 @@ TEST(queue_test, circular_buffer_wrap_around)
         test_queue.push(idx);
     }
 
-    // 2. Act - Sustain push and pop across multiple block boundaries
+    // Act - Sustain push and pop across multiple block boundaries
     constexpr auto iterations = 5000;
     for (auto idx = 0; idx < iterations; ++idx)
     {
@@ -421,7 +421,7 @@ TEST(queue_test, circular_buffer_wrap_around)
         EXPECT_EQ(test_queue.size(), static_cast<size_t>(window_size));
     }
 
-    // 3. Assert - Drain the remaining window
+    // Assert - Drain the remaining window
     for (auto idx = 0; idx < window_size; ++idx)
     {
         EXPECT_EQ(test_queue.front(), iterations + idx);
@@ -436,15 +436,15 @@ TEST(queue_test, circular_buffer_wrap_around)
 /// @brief Verifies deque emplace_front and push_front with move semantics.
 TEST(queue_test, deque_push_front_move_and_emplace)
 {
-    // 1. Setup
+    // Setup
     auto test_deque = tempest::deque<tempest::unique_ptr<int>>{};
 
-    // 2. Act - push_front(T&&) and emplace_front
+    // Act - push_front(T&&) and emplace_front
     test_deque.push_front(tempest::make_unique<int>(1));
     test_deque.emplace_front(tempest::make_unique<int>(2));
     test_deque.emplace_front(tempest::make_unique<int>(3));
 
-    // 3. Assert
+    // Assert
     EXPECT_EQ(test_deque.size(), 3U);
     EXPECT_EQ(*test_deque.front(), 3);
     EXPECT_EQ(*test_deque[1], 2);

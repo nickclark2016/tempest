@@ -386,12 +386,12 @@ namespace tempest
         struct variant_index_of<Idx, T, U>;
 
         // Index selection criteria:
-        // 1. If the type is in the variant, return the index of the type.
-        // 2. If the type is not in the variant, but decays to a type in the variant, return the index of the decayed
+        // If the type is in the variant, return the index of the type.
+        // If the type is not in the variant, but decays to a type in the variant, return the index of the decayed
         // type.
-        // 3. If the type is not in the variant, but is convertible to a type in the variant, return the index of the
+        // If the type is not in the variant, but is convertible to a type in the variant, return the index of the
         // convertible type.
-        // 4. If the type is not in the variant, but is constructible from a type in the variant, return the index of
+        // If the type is not in the variant, but is constructible from a type in the variant, return the index of
         // the constructible type.
 
         template <typename T, typename... Ts>

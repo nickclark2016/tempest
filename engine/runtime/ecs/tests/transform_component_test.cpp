@@ -26,10 +26,10 @@ using tempest::math::vec4;
 /// @brief Tests that transform_component{} initializes to identity transform.
 TEST(transform_component_test, identity_invariants)
 {
-    // 1. Setup & Act
+    // Setup & Act
     const auto tx = transform_component{};
 
-    // 2. Assert
+    // Assert
     EXPECT_FLOAT_EQ(tx.position().x, 0.0F);
     EXPECT_FLOAT_EQ(tx.position().y, 0.0F);
     EXPECT_FLOAT_EQ(tx.position().z, 0.0F);
@@ -60,18 +60,18 @@ TEST(transform_component_test, identity_invariants)
 /// @brief Tests that mutating position, rotation, and scale properly updates the cached matrix.
 TEST(transform_component_test, mutators_update_cached_matrix)
 {
-    // 1. Setup
+    // Setup
     auto tx = transform_component{};
     const auto new_pos = vec3<float>{5.0F, 10.0F, -15.0F};
     const auto new_rot = vec3<float>{as_radians(30.0F), as_radians(45.0F), 0.0F};
     const auto new_scale = vec3<float>{2.0F, 2.0F, 2.0F};
 
-    // 2. Act
+    // Act
     tx.position(new_pos);
     tx.rotation(new_rot);
     tx.scale(new_scale);
 
-    // 3. Assert
+    // Assert
     const auto expected_matrix = tempest::math::transform(new_pos, new_rot, new_scale);
     const auto actual_matrix = tx.matrix();
 
@@ -91,7 +91,7 @@ TEST(transform_component_test, mutators_update_cached_matrix)
 /// @brief Tests assigning transform_component in an archetype_registry and computing world matrix.
 TEST(transform_component_test, hierarchy_world_matrix_computation)
 {
-    // 1. Setup
+    // Setup
     auto events = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto registry = archetype_registry{events, types};
@@ -108,7 +108,7 @@ TEST(transform_component_test, hierarchy_world_matrix_computation)
 
     create_parent_child_relationship(registry, parent_ent, child_ent);
 
-    // 2. Act - Compute world matrix by traversing hierarchy
+    // Act - Compute world matrix by traversing hierarchy
     auto world = fmat4{1.0F};
     auto curr = child_ent;
     while (curr != tempest::ecs::tombstone)
@@ -127,7 +127,7 @@ TEST(transform_component_test, hierarchy_world_matrix_computation)
         }
     }
 
-    // 3. Assert - Child at local (0, 5, 0) under parent at (10, 0, 0) should be at world (10, 5, 0)
+    // Assert - Child at local (0, 5, 0) under parent at (10, 0, 0) should be at world (10, 5, 0)
     const auto origin = vec4<float>{0.0F, 0.0F, 0.0F, 1.0F};
     const auto world_pos = world * origin;
 

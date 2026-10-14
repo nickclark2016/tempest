@@ -35,13 +35,13 @@ namespace
 } // namespace
 
 // ============================================================================
-// 1. Debounce and Burst Coalescing Tests
+// Debounce and Burst Coalescing Tests
 // ============================================================================
 
 /// @brief Verifies that file modifications are detected and debounced into single events.
 TEST(tempest_file_watcher, debounce_coalesces_burst_writes)
 {
-    // 1. Setup: Create temporary directory and initialize file_watcher
+    // Setup: Create temporary directory and initialize file_watcher
     const auto temp_dir = fs::temp_directory_path() / "tempest_fw_debounce_test";
     fs::remove_all(temp_dir);
     ASSERT_TRUE(fs::create_directories(temp_dir));
@@ -58,7 +58,7 @@ TEST(tempest_file_watcher, debounce_coalesces_burst_writes)
     ASSERT_TRUE(watcher.is_running());
     static_cast<void>(watcher.poll_events());
 
-    // 2. Act: Rapidly issue 50 file write operations to "test.txt" within 50ms
+    // Act: Rapidly issue 50 file write operations to "test.txt" within 50ms
     const auto start_burst = tempest::chrono::steady_clock::now();
     for (auto write_idx = 0; write_idx < 50; ++write_idx)
     {
@@ -76,7 +76,7 @@ TEST(tempest_file_watcher, debounce_coalesces_burst_writes)
     const auto immediate_events = watcher.poll_events();
     EXPECT_EQ(immediate_events.size(), 0U);
 
-    // 3. Assert: Verify exactly 1 coalesced modified event is published after 250ms debounce
+    // Assert: Verify exactly 1 coalesced modified event is published after 250ms debounce
     const auto events = wait_for_events(watcher, 1, tempest::chrono::milliseconds{3000});
     ASSERT_EQ(events.size(), 1U);
     EXPECT_EQ(events[0].type, tempest::file_watch_event_type::modified);
@@ -94,7 +94,7 @@ TEST(tempest_file_watcher, debounce_coalesces_burst_writes)
 /// @brief Verifies that multiple separate files being written in bursts debounce independently.
 TEST(tempest_file_watcher, multiple_files_debounce_independently)
 {
-    // 1. Setup: Create two distinct files in temporary directory
+    // Setup: Create two distinct files in temporary directory
     const auto temp_dir = fs::temp_directory_path() / "tempest_fw_multi_debounce";
     fs::remove_all(temp_dir);
     ASSERT_TRUE(fs::create_directories(temp_dir));
@@ -115,7 +115,7 @@ TEST(tempest_file_watcher, multiple_files_debounce_independently)
     ASSERT_TRUE(watcher.is_running());
     static_cast<void>(watcher.poll_events());
 
-    // 2. Act: Rapidly interleave writes to both files
+    // Act: Rapidly interleave writes to both files
     for (auto write_idx = 0; write_idx < 25; ++write_idx)
     {
         const auto payload_a = tempest::string_view{"alpha write"};
@@ -128,7 +128,7 @@ TEST(tempest_file_watcher, multiple_files_debounce_independently)
             {reinterpret_cast<const tempest::byte*>(payload_b.data()), payload_b.size()}));
     }
 
-    // 3. Assert: Verify each file receives exactly 1 coalesced event after debounce
+    // Assert: Verify each file receives exactly 1 coalesced event after debounce
     const auto events = wait_for_events(watcher, 2, tempest::chrono::milliseconds{3000});
     ASSERT_EQ(events.size(), 2U);
 
@@ -154,13 +154,13 @@ TEST(tempest_file_watcher, multiple_files_debounce_independently)
 }
 
 // ============================================================================
-// 2. File Creation, Removal and Rename Detection Tests
+// File Creation, Removal and Rename Detection Tests
 // ============================================================================
 
 /// @brief Verifies that creating a new file publishes an added event.
 TEST(tempest_file_watcher, file_added_detection)
 {
-    // 1. Setup: Create empty directory and start file_watcher
+    // Setup: Create empty directory and start file_watcher
     const auto temp_dir = fs::temp_directory_path() / "tempest_fw_add_test";
     fs::remove_all(temp_dir);
     ASSERT_TRUE(fs::create_directories(temp_dir));
@@ -169,14 +169,14 @@ TEST(tempest_file_watcher, file_added_detection)
     ASSERT_TRUE(watcher.is_running());
     static_cast<void>(watcher.poll_events());
 
-    // 2. Act: Create a brand new file
+    // Act: Create a brand new file
     const auto new_file = temp_dir / "created.txt";
     const auto payload = tempest::string_view{"brand new content"};
     ASSERT_TRUE(tempest::write_file_from_bytes(
         new_file,
         {reinterpret_cast<const tempest::byte*>(payload.data()), payload.size()}));
 
-    // 3. Assert: Wait for debounce and verify added event
+    // Assert: Wait for debounce and verify added event
     const auto events = wait_for_events(watcher, 1, tempest::chrono::milliseconds{3000});
     ASSERT_FALSE(events.empty());
     EXPECT_EQ(events[0].type, tempest::file_watch_event_type::added);
@@ -189,7 +189,7 @@ TEST(tempest_file_watcher, file_added_detection)
 /// @brief Verifies that removing an existing file publishes a removed event.
 TEST(tempest_file_watcher, file_removed_detection)
 {
-    // 1. Setup: Create directory with an existing file and initialize watcher
+    // Setup: Create directory with an existing file and initialize watcher
     const auto temp_dir = fs::temp_directory_path() / "tempest_fw_remove_test";
     fs::remove_all(temp_dir);
     ASSERT_TRUE(fs::create_directories(temp_dir));
@@ -206,10 +206,10 @@ TEST(tempest_file_watcher, file_removed_detection)
     ASSERT_TRUE(watcher.is_running());
     static_cast<void>(watcher.poll_events());
 
-    // 2. Act: Remove the file
+    // Act: Remove the file
     ASSERT_TRUE(fs::remove(file_to_delete));
 
-    // 3. Assert: Verify removed event received
+    // Assert: Verify removed event received
     const auto events = wait_for_events(watcher, 1, tempest::chrono::milliseconds{3000});
     ASSERT_FALSE(events.empty());
     EXPECT_EQ(events[0].type, tempest::file_watch_event_type::removed);
@@ -222,7 +222,7 @@ TEST(tempest_file_watcher, file_removed_detection)
 /// @brief Verifies file rename detection and clean RAII thread shutdown.
 TEST(tempest_file_watcher, rename_detection_and_clean_teardown)
 {
-    // 1. Setup: Create temporary file "old_name.txt"
+    // Setup: Create temporary file "old_name.txt"
     const auto temp_dir = fs::temp_directory_path() / "tempest_fw_rename_test";
     fs::remove_all(temp_dir);
     ASSERT_TRUE(fs::create_directories(temp_dir));
@@ -240,10 +240,10 @@ TEST(tempest_file_watcher, rename_detection_and_clean_teardown)
     ASSERT_TRUE(watcher->is_running());
     static_cast<void>(watcher->poll_events());
 
-    // 2. Act: Rename to "new_name.txt"
+    // Act: Rename to "new_name.txt"
     ASSERT_TRUE(fs::rename(old_file, new_file));
 
-    // 3. Assert: Verify rename event received; destroy watcher and verify thread joins cleanly
+    // Assert: Verify rename event received; destroy watcher and verify thread joins cleanly
     const auto events = wait_for_events(*watcher, 1, tempest::chrono::milliseconds{3000});
     ASSERT_FALSE(events.empty());
 
@@ -269,18 +269,18 @@ TEST(tempest_file_watcher, rename_detection_and_clean_teardown)
 }
 
 // ============================================================================
-// 3. RAII Lifecycle and Concurrency Safety Tests
+// RAII Lifecycle and Concurrency Safety Tests
 // ============================================================================
 
 /// @brief Verifies that rapid instantiation and destruction of file_watcher does not hang or leak threads.
 TEST(tempest_file_watcher, rapid_raii_lifecycle_teardown)
 {
-    // 1. Setup: Create a temporary directory
+    // Setup: Create a temporary directory
     const auto temp_dir = fs::temp_directory_path() / "tempest_fw_lifecycle_test";
     fs::remove_all(temp_dir);
     ASSERT_TRUE(fs::create_directories(temp_dir));
 
-    // 2. Act & Assert: Rapidly construct and immediately destruct watchers in succession
+    // Act & Assert: Rapidly construct and immediately destruct watchers in succession
     for (auto cycle_idx = 0; cycle_idx < 10; ++cycle_idx)
     {
         auto watcher = tempest::file_watcher{temp_dir};
@@ -295,7 +295,7 @@ TEST(tempest_file_watcher, rapid_raii_lifecycle_teardown)
 /// @brief Verifies concurrent multi-producer push and single-consumer drain on mpsc_queue.
 TEST(tempest_file_watcher, mpsc_queue_multithreaded_stress)
 {
-    // 1. Setup: Initialize an mpsc_queue and spawn 4 concurrent producer threads
+    // Setup: Initialize an mpsc_queue and spawn 4 concurrent producer threads
     auto queue = tempest::mpsc_queue<uint32_t>{};
     static constexpr size_t thread_count = 4;
     static constexpr size_t items_per_thread = 1000;
@@ -303,7 +303,7 @@ TEST(tempest_file_watcher, mpsc_queue_multithreaded_stress)
     auto threads = tempest::vector<tempest::thread>{};
     threads.reserve(thread_count);
 
-    // 2. Act: Each producer thread pushes items into the queue
+    // Act: Each producer thread pushes items into the queue
     for (auto thread_idx = size_t{0}; thread_idx < thread_count; ++thread_idx)
     {
         threads.push_back(tempest::thread{[&queue, thread_idx]() {
@@ -323,7 +323,7 @@ TEST(tempest_file_watcher, mpsc_queue_multithreaded_stress)
         }
     }
 
-    // 3. Assert: Consumer drains queue and verifies exact element count
+    // Assert: Consumer drains queue and verifies exact element count
     auto drained_items = tempest::vector<uint32_t>{};
     const auto drained_count = queue.drain(drained_items);
 

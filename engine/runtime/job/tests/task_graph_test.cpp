@@ -19,7 +19,7 @@ namespace tempest::job::tests
     ///        ensuring downstream nodes only execute after all predecessors complete.
     TEST(task_graph_test, fan_out_fan_in_dependency_reduction)
     {
-        // 1. Setup: 4-worker job system and task graph
+        // Setup: 4-worker job system and task graph
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -67,7 +67,7 @@ namespace tempest::job::tests
             light_done.store(true, memory_order::release);
         });
 
-        // 2. Act: Wire dependencies
+        // Act: Wire dependencies
         cull.precede(shadow, depth);
         light.succeed(shadow, depth);
 
@@ -84,7 +84,7 @@ namespace tempest::job::tests
         exec.resume();
         sys.wait_idle();
 
-        // 3. Assert: All dependency reduction invariants held
+        // Assert: All dependency reduction invariants held
         ASSERT_TRUE(exec.is_ready());
         EXPECT_TRUE(exec.value().has_value());
         EXPECT_TRUE(cull_done.load(memory_order::relaxed));
@@ -104,7 +104,7 @@ namespace tempest::job::tests
     ///        with zero memory reallocation, correctly resetting runtime atomic counters.
     TEST(task_graph_test, reusable_frame_execution)
     {
-        // 1. Setup: 4-worker job system
+        // Setup: 4-worker job system
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -129,7 +129,7 @@ namespace tempest::job::tests
         n1.precede(n2);
         n2.precede(n3);
 
-        // 2. Act: Execute 5 frames consecutively without modifying the graph
+        // Act: Execute 5 frames consecutively without modifying the graph
         for (auto frame = 0; frame < 5; ++frame)
         {
             auto run_frame = [&sys, &graph]() -> task<expected<void, error_code>> {
@@ -143,7 +143,7 @@ namespace tempest::job::tests
             EXPECT_TRUE(t.value().has_value());
         }
 
-        // 3. Assert: 3 nodes executed exactly 5 times = 15 invocations
+        // Assert: 3 nodes executed exactly 5 times = 15 invocations
         EXPECT_EQ(iteration_count.load(memory_order::relaxed), 15);
     }
 
@@ -155,7 +155,7 @@ namespace tempest::job::tests
     ///        and never executed, while independent branches complete normally.
     TEST(task_graph_test, subtree_error_pruning)
     {
-        // 1. Setup:
+        // Setup:
         // Branch 1: Root1 -> FailedNode -> Child1 (should be skipped!)
         // Branch 2: Root2 -> IndependentChild (should complete normally!)
         auto log = logger{};
@@ -196,7 +196,7 @@ namespace tempest::job::tests
             independent_child_executed.store(true, memory_order::release);
         });
 
-        // 2. Act: Wire dependencies
+        // Act: Wire dependencies
         root1.precede(failed_node);
         failed_node.precede(child1);
 
@@ -209,7 +209,7 @@ namespace tempest::job::tests
         t.resume();
         sys.wait_idle();
 
-        // 3. Assert:
+        // Assert:
         // - Root1 and FailedNode ran
         // - Child1 was PRUNED (never executed!)
         // - Independent Branch 2 ran completely
@@ -233,7 +233,7 @@ namespace tempest::job::tests
     /// @brief Verifies that graph nodes can be asynchronous coroutines returning task<T, E>.
     TEST(task_graph_test, coroutine_native_nodes)
     {
-        // 1. Setup: 4-worker job system
+        // Setup: 4-worker job system
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -247,7 +247,7 @@ namespace tempest::job::tests
         auto step1_val = atomic<int>{0};
         auto step2_val = atomic<int>{0};
 
-        // 2. Act: Emplace coroutine nodes
+        // Act: Emplace coroutine nodes
         auto& coro1 = graph.emplace("Coro1", [&step1_val]() -> task<void> {
             step1_val.store(42, memory_order::release);
             co_return;
@@ -268,7 +268,7 @@ namespace tempest::job::tests
         t.resume();
         sys.wait_idle();
 
-        // 3. Assert: Both coroutine nodes executed in order
+        // Assert: Both coroutine nodes executed in order
         ASSERT_TRUE(t.is_ready());
         EXPECT_TRUE(t.value().has_value());
         EXPECT_EQ(step1_val.load(memory_order::relaxed), 42);
@@ -278,7 +278,7 @@ namespace tempest::job::tests
     /// @brief Verifies that task graph dependencies can be wired via span<const non_null<task_node>>.
     TEST(task_graph_test, non_null_span_dependencies)
     {
-        // 1. Setup
+        // Setup
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto sys = job_system{log, prof};
@@ -302,7 +302,7 @@ namespace tempest::job::tests
             }
         });
 
-        // 2. Act: Precede via span<const non_null<task_node>>
+        // Act: Precede via span<const non_null<task_node>>
         auto deps = vector<non_null<task_node>>{};
         deps.push_back(node_b);
         deps.push_back(node_c);
@@ -315,7 +315,7 @@ namespace tempest::job::tests
         t.resume();
         sys.wait_idle();
 
-        // 3. Assert
+        // Assert
         ASSERT_TRUE(t.is_ready());
         EXPECT_TRUE(t.value().has_value());
         EXPECT_TRUE(b_saw_a.load(memory_order::acquire));
@@ -330,7 +330,7 @@ namespace tempest::job::tests
     ///        returns the intact graph inside task_graph_result, and unpacks via structured bindings.
     TEST(task_graph_test, by_value_execution_success)
     {
-        // 1. Setup: 4-worker job system and task graph
+        // Setup: 4-worker job system and task graph
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -351,7 +351,7 @@ namespace tempest::job::tests
         });
         first.precede(second);
 
-        // 2. Act: Move graph into execute and unpack via structured bindings
+        // Act: Move graph into execute and unpack via structured bindings
         auto run = [&sys, g = tempest::move(graph)]() mutable -> task<task_graph_result, void> {
             auto [returned_graph, status] = co_await sys.execute(tempest::move(g));
             co_return task_graph_result{
@@ -364,7 +364,7 @@ namespace tempest::job::tests
         t.resume();
         sys.wait_idle();
 
-        // 3. Assert: Execution succeeded and graph was safely returned
+        // Assert: Execution succeeded and graph was safely returned
         ASSERT_TRUE(t.is_ready());
         auto res = tempest::move(t.value());
         EXPECT_TRUE(res.has_value());
@@ -377,7 +377,7 @@ namespace tempest::job::tests
     ///        the graph inside task_graph_result, preserves the error code, and allows inspecting failing nodes.
     TEST(task_graph_test, by_value_execution_error_recovery)
     {
-        // 1. Setup: Graph with a failing node and dependent child
+        // Setup: Graph with a failing node and dependent child
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -403,7 +403,7 @@ namespace tempest::job::tests
         root.precede(failing);
         failing.precede(child);
 
-        // 2. Act: Execute by value
+        // Act: Execute by value
         auto run = [&sys, g = tempest::move(graph)]() mutable -> task<task_graph_result, void> {
             co_return co_await sys.execute(tempest::move(g));
         };
@@ -412,7 +412,7 @@ namespace tempest::job::tests
         t.resume();
         sys.wait_idle();
 
-        // 3. Assert: Graph is recovered, failure reported, and downstream pruned
+        // Assert: Graph is recovered, failure reported, and downstream pruned
         ASSERT_TRUE(t.is_ready());
         auto res = tempest::move(t.value());
         EXPECT_FALSE(res.has_value());
@@ -439,7 +439,7 @@ namespace tempest::job::tests
     ///        restoring ownership each frame with zero memory reallocations.
     TEST(task_graph_test, by_value_reusable_frame_execution)
     {
-        // 1. Setup: 4-worker job system and reusable DAG
+        // Setup: 4-worker job system and reusable DAG
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -459,7 +459,7 @@ namespace tempest::job::tests
         });
         n1.precede(n2);
 
-        // 2. Act: Execute 5 frames consecutively transferring ownership in and out
+        // Act: Execute 5 frames consecutively transferring ownership in and out
         for (auto frame = 0; frame < 5; ++frame)
         {
             auto run_frame = [&sys, g = tempest::move(graph)]() mutable -> task<task_graph_result, void> {
@@ -478,7 +478,7 @@ namespace tempest::job::tests
             graph = tempest::move(res.graph);
         }
 
-        // 3. Assert: 2 nodes executed 5 times = 10 invocations, and graph ownership intact
+        // Assert: 2 nodes executed 5 times = 10 invocations, and graph ownership intact
         EXPECT_EQ(iteration_count.load(memory_order::relaxed), 10);
         EXPECT_EQ(graph.size(), 2u);
     }

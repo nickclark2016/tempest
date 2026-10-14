@@ -23,7 +23,7 @@ namespace
 /// children to the parent's sibling chain, preserving authored insertion order (A -> B -> C).
 TEST(tempest_ecs_hierarchy, sibling_order_appends)
 {
-    // 1. Setup
+    // Setup
     auto event_reg = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
@@ -33,12 +33,12 @@ TEST(tempest_ecs_hierarchy, sibling_order_appends)
     const auto child_b = reg.create();
     const auto child_c = reg.create();
 
-    // 2. Act
+    // Act
     tempest::ecs::create_parent_child_relationship(reg, parent, child_a);
     tempest::ecs::create_parent_child_relationship(reg, parent, child_b);
     tempest::ecs::create_parent_child_relationship(reg, parent, child_c);
 
-    // 3. Assert
+    // Assert
     ASSERT_TRUE(reg.has<rel_comp_type>(parent));
     ASSERT_TRUE(reg.has<rel_comp_type>(child_a));
     ASSERT_TRUE(reg.has<rel_comp_type>(child_b));
@@ -68,7 +68,7 @@ TEST(tempest_ecs_hierarchy, sibling_order_appends)
 /// destroying a parent entity orphans all its direct children, and destroyed entity names are erased.
 TEST(tempest_ecs_hierarchy, destroy_cleans_links_and_names)
 {
-    // 1. Setup - Part A: Middle child destruction and sibling stitching
+    // Setup - Part A: Middle child destruction and sibling stitching
     auto event_reg = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
@@ -83,10 +83,10 @@ TEST(tempest_ecs_hierarchy, destroy_cleans_links_and_names)
     tempest::ecs::create_parent_child_relationship(reg, parent, child_b);
     tempest::ecs::create_parent_child_relationship(reg, parent, child_c);
 
-    // 2. Act - Destroy middle child B
+    // Act - Destroy middle child B
     reg.destroy(child_b);
 
-    // 3. Assert - Sibling stitching and name cleanup
+    // Assert - Sibling stitching and name cleanup
     EXPECT_FALSE(reg.is_valid(child_b));
     EXPECT_FALSE(reg.name(child_b).has_value());
     EXPECT_FALSE(reg.find_first_with_name("MiddleChild").has_value());
@@ -98,7 +98,7 @@ TEST(tempest_ecs_hierarchy, destroy_cleans_links_and_names)
     EXPECT_EQ(rel_c.parent, parent);
     EXPECT_EQ(rel_c.next_sibling, tombstone_entity);
 
-    // 4. Setup - Part B: Destroying parent orphans direct children
+    // Setup - Part B: Destroying parent orphans direct children
     const auto parent2 = reg.create();
     const auto child_d = reg.create();
     const auto child_e = reg.create();
@@ -107,10 +107,10 @@ TEST(tempest_ecs_hierarchy, destroy_cleans_links_and_names)
     tempest::ecs::create_parent_child_relationship(reg, parent2, child_d);
     tempest::ecs::create_parent_child_relationship(reg, parent2, child_e);
 
-    // 5. Act - Destroy parent2
+    // Act - Destroy parent2
     reg.destroy(parent2);
 
-    // 6. Assert - Parent name is erased and children are orphaned
+    // Assert - Parent name is erased and children are orphaned
     EXPECT_FALSE(reg.is_valid(parent2));
     EXPECT_FALSE(reg.name(parent2).has_value());
     EXPECT_FALSE(reg.find_first_with_name("ParentTwo").has_value());
@@ -132,7 +132,7 @@ TEST(tempest_ecs_hierarchy, destroy_cleans_links_and_names)
 /// @brief Verifies inserting at head, middle, tail with insert_before, and reparenting across parents.
 TEST(tempest_ecs_hierarchy, reparent_insert_before)
 {
-    // 1. Setup
+    // Setup
     auto event_reg = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
@@ -144,38 +144,38 @@ TEST(tempest_ecs_hierarchy, reparent_insert_before)
     tempest::ecs::create_parent_child_relationship(reg, parent1, child_a);
     tempest::ecs::create_parent_child_relationship(reg, parent1, child_c);
 
-    // 2. Act - Insert B before C (middle insertion)
+    // Act - Insert B before C (middle insertion)
     const auto child_b = reg.create();
     auto reparent_b_ok = reg.reparent(child_b, parent1, child_c);
     EXPECT_TRUE(reparent_b_ok);
 
-    // 3. Assert - Order is A -> B -> C
+    // Assert - Order is A -> B -> C
     auto parent1_rel = reg.get<rel_comp_type>(parent1);
     EXPECT_EQ(parent1_rel.first_child, child_a);
     EXPECT_EQ(reg.get<rel_comp_type>(child_a).next_sibling, child_b);
     EXPECT_EQ(reg.get<rel_comp_type>(child_b).next_sibling, child_c);
     EXPECT_EQ(reg.get<rel_comp_type>(child_c).next_sibling, tombstone_entity);
 
-    // 4. Act - Insert X before A (head insertion)
+    // Act - Insert X before A (head insertion)
     const auto child_x = reg.create();
     auto reparent_x_ok = reg.reparent(child_x, parent1, child_a);
     EXPECT_TRUE(reparent_x_ok);
 
-    // 5. Assert - Order is X -> A -> B -> C
+    // Assert - Order is X -> A -> B -> C
     parent1_rel = reg.get<rel_comp_type>(parent1);
     EXPECT_EQ(parent1_rel.first_child, child_x);
     EXPECT_EQ(reg.get<rel_comp_type>(child_x).next_sibling, child_a);
 
-    // 6. Act - Insert Y at tail with tombstone
+    // Act - Insert Y at tail with tombstone
     const auto child_y = reg.create();
     auto reparent_y_ok = reg.reparent(child_y, parent1, tombstone_entity);
     EXPECT_TRUE(reparent_y_ok);
 
-    // 7. Assert - Order is X -> A -> B -> C -> Y
+    // Assert - Order is X -> A -> B -> C -> Y
     EXPECT_EQ(reg.get<rel_comp_type>(child_c).next_sibling, child_y);
     EXPECT_EQ(reg.get<rel_comp_type>(child_y).next_sibling, tombstone_entity);
 
-    // 8. Act - Reparent B across parents to parent2 before Z
+    // Act - Reparent B across parents to parent2 before Z
     const auto parent2 = reg.create();
     const auto child_z = reg.create();
     tempest::ecs::create_parent_child_relationship(reg, parent2, child_z);
@@ -183,7 +183,7 @@ TEST(tempest_ecs_hierarchy, reparent_insert_before)
     auto reparent_b_to_p2_ok = reg.reparent(child_b, parent2, child_z);
     EXPECT_TRUE(reparent_b_to_p2_ok);
 
-    // 9. Assert - Parent1 order is X -> A -> C -> Y, Parent2 order is B -> Z
+    // Assert - Parent1 order is X -> A -> C -> Y, Parent2 order is B -> Z
     EXPECT_EQ(reg.get<rel_comp_type>(child_a).next_sibling, child_c);
     EXPECT_EQ(reg.get<rel_comp_type>(parent2).first_child, child_b);
     EXPECT_EQ(reg.get<rel_comp_type>(child_b).parent, parent2);
@@ -194,7 +194,7 @@ TEST(tempest_ecs_hierarchy, reparent_insert_before)
 /// @brief Verifies that self-parenting and deep cyclic reparenting are rejected.
 TEST(tempest_ecs_hierarchy, reparent_cycle_rejection)
 {
-    // 1. Setup - Linear chain: A -> B -> C -> D
+    // Setup - Linear chain: A -> B -> C -> D
     auto event_reg = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
@@ -208,21 +208,21 @@ TEST(tempest_ecs_hierarchy, reparent_cycle_rejection)
     tempest::ecs::create_parent_child_relationship(reg, node_b, node_c);
     tempest::ecs::create_parent_child_relationship(reg, node_c, node_d);
 
-    // 2. Act & Assert - Self-parenting
+    // Act & Assert - Self-parenting
     EXPECT_FALSE(reg.reparent(node_a, node_a));
     EXPECT_FALSE(reg.reparent(node_b, node_b));
 
-    // 3. Act & Assert - Deep cyclic reparenting (reparenting ancestor under descendant)
+    // Act & Assert - Deep cyclic reparenting (reparenting ancestor under descendant)
     EXPECT_FALSE(reg.reparent(node_a, node_d));
     EXPECT_FALSE(reg.reparent(node_a, node_c));
     EXPECT_FALSE(reg.reparent(node_b, node_d));
 
-    // 4. Act & Assert - Invalid entities
+    // Act & Assert - Invalid entities
     EXPECT_FALSE(reg.reparent(tombstone_entity, node_a));
     const auto invalid_ent = static_cast<entity_type>(99999ULL);
     EXPECT_FALSE(reg.reparent(node_a, invalid_ent));
 
-    // 5. Assert - Hierarchy remains valid and unchanged
+    // Assert - Hierarchy remains valid and unchanged
     EXPECT_EQ(reg.get<rel_comp_type>(node_a).first_child, node_b);
     EXPECT_EQ(reg.get<rel_comp_type>(node_b).parent, node_a);
     EXPECT_EQ(reg.get<rel_comp_type>(node_b).first_child, node_c);
@@ -239,7 +239,7 @@ TEST(tempest_ecs_hierarchy, reparent_cycle_rejection)
 /// from their parent and sibling linked list without destroying the entities.
 TEST(tempest_ecs_hierarchy, unlink_detaches_from_parent_and_siblings)
 {
-    // 1. Setup
+    // Setup
     auto event_reg = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
@@ -253,20 +253,20 @@ TEST(tempest_ecs_hierarchy, unlink_detaches_from_parent_and_siblings)
     tempest::ecs::create_parent_child_relationship(reg, parent, child_b);
     tempest::ecs::create_parent_child_relationship(reg, parent, child_c);
 
-    // 2. Act - Unlink middle child B
+    // Act - Unlink middle child B
     reg.unlink(child_b);
 
-    // 3. Assert - Parent has A -> C; B is detached
+    // Assert - Parent has A -> C; B is detached
     EXPECT_EQ(reg.get<rel_comp_type>(parent).first_child, child_a);
     EXPECT_EQ(reg.get<rel_comp_type>(child_a).next_sibling, child_c);
     EXPECT_EQ(reg.get<rel_comp_type>(child_b).parent, tombstone_entity);
     EXPECT_EQ(reg.get<rel_comp_type>(child_b).next_sibling, tombstone_entity);
     EXPECT_TRUE(reg.is_valid(child_b));
 
-    // 4. Act - Unlink head child A
+    // Act - Unlink head child A
     reg.unlink(child_a);
 
-    // 5. Assert - Parent has C; A is detached
+    // Assert - Parent has C; A is detached
     EXPECT_EQ(reg.get<rel_comp_type>(parent).first_child, child_c);
     EXPECT_EQ(reg.get<rel_comp_type>(child_a).parent, tombstone_entity);
     EXPECT_EQ(reg.get<rel_comp_type>(child_a).next_sibling, tombstone_entity);
@@ -281,7 +281,7 @@ TEST(tempest_ecs_hierarchy, unlink_detaches_from_parent_and_siblings)
 /// and completely erases all names and component storage.
 TEST(tempest_ecs_hierarchy, destroy_recursive_teardown)
 {
-    // 1. Setup - Build a multi-level tree
+    // Setup - Build a multi-level tree
     auto event_reg = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
@@ -306,10 +306,10 @@ TEST(tempest_ecs_hierarchy, destroy_recursive_teardown)
     tempest::ecs::create_parent_child_relationship(reg, branch1, leaf1b);
     tempest::ecs::create_parent_child_relationship(reg, branch2, leaf2a);
 
-    // 2. Act
+    // Act
     reg.destroy_recursive(root);
 
-    // 3. Assert - All entities are invalid and all names erased
+    // Assert - All entities are invalid and all names erased
     EXPECT_FALSE(reg.is_valid(root));
     EXPECT_FALSE(reg.is_valid(branch1));
     EXPECT_FALSE(reg.is_valid(branch2));
@@ -333,7 +333,7 @@ TEST(tempest_ecs_hierarchy, destroy_recursive_teardown)
 /// the target's former position in the parent's sibling chain, and handles root targets.
 TEST(tempest_ecs_hierarchy, destroy_and_reparent_children)
 {
-    // 1. Setup - Part A: Non-root target splicing
+    // Setup - Part A: Non-root target splicing
     auto event_reg = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
@@ -351,10 +351,10 @@ TEST(tempest_ecs_hierarchy, destroy_and_reparent_children)
     tempest::ecs::create_parent_child_relationship(reg, target, grandchild1);
     tempest::ecs::create_parent_child_relationship(reg, target, grandchild2);
 
-    // 2. Act - Destroy target and reparent grandchildren into grandparent
+    // Act - Destroy target and reparent grandchildren into grandparent
     reg.destroy_and_reparent_children(target);
 
-    // 3. Assert - Grandchildren spliced into target's position: A -> grandchild1 -> grandchild2 -> B
+    // Assert - Grandchildren spliced into target's position: A -> grandchild1 -> grandchild2 -> B
     EXPECT_FALSE(reg.is_valid(target));
 
     EXPECT_EQ(reg.get<rel_comp_type>(child_a).next_sibling, grandchild1);
@@ -364,7 +364,7 @@ TEST(tempest_ecs_hierarchy, destroy_and_reparent_children)
     EXPECT_EQ(reg.get<rel_comp_type>(grandchild2).next_sibling, child_b);
     EXPECT_EQ(reg.get<rel_comp_type>(child_b).next_sibling, tombstone_entity);
 
-    // 4. Setup - Part B: Root target destruction
+    // Setup - Part B: Root target destruction
     const auto root_target = reg.create();
     const auto r_child1 = reg.create();
     const auto r_child2 = reg.create();
@@ -372,10 +372,10 @@ TEST(tempest_ecs_hierarchy, destroy_and_reparent_children)
     tempest::ecs::create_parent_child_relationship(reg, root_target, r_child1);
     tempest::ecs::create_parent_child_relationship(reg, root_target, r_child2);
 
-    // 5. Act - Destroy root target
+    // Act - Destroy root target
     reg.destroy_and_reparent_children(root_target);
 
-    // 6. Assert - Root target destroyed, children become root entities
+    // Assert - Root target destroyed, children become root entities
     EXPECT_FALSE(reg.is_valid(root_target));
     ASSERT_TRUE(reg.is_valid(r_child1));
     ASSERT_TRUE(reg.is_valid(r_child2));
@@ -392,7 +392,7 @@ TEST(tempest_ecs_hierarchy, destroy_and_reparent_children)
 /// and that duplicate name assignments do not publish spurious events.
 TEST(tempest_ecs_hierarchy, entity_renamed_event_published)
 {
-    // 1. Setup
+    // Setup
     auto event_reg = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
@@ -417,28 +417,28 @@ TEST(tempest_ecs_hierarchy, entity_renamed_event_published)
 
     const auto ent = reg.create();
 
-    // 2. Act - Initial name assignment
+    // Act - Initial name assignment
     reg.name(ent, "Alpha");
 
-    // 3. Assert - Initial event published with empty old_name
+    // Assert - Initial event published with empty old_name
     ASSERT_EQ(rename_events.size(), 1U);
     EXPECT_EQ(rename_events.front().entity, ent);
     EXPECT_EQ(rename_events.front().old_name, "");
     EXPECT_EQ(rename_events.front().new_name, "Alpha");
 
-    // 4. Act - Rename entity
+    // Act - Rename entity
     reg.name(ent, "Beta");
 
-    // 5. Assert - Rename event published with previous name
+    // Assert - Rename event published with previous name
     ASSERT_EQ(rename_events.size(), 2U);
     EXPECT_EQ(rename_events.back().entity, ent);
     EXPECT_EQ(rename_events.back().old_name, "Alpha");
     EXPECT_EQ(rename_events.back().new_name, "Beta");
 
-    // 6. Act - Duplicate name assignment (no-op)
+    // Act - Duplicate name assignment (no-op)
     reg.name(ent, "Beta");
 
-    // 7. Assert - No duplicate event dispatched
+    // Assert - No duplicate event dispatched
     EXPECT_EQ(rename_events.size(), 2U);
 }
 
@@ -449,7 +449,7 @@ TEST(tempest_ecs_hierarchy, entity_renamed_event_published)
 /// @brief Verifies that reparent_head prepends a child at the parent's head in O(1).
 TEST(tempest_ecs_hierarchy, reparent_head_prepends_in_o1)
 {
-    // 1. Setup - Parent with ChildA -> ChildB
+    // Setup - Parent with ChildA -> ChildB
     auto event_reg = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
@@ -461,12 +461,12 @@ TEST(tempest_ecs_hierarchy, reparent_head_prepends_in_o1)
     tempest::ecs::create_parent_child_relationship(reg, parent, child_a);
     tempest::ecs::create_parent_child_relationship(reg, parent, child_b);
 
-    // 2. Act - Prepend ChildC at the head
+    // Act - Prepend ChildC at the head
     const auto child_c = reg.create();
     const auto ok = reg.reparent_head(child_c, parent);
     EXPECT_TRUE(ok);
 
-    // 3. Assert - ChildC is head: ChildC -> ChildA -> ChildB
+    // Assert - ChildC is head: ChildC -> ChildA -> ChildB
     EXPECT_EQ(reg.get<rel_comp_type>(parent).first_child, child_c);
     EXPECT_EQ(reg.get<rel_comp_type>(child_c).parent, parent);
     EXPECT_EQ(reg.get<rel_comp_type>(child_c).next_sibling, child_a);
@@ -478,7 +478,7 @@ TEST(tempest_ecs_hierarchy, reparent_head_prepends_in_o1)
 /// the batch at the end of the parent's sibling chain.
 TEST(tempest_ecs_hierarchy, reparent_children_appends_at_tail_by_default)
 {
-    // 1. Setup - Parent with ChildA -> ChildB
+    // Setup - Parent with ChildA -> ChildB
     auto event_reg = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
@@ -495,12 +495,12 @@ TEST(tempest_ecs_hierarchy, reparent_children_appends_at_tail_by_default)
     const auto child_e = reg.create();
     const auto batch = tempest::array<entity_type, 3>{child_c, child_d, child_e};
 
-    // 2. Act - Batch append with default tombstone insert_before
+    // Act - Batch append with default tombstone insert_before
     const auto ok = reg.reparent_children(tempest::span<const entity_type>{batch.data(), batch.size()}, parent,
                                           tombstone_entity);
     EXPECT_TRUE(ok);
 
-    // 3. Assert - Sequence: ChildA -> ChildB -> ChildC -> ChildD -> ChildE
+    // Assert - Sequence: ChildA -> ChildB -> ChildC -> ChildD -> ChildE
     EXPECT_EQ(reg.get<rel_comp_type>(parent).first_child, child_a);
     EXPECT_EQ(reg.get<rel_comp_type>(child_a).next_sibling, child_b);
     EXPECT_EQ(reg.get<rel_comp_type>(child_b).next_sibling, child_c);
@@ -516,7 +516,7 @@ TEST(tempest_ecs_hierarchy, reparent_children_appends_at_tail_by_default)
 /// the batch of children in-place before the target sibling.
 TEST(tempest_ecs_hierarchy, reparent_children_insert_before)
 {
-    // 1. Setup - Parent with ChildA -> ChildB
+    // Setup - Parent with ChildA -> ChildB
     auto event_reg = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
@@ -532,12 +532,12 @@ TEST(tempest_ecs_hierarchy, reparent_children_insert_before)
     const auto child_y = reg.create();
     const auto batch = tempest::array<entity_type, 2>{child_x, child_y};
 
-    // 2. Act - Insert batch before ChildB
+    // Act - Insert batch before ChildB
     const auto ok =
         reg.reparent_children(tempest::span<const entity_type>{batch.data(), batch.size()}, parent, child_b);
     EXPECT_TRUE(ok);
 
-    // 3. Assert - Sequence: ChildA -> ChildX -> ChildY -> ChildB
+    // Assert - Sequence: ChildA -> ChildX -> ChildY -> ChildB
     EXPECT_EQ(reg.get<rel_comp_type>(parent).first_child, child_a);
     EXPECT_EQ(reg.get<rel_comp_type>(child_a).next_sibling, child_x);
     EXPECT_EQ(reg.get<rel_comp_type>(child_x).parent, parent);
@@ -551,7 +551,7 @@ TEST(tempest_ecs_hierarchy, reparent_children_insert_before)
 /// the batch at the head of the parent's children.
 TEST(tempest_ecs_hierarchy, reparent_children_insert_before_head)
 {
-    // 1. Setup - Parent with ChildA -> ChildB
+    // Setup - Parent with ChildA -> ChildB
     auto event_reg = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, types};
@@ -567,12 +567,12 @@ TEST(tempest_ecs_hierarchy, reparent_children_insert_before_head)
     const auto child_y = reg.create();
     const auto batch = tempest::array<entity_type, 2>{child_x, child_y};
 
-    // 2. Act - Insert batch before ChildA (head)
+    // Act - Insert batch before ChildA (head)
     const auto ok =
         reg.reparent_children(tempest::span<const entity_type>{batch.data(), batch.size()}, parent, child_a);
     EXPECT_TRUE(ok);
 
-    // 3. Assert - Sequence: ChildX -> ChildY -> ChildA -> ChildB
+    // Assert - Sequence: ChildX -> ChildY -> ChildA -> ChildB
     EXPECT_EQ(reg.get<rel_comp_type>(parent).first_child, child_x);
     EXPECT_EQ(reg.get<rel_comp_type>(child_x).parent, parent);
     EXPECT_EQ(reg.get<rel_comp_type>(child_x).next_sibling, child_y);

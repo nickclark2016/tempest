@@ -2254,13 +2254,13 @@ namespace
 ///        and read back through various memory orders.
 TEST(atomic_struct16_test, value_construct_and_load)
 {
-    // 1. Setup
+    // Setup
     const auto initial = test_payload_16{0x1122334455667788ULL, 0x99AABBCCDDEEFF00ULL};
 
-    // 2. Act
+    // Act
     const auto atom = tempest::atomic<test_payload_16>{initial};
 
-    // 3. Assert
+    // Assert
     EXPECT_EQ(atom.load(), initial);
     EXPECT_EQ(atom.load(tempest::memory_order::relaxed), initial);
     EXPECT_EQ(atom.load(tempest::memory_order::acquire), initial);
@@ -2270,28 +2270,28 @@ TEST(atomic_struct16_test, value_construct_and_load)
 /// @brief Verifies store and load operations on a 16-byte struct atomic across memory orders.
 TEST(atomic_struct16_test, store_and_load)
 {
-    // 1. Setup
+    // Setup
     auto atom = tempest::atomic<test_payload_16>{test_payload_16{1, 2}};
     const auto update = test_payload_16{0xCAFEBABEDEADBEEFULL, 0xFEEDFACE12345678ULL};
 
-    // 2. Act
+    // Act
     atom.store(update, tempest::memory_order::release);
 
-    // 3. Assert
+    // Assert
     EXPECT_EQ(atom.load(tempest::memory_order::acquire), update);
 }
 
 /// @brief Verifies exchange operations on a 16-byte struct atomic.
 TEST(atomic_struct16_test, exchange)
 {
-    // 1. Setup
+    // Setup
     auto atom = tempest::atomic<test_payload_16>{test_payload_16{100, 200}};
     const auto desired = test_payload_16{300, 400};
 
-    // 2. Act
+    // Act
     const auto previous = atom.exchange(desired, tempest::memory_order::acq_rel);
 
-    // 3. Assert
+    // Assert
     EXPECT_EQ(previous, (test_payload_16{100, 200}));
     EXPECT_EQ(atom.load(tempest::memory_order::seq_cst), desired);
 }
@@ -2299,25 +2299,25 @@ TEST(atomic_struct16_test, exchange)
 /// @brief Verifies compare_exchange_strong on a 16-byte struct atomic for both success and failure cases.
 TEST(atomic_struct16_test, compare_exchange_strong)
 {
-    // 1. Setup
+    // Setup
     const auto initial = test_payload_16{10, 20};
     auto atom = tempest::atomic<test_payload_16>{initial};
 
-    // 2. Act - Failure path
+    // Act - Failure path
     auto wrong_expected = test_payload_16{99, 99};
     const auto desired = test_payload_16{30, 40};
     const auto fail_result = atom.compare_exchange_strong(wrong_expected, desired);
 
-    // 3. Assert - Failure path
+    // Assert - Failure path
     EXPECT_FALSE(fail_result);
     EXPECT_EQ(wrong_expected, initial);
     EXPECT_EQ(atom.load(), initial);
 
-    // 4. Act - Success path
+    // Act - Success path
     auto expected = initial;
     const auto success_result = atom.compare_exchange_strong(expected, desired);
 
-    // 5. Assert - Success path
+    // Assert - Success path
     EXPECT_TRUE(success_result);
     EXPECT_EQ(expected, initial);
     EXPECT_EQ(atom.load(), desired);

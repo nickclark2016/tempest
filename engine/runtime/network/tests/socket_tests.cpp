@@ -19,19 +19,19 @@ namespace tempest::network::tests
     /// @brief Verifies parsing string addresses and formatting to_string round-trip.
     TEST(socket_tests, endpoint_parse_and_format)
     {
-        // 1. Setup: Define known endpoints
+        // Setup: Define known endpoints
         const auto expected_loopback = endpoint(127, 0, 0, 1, 8080);
         const auto expected_gateway = endpoint(192, 168, 1, 1, 27015);
         const auto expected_broadcast = endpoint(255, 255, 255, 255, 65535);
         const auto expected_any = endpoint(0, 0, 0, 0, 0);
 
-        // 2. Act: Parse string representations
+        // Act: Parse string representations
         const auto parsed_loopback = endpoint::parse("127.0.0.1:8080");
         const auto parsed_gateway = endpoint::parse("192.168.1.1:27015");
         const auto parsed_broadcast = endpoint::parse("255.255.255.255:65535");
         const auto parsed_any = endpoint::parse("0.0.0.0:0");
 
-        // 3. Assert: Parsing returns expected endpoint values
+        // Assert: Parsing returns expected endpoint values
         ASSERT_TRUE(parsed_loopback.has_value());
         EXPECT_EQ(parsed_loopback.value(), expected_loopback);
         EXPECT_EQ(parsed_loopback.value().to_string(), "127.0.0.1:8080");
@@ -66,12 +66,12 @@ namespace tempest::network::tests
     /// @brief Verifies opening and binding socket to loopback with port 0, and closing.
     TEST(socket_tests, socket_open_bind_close)
     {
-        // 1. Setup: Create unopened UDP socket
+        // Setup: Create unopened UDP socket
         auto test_socket = udp_socket{};
         EXPECT_FALSE(test_socket.is_open());
         EXPECT_FALSE(test_socket.local_endpoint().has_value());
 
-        // 2. Act: Open socket and bind to loopback with ephemeral port
+        // Act: Open socket and bind to loopback with ephemeral port
         const auto open_success = test_socket.open();
         EXPECT_TRUE(open_success);
         EXPECT_TRUE(test_socket.is_open());
@@ -79,7 +79,7 @@ namespace tempest::network::tests
         const auto bind_success = test_socket.bind(endpoint::loopback(0));
         EXPECT_TRUE(bind_success);
 
-        // 3. Assert: Local endpoint has valid loopback address and non-zero bound port
+        // Assert: Local endpoint has valid loopback address and non-zero bound port
         const auto bound_endpoint_opt = test_socket.local_endpoint();
         ASSERT_TRUE(bound_endpoint_opt.has_value());
         EXPECT_EQ(bound_endpoint_opt.value().address(), endpoint::loopback(0).address());
@@ -93,25 +93,25 @@ namespace tempest::network::tests
     /// @brief Verifies receive_from returns 0 when no data is available without blocking.
     TEST(socket_tests, socket_non_blocking_empty_drain)
     {
-        // 1. Setup: Create bound UDP socket on loopback
+        // Setup: Create bound UDP socket on loopback
         auto drain_socket = udp_socket{};
         ASSERT_TRUE(drain_socket.bind(endpoint::loopback(0)));
         auto receive_buffer = array<byte, 64>{};
         auto sender_endpoint = endpoint{};
 
-        // 2. Act: Attempt to receive when socket queue is empty
+        // Act: Attempt to receive when socket queue is empty
         const auto received_bytes = drain_socket.receive_from(
             sender_endpoint,
             span<byte>{receive_buffer.data(), receive_buffer.size()});
 
-        // 3. Assert: Immediately returns 0 bytes without blocking
+        // Assert: Immediately returns 0 bytes without blocking
         EXPECT_EQ(received_bytes, 0);
     }
 
     /// @brief Verifies two non-blocking sockets exchanging packets over 127.0.0.1.
     TEST(socket_tests, socket_loopback_send_receive)
     {
-        // 1. Setup: Create and bind server socket, create client socket
+        // Setup: Create and bind server socket, create client socket
         auto server_socket = udp_socket{};
         ASSERT_TRUE(server_socket.bind(endpoint::loopback(0)));
         const auto server_endpoint_opt = server_socket.local_endpoint();
@@ -126,7 +126,7 @@ namespace tempest::network::tests
             byte{0xCA}, byte{0xFE}, byte{0xBA}, byte{0xBE}
         };
 
-        // 2. Act: Client sends payload to server
+        // Act: Client sends payload to server
         const auto sent_bytes = client_socket.send_to(
             server_endpoint,
             span<const byte>{payload.data(), payload.size()});
@@ -148,7 +148,7 @@ namespace tempest::network::tests
             }
         }
 
-        // 3. Assert: Packet was received intact with valid sender endpoint
+        // Assert: Packet was received intact with valid sender endpoint
         EXPECT_EQ(received_bytes, payload.size());
         for (auto byte_index = size_t{0}; byte_index < payload.size(); ++byte_index)
         {
@@ -166,7 +166,7 @@ namespace tempest::network::tests
     /// and resetting to none on success.
     TEST(socket_tests, socket_error_diagnostic_tracking)
     {
-        // 1. Setup: Create server socket bound to loopback and client socket
+        // Setup: Create server socket bound to loopback and client socket
         auto server_socket = udp_socket{};
         ASSERT_TRUE(server_socket.bind(endpoint::loopback(0)));
         EXPECT_EQ(server_socket.last_error(), socket_error::none);
@@ -175,18 +175,18 @@ namespace tempest::network::tests
         ASSERT_TRUE(client_socket.open());
         EXPECT_EQ(client_socket.last_error(), socket_error::none);
 
-        // 2. Act: Attempt receive on empty non-blocking server socket
+        // Act: Attempt receive on empty non-blocking server socket
         auto receive_buffer = array<byte, 64>{};
         auto sender_endpoint = endpoint{};
         const auto received_empty = server_socket.receive_from(
             sender_endpoint,
             span<byte>{receive_buffer.data(), receive_buffer.size()});
 
-        // 3. Assert: Empty non-blocking receive returns 0 and sets last_error to would_block
+        // Assert: Empty non-blocking receive returns 0 and sets last_error to would_block
         EXPECT_EQ(received_empty, 0);
         EXPECT_EQ(server_socket.last_error(), socket_error::would_block);
 
-        // 4. Act: Client sends a datagram to server
+        // Act: Client sends a datagram to server
         const auto server_ep = server_socket.local_endpoint().value();
         const auto payload = array<byte, 4>{byte{1}, byte{2}, byte{3}, byte{4}};
         const auto sent_bytes = client_socket.send_to(server_ep, span<const byte>{payload.data(), payload.size()});
@@ -206,7 +206,7 @@ namespace tempest::network::tests
             }
         }
 
-        // 5. Assert: Successful receive resets last_error to none
+        // Assert: Successful receive resets last_error to none
         EXPECT_EQ(received_bytes, 4);
         EXPECT_EQ(server_socket.last_error(), socket_error::none);
     }
@@ -215,22 +215,22 @@ namespace tempest::network::tests
     /// following RAII semantics and supports move construction and assignment.
     TEST(socket_tests, network_context_raii_lifecycle)
     {
-        // 1. Setup & Act: Construct primary network_context
+        // Setup & Act: Construct primary network_context
         auto context = network_context{};
         EXPECT_TRUE(context.is_initialized());
 
-        // 2. Act: Move construct
+        // Act: Move construct
         auto moved_context = tempest::move(context);
         EXPECT_TRUE(moved_context.is_initialized());
         EXPECT_FALSE(context.is_initialized());
 
-        // 3. Act: Move assign
+        // Act: Move assign
         auto target_context = network_context{};
         EXPECT_TRUE(target_context.is_initialized());
         target_context = tempest::move(moved_context);
         EXPECT_TRUE(target_context.is_initialized());
         EXPECT_FALSE(moved_context.is_initialized());
 
-        // 4. Assert: Scope exit destroys target_context cleanly
+        // Assert: Scope exit destroys target_context cleanly
     }
 } // namespace tempest::network::tests

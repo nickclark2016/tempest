@@ -53,10 +53,10 @@ namespace tempest::ecs
 /// @brief Verifies that default-constructed prefab templates are empty and that records can be populated.
 TEST(prefab_template_test, create_empty_and_valid_template)
 {
-    // 1. Setup: Construct an empty prefab_template
+    // Setup: Construct an empty prefab_template
     const auto empty_tmpl = tempest::scene::prefab_template{};
 
-    // 2. Act & Assert: Empty template invariants
+    // Act & Assert: Empty template invariants
     EXPECT_EQ(empty_tmpl.entity_count(), 0U);
     EXPECT_TRUE(empty_tmpl.is_empty());
     EXPECT_TRUE(empty_tmpl.get_records().empty());
@@ -64,7 +64,7 @@ TEST(prefab_template_test, create_empty_and_valid_template)
     EXPECT_EQ(empty_tmpl.get_root_record(), nullptr);
     EXPECT_EQ(empty_tmpl.get_record(0), nullptr);
 
-    // 3. Act: Construct a valid non-empty template with records
+    // Act: Construct a valid non-empty template with records
     auto records = tempest::vector<tempest::scene::prefab_entity_record>{};
     auto rec = tempest::scene::prefab_entity_record{
         .local_id = tempest::scene::entity_local_id{1},
@@ -75,7 +75,7 @@ TEST(prefab_template_test, create_empty_and_valid_template)
 
     const auto populated_tmpl = tempest::scene::prefab_template{tempest::move(records)};
 
-    // 4. Assert: Populated template invariants
+    // Assert: Populated template invariants
     EXPECT_EQ(populated_tmpl.entity_count(), 1U);
     EXPECT_FALSE(populated_tmpl.is_empty());
     EXPECT_EQ(populated_tmpl.get_records().size(), 1U);
@@ -89,17 +89,17 @@ TEST(prefab_template_test, create_empty_and_valid_template)
 /// @brief Verifies parent-child hierarchy indexing and multi-root identification within a prefab template.
 TEST(prefab_template_test, template_hierarchy_and_root_lookup)
 {
-    // 1. Setup: Build a multi-entity tree hierarchy (Root, Child1, Child2, Grandchild)
+    // Setup: Build a multi-entity tree hierarchy (Root, Child1, Child2, Grandchild)
     auto builder = tempest::scene::prefab_template_builder{};
     const auto root_idx = builder.add_entity(tempest::scene::entity_local_id{10}, "Root");
     const auto child1_idx = builder.add_entity(tempest::scene::entity_local_id{20}, "Child1", root_idx);
     const auto child2_idx = builder.add_entity(tempest::scene::entity_local_id{30}, "Child2", root_idx);
     const auto grandchild_idx = builder.add_entity(tempest::scene::entity_local_id{40}, "Grandchild", child1_idx);
 
-    // 2. Act: Build the template
+    // Act: Build the template
     const auto tmpl = builder.build();
 
-    // 3. Assert: Verify hierarchy and root records
+    // Assert: Verify hierarchy and root records
     EXPECT_EQ(tmpl.entity_count(), 4U);
     EXPECT_EQ(tmpl.get_root_indices().size(), 1U);
     EXPECT_EQ(tmpl.get_root_indices()[0], root_idx);
@@ -128,7 +128,7 @@ TEST(prefab_template_test, template_hierarchy_and_root_lookup)
 /// @brief Verifies that entities can be looked up by their entity_local_id via fast indexed hash map.
 TEST(prefab_template_test, find_record_by_local_id)
 {
-    // 1. Setup: Build a template with disparate local IDs
+    // Setup: Build a template with disparate local IDs
     auto builder = tempest::scene::prefab_template_builder{};
     const auto id_a = tempest::scene::entity_local_id{0x1000'0001ULL};
     const auto id_b = tempest::scene::entity_local_id{0xABCD'0002ULL};
@@ -137,10 +137,10 @@ TEST(prefab_template_test, find_record_by_local_id)
     builder.add_entity(id_a, "EntityA");
     builder.add_entity(id_b, "EntityB");
 
-    // 2. Act: Build template and query
+    // Act: Build template and query
     const auto tmpl = builder.build();
 
-    // 3. Assert: Existing records are found with correct metadata
+    // Assert: Existing records are found with correct metadata
     const auto idx_a_opt = tmpl.find_index(id_a);
     ASSERT_TRUE(idx_a_opt.has_value());
     EXPECT_EQ(*idx_a_opt, 0U);
@@ -167,7 +167,7 @@ TEST(prefab_template_test, find_record_by_local_id)
 /// @brief Verifies conversion of staged entities into a prefab template.
 TEST(prefab_template_test, from_staged_entities_conversion)
 {
-    // 1. Setup: Prepare a vector of staged entities
+    // Setup: Prepare a vector of staged entities
     auto staged = tempest::vector<tempest::scene::staged_entity>{};
     auto root_staged = tempest::scene::staged_entity{
         .local_id = tempest::scene::entity_local_id{1},
@@ -184,11 +184,11 @@ TEST(prefab_template_test, from_staged_entities_conversion)
     staged.push_back(tempest::move(root_staged));
     staged.push_back(tempest::move(child_staged));
 
-    // 2. Act: Convert to prefab template
+    // Act: Convert to prefab template
     const auto tmpl = tempest::scene::prefab_template::from_staged_entities(
         tempest::span<const tempest::scene::staged_entity>{staged.data(), staged.size()});
 
-    // 3. Assert: Invariants and data match staged source
+    // Assert: Invariants and data match staged source
     EXPECT_EQ(tmpl.entity_count(), 2U);
     EXPECT_EQ(tmpl.get_root_indices().size(), 1U);
     EXPECT_EQ(tmpl.get_root_indices()[0], 0U);
@@ -207,7 +207,7 @@ TEST(prefab_template_test, from_staged_entities_conversion)
 /// @brief Verifies extracting a prefab template directly from an existing live ECS entity hierarchy.
 TEST(prefab_template_test, from_entity_conversion)
 {
-    // 1. Setup: ECS registry with reflected test component
+    // Setup: ECS registry with reflected test component
     auto event_reg = tempest::event::event_registry{};
     auto type_reg = tempest::ecs::component_type_registry{};
     type_reg.ensure<tempest_prefab_test::test_prefab_component>();
@@ -222,10 +222,10 @@ TEST(prefab_template_test, from_entity_conversion)
     registry.name(child_ent, "ECSChild");
     tempest::ecs::create_parent_child_relationship(registry, root_ent, child_ent);
 
-    // 2. Act: Extract template from ECS root entity
+    // Act: Extract template from ECS root entity
     const auto tmpl = tempest::scene::prefab_template::from_entity(registry, root_ent);
 
-    // 3. Assert: Invariants and components are captured
+    // Assert: Invariants and components are captured
     EXPECT_EQ(tmpl.entity_count(), 2U);
     EXPECT_EQ(tmpl.get_root_indices().size(), 1U);
     EXPECT_EQ(tmpl.get_root_indices()[0], 0U);
@@ -250,7 +250,7 @@ TEST(prefab_template_test, from_entity_conversion)
 /// @brief Verifies registration, inspection, and unregistration of templates within prefab_cache.
 TEST(prefab_cache_test, cache_register_find_unregister)
 {
-    // 1. Setup: Cache and dummy template
+    // Setup: Cache and dummy template
     auto cache = tempest::scene::prefab_cache{};
     const auto test_guid = tempest::guid::generate_random_guid();
 
@@ -261,7 +261,7 @@ TEST(prefab_cache_test, cache_register_find_unregister)
     EXPECT_EQ(cache.template_count(), 0U);
     EXPECT_FALSE(cache.has_template(test_guid));
 
-    // 2. Act: Register template
+    // Act: Register template
     const auto reg_ok = cache.register_template(test_guid, tmpl);
     EXPECT_TRUE(reg_ok);
 
@@ -269,7 +269,7 @@ TEST(prefab_cache_test, cache_register_find_unregister)
     const auto dup_ok = cache.register_template(test_guid, tmpl);
     EXPECT_FALSE(dup_ok);
 
-    // 3. Assert: Template exists and can be looked up / inspected
+    // Assert: Template exists and can be looked up / inspected
     EXPECT_EQ(cache.template_count(), 1U);
     EXPECT_TRUE(cache.has_template(test_guid));
 
@@ -288,7 +288,7 @@ TEST(prefab_cache_test, cache_register_find_unregister)
     EXPECT_TRUE(with_ok);
     EXPECT_TRUE(visited);
 
-    // 4. Act: Unregister template
+    // Act: Unregister template
     const auto unreg_ok = cache.unregister_template(test_guid);
     EXPECT_TRUE(unreg_ok);
 
@@ -310,7 +310,7 @@ TEST(prefab_cache_test, cache_register_find_unregister)
 /// @brief Verifies that prefab templates and prefab cache remain completely off-world without mutating the ECS registry.
 TEST(prefab_cache_test, off_world_isolation_no_registry_mutation)
 {
-    // 1. Setup: Event registry, component type registry, and ECS archetype registry
+    // Setup: Event registry, component type registry, and ECS archetype registry
     auto event_reg = tempest::event::event_registry{};
     auto type_reg = tempest::ecs::component_type_registry{};
     auto registry = tempest::ecs::basic_archetype_registry{event_reg, type_reg};
@@ -323,7 +323,7 @@ TEST(prefab_cache_test, off_world_isolation_no_registry_mutation)
 
     auto cache = tempest::scene::prefab_cache{};
 
-    // 2. Act: Construct complex templates with records and nested prefab descriptors, and store them in the cache
+    // Act: Construct complex templates with records and nested prefab descriptors, and store them in the cache
     auto builder = tempest::scene::prefab_template_builder{};
     const auto root_id = tempest::scene::entity_local_id{100};
     const auto child_id = tempest::scene::entity_local_id{200};
@@ -348,7 +348,7 @@ TEST(prefab_cache_test, off_world_isolation_no_registry_mutation)
         EXPECT_EQ(t.entity_count(), 2U);
     });
 
-    // 3. Assert: Invariant verification - the world registry was never touched
+    // Assert: Invariant verification - the world registry was never touched
     EXPECT_EQ(registry.size(), initial_entity_count);
     EXPECT_TRUE(registry.is_valid(existing_ent));
     const auto name_opt = registry.name(existing_ent);
@@ -359,7 +359,7 @@ TEST(prefab_cache_test, off_world_isolation_no_registry_mutation)
 /// @brief Verifies that prefab_cache supports concurrent multi-threaded reads under shared_lock without contention or race.
 TEST(prefab_cache_test, multithreaded_concurrent_reads)
 {
-    // 1. Setup: Populate prefab_cache with multiple templates
+    // Setup: Populate prefab_cache with multiple templates
     auto cache = tempest::scene::prefab_cache{};
     static constexpr size_t template_count = 8;
     auto guids = tempest::vector<tempest::guid>{};
@@ -376,7 +376,7 @@ TEST(prefab_cache_test, multithreaded_concurrent_reads)
 
     EXPECT_EQ(cache.template_count(), template_count);
 
-    // 2. Act: Spawn multiple reader worker threads reading concurrently
+    // Act: Spawn multiple reader worker threads reading concurrently
     static constexpr size_t thread_count = 4;
     static constexpr size_t iterations_per_thread = 200;
     auto threads = tempest::vector<tempest::thread>{};
@@ -407,7 +407,7 @@ TEST(prefab_cache_test, multithreaded_concurrent_reads)
         }});
     }
 
-    // 3. Assert: Join all threads and verify all concurrent reads completed successfully
+    // Assert: Join all threads and verify all concurrent reads completed successfully
     for (auto& worker : threads)
     {
         if (worker.joinable())

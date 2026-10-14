@@ -40,13 +40,13 @@ TEST(thread, compute_value_in_thread)
 /// @brief Verify that tempest::this_thread::sleep_for suspends execution for at least the specified duration.
 TEST(thread, sleep_for)
 {
-    // 1. Setup start time
+    // Setup start time
     auto start = tempest::chrono::steady_clock::now();
 
-    // 2. Act: sleep for 10 milliseconds
+    // Act: sleep for 10 milliseconds
     tempest::this_thread::sleep_for(tempest::chrono::milliseconds{10});
 
-    // 3. Assert: elapsed duration is at least 5 milliseconds (allowing OS timer scheduler tolerances)
+    // Assert: elapsed duration is at least 5 milliseconds (allowing OS timer scheduler tolerances)
     auto elapsed =
         tempest::chrono::duration_cast<tempest::chrono::milliseconds>(tempest::chrono::steady_clock::now() - start);
     ASSERT_GE(elapsed.count(), 5);

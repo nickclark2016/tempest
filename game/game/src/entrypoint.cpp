@@ -182,7 +182,7 @@ namespace
         const auto pi = tempest::math::constants::pi<float>;
         const auto half_pi = tempest::math::constants::half_pi<float>;
 
-        // 1. Generate vertices ring by ring from south pole (-Y) to north pole (+Y)
+        // Generate vertices ring by ring from south pole (-Y) to north pole (+Y)
         for (auto ring_idx = 0U; ring_idx < num_rings; ++ring_idx)
         {
             auto latitude = 0.0F;
@@ -247,7 +247,7 @@ namespace
             }
         }
 
-        // 2. Generate clockwise indices for triangles connecting consecutive rings
+        // Generate clockwise indices for triangles connecting consecutive rings
         for (auto ring_idx = 0U; ring_idx < num_rings - 1U; ++ring_idx)
         {
             const auto ring_start = ring_idx * verts_per_ring;
@@ -380,7 +380,7 @@ namespace
             return;
         }
 
-        // 1. Static floor box: 40m x 1m x 40m centered at (0, -0.5, 0) so top surface is at Y = 0.0m
+        // Static floor box: 40m x 1m x 40m centered at (0, -0.5, 0) so top surface is at Y = 0.0m
         const auto floor_shape = system->create_box_shape(jolt::shim::vec3{20.0F, 0.5F, 20.0F});
         shapes.push_back(floor_shape);
 
@@ -395,7 +395,7 @@ namespace
         system->add_body(floor_body, false);
         bodies.push_back(floor_body);
 
-        // 2. Static step box: 2m x 0.2m x 2m step at (0, 0.1, 5.0) for stair-stepping verification
+        // Static step box: 2m x 0.2m x 2m step at (0, 0.1, 5.0) for stair-stepping verification
         const auto step_shape = system->create_box_shape(jolt::shim::vec3{1.0F, 0.1F, 1.0F});
         shapes.push_back(step_shape);
 
@@ -622,7 +622,7 @@ namespace
         setup_client_static_environment(client->client_physics_world, client->static_bodies, client->static_shapes);
 
         // Register procedural sandbox meshes and materials
-        // 1. Floor: 40m x 40m plane mesh with clockwise winding
+        // Floor: 40m x 40m plane mesh with clockwise winding
         client->floor_mesh_id =
             ctx->get_meshes().register_mesh(create_plane_mesh(40.0F, 40.0F, 10.0F, {1.0F, 1.0F, 1.0F, 1.0F}));
         auto floor_mat = tempest::core::material{};
@@ -632,7 +632,7 @@ namespace
         floor_mat.set_scalar(tempest::core::material::roughness_factor_name, 0.65F);
         client->floor_mat_id = ctx->get_materials().register_material(tempest::move(floor_mat));
 
-        // 2. Step obstacle: 2m x 0.2m x 2m (half-extents 1.0, 0.1, 1.0)
+        // Step obstacle: 2m x 0.2m x 2m (half-extents 1.0, 0.1, 1.0)
         client->step_mesh_id =
             ctx->get_meshes().register_mesh(create_box_mesh({1.0F, 0.1F, 1.0F}, {1.0F, 1.0F, 1.0F, 1.0F}));
         auto step_mat = tempest::core::material{};
@@ -642,17 +642,17 @@ namespace
         step_mat.set_scalar(tempest::core::material::roughness_factor_name, 0.6F);
         client->step_mat_id = ctx->get_materials().register_material(tempest::move(step_mat));
 
-        // 3. Local player mesh (feet indicator):
+        // Local player mesh (feet indicator):
         // Small indicator cube placed at the feet (half-extents 0.18, 0.08, 0.22) offset forward (+0.15m)
         // so the player can verify position/orientation when looking down, avoiding phantom torso shadows.
         client->local_player_mesh_id = ctx->get_meshes().register_mesh(
             create_box_mesh({0.18F, 0.08F, 0.22F}, {1.0F, 1.0F, 1.0F, 1.0F}, {0.0F, -0.82F, 0.15F}));
 
-        // 4. Remote player proxy mesh: capsule matching physics character controller (half-height 0.5m, radius 0.4m, total height 1.8m)
+        // Remote player proxy mesh: capsule matching physics character controller (half-height 0.5m, radius 0.4m, total height 1.8m)
         client->remote_player_mesh_id =
             ctx->get_meshes().register_mesh(create_capsule_mesh(0.5F, 0.4F, {1.0F, 1.0F, 1.0F, 1.0F}));
 
-        // 5. Local player material: Warm Amber / Orange
+        // Local player material: Warm Amber / Orange
         auto local_mat = tempest::core::material{};
         local_mat.set_vec4(tempest::core::material::base_color_factor_name, {0.95F, 0.55F, 0.15F, 1.0F});
         local_mat.set_vec3(tempest::core::material::emissive_factor_name, {0.0F, 0.0F, 0.0F});
@@ -660,7 +660,7 @@ namespace
         local_mat.set_scalar(tempest::core::material::roughness_factor_name, 0.5F);
         client->local_player_mat_id = ctx->get_materials().register_material(tempest::move(local_mat));
 
-        // 6. Remote player material: Vibrant Cyan
+        // Remote player material: Vibrant Cyan
         auto remote_mat = tempest::core::material{};
         remote_mat.set_vec4(tempest::core::material::base_color_factor_name, {0.15F, 0.75F, 0.95F, 1.0F});
         remote_mat.set_vec3(tempest::core::material::emissive_factor_name, {0.0F, 0.0F, 0.0F});
@@ -829,7 +829,7 @@ namespace
 
             if (!client->is_offline)
             {
-                // 1. Connection Handshake Retransmission
+                // Connection Handshake Retransmission
                 if (!client->connected)
                 {
                     if (now - client->last_connect_attempt > multiplayer_client::connect_retransmit_interval)
@@ -851,7 +851,7 @@ namespace
                     }
                 }
 
-                // 2. Ingest Incoming Network Packets
+                // Ingest Incoming Network Packets
                 auto buffer = tempest::array<tempest::byte, 2048>{};
                 auto sender = tempest::network::endpoint{};
                 auto packets_processed = size_t{0};
@@ -919,7 +919,7 @@ namespace
                 }
             }
 
-            // 3. Player Input & Simulation
+            // Player Input & Simulation
             const auto can_simulate = client->is_offline || (client->connected && client->local_player_entity != tempest::ecs::null);
             if (can_simulate && client->local_player_entity != tempest::ecs::null)
             {
@@ -1050,10 +1050,10 @@ namespace
                                       now - client->last_render_time);
             client->last_render_time = now;
 
-            // 1. Decay visual reconciliation error smoothing
+            // Decay visual reconciliation error smoothing
             tempest::physics::update_reconciliation_smoothing(registry, dt);
 
-            // 2. Position first-person camera relative to local player's transform
+            // Position first-person camera relative to local player's transform
             const auto* player_tx = registry.try_get<tempest::ecs::transform_component>(client->local_player_entity);
             if (player_tx == nullptr)
             {
@@ -1080,7 +1080,7 @@ namespace
             cam_tx.rotation(cam_rot);
             registry.assign_or_replace(client->camera_entity, cam_tx);
 
-            // 3. Smoothly interpolate remote player visual proxies between snapshots
+            // Smoothly interpolate remote player visual proxies between snapshots
             for (auto& remote : client->remote_players)
             {
                 if (remote.entity == tempest::ecs::null)

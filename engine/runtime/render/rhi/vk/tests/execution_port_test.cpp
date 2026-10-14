@@ -609,7 +609,7 @@ namespace tempest::rhi::vk
     ///        within an active dynamic render pass without affecting outside regions.
     TEST(execution_port_test, clear_depth_attachment_scissor)
     {
-        // 1. Setup: Create device, graphics queue, depth texture, view, and readback buffer
+        // Setup: Create device, graphics queue, depth texture, view, and readback buffer
         auto env = create_test_env();
         ASSERT_NE(env.dev, nullptr);
         auto* dev = env.dev.get();
@@ -640,7 +640,7 @@ namespace tempest::rhi::vk
         });
         ASSERT_NE(readback_buf.handle, 0);
 
-        // 2. Act: Record pass with initial clear to 0.1F, then clear sub-rect [8, 8, 16, 16] to 0.85F
+        // Act: Record pass with initial clear to 0.1F, then clear sub-rect [8, 8, 16, 16] to 0.85F
         auto& cmd = graphics_port.acquire_command_list();
         cmd.begin();
 
@@ -733,7 +733,7 @@ namespace tempest::rhi::vk
 
         dev->wait_for_sync(host_sync_point{.semaphore = timeline_sem, .value = 1});
 
-        // 3. Assert: Sub-rect pixels are 0.85F, outside pixels remain 0.1F
+        // Assert: Sub-rect pixels are 0.85F, outside pixels remain 0.1F
         const auto* depths = static_cast<const float*>(readback_buf.cpu_address);
         ASSERT_NE(depths, nullptr);
 

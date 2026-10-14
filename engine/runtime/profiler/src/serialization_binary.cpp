@@ -100,7 +100,7 @@ namespace tempest::profiler
             return id;
         };
 
-        // 1. Scan and index all strings
+        // Scan and index all strings
         for (const auto& track : data.tracks)
         {
             get_string_id(string_view{track.name.data(), track.name.size()});
@@ -127,7 +127,7 @@ namespace tempest::profiler
             }
         }
 
-        // 2. Encode uncompressed payload
+        // Encode uncompressed payload
         auto payload = binary_writer{};
 
         payload.write(data.start_time_ns);
@@ -218,7 +218,7 @@ namespace tempest::profiler
             }
         }
 
-        // 3. Compress with miniz
+        // Compress with miniz
         const auto uncompressed_size = payload.buffer.size();
         const auto max_compressed = mz_compressBound(static_cast<mz_ulong>(uncompressed_size));
         auto compressed_data = vector<byte>(static_cast<size_t>(max_compressed));
@@ -235,7 +235,7 @@ namespace tempest::profiler
 
         compressed_data.resize(actual_compressed_len);
 
-        // 4. Assemble final file buffer
+        // Assemble final file buffer
         auto header = tprof_header{
             .magic = {magic_bytes[0], magic_bytes[1], magic_bytes[2], magic_bytes[3]},
             .version_major = 1,

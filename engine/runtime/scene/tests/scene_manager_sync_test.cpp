@@ -72,7 +72,7 @@ namespace
 /// @brief Verifies that multiple scenes can be loaded additively and an individual scene can be unloaded without affecting others.
 TEST(scene_manager_sync_test, additive_loading_and_selective_unload)
 {
-    // 1. Setup: Test context with registry and scene manager
+    // Setup: Test context with registry and scene manager
     auto ctx = test_context{};
     const auto scene_a_json = tempest::string_view{R"({
         "version": 1,
@@ -88,7 +88,7 @@ TEST(scene_manager_sync_test, additive_loading_and_selective_unload)
         ]
     })"};
 
-    // 2. Act: Load Scene A and Scene B additively
+    // Act: Load Scene A and Scene B additively
     const auto opts = tempest::scene::scene_load_options{
         .mode = tempest::scene::scene_load_mode::additive,
         .clear_first = false,
@@ -125,7 +125,7 @@ TEST(scene_manager_sync_test, additive_loading_and_selective_unload)
     const auto unload_ok = ctx.manager.unload(handle_a);
     EXPECT_TRUE(unload_ok);
 
-    // 3. Assert: Scene A is invalid and its entities destroyed; Scene B remains valid and intact
+    // Assert: Scene A is invalid and its entities destroyed; Scene B remains valid and intact
     EXPECT_EQ(ctx.manager.get_scene_count(), 1U);
     EXPECT_FALSE(ctx.manager.is_valid(handle_a));
     EXPECT_TRUE(ctx.manager.is_valid(handle_b));
@@ -138,7 +138,7 @@ TEST(scene_manager_sync_test, additive_loading_and_selective_unload)
 /// @brief Verifies that loading in single mode without clear_first keeps prior scene intact until new scene succeeds.
 TEST(scene_manager_sync_test, single_mode_atomic_replacement)
 {
-    // 1. Setup: Load initial Scene 1 in single mode
+    // Setup: Load initial Scene 1 in single mode
     auto ctx = test_context{};
     const auto scene_1_json = tempest::string_view{R"({
         "version": 1,
@@ -162,12 +162,12 @@ TEST(scene_manager_sync_test, single_mode_atomic_replacement)
     const auto ent_1 = roots_1[0];
     EXPECT_TRUE(ctx.registry.is_valid(ent_1));
 
-    // 2. Act: Load Scene 2 in single mode (atomic replacement)
+    // Act: Load Scene 2 in single mode (atomic replacement)
     const auto handle_2_res = ctx.manager.load_from_string_sync(scene_2_json, "Scene2");
     ASSERT_TRUE(handle_2_res.has_value());
     const auto handle_2 = *handle_2_res;
 
-    // 3. Assert: Scene 1 unloaded, Scene 2 is active, Scene 1 entities destroyed, Scene 2 entities valid
+    // Assert: Scene 1 unloaded, Scene 2 is active, Scene 1 entities destroyed, Scene 2 entities valid
     EXPECT_EQ(ctx.manager.get_scene_count(), 1U);
     EXPECT_FALSE(ctx.manager.is_valid(handle_1));
     EXPECT_TRUE(ctx.manager.is_valid(handle_2));
@@ -186,7 +186,7 @@ TEST(scene_manager_sync_test, single_mode_atomic_replacement)
 /// @brief Verifies that corrupted or malformed scene JSON fails to load and leaves prior scenes undisturbed.
 TEST(scene_manager_sync_test, load_failure_rollback)
 {
-    // 1. Setup: Test context with valid Scene 1 loaded
+    // Setup: Test context with valid Scene 1 loaded
     auto ctx = test_context{};
     const auto scene_1_json = tempest::string_view{R"({
         "version": 1,
@@ -199,11 +199,11 @@ TEST(scene_manager_sync_test, load_failure_rollback)
     const auto handle_1 = *handle_1_res;
     const auto initial_entity_count = ctx.registry.size();
 
-    // 2. Act: Attempt to load invalid JSON
+    // Act: Attempt to load invalid JSON
     const auto bad_json = tempest::string_view{R"({ "version": 1, "entities": "not_an_array" })"};
     const auto bad_res = ctx.manager.load_from_string_sync(bad_json, "CorruptScene");
 
-    // 3. Assert: Loading fails, error is deserialization_failed, Scene 1 is completely intact
+    // Assert: Loading fails, error is deserialization_failed, Scene 1 is completely intact
     EXPECT_FALSE(bad_res.has_value());
     EXPECT_EQ(bad_res.error(), tempest::scene::scene_error::deserialization_failed);
     EXPECT_EQ(ctx.manager.get_scene_count(), 1U);
@@ -215,7 +215,7 @@ TEST(scene_manager_sync_test, load_failure_rollback)
 /// @brief Verifies that dynamically spawned child entities parented to scene entities are destroyed when scene is unloaded.
 TEST(scene_manager_sync_test, recursive_child_cleanup)
 {
-    // 1. Setup: Load a scene with a root entity
+    // Setup: Load a scene with a root entity
     auto ctx = test_context{};
     const auto scene_json = tempest::string_view{R"({
         "version": 1,
@@ -248,11 +248,11 @@ TEST(scene_manager_sync_test, recursive_child_cleanup)
     EXPECT_TRUE(ctx.registry.is_valid(dynamic_child));
     EXPECT_TRUE(ctx.registry.is_valid(dynamic_grandchild));
 
-    // 2. Act: Unload scene
+    // Act: Unload scene
     const auto unload_ok = ctx.manager.unload(handle);
     EXPECT_TRUE(unload_ok);
 
-    // 3. Assert: Root, child, and grandchild are all destroyed
+    // Assert: Root, child, and grandchild are all destroyed
     EXPECT_FALSE(ctx.registry.is_valid(root_ent));
     EXPECT_FALSE(ctx.registry.is_valid(dynamic_child));
     EXPECT_FALSE(ctx.registry.is_valid(dynamic_grandchild));
@@ -262,11 +262,11 @@ TEST(scene_manager_sync_test, recursive_child_cleanup)
 /// @brief Verifies active scene tracking, explicit clearing/setting, and entity creation with component tagging.
 TEST(scene_manager_sync_test, active_scene_tracking_and_entity_creation)
 {
-    // 1. Setup: Initially no scene is active
+    // Setup: Initially no scene is active
     auto ctx = test_context{};
     EXPECT_FALSE(ctx.manager.get_active_scene().is_valid());
 
-    // 2. Act & Assert: Load first scene and verify it becomes active
+    // Act & Assert: Load first scene and verify it becomes active
     const auto empty_scene_json = tempest::string_view{R"({ "version": 1, "entities": [] })"};
     const auto handle_res = ctx.manager.load_from_string_sync(empty_scene_json, "SceneA");
     ASSERT_TRUE(handle_res.has_value());
@@ -309,7 +309,7 @@ TEST(scene_manager_sync_test, active_scene_tracking_and_entity_creation)
 /// @brief Verifies creating entities, saving scene to string, unloading, reloading, and ensuring component and hierarchy fidelity.
 TEST(scene_manager_sync_test, save_and_reload_scene)
 {
-    // 1. Setup: Load empty scene and create entities with components
+    // Setup: Load empty scene and create entities with components
     auto ctx = test_context{};
     const auto empty_scene = tempest::string_view{R"({ "version": 1, "entities": [] })"};
     const auto handle_res = ctx.manager.load_from_string_sync(empty_scene, "SaveTestScene");
@@ -329,7 +329,7 @@ TEST(scene_manager_sync_test, save_and_reload_scene)
                                    });
     ctx.registry.reparent(child_ent, root_ent);
 
-    // 2. Act: Save scene to string and unload
+    // Act: Save scene to string and unload
     const auto save_res = ctx.manager.save_to_string(handle_1);
     ASSERT_TRUE(save_res.has_value());
     const auto saved_json = *save_res;
@@ -344,7 +344,7 @@ TEST(scene_manager_sync_test, save_and_reload_scene)
     ASSERT_TRUE(reload_res.has_value());
     const auto handle_2 = *reload_res;
 
-    // 3. Assert: Reloaded scene has correct roots, children, and component data
+    // Assert: Reloaded scene has correct roots, children, and component data
     EXPECT_EQ(ctx.manager.get_scene_count(), 1U);
     const auto reloaded_roots = ctx.manager.get_root_entities(handle_2);
     ASSERT_TRUE(reloaded_roots.has_value());
@@ -373,7 +373,7 @@ TEST(scene_manager_sync_test, save_and_reload_scene)
 /// @brief Verifies filesystem roundtrip saving and loading with path tracking.
 TEST(scene_manager_sync_test, filesystem_save_and_load_sync)
 {
-    // 1. Setup: Load empty scene and create entities
+    // Setup: Load empty scene and create entities
     auto ctx = test_context{};
     const auto empty_scene = tempest::string_view{R"({ "version": 1, "entities": [] })"};
     const auto handle_res = ctx.manager.load_from_string_sync(empty_scene, "DiskScene");
@@ -388,7 +388,7 @@ TEST(scene_manager_sync_test, filesystem_save_and_load_sync)
 
     const auto temp_path = tempest::filesystem::path{"bin/Debug/test_sync_scene.tscene"};
 
-    // 2. Act: Save to filesystem path
+    // Act: Save to filesystem path
     const auto save_res = ctx.manager.save_sync(handle, temp_path);
     ASSERT_TRUE(save_res.has_value());
 
@@ -405,7 +405,7 @@ TEST(scene_manager_sync_test, filesystem_save_and_load_sync)
     ASSERT_TRUE(load_res.has_value());
     const auto reloaded_handle = *load_res;
 
-    // 3. Assert: Entity restored from disk with correct path and component values
+    // Assert: Entity restored from disk with correct path and component values
     EXPECT_EQ(ctx.manager.get_scene_count(), 1U);
     const auto loaded_path_opt = ctx.manager.get_scene_path(reloaded_handle);
     ASSERT_TRUE(loaded_path_opt.has_value());

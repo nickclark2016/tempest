@@ -25,10 +25,10 @@ using tempest::math::vec3;
 /// @brief Tests default initialization of transform_history_component fields.
 TEST(transform_history_test, default_initialization)
 {
-    // 1. Setup & Act
+    // Setup & Act
     const auto history = transform_history_component::create();
 
-    // 2. Assert
+    // Assert
     EXPECT_FLOAT_EQ(history.previous_position.x, 0.0F);
     EXPECT_FLOAT_EQ(history.previous_position.y, 0.0F);
     EXPECT_FLOAT_EQ(history.previous_position.z, 0.0F);
@@ -64,7 +64,7 @@ TEST(transform_history_test, default_initialization)
 /// @brief Tests that step_transform_history snapshots current position and rotation to previous.
 TEST(transform_history_test, step_history_snapshots_current_pose)
 {
-    // 1. Setup
+    // Setup
     auto events = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto registry = archetype_registry{events, types};
@@ -78,10 +78,10 @@ TEST(transform_history_test, step_history_snapshots_current_pose)
     };
     registry.assign(entity, initial_history);
 
-    // 2. Act
+    // Act
     step_transform_history(registry);
 
-    // 3. Assert
+    // Assert
     const auto* const updated_history = registry.try_get<transform_history_component>(entity);
     ASSERT_NE(updated_history, nullptr);
 
@@ -102,7 +102,7 @@ TEST(transform_history_test, step_history_snapshots_current_pose)
 /// @brief Tests that interpolate_transform_history yields monotonic linear progression for position.
 TEST(transform_history_test, interpolate_monotonic_position_progression)
 {
-    // 1. Setup
+    // Setup
     auto events = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto registry = archetype_registry{events, types};
@@ -114,7 +114,7 @@ TEST(transform_history_test, interpolate_monotonic_position_progression)
     };
     registry.assign(entity, history);
 
-    // 2. Act & Assert across varying alpha values
+    // Act & Assert across varying alpha values
     const auto alpha_steps = {0.0F, 0.25F, 0.5F, 0.75F, 1.0F};
     auto last_x = -1.0F;
 
@@ -137,7 +137,7 @@ TEST(transform_history_test, interpolate_monotonic_position_progression)
 /// @brief Tests that interpolate_transform_history performs spherical linear interpolation on rotation.
 TEST(transform_history_test, interpolate_spherical_rotation)
 {
-    // 1. Setup - 0 deg rotation to 90 deg rotation around Y
+    // Setup - 0 deg rotation to 90 deg rotation around Y
     auto events = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto registry = archetype_registry{events, types};
@@ -152,10 +152,10 @@ TEST(transform_history_test, interpolate_spherical_rotation)
     };
     registry.assign(entity, history);
 
-    // 2. Act - Interpolate halfway
+    // Act - Interpolate halfway
     interpolate_transform_history(registry, 0.5F);
 
-    // 3. Assert - Intermediate rotation must rotate forward (+Z) by 45 degrees
+    // Assert - Intermediate rotation must rotate forward (+Z) by 45 degrees
     const auto* const comp = registry.try_get<transform_history_component>(entity);
     ASSERT_NE(comp, nullptr);
 
@@ -171,7 +171,7 @@ TEST(transform_history_test, interpolate_spherical_rotation)
 /// @brief Tests that interpolate_transform_history synchronizes transform_component on the same entity.
 TEST(transform_history_test, interpolate_synchronizes_transform_component)
 {
-    // 1. Setup
+    // Setup
     auto events = tempest::event::event_registry{};
     auto types = tempest::ecs::component_type_registry{};
     auto registry = archetype_registry{events, types};
@@ -188,10 +188,10 @@ TEST(transform_history_test, interpolate_synchronizes_transform_component)
     registry.assign(entity, history);
     registry.assign(entity, tx);
 
-    // 2. Act - Interpolate with alpha = 0.5
+    // Act - Interpolate with alpha = 0.5
     interpolate_transform_history(registry, 0.5F);
 
-    // 3. Assert - transform_component position and matrix must reflect (5, 0, 0)
+    // Assert - transform_component position and matrix must reflect (5, 0, 0)
     const auto* const synced_tx = registry.try_get<transform_component>(entity);
     ASSERT_NE(synced_tx, nullptr);
 

@@ -685,7 +685,7 @@ namespace tempest::render_graph
     /// @brief Verifies that temporal_texture can be bound as a depth/stencil attachment in render graph passes.
     TEST(temporal_texture_test, temporal_depth_stencil_attachment_binding)
     {
-        // 1. Setup mock device, temporal depth texture, and render graph
+        // Setup mock device, temporal depth texture, and render graph
         auto dev = mock_temporal_device{};
         auto depth_tex = temporal_texture{};
 
@@ -710,7 +710,7 @@ namespace tempest::render_graph
             rg_texture_id depth_target{};
         };
 
-        // 2. Act - Bind write slot of temporal depth texture as depth/stencil attachment
+        // Act - Bind write slot of temporal depth texture as depth/stencil attachment
         rg.add_graphics_pass<depth_pass_data>(
             "ShadowDepthPass",
             [&depth_tex](pass_builder& builder, depth_pass_data& data) {
@@ -725,7 +725,7 @@ namespace tempest::render_graph
             []([[maybe_unused]] const depth_pass_data& data, [[maybe_unused]] pass_execution_context& pass_ctx,
                [[maybe_unused]] rhi::command_list& cmd) {});
 
-        // 3. Assert - Compile and execute Frame 0
+        // Assert - Compile and execute Frame 0
         const auto compile_res = rg.compile();
         EXPECT_TRUE(compile_res.has_value());
 
@@ -741,7 +741,7 @@ namespace tempest::render_graph
     ///        through import_texture to physical allocations and accessible via pass_execution_context.
     TEST(temporal_texture_test, imported_temporal_descriptor_propagation)
     {
-        // 1. Setup temporal texture with sampled usage
+        // Setup temporal texture with sampled usage
         auto dev = mock_temporal_device{};
         auto tex = temporal_texture{};
 
@@ -768,7 +768,7 @@ namespace tempest::render_graph
             rg_texture_id sampled_tex{};
         };
 
-        // 2. Act - Import write texture with its sampled descriptor and query it in execute callback
+        // Act - Import write texture with its sampled descriptor and query it in execute callback
         uint32_t recorded_descriptor_idx = invalid_descriptor_index;
         rg.add_graphics_pass<sampled_pass_data>(
             "SamplePass",
@@ -785,7 +785,7 @@ namespace tempest::render_graph
                 recorded_descriptor_idx = pass_ctx.get_texture_descriptor(data.sampled_tex);
             });
 
-        // 3. Assert - Descriptor queried from pass_execution_context matches the allocated descriptor
+        // Assert - Descriptor queried from pass_execution_context matches the allocated descriptor
         const auto exec_res = rg.execute_sync(dev);
         EXPECT_TRUE(exec_res.has_value());
         EXPECT_EQ(recorded_descriptor_idx, write_desc.index);
@@ -797,7 +797,7 @@ namespace tempest::render_graph
     ///        and are not eliminated by DAG dead-code culling even when unconsumed within the current frame.
     TEST(temporal_texture_test, temporal_attachments_automatically_marked_as_sink)
     {
-        // 1. Setup mock device, temporal color and depth textures, and render graph
+        // Setup mock device, temporal color and depth textures, and render graph
         auto dev = mock_temporal_device{};
         auto color_tex = temporal_texture{};
         auto depth_tex = temporal_texture{};
@@ -839,7 +839,7 @@ namespace tempest::render_graph
             rg_texture_id target{};
         };
 
-        // 2. Act - Bind passes using set_temporal_color_attachment and set_temporal_depth_stencil_attachment
+        // Act - Bind passes using set_temporal_color_attachment and set_temporal_depth_stencil_attachment
         //           WITHOUT explicitly calling mark_sink() or consuming their outputs downstream
         rg.add_graphics_pass<color_pass_data>(
             "TemporalColorProducer",
@@ -865,7 +865,7 @@ namespace tempest::render_graph
             []([[maybe_unused]] const depth_pass_data& data, [[maybe_unused]] pass_execution_context& pass_ctx,
                [[maybe_unused]] rhi::command_list& cmd) {});
 
-        // 3. Assert - DAG compiler must preserve both passes in sorted_pass_indices
+        // Assert - DAG compiler must preserve both passes in sorted_pass_indices
         const auto compile_res = rg.compile();
         ASSERT_TRUE(compile_res.has_value());
         EXPECT_EQ(compile_res.value().sorted_pass_indices.size(), 2U);
@@ -884,7 +884,7 @@ namespace tempest::render_graph
     ///        premature destruction upon subsequent init() or release() calls.
     TEST(temporal_texture_test, extract_resources_handover)
     {
-        // 1. Setup: Allocate temporal_texture with 2 history slots (3 physical slots)
+        // Setup: Allocate temporal_texture with 2 history slots (3 physical slots)
         auto dev = mock_temporal_device{};
         auto tex = temporal_texture{};
 
@@ -905,10 +905,10 @@ namespace tempest::render_graph
         EXPECT_EQ(tex.get_all_views().size(), 3U);
         EXPECT_EQ(tex.get_all_sampled_descriptors().size(), 3U);
 
-        // 2. Act: Extract resources from temporal_texture
+        // Act: Extract resources from temporal_texture
         auto extracted = tex.extract_resources();
 
-        // 3. Assert: temporal_texture is now unallocated and extracted resources hold the handles
+        // Assert: temporal_texture is now unallocated and extracted resources hold the handles
         EXPECT_FALSE(tex.is_allocated());
         EXPECT_EQ(tex.get_all_textures().size(), 0U);
         EXPECT_EQ(tex.get_all_views().size(), 0U);

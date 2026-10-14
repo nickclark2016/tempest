@@ -21,13 +21,13 @@ namespace tempest::network::tests
     /// @brief Verifies wire format layout, packing size of exactly 27 bytes, and default magic.
     TEST(bitstream_tests, packet_header_layout_and_magic)
     {
-        // 1. Setup: Instantiate default packet header
+        // Setup: Instantiate default packet header
         const auto default_header = packet_header{};
 
-        // 2. Act: Inspect byte sizes and default fields
+        // Act: Inspect byte sizes and default fields
         const auto header_size = sizeof(packet_header);
 
-        // 3. Assert: Wire size matches exactly 27 bytes and defaults match specification
+        // Assert: Wire size matches exactly 27 bytes and defaults match specification
         EXPECT_EQ(header_size, 27);
         EXPECT_EQ(default_header.protocol_magic, packet_header::default_protocol_magic);
         EXPECT_EQ(default_header.protocol_magic, 0x544D5053U); // "TMPS"
@@ -61,10 +61,10 @@ namespace tempest::network::tests
     /// @brief Verifies bit-level packing from 1 to 32 bits, booleans, u64, and buffer overflow detection.
     TEST(bitstream_tests, bitstream_read_write_primitive_bits)
     {
-        // 1. Setup: Prepare bit_writer with initial allocation
+        // Setup: Prepare bit_writer with initial allocation
         auto writer = bit_writer{64};
 
-        // 2. Act: Write diverse bit widths, boolean values, u64, and raw byte spans
+        // Act: Write diverse bit widths, boolean values, u64, and raw byte spans
         writer.write_bits(1U, 1);
         writer.write_bits(5U, 3);
         writer.write_bits(120U, 7);
@@ -81,7 +81,7 @@ namespace tempest::network::tests
         const auto payload_bytes = array<byte, 4>{byte{0xAA}, byte{0xBB}, byte{0xCC}, byte{0xDD}};
         writer.write_bytes(span<const byte>{payload_bytes.data(), payload_bytes.size()});
 
-        // 3. Assert: Read all values back and verify exact bitstream integrity
+        // Assert: Read all values back and verify exact bitstream integrity
         auto reader = bit_reader{writer.data()};
         EXPECT_FALSE(reader.has_overflowed());
 
@@ -120,18 +120,18 @@ namespace tempest::network::tests
     /// @brief Verifies fixed-point position quantization in [-100m, +100m] with < 1mm error.
     TEST(bitstream_tests, bitstream_position_quantization_1mm_precision)
     {
-        // 1. Setup: Test coordinate positions across [-100m, +100m]
+        // Setup: Test coordinate positions across [-100m, +100m]
         const auto test_positions = array<float, 7>{-100.0f, -50.1234f, -0.001f, 0.0f, 12.3456f, 99.999f, 100.0f};
 
         auto writer = bit_writer{64};
 
-        // 2. Act: Quantize using 20 bits (resolution 200m / 1,048,575 = ~0.19mm per step)
+        // Act: Quantize using 20 bits (resolution 200m / 1,048,575 = ~0.19mm per step)
         for (const auto original_pos : test_positions)
         {
             writer.write_quantized_float(original_pos, -100.0f, 100.0f, 20);
         }
 
-        // 3. Assert: Dequantized values exhibit position error strictly less than 1mm (0.001m)
+        // Assert: Dequantized values exhibit position error strictly less than 1mm (0.001m)
         auto reader = bit_reader{writer.data()};
         for (const auto original_pos : test_positions)
         {
@@ -145,7 +145,7 @@ namespace tempest::network::tests
     /// @brief Verifies chunk-relative position quantization in a 64m chunk maintains < 1mm error.
     TEST(bitstream_tests, bitstream_chunk_relative_position)
     {
-        // 1. Setup: Define chunk origin in world space and chunk extent of 64m
+        // Setup: Define chunk origin in world space and chunk extent of 64m
         const auto chunk_origin = math::float3{1024.0f, 2048.0f, -512.0f};
         constexpr auto chunk_extent_m = 64.0f;
 
@@ -155,13 +155,13 @@ namespace tempest::network::tests
 
         auto writer = bit_writer{64};
 
-        // 2. Act: Write chunk-relative positions quantized to 16 bits per axis
+        // Act: Write chunk-relative positions quantized to 16 bits per axis
         for (const auto& original_world_pos : world_positions)
         {
             writer.write_chunk_relative_position(original_world_pos, chunk_origin, chunk_extent_m, 16);
         }
 
-        // 3. Assert: 3D Euclidean error between original and reconstructed positions is < 1mm (0.001m)
+        // Assert: 3D Euclidean error between original and reconstructed positions is < 1mm (0.001m)
         auto reader = bit_reader{writer.data()};
         for (const auto& original_world_pos : world_positions)
         {
@@ -180,7 +180,7 @@ namespace tempest::network::tests
     /// @brief Verifies IEEE 754 16-bit half-precision floating-point pack and unpack round-trip.
     TEST(bitstream_tests, bitstream_half_precision_float)
     {
-        // 1. Setup: Test float values spanning zero, signs, normal ranges, subnormals, and infinities
+        // Setup: Test float values spanning zero, signs, normal ranges, subnormals, and infinities
         constexpr auto min_subnormal = 5.9604644775390625e-8f; // 2^-24
         const auto test_floats = array<float, 12>{
             0.0f, -0.0f, 1.0f, -1.0f, 0.5f, -2.5f, 65504.0f, -65504.0f,
@@ -190,7 +190,7 @@ namespace tempest::network::tests
 
         auto writer = bit_writer{48};
 
-        // 2. Act: Write floats as 16-bit half precision
+        // Act: Write floats as 16-bit half precision
         for (const auto original_value : test_floats)
         {
             writer.write_half(original_value);
@@ -200,7 +200,7 @@ namespace tempest::network::tests
         const auto test_nan = bit_cast<float>(0x7FC00000U);
         writer.write_half(test_nan);
 
-        // 3. Assert: Exact representable half-floats decode with zero error
+        // Assert: Exact representable half-floats decode with zero error
         auto reader = bit_reader{writer.data()};
         for (const auto original_value : test_floats)
         {
@@ -229,11 +229,11 @@ namespace tempest::network::tests
     /// @brief Verifies angle quantization for 8-bit and 16-bit precision across primary radians.
     TEST(bitstream_tests, bitstream_angle_quantization)
     {
-        // 1. Setup: Test cardinal angles 0, pi/4, pi/2, pi, 3*pi/2
+        // Setup: Test cardinal angles 0, pi/4, pi/2, pi, 3*pi/2
         constexpr auto pi = math::constants::pi<float>;
         const auto test_angles = array<float, 5>{0.0f, pi * 0.25f, pi * 0.5f, pi, pi * 1.5f};
 
-        // 2. Act: Test both 8-bit and 16-bit quantizations
+        // Act: Test both 8-bit and 16-bit quantizations
         auto writer_8bit = bit_writer{16};
         for (const auto angle_rad : test_angles)
         {
@@ -246,7 +246,7 @@ namespace tempest::network::tests
             writer_16bit.write_angle(angle_rad, 16);
         }
 
-        // 3. Assert: 8-bit angles round-trip within < 0.03 rad, 16-bit within < 0.001 rad
+        // Assert: 8-bit angles round-trip within < 0.03 rad, 16-bit within < 0.001 rad
         auto reader_8bit = bit_reader{writer_8bit.data()};
         for (const auto angle_rad : test_angles)
         {
@@ -267,7 +267,7 @@ namespace tempest::network::tests
     /// @brief Verifies octahedral unit vector compression maintains angular error < 0.5 degrees.
     TEST(bitstream_tests, bitstream_octahedral_unit_vector)
     {
-        // 1. Setup: Test vectors on coordinate axes and arbitrary directions
+        // Setup: Test vectors on coordinate axes and arbitrary directions
         const auto inv_sqrt3 = 1.0f / math::sqrt(3.0f);
         const auto test_vectors = array<math::float3, 6>{math::float3{1.0f, 0.0f, 0.0f},
                                                          math::float3{0.0f, 1.0f, 0.0f},
@@ -278,13 +278,13 @@ namespace tempest::network::tests
 
         auto writer = bit_writer{32};
 
-        // 2. Act: Quantize octahedral vectors using 12 bits per axis
+        // Act: Quantize octahedral vectors using 12 bits per axis
         for (const auto& original_vector : test_vectors)
         {
             writer.write_octahedral_unit_vector(original_vector, 12);
         }
 
-        // 3. Assert: Angular error between original and reconstructed vectors is strictly < 0.5 degrees
+        // Assert: Angular error between original and reconstructed vectors is strictly < 0.5 degrees
         auto reader = bit_reader{writer.data()};
         for (const auto& original_vector : test_vectors)
         {
@@ -300,7 +300,7 @@ namespace tempest::network::tests
     /// @brief Verifies smallest-three unit quaternion compression across different dominant axes.
     TEST(bitstream_tests, bitstream_smallest_three_quaternion)
     {
-        // 1. Setup: Prepare quaternions with different dominant axes (w, x, y, z)
+        // Setup: Prepare quaternions with different dominant axes (w, x, y, z)
         constexpr auto pi = math::constants::pi<float>;
         const auto test_quaternions = array<math::fquat, 5>{
             math::fquat{0.0f, 0.0f, 0.0f, 1.0f},                                   // Dominant w (identity)
@@ -312,13 +312,13 @@ namespace tempest::network::tests
 
         auto writer = bit_writer{32};
 
-        // 2. Act: Compress quaternions using smallest-three representation
+        // Act: Compress quaternions using smallest-three representation
         for (const auto& original_quat : test_quaternions)
         {
             writer.write_smallest_three_quaternion(original_quat);
         }
 
-        // 3. Assert: Reconstructed quaternion aligns with original (|dot(q1, q2)| > 0.999)
+        // Assert: Reconstructed quaternion aligns with original (|dot(q1, q2)| > 0.999)
         auto reader = bit_reader{writer.data()};
         for (const auto& original_quat : test_quaternions)
         {
@@ -333,20 +333,20 @@ namespace tempest::network::tests
     /// does not suffer from float-to-integer overflow wrapping or precision corruption.
     TEST(bitstream_tests, bitstream_quantized_float_32bit_boundary)
     {
-        // 1. Setup: Test boundary values across [-100.0f, +100.0f] range
+        // Setup: Test boundary values across [-100.0f, +100.0f] range
         constexpr auto min_range = -100.0f;
         constexpr auto max_range = 100.0f;
         const auto test_values = array<float, 4>{-100.0f, 0.0f, 50.0f, 100.0f};
 
         auto writer = bit_writer{16};
 
-        // 2. Act: Quantize using maximum 32-bit integer resolution
+        // Act: Quantize using maximum 32-bit integer resolution
         for (const auto original_value : test_values)
         {
             writer.write_quantized_float(original_value, min_range, max_range, 32);
         }
 
-        // 3. Assert: Read back each value and verify accurate reconstruction within float epsilon
+        // Assert: Read back each value and verify accurate reconstruction within float epsilon
         auto reader = bit_reader{writer.data()};
         for (const auto original_value : test_values)
         {
@@ -364,14 +364,14 @@ namespace tempest::network::tests
     /// with zero corruption, correctly handle unaligned bit-offset transfers, and detect buffer overflow.
     TEST(bitstream_tests, bitstream_bulk_bytes_byte_aligned_and_unaligned)
     {
-        // 1. Setup: Prepare 256-byte payload with deterministic pseudo-random bytes
+        // Setup: Prepare 256-byte payload with deterministic pseudo-random bytes
         auto test_payload = array<byte, 256>{};
         for (auto index = 0U; index < test_payload.size(); ++index)
         {
             test_payload[index] = static_cast<byte>((index * 13U + 7U) & 0xFFU);
         }
 
-        // 2. Act & Assert: Byte-aligned bulk transfer (fast path)
+        // Act & Assert: Byte-aligned bulk transfer (fast path)
         auto writer_aligned = bit_writer{256};
         writer_aligned.write_bytes(span<const byte>{test_payload.data(), test_payload.size()});
 
@@ -392,7 +392,7 @@ namespace tempest::network::tests
             EXPECT_EQ(read_aligned_dest[index], test_payload[index]);
         }
 
-        // 3. Act & Assert: Unaligned bulk transfer preceded by 3 bits (slow path)
+        // Act & Assert: Unaligned bulk transfer preceded by 3 bits (slow path)
         auto writer_unaligned = bit_writer{300};
         constexpr auto prefix_bits = 5U;  // 3-bit pattern 101b = 5
         constexpr auto suffix_bits = 19U; // 5-bit pattern 10011b = 19
@@ -422,7 +422,7 @@ namespace tempest::network::tests
             EXPECT_EQ(read_unaligned_dest[index], test_payload[index]);
         }
 
-        // 4. Assert: Reading beyond available bits sets overflow flag and returns false
+        // Assert: Reading beyond available bits sets overflow flag and returns false
         auto read_overflow_dest = array<byte, 1>{};
         const auto overflow_read_success = reader_unaligned.read_bytes(
             span<byte>{read_overflow_dest.data(), read_overflow_dest.size()});

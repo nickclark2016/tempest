@@ -116,7 +116,7 @@ namespace tempest::physics::tests
     /// world-space wish direction vectors and sets button flags.
     TEST_F(character_prediction_fixture, apply_user_cmd_directional_mapping)
     {
-        // 1. Act & Assert: Yaw = 0 (facing +Z)
+        // Act & Assert: Yaw = 0 (facing +Z)
         const auto cmd_forward = network::user_cmd{
             .tick = 1,
             .forward_move = 1.0F,
@@ -132,7 +132,7 @@ namespace tempest::physics::tests
         EXPECT_TRUE(intent_forward.jump_requested);
         EXPECT_TRUE(intent_forward.sprint_requested);
 
-        // 2. Act & Assert: Yaw = pi/2 (facing +X)
+        // Act & Assert: Yaw = pi/2 (facing +X)
         constexpr auto half_pi = 1.57079632679F;
         const auto cmd_right = network::user_cmd{
             .tick = 2,
@@ -159,7 +159,7 @@ namespace tempest::physics::tests
     /// input commands and state snapshots into the circular prediction buffer.
     TEST_F(character_prediction_fixture, character_prediction_step_and_buffer_record)
     {
-        // 1. Setup: Physics world with static floor and character entity
+        // Setup: Physics world with static floor and character entity
         auto world = physics_world{make_description()};
         auto* const system = world.physics_system();
         ASSERT_NE(system, nullptr);
@@ -197,7 +197,7 @@ namespace tempest::physics::tests
         const auto settled_snapshot = capture_character_snapshot(0, registry, player_entity);
         ASSERT_TRUE(settled_snapshot.is_grounded);
 
-        // 2. Act: Execute 10 predictive ticks with forward movement and jump button pressed
+        // Act: Execute 10 predictive ticks with forward movement and jump button pressed
         auto previous_z = settled_snapshot.position().z;
         for (uint32_t tick = 1; tick <= 10; ++tick)
         {
@@ -211,7 +211,7 @@ namespace tempest::physics::tests
 
             const auto& predicted_state = step_client_prediction(world, registry, player_entity, cmd, delta_time, buffer);
 
-            // 3. Assert: Verify returned snapshot matches tick and exhibits monotonic forward displacement
+            // Assert: Verify returned snapshot matches tick and exhibits monotonic forward displacement
             EXPECT_EQ(predicted_state.tick(), tick);
             EXPECT_GT(predicted_state.position().z, previous_z);
             previous_z = predicted_state.position().z;
@@ -242,7 +242,7 @@ namespace tempest::physics::tests
     /// and direct manual stepping via update_character_controllers and world.step across 60 ticks.
     TEST_F(character_prediction_fixture, prediction_determinism_vs_direct_stepping)
     {
-        // 1. Setup: World A (client prediction) and World B (direct stepping) with identical initial configurations
+        // Setup: World A (client prediction) and World B (direct stepping) with identical initial configurations
         constexpr auto delta_time = 1.0F / 60.0F;
         constexpr auto gravity = math::vec3<float>{0.0F, -9.81F, 0.0F};
 
@@ -303,7 +303,7 @@ namespace tempest::physics::tests
         registry_b.replace(entity_b, initial_transform_b);
         registry_b.replace(entity_b, ecs::transform_history_component::create(initial_position));
 
-        // 2. Act: Step 60 ticks with varied inputs (turning yaw, moving, jumping)
+        // Act: Step 60 ticks with varied inputs (turning yaw, moving, jumping)
         for (uint32_t tick = 1; tick <= 60; ++tick)
         {
             const auto yaw = static_cast<float>(tick) * 0.05F;
@@ -329,7 +329,7 @@ namespace tempest::physics::tests
             world_b.step(delta_time);
             const auto snapshot_b = capture_character_snapshot(tick, registry_b, entity_b);
 
-            // 3. Assert: Bit-for-bit / exact floating point match at every tick
+            // Assert: Bit-for-bit / exact floating point match at every tick
             EXPECT_EQ(snapshot_a.tick(), snapshot_b.tick());
             EXPECT_EQ(snapshot_a.position().x, snapshot_b.position().x);
             EXPECT_EQ(snapshot_a.position().y, snapshot_b.position().y);

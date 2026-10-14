@@ -20,7 +20,7 @@ namespace tempest::editor::tests
     /// @brief Verify that exceeding ring buffer capacity evicts oldest entries, updates sequence watermarks and dropped counters.
     TEST(log_store_test, ring_buffer_capacity_eviction_and_dropped_counters)
     {
-        // 1. Setup: initialize log_store with fixed capacity of 100 entries and editor_log_sink
+        // Setup: initialize log_store with fixed capacity of 100 entries and editor_log_sink
         constexpr auto test_capacity = size_t{100};
         constexpr auto total_records = size_t{250};
         constexpr auto expected_dropped = static_cast<uint64_t>(total_records - test_capacity);
@@ -34,7 +34,7 @@ namespace tempest::editor::tests
         EXPECT_EQ(store.oldest_sequence(), 0ULL);
         EXPECT_EQ(store.next_sequence(), 0ULL);
 
-        // 2. Act: enqueue and drain 250 log records through the sink into the store
+        // Act: enqueue and drain 250 log records through the sink into the store
         for (auto record_idx = size_t{0}; record_idx < total_records; ++record_idx)
         {
             sink.log(log_record{
@@ -48,7 +48,7 @@ namespace tempest::editor::tests
 
         const auto drained_count = store.drain(sink);
 
-        // 3. Assert: exact capacity retained, oldest entries evicted, dropped count accurate
+        // Assert: exact capacity retained, oldest entries evicted, dropped count accurate
         EXPECT_EQ(drained_count, total_records);
         EXPECT_EQ(store.size(), test_capacity);
         EXPECT_EQ(store.dropped_count(), expected_dropped);
@@ -75,7 +75,7 @@ namespace tempest::editor::tests
     /// @brief Verify that incremental filtering during ingestion produces bit-identical results to a full rebuild.
     TEST(log_store_test, incremental_matches_equal_full_rebuild)
     {
-        // 1. Setup: configure store with capacity for 1,000 diverse records and pre-set filter for Warn+ and "network"
+        // Setup: configure store with capacity for 1,000 diverse records and pre-set filter for Warn+ and "network"
         constexpr auto test_capacity = size_t{2000};
         constexpr auto test_record_count = size_t{1000};
 
@@ -96,7 +96,7 @@ namespace tempest::editor::tests
             "audio stream buffer underrun",
         };
 
-        // 2. Act: ingest 1,000 records of varying log levels and topics
+        // Act: ingest 1,000 records of varying log levels and topics
         for (auto record_idx = size_t{0}; record_idx < test_record_count; ++record_idx)
         {
             const auto level = static_cast<log_level>(record_idx % 7);
@@ -123,7 +123,7 @@ namespace tempest::editor::tests
 
         ASSERT_FALSE(incremental_matches.empty());
 
-        // 3. Act: force a full rebuild of the filter cache
+        // Act: force a full rebuild of the filter cache
         store.rebuild_filter();
 
         // Assert: incremental and rebuild results are bit-identical
@@ -147,7 +147,7 @@ namespace tempest::editor::tests
     /// @brief Verify that clearing the store hides historical records, resets counters, and retains ring buffer allocation.
     TEST(log_store_test, clear_hides_historical_records_and_resets_counters)
     {
-        // 1. Setup: ingest 50 records containing 10 warnings, 5 errors, and 35 info messages
+        // Setup: ingest 50 records containing 10 warnings, 5 errors, and 35 info messages
         constexpr auto test_capacity = size_t{200};
         auto store = log_store{test_capacity};
         auto sink = editor_log_sink{};
@@ -180,7 +180,7 @@ namespace tempest::editor::tests
         EXPECT_EQ(store.filter().error_count, 5U);
         EXPECT_EQ(store.filter().total_count, 50U);
 
-        // 2. Act: clear the store
+        // Act: clear the store
         store.clear();
 
         // Assert: visible count and filter counters reset, matches cleared, capacity retained
@@ -195,7 +195,7 @@ namespace tempest::editor::tests
         EXPECT_EQ(store.get_entry(0), nullptr);
         EXPECT_EQ(store.get_entry(49), nullptr);
 
-        // 3. Act: ingest 10 new records (1 error and 9 info)
+        // Act: ingest 10 new records (1 error and 9 info)
         for (auto record_idx = size_t{0}; record_idx < 10; ++record_idx)
         {
             const auto level = (record_idx == 0) ? log_level::error : log_level::info;
@@ -232,7 +232,7 @@ namespace tempest::editor::tests
     /// @brief Verify that matched sequence numbers are trimmed from the front when older records are evicted from the ring buffer.
     TEST(log_store_test, front_trimming_on_ring_eviction)
     {
-        // 1. Setup: configure store of capacity 50 to match only warnings
+        // Setup: configure store of capacity 50 to match only warnings
         constexpr auto test_capacity = size_t{50};
         auto store = log_store{test_capacity};
         auto sink = editor_log_sink{};
@@ -244,7 +244,7 @@ namespace tempest::editor::tests
         store.set_filter_level(log_level::critical, false);
         store.set_filter_level(log_level::fatal, false);
 
-        // 2. Act: ingest 50 warnings filling the ring buffer entirely
+        // Act: ingest 50 warnings filling the ring buffer entirely
         for (auto record_idx = size_t{0}; record_idx < test_capacity; ++record_idx)
         {
             sink.log(log_record{
@@ -264,7 +264,7 @@ namespace tempest::editor::tests
             EXPECT_EQ(store.filter().matched_sequences[record_idx], record_idx);
         }
 
-        // 3. Act: ingest 25 info records, causing eviction of sequences 0..24
+        // Act: ingest 25 info records, causing eviction of sequences 0..24
         for (auto record_idx = size_t{0}; record_idx < 25; ++record_idx)
         {
             sink.log(log_record{
@@ -278,7 +278,7 @@ namespace tempest::editor::tests
 
         store.drain(sink);
 
-        // 4. Assert: matched sequences trimmed front prefix, remaining 25 entries span 25..49
+        // Assert: matched sequences trimmed front prefix, remaining 25 entries span 25..49
         ASSERT_EQ(store.filter().matched_sequences.size(), 25U);
         EXPECT_EQ(store.filter().matched_sequences.front(), 25ULL);
         EXPECT_EQ(store.filter().matched_sequences.back(), 49ULL);
@@ -296,11 +296,11 @@ namespace tempest::editor::tests
     /// @brief Verify that case-insensitive search queries match message substrings and source location filenames.
     TEST(log_store_test, case_insensitive_and_source_matching)
     {
-        // 1. Setup: instantiate log store and sink
+        // Setup: instantiate log store and sink
         auto store = log_store{100};
         auto sink = editor_log_sink{};
 
-        // 2. Act: emit records with varying case in messages and from a source filename containing 'renderer'
+        // Act: emit records with varying case in messages and from a source filename containing 'renderer'
         // Record 0: "Renderer initialized" in message
         sink.log(log_record{
             .level = log_level::info,
@@ -333,10 +333,10 @@ namespace tempest::editor::tests
 
         store.drain(sink);
 
-        // 3. Act: set search query to lowercase "render"
+        // Act: set search query to lowercase "render"
         store.set_filter_search("render");
 
-        // 4. Assert: records 0, 1, and 2 match, record 3 does not
+        // Assert: records 0, 1, and 2 match, record 3 does not
         ASSERT_EQ(store.filter().matched_sequences.size(), 3U);
         EXPECT_EQ(store.filter().matched_sequences[0], 0ULL);
         EXPECT_EQ(store.filter().matched_sequences[1], 1ULL);

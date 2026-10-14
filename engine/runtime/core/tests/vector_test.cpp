@@ -305,16 +305,16 @@ TEST(vector, vector_insert_self_referential)
     // Case 1: Trivial Type (int) with Reallocation Triggered (Capacity Exceeded)
     // =========================================================================
     {
-        // 1. Setup: Vector initialized with exact capacity matching size
+        // Setup: Vector initialized with exact capacity matching size
         auto vec = vector<int>{tempest::init_list, 10, 20, 30};
         vec.shrink_to_fit();
         EXPECT_EQ(vec.size(), 3);
         EXPECT_EQ(vec.capacity(), 3);
 
-        // 2. Act: Insert vec[0] into vec.begin() + 1 when size == capacity
+        // Act: Insert vec[0] into vec.begin() + 1 when size == capacity
         const auto it_first = vec.insert(vec.begin() + 1, vec[0]);
 
-        // 3. Assert: Value is intact, capacity grew, and elements are in expected order
+        // Assert: Value is intact, capacity grew, and elements are in expected order
         EXPECT_EQ(vec.size(), 4);
         EXPECT_GE(vec.capacity(), 4);
         EXPECT_EQ(*it_first, 10);
@@ -343,7 +343,7 @@ TEST(vector, vector_insert_self_referential)
     // Case 2: Trivial Type (int) with Pre-Reserved Capacity (No Reallocation)
     // =========================================================================
     {
-        // 1. Setup: Vector with pre-reserved excess capacity
+        // Setup: Vector with pre-reserved excess capacity
         auto vec = vector<int>{};
         vec.reserve(16);
         vec.push_back(10);
@@ -352,10 +352,10 @@ TEST(vector, vector_insert_self_referential)
         EXPECT_EQ(vec.size(), 3);
         EXPECT_GE(vec.capacity(), 16);
 
-        // 2. Act: Insert vec[0] into vec.begin() + 1 with sufficient capacity
+        // Act: Insert vec[0] into vec.begin() + 1 with sufficient capacity
         const auto it_first = vec.insert(vec.begin() + 1, vec[0]);
 
-        // 3. Assert: All elements shifted and inserted correctly without moving-from source element
+        // Assert: All elements shifted and inserted correctly without moving-from source element
         EXPECT_EQ(vec.size(), 4);
         EXPECT_EQ(*it_first, 10);
         EXPECT_EQ(vec[0], 10);

@@ -974,16 +974,16 @@ namespace tempest::render_system
 
         _graph.set_surface_size(width, height);
 
-        // 1. Automatically load any missing mesh/material/texture assets needed by tracked renderables
+        // Automatically load any missing mesh/material/texture assets needed by tracked renderables
         _ensure_assets_loaded();
 
-        // 2. Automatically update draw commands and instance buffer if renderables changed
+        // Automatically update draw commands and instance buffer if renderables changed
         if (_renderables_dirty_count > 0 && _inputs.entity_registry != nullptr)
         {
             _update_renderable_commands();
         }
 
-        // 3. Automatically update dynamic object transforms from entity registry
+        // Automatically update dynamic object transforms from entity registry
         if ((_inputs.entity_registry != nullptr) && !_tracked_entities.empty())
         {
             auto objects = vector<object_payload>{};
@@ -1036,7 +1036,7 @@ namespace tempest::render_system
             _pool.write_objects(objects);
         }
 
-        // 2. Automatically update dynamic lights from entity registry
+        // Automatically update dynamic lights from entity registry
         auto needs_light_update = (_lights_dirty_count > 0);
         if (!needs_light_update && _inputs.entity_registry != nullptr && !_point_light_entities.empty())
         {

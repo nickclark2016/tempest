@@ -20,11 +20,11 @@ namespace tempest::editor::tests
     /// @brief Verify that log records enqueued in a single thread are drained in exact FIFO chronological order.
     TEST(editor_log_sink_test, single_thread_enqueue_and_drain_fifo)
     {
-        // 1. Setup: instantiate editor_log_sink
+        // Setup: instantiate editor_log_sink
         auto sink = editor_log_sink{};
         EXPECT_EQ(sink.enqueued_count(), 0ULL);
 
-        // 2. Act: emit 10 distinct records with varying messages
+        // Act: emit 10 distinct records with varying messages
         static constexpr size_t test_record_count = 10;
         const char* const sample_messages[test_record_count] = {
             "Message 0: Initializing pipeline",
@@ -51,7 +51,7 @@ namespace tempest::editor::tests
             sink.log(record);
         }
 
-        // 3. Assert: exact 10 nodes returned, in correct FIFO order, messages and metadata match
+        // Assert: exact 10 nodes returned, in correct FIFO order, messages and metadata match
         EXPECT_EQ(sink.enqueued_count(), test_record_count);
 
         auto* const drained_head = sink.drain_nodes();
@@ -85,7 +85,7 @@ namespace tempest::editor::tests
     /// @brief Verify that 16 concurrent worker threads flooding 10,000 records each (160,000 total) drop 0 records.
     TEST(editor_log_sink_test, concurrent_worker_flood_no_drop_before_drain)
     {
-        // 1. Setup: instantiate logger and attach editor_log_sink
+        // Setup: instantiate logger and attach editor_log_sink
         auto test_logger = logger{};
         auto sink = editor_log_sink{test_logger};
 
@@ -95,7 +95,7 @@ namespace tempest::editor::tests
 
         auto start_flag = atomic<bool>{false};
 
-        // 2. Act: spawn 16 tempest::thread workers, each emitting 10,000 log records concurrently
+        // Act: spawn 16 tempest::thread workers, each emitting 10,000 log records concurrently
         auto workers = vector<thread>{};
         workers.reserve(worker_thread_count);
 
@@ -122,7 +122,7 @@ namespace tempest::editor::tests
             worker.join();
         }
 
-        // 3. Assert: drain_nodes() yields exactly 160,000 nodes without corruption. Free all nodes.
+        // Assert: drain_nodes() yields exactly 160,000 nodes without corruption. Free all nodes.
         EXPECT_EQ(sink.enqueued_count(), total_expected_logs);
 
         auto* const drained_head = sink.drain_nodes();
@@ -151,17 +151,17 @@ namespace tempest::editor::tests
     /// @brief Verify that destroying an attached editor_log_sink cleanly detaches it from the logger.
     TEST(editor_log_sink_test, raii_unregistration_on_destruction)
     {
-        // 1. Setup: instantiate logger. In an inner scope, create editor_log_sink attached to the logger
+        // Setup: instantiate logger. In an inner scope, create editor_log_sink attached to the logger
         auto test_logger = logger{};
 
         {
             auto scoped_sink = editor_log_sink{test_logger};
             test_logger.info("Message inside sink lifetime");
             EXPECT_EQ(scoped_sink.enqueued_count(), 1ULL);
-            // 2. Act: destroy editor_log_sink by exiting scope
+            // Act: destroy editor_log_sink by exiting scope
         }
 
-        // 3. Assert: logger emits safely without fault or crash
+        // Assert: logger emits safely without fault or crash
         test_logger.trace("Post-destruction trace");
         test_logger.debug("Post-destruction debug");
         test_logger.info("Post-destruction info");
@@ -174,7 +174,7 @@ namespace tempest::editor::tests
     /// @brief Verify that destructing a sink with pending entries cleanly frees all nodes without leaks.
     TEST(editor_log_sink_test, destructor_drains_remaining_nodes_without_leak)
     {
-        // 1. Setup & Act: Create sink, populate it with records, and let it destruct without draining
+        // Setup & Act: Create sink, populate it with records, and let it destruct without draining
         {
             auto scoped_sink = editor_log_sink{};
             for (size_t record_idx = 0; record_idx < 100; ++record_idx)
@@ -190,18 +190,18 @@ namespace tempest::editor::tests
             }
             EXPECT_EQ(scoped_sink.enqueued_count(), 100ULL);
         }
-        // 2. Assert: Destructor completed cleanly without leaks or crashes
+        // Assert: Destructor completed cleanly without leaks or crashes
     }
 
     /// @brief Verify that explicit attach and detach calls properly control which records are captured.
     TEST(editor_log_sink_test, explicit_attach_and_detach)
     {
-        // 1. Setup: instantiate logger and default-constructed sink
+        // Setup: instantiate logger and default-constructed sink
         auto test_logger = logger{};
         auto sink = editor_log_sink{};
         EXPECT_EQ(sink.enqueued_count(), 0ULL);
 
-        // 2. Act: attach sink and emit first message
+        // Act: attach sink and emit first message
         sink.attach(test_logger);
         test_logger.info("Attached message 1");
         EXPECT_EQ(sink.enqueued_count(), 1ULL);
@@ -216,7 +216,7 @@ namespace tempest::editor::tests
         test_logger.info("Attached message 2");
         EXPECT_EQ(sink.enqueued_count(), 2ULL);
 
-        // 3. Assert: drain nodes and verify only attached messages were enqueued
+        // Assert: drain nodes and verify only attached messages were enqueued
         auto* const drained_head = sink.drain_nodes();
         ASSERT_NE(drained_head, nullptr);
 

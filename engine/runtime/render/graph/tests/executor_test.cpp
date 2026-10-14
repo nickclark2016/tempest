@@ -1030,7 +1030,7 @@ namespace tempest::render_graph
     /// @brief Verify automated start/end timestamp insertion across all compiled DAG passes.
     TEST(executor_test, automated_start_end_timestamp_insertion_across_all_passes)
     {
-        // 1. Setup device and render graph with multiple passes
+        // Setup device and render graph with multiple passes
         auto dev = mock_device_with_ports{};
         auto ctx = test_context{};
         auto rg = render_graph{ctx.jobs, 1920, 1080};
@@ -1058,11 +1058,11 @@ namespace tempest::render_graph
             },
             [](const pass_data&, pass_execution_context&, rhi::command_list&) {});
 
-        // 2. Act: Execute frame
+        // Act: Execute frame
         const auto exec_res = rg.execute_sync(dev);
         ASSERT_TRUE(exec_res.has_value());
 
-        // 3. Assert: Verify 6 timestamp writes (2 for submit zone + 4 for 2 passes) and query pool reset
+        // Assert: Verify 6 timestamp writes (2 for submit zone + 4 for 2 passes) and query pool reset
         const auto& cmd = dev.graphics_port.cmd;
         EXPECT_EQ(cmd.written_timestamps.size(), 6U);
         EXPECT_EQ(cmd.written_timestamps[0].stage, rhi::pipeline_stage::bottom_of_pipe);
@@ -1086,7 +1086,7 @@ namespace tempest::render_graph
     /// submit zones.
     TEST(executor_test, cross_queue_pass_attribution_to_execution_port_tracks)
     {
-        // 1. Setup profiler session and multi-queue render graph
+        // Setup profiler session and multi-queue render graph
         auto dev = mock_device_with_ports{};
         auto profiler = profiler::profiler_session{true};
         auto ctx = test_context{};
@@ -1128,7 +1128,7 @@ namespace tempest::render_graph
             .profiler = &profiler,
         };
 
-        // 2. Act: Record frame 0
+        // Act: Record frame 0
         const auto exec_res0 = rg.execute_sync(dev, sync_opts);
         ASSERT_TRUE(exec_res0.has_value());
 
@@ -1136,7 +1136,7 @@ namespace tempest::render_graph
         const auto exec_res1 = rg.execute_sync(dev, sync_opts);
         ASSERT_TRUE(exec_res1.has_value());
 
-        // 3. Assert: Drain profiler chunks and verify track IDs
+        // Assert: Drain profiler chunks and verify track IDs
         auto chunks = profiler.drain_completed_chunks();
         ASSERT_GE(chunks.size(), 2U);
 
@@ -1180,7 +1180,7 @@ namespace tempest::render_graph
     /// @brief Verify selective pipeline statistics query capture on opted-in passes.
     TEST(executor_test, selective_pipeline_statistics_query_capture_on_opted_in_passes)
     {
-        // 1. Setup device, profiler, and passes with and without pipeline stats
+        // Setup device, profiler, and passes with and without pipeline stats
         auto dev = mock_device_with_ports{};
         auto profiler = profiler::profiler_session{true};
         auto ctx = test_context{};
@@ -1217,7 +1217,7 @@ namespace tempest::render_graph
             .profiler = &profiler,
         };
 
-        // 2. Act: Record frame 0
+        // Act: Record frame 0
         const auto exec_res0 = rg.execute_sync(dev, sync_opts);
         ASSERT_TRUE(exec_res0.has_value());
 
@@ -1240,7 +1240,7 @@ namespace tempest::render_graph
         const auto exec_res1 = rg.execute_sync(dev, sync_opts);
         ASSERT_TRUE(exec_res1.has_value());
 
-        // 3. Assert: Verify metrics attached to GeometryPass zone record
+        // Assert: Verify metrics attached to GeometryPass zone record
         auto chunks = profiler.drain_completed_chunks();
         ASSERT_FALSE(chunks.empty());
 
@@ -1270,7 +1270,7 @@ namespace tempest::render_graph
     /// @brief Verify multi-frame flight slot query ring recycling across 10+ frames without leaks or stalls.
     TEST(executor_test, multi_frame_flight_slot_query_ring_recycling)
     {
-        // 1. Setup device and executor
+        // Setup device and executor
         auto dev = mock_device_with_ports{};
         auto ctx = test_context{};
         auto executor = render_graph_executor{};
@@ -1282,7 +1282,7 @@ namespace tempest::render_graph
             rg_texture_id tex;
         };
 
-        // 2. Act: Loop over 15 frames cycling through 3 flight slots
+        // Act: Loop over 15 frames cycling through 3 flight slots
         for (uint32_t frame = 0; frame < num_frames; ++frame)
         {
             auto rg = render_graph{ctx.jobs, 1920, 1080};
@@ -1307,7 +1307,7 @@ namespace tempest::render_graph
             ASSERT_TRUE(exec_res.has_value());
         }
 
-        // 3. Assert: Query pools are stable and reused across slots without unbounded allocations
+        // Assert: Query pools are stable and reused across slots without unbounded allocations
         EXPECT_LE(dev.query_pools_created, frames_in_flight * 2);
 
         executor.release(dev);
@@ -1322,7 +1322,7 @@ namespace tempest::render_graph
     /// separate primary command buffers by worker threads and submitted in a single port.submit call.
     TEST(executor_test, concurrent_primary_command_buffer_recording)
     {
-        // 1. Setup device, 4-worker job system, and render graph with 3 parallel passes
+        // Setup device, 4-worker job system, and render graph with 3 parallel passes
         auto dev = mock_device_with_ports{};
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
@@ -1386,11 +1386,11 @@ namespace tempest::render_graph
                 pass_c_executed = true;
             });
 
-        // 2. Act: Synchronously execute the graph (which dispatches passes to workers and awaits when_all)
+        // Act: Synchronously execute the graph (which dispatches passes to workers and awaits when_all)
         const auto exec_res = rg.execute_sync(dev);
         ASSERT_TRUE(exec_res.has_value());
 
-        // 3. Assert: All passes executed, exactly one unified queue submission occurred,
+        // Assert: All passes executed, exactly one unified queue submission occurred,
         // and submitted commands include prologue + 3 passes + epilogue
         EXPECT_TRUE(pass_a_executed);
         EXPECT_TRUE(pass_b_executed);
@@ -1409,7 +1409,7 @@ namespace tempest::render_graph
     /// while epilogue command buffer contains submit end timestamp and presentation layout transition.
     TEST(executor_test, prologue_query_reset_and_epilogue_present)
     {
-        // 1. Setup device, 2-worker job system, profiler, and presentation swapchain texture
+        // Setup device, 2-worker job system, profiler, and presentation swapchain texture
         auto dev = mock_device_with_ports{};
         auto log = logger{};
         auto prof = profiler::profiler_session{true};
@@ -1444,11 +1444,11 @@ namespace tempest::render_graph
             .profiler = &prof,
         };
 
-        // 2. Act: Execute frame
+        // Act: Execute frame
         const auto exec_res = rg.execute_sync(dev, sync_opts);
         ASSERT_TRUE(exec_res.has_value());
 
-        // 3. Assert: Verify prologue (cmds[0]) and epilogue (cmds.back()) buffers
+        // Assert: Verify prologue (cmds[0]) and epilogue (cmds.back()) buffers
         ASSERT_GE(dev.graphics_port.allocated_cmds.size(), 3U);
         const auto& prologue_cmd = *dev.graphics_port.allocated_cmds[0];
         const auto& epilogue_cmd = *dev.graphics_port.allocated_cmds.back();
@@ -1468,7 +1468,7 @@ namespace tempest::render_graph
     /// independent graphics and compute queue execution ports.
     TEST(executor_test, multi_queue_concurrent_recording)
     {
-        // 1. Setup multi-worker job system and multi-queue DAG
+        // Setup multi-worker job system and multi-queue DAG
         auto dev = mock_device_with_ports{};
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
@@ -1521,11 +1521,11 @@ namespace tempest::render_graph
             },
             []([[maybe_unused]] const gfx_data&, pass_execution_context&, rhi::command_list&) {});
 
-        // 2. Act: Execute multi-queue graph
+        // Act: Execute multi-queue graph
         const auto exec_res = rg.execute_sync(dev);
         ASSERT_TRUE(exec_res.has_value());
 
-        // 3. Assert: All three queues submitted exactly one batch
+        // Assert: All three queues submitted exactly one batch
         EXPECT_EQ(dev.transfer_port.submit_calls, 1U);
         EXPECT_EQ(dev.compute_port.submit_calls, 1U);
         EXPECT_EQ(dev.graphics_port.submit_calls, 1U);
@@ -1540,7 +1540,7 @@ namespace tempest::render_graph
     /// rather than stalling earlier offscreen graphics batches (e.g. shadow map generation).
     TEST(executor_test, swapchain_wait_semaphore_deferred_to_presented_texture_batch)
     {
-        // 1. Setup: Multi-batch graph with offscreen graphics, compute, and presentation graphics
+        // Setup: Multi-batch graph with offscreen graphics, compute, and presentation graphics
         auto dev = mock_device_with_ports{};
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
@@ -1603,11 +1603,11 @@ namespace tempest::render_graph
             .frames_in_flight = 2,
         };
 
-        // 2. Act: Execute graph
+        // Act: Execute graph
         const auto exec_res = rg.execute_sync(dev, sync_opts);
         ASSERT_TRUE(exec_res.has_value());
 
-        // 3. Assert: Verify graphics port had two distinct submits and wait semaphore placement
+        // Assert: Verify graphics port had two distinct submits and wait semaphore placement
         ASSERT_EQ(dev.graphics_port.submit_calls, 2U);
         ASSERT_EQ(dev.graphics_port.all_wait_syncs.size(), 2U);
 
@@ -1637,7 +1637,7 @@ namespace tempest::render_graph
     ///        exact async compute timeline semaphore value.
     TEST(executor_test, cross_queue_decoupled_timeline_synchronization_allows_independent_passes_to_run_without_wait)
     {
-        // 1. Setup: Multi-queue graph with async compute, independent graphics, and dependent graphics
+        // Setup: Multi-queue graph with async compute, independent graphics, and dependent graphics
         auto dev = mock_device_with_ports{};
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
@@ -1699,11 +1699,11 @@ namespace tempest::render_graph
             },
             []([[maybe_unused]] const pbr_data&, pass_execution_context&, rhi::command_list&) {});
 
-        // 2. Act: Execute graph
+        // Act: Execute graph
         const auto exec_res = rg.execute_sync(dev);
         ASSERT_TRUE(exec_res.has_value());
 
-        // 3. Assert: Verify submissions and decoupled synchronization
+        // Assert: Verify submissions and decoupled synchronization
         EXPECT_EQ(dev.compute_port.submit_calls, 1U);
         EXPECT_EQ(dev.graphics_port.submit_calls, 2U);
         ASSERT_EQ(dev.graphics_port.all_wait_syncs.size(), 2U);
@@ -1732,7 +1732,7 @@ namespace tempest::render_graph
     /// when pass_dispatcher is nullopt in frame_sync_options.
     TEST(executor_test, sequential_pass_recording_no_dispatcher)
     {
-        // 1. Setup device and render graph with multiple independent passes
+        // Setup device and render graph with multiple independent passes
         auto dev = mock_device_with_ports{};
         auto rg = render_graph{1920, 1080};
 
@@ -1768,13 +1768,13 @@ namespace tempest::render_graph
                 pass_2_executed = true;
             });
 
-        // 2. Act: Execute with pass_dispatcher = nullopt
+        // Act: Execute with pass_dispatcher = nullopt
         const auto sync_opts = frame_sync_options{
             .pass_dispatcher = nullopt,
         };
         const auto exec_res = rg.execute_sync(dev, sync_opts);
 
-        // 3. Assert: Execution succeeds and both passes are executed inline
+        // Assert: Execution succeeds and both passes are executed inline
         ASSERT_TRUE(exec_res.has_value());
         EXPECT_TRUE(pass_1_executed);
         EXPECT_TRUE(pass_2_executed);
@@ -1786,7 +1786,7 @@ namespace tempest::render_graph
     /// are present in a batch, and invoking the record_fn items completes execution successfully.
     TEST(executor_test, parallel_pass_dispatching_with_mock_dispatcher)
     {
-        // 1. Setup device and render graph with 3 independent passes
+        // Setup device and render graph with 3 independent passes
         auto dev = mock_device_with_ports{};
         auto rg = render_graph{1920, 1080};
 
@@ -1850,13 +1850,13 @@ namespace tempest::render_graph
             }
         };
 
-        // 2. Act: Execute with mock pass_dispatcher
+        // Act: Execute with mock pass_dispatcher
         const auto sync_opts = frame_sync_options{
             .pass_dispatcher = pass_dispatcher_fn{mock_dispatcher},
         };
         const auto exec_res = rg.execute_sync(dev, sync_opts);
 
-        // 3. Assert: Dispatcher was called with 3 pass items, each pass was executed, and batch submitted
+        // Assert: Dispatcher was called with 3 pass items, each pass was executed, and batch submitted
         ASSERT_TRUE(exec_res.has_value());
         EXPECT_TRUE(dispatcher_called);
         EXPECT_EQ(dispatched_pass_count, 3U);

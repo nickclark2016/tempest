@@ -63,7 +63,7 @@ namespace tempest::server
             return;
         }
 
-        // 1. Static floor box: 40m x 1m x 40m centered at (0, -0.5, 0) so top surface is at Y = 0.0m
+        // Static floor box: 40m x 1m x 40m centered at (0, -0.5, 0) so top surface is at Y = 0.0m
         const auto floor_shape = system->create_box_shape(jolt::shim::vec3{20.0F, 0.5F, 20.0F});
         _static_shapes.push_back(floor_shape);
 
@@ -78,7 +78,7 @@ namespace tempest::server
         system->add_body(floor_body, false);
         _static_bodies.push_back(floor_body);
 
-        // 2. Static step box: 2m x 0.2m x 2m step at (0, 0.1, 5.0) for stair-stepping verification
+        // Static step box: 2m x 0.2m x 2m step at (0, 0.1, 5.0) for stair-stepping verification
         const auto step_shape = system->create_box_shape(jolt::shim::vec3{1.0F, 0.1F, 1.0F});
         _static_shapes.push_back(step_shape);
 
@@ -425,7 +425,7 @@ namespace tempest::server
     {
         const auto now = chrono::steady_clock::now();
 
-        // 1. Reap timed-out client sessions
+        // Reap timed-out client sessions
         for (size_t i = _sessions.size(); i > 0; --i)
         {
             const auto idx = i - 1;
@@ -441,7 +441,7 @@ namespace tempest::server
             return;
         }
 
-        // 2. Capture snapshots for all active player entities
+        // Capture snapshots for all active player entities
         auto player_snapshots = vector<physics::player_snapshot_entry>{};
         player_snapshots.reserve(_sessions.size());
 
@@ -455,7 +455,7 @@ namespace tempest::server
             });
         }
 
-        // 3. Compose and dispatch personalized world snapshot to each client
+        // Compose and dispatch personalized world snapshot to each client
         for (auto& s : _sessions)
         {
             const auto packet = physics::world_snapshot_packet{

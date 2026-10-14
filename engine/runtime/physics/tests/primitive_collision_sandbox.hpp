@@ -117,7 +117,7 @@ namespace tempest::physics::tests
                 return;
             }
 
-            // 1. Static Ground Plane (100m x 100m)
+            // Static Ground Plane (100m x 100m)
             const auto ground_shape = _system->create_box_shape(jolt::shim::vec3{50.0F, 0.5F, 50.0F});
             _shapes.push_back(ground_shape);
 
@@ -132,7 +132,7 @@ namespace tempest::physics::tests
             _system->add_body(ground_body, false);
             _bodies.push_back(ground_body);
 
-            // 2. Ramp Incline Sections (30 deg, 45 deg, 60 deg)
+            // Ramp Incline Sections (30 deg, 45 deg, 60 deg)
             const auto ramp_shape = _system->create_box_shape(jolt::shim::vec3{2.0F, 0.2F, 6.0F});
             _shapes.push_back(ramp_shape);
 
@@ -175,7 +175,7 @@ namespace tempest::physics::tests
             _system->add_body(ramp_60_body, false);
             _bodies.push_back(ramp_60_body);
 
-            // 3. Stepped Terrain (0.15m, 0.25m, 0.40m)
+            // Stepped Terrain (0.15m, 0.25m, 0.40m)
             const auto step_015_shape = _system->create_box_shape(jolt::shim::vec3{2.0F, 0.075F, 1.0F});
             _shapes.push_back(step_015_shape);
             const auto step_015_desc = jolt::shim::body_desc{
@@ -215,7 +215,7 @@ namespace tempest::physics::tests
             _system->add_body(step_040_body, false);
             _bodies.push_back(step_040_body);
 
-            // 4. Dynamic Pushable Boxes (1m^3 box: half extents 0.5m)
+            // Dynamic Pushable Boxes (1m^3 box: half extents 0.5m)
             const auto dynamic_box_shape = _system->create_box_shape(jolt::shim::vec3{0.5F, 0.5F, 0.5F});
             _shapes.push_back(dynamic_box_shape);
 

@@ -116,22 +116,22 @@ namespace
 /// @brief Verify formatting and parsing 64-bit local entity identifiers to and from hex strings.
 TEST(scene_codec_tests, local_id_hex_formatting_and_parsing)
 {
-    // 1. Setup: Known 64-bit test identifiers
+    // Setup: Known 64-bit test identifiers
     constexpr auto test_id_one = uint64_t{0x1a2b3c4d5e6f7081ULL};
     constexpr auto test_id_zero = uint64_t{0ULL};
     constexpr auto test_id_max = uint64_t{~uint64_t{0}};
 
-    // 2. Act: Format to hex strings
+    // Act: Format to hex strings
     const auto str_one = tempest::scene::to_hex_string(test_id_one);
     const auto str_zero = tempest::scene::to_hex_string(test_id_zero);
     const auto str_max = tempest::scene::to_hex_string(test_id_max);
 
-    // 3. Assert: Expected formatting with 0x prefix and lowercase hex digits
+    // Assert: Expected formatting with 0x prefix and lowercase hex digits
     EXPECT_EQ(str_one, "0x1a2b3c4d5e6f7081");
     EXPECT_EQ(str_zero, "0x0000000000000000");
     EXPECT_EQ(str_max, "0xffffffffffffffff");
 
-    // 4. Act: Parse back from hex strings
+    // Act: Parse back from hex strings
     const auto parsed_one = tempest::scene::parse_hex_string(str_one);
     const auto parsed_zero = tempest::scene::parse_hex_string(str_zero);
     const auto parsed_max = tempest::scene::parse_hex_string(str_max);
@@ -142,7 +142,7 @@ TEST(scene_codec_tests, local_id_hex_formatting_and_parsing)
     const auto parsed_prefix_only = tempest::scene::parse_hex_string("0x");
     const auto parsed_overflow = tempest::scene::parse_hex_string("0x12345678901234567");
 
-    // 5. Assert: Parsed values match originals and invalid cases return expected errors
+    // Assert: Parsed values match originals and invalid cases return expected errors
     ASSERT_TRUE(parsed_one.has_value());
     EXPECT_EQ(*parsed_one, test_id_one);
     ASSERT_TRUE(parsed_zero.has_value());
@@ -163,7 +163,7 @@ TEST(scene_codec_tests, local_id_hex_formatting_and_parsing)
     EXPECT_FALSE(parsed_overflow.has_value());
     EXPECT_EQ(parsed_overflow.error(), tempest::scene::parse_hex_error::overflow_too_many_digits);
 
-    // 6. Act & Assert: Strongly typed entity_local_id and parse_local_id
+    // Act & Assert: Strongly typed entity_local_id and parse_local_id
     const auto local_id = tempest::scene::entity_local_id{test_id_one};
     EXPECT_TRUE(local_id.is_valid());
     EXPECT_EQ(tempest::scene::to_hex_string(local_id), str_one);
@@ -185,7 +185,7 @@ TEST(scene_codec_tests, local_id_hex_formatting_and_parsing)
 /// @brief Verify that save -> load -> save generates identical JSON output byte-for-byte.
 TEST(scene_codec_tests, round_trip_byte_identity)
 {
-    // 1. Setup: Construct entities with transform, actor, and link components
+    // Setup: Construct entities with transform, actor, and link components
     auto context1 = test_registry_context{};
     auto& reg1 = context1.registry;
 
@@ -218,28 +218,28 @@ TEST(scene_codec_tests, round_trip_byte_identity)
     auto root_entities = tempest::vector<tempest::ecs::entity>{};
     root_entities.push_back(root_entity);
 
-    // 2. Act: First serialization
+    // Act: First serialization
     const auto json_output1 = tempest::scene::scene_codec::serialize(
         reg1, root_entities, {}, {.format = tempest::json_format::pretty});
     EXPECT_FALSE(json_output1.empty());
 
-    // 3. Act: Deserialize into clean second registry
+    // Act: Deserialize into clean second registry
     auto context2 = test_registry_context{};
     auto& reg2 = context2.registry;
     const auto scene_id = tempest::scene::scene_handle{1, 1};
     const auto deserialize_res = tempest::scene::scene_codec::deserialize(reg2, scene_id, json_output1);
 
-    // 4. Assert: Deserialization succeeded and entities were recreated
+    // Assert: Deserialization succeeded and entities were recreated
     ASSERT_TRUE(deserialize_res.success);
     ASSERT_EQ(deserialize_res.root_entities.size(), 1U);
     ASSERT_EQ(deserialize_res.all_entities.size(), 2U);
 
-    // 5. Act: Second serialization from deserialized state
+    // Act: Second serialization from deserialized state
     const auto json_output2 = tempest::scene::scene_codec::serialize(
         reg2, deserialize_res.root_entities, deserialize_res.unrecognized_data,
         {.format = tempest::json_format::pretty});
 
-    // 6. Assert: Byte identity between first and second serialization
+    // Assert: Byte identity between first and second serialization
     EXPECT_EQ(json_output1, json_output2);
 }
 
@@ -250,7 +250,7 @@ TEST(scene_codec_tests, round_trip_byte_identity)
 /// @brief Verify multi-level parent-child-sibling relationships are strictly preserved.
 TEST(scene_codec_tests, nested_hierarchy_preservation)
 {
-    // 1. Setup: Build multi-root, multi-level hierarchy:
+    // Setup: Build multi-root, multi-level hierarchy:
     // Root1 ("World")
     //   Child1A ("ZoneA")
     //     Grandchild1A1 ("Prop1")
@@ -291,13 +291,13 @@ TEST(scene_codec_tests, nested_hierarchy_preservation)
     roots.push_back(root1);
     roots.push_back(root2);
 
-    // 2. Act: Serialize and deserialize
+    // Act: Serialize and deserialize
     const auto json_content = tempest::scene::scene_codec::serialize(reg1, roots);
     auto context2 = test_registry_context{};
     auto& reg2 = context2.registry;
     const auto res = tempest::scene::scene_codec::deserialize(reg2, tempest::scene::scene_handle{1, 1}, json_content);
 
-    // 3. Assert: Root structure preserved
+    // Assert: Root structure preserved
     ASSERT_TRUE(res.success);
     ASSERT_EQ(res.root_entities.size(), 2U);
     ASSERT_EQ(res.all_entities.size(), 7U);
@@ -307,7 +307,7 @@ TEST(scene_codec_tests, nested_hierarchy_preservation)
     EXPECT_EQ(reg2.name(new_root1).value(), "World");
     EXPECT_EQ(reg2.name(new_root2).value(), "Sky");
 
-    // 4. Assert: Sibling order under World: ZoneA -> ZoneB -> ZoneC
+    // Assert: Sibling order under World: ZoneA -> ZoneB -> ZoneC
     using rel_t = tempest::ecs::relationship_component<tempest::ecs::entity>;
     const auto* root1_rel = reg2.try_get<rel_t>(new_root1);
     ASSERT_NE(root1_rel, nullptr);
@@ -332,7 +332,7 @@ TEST(scene_codec_tests, nested_hierarchy_preservation)
     ASSERT_NE(child_c_rel, nullptr);
     EXPECT_TRUE(child_c_rel->next_sibling == tempest::ecs::tombstone);
 
-    // 5. Assert: ZoneA children: Prop1 -> Prop2
+    // Assert: ZoneA children: Prop1 -> Prop2
     const auto prop_1 = child_a_rel->first_child;
     ASSERT_TRUE(prop_1 != tempest::ecs::tombstone);
     EXPECT_EQ(reg2.name(prop_1).value(), "Prop1");
@@ -347,7 +347,7 @@ TEST(scene_codec_tests, nested_hierarchy_preservation)
     ASSERT_NE(prop_2_rel, nullptr);
     EXPECT_TRUE(prop_2_rel->next_sibling == tempest::ecs::tombstone);
 
-    // 6. Assert: Sky has no children
+    // Assert: Sky has no children
     const auto* root2_rel = reg2.try_get<rel_t>(new_root2);
     if (root2_rel != nullptr)
     {
@@ -362,7 +362,7 @@ TEST(scene_codec_tests, nested_hierarchy_preservation)
 /// @brief Verify forward, backward, and cyclic entity references remap to live handles in Pass 2.
 TEST(scene_codec_tests, entity_ref_remapping)
 {
-    // 1. Setup: Create 3 entities with mutual cross-references:
+    // Setup: Create 3 entities with mutual cross-references:
     // Alpha -> Gamma (forward reference)
     // Beta -> Alpha (backward reference)
     // Gamma -> Beta (backward reference)
@@ -387,13 +387,13 @@ TEST(scene_codec_tests, entity_ref_remapping)
     roots.push_back(entity_beta);
     roots.push_back(entity_gamma);
 
-    // 2. Act: Serialize to JSON and deserialize into new registry
+    // Act: Serialize to JSON and deserialize into new registry
     const auto json_str = tempest::scene::scene_codec::serialize(reg1, roots);
     auto context2 = test_registry_context{};
     auto& reg2 = context2.registry;
     const auto res = tempest::scene::scene_codec::deserialize(reg2, tempest::scene::scene_handle{1, 1}, json_str);
 
-    // 3. Assert: Deserialization successful
+    // Assert: Deserialization successful
     ASSERT_TRUE(res.success);
     ASSERT_EQ(res.root_entities.size(), 3U);
 
@@ -405,7 +405,7 @@ TEST(scene_codec_tests, entity_ref_remapping)
     const auto& link_beta = reg2.get<test_link_component>(new_beta);
     const auto& link_gamma = reg2.get<test_link_component>(new_gamma);
 
-    // 4. Assert: Entity handles correctly resolved across all cyclic links
+    // Assert: Entity handles correctly resolved across all cyclic links
     EXPECT_EQ(link_alpha.target, new_gamma);
     EXPECT_EQ(link_alpha.tag, 10);
 
@@ -423,7 +423,7 @@ TEST(scene_codec_tests, entity_ref_remapping)
 /// @brief Verify unknown components and extra unrecognized fields are preserved intact across round-trips.
 TEST(scene_codec_tests, preserves_unrecognized_schema_data)
 {
-    // 1. Setup: Author JSON containing an unrecognized component and an extra field on test_actor_component
+    // Setup: Author JSON containing an unrecognized component and an extra field on test_actor_component
     constexpr auto authored_json = tempest::string_view{R"({
   "version": 1,
   "entities": [
@@ -447,12 +447,12 @@ TEST(scene_codec_tests, preserves_unrecognized_schema_data)
   ]
 })"};
 
-    // 2. Act: Deserialize into registry
+    // Act: Deserialize into registry
     auto context = test_registry_context{};
     auto& reg = context.registry;
     const auto res = tempest::scene::scene_codec::deserialize(reg, tempest::scene::scene_handle{1, 1}, authored_json);
 
-    // 3. Assert: Entity created and recognized component deserialized
+    // Assert: Entity created and recognized component deserialized
     ASSERT_TRUE(res.success);
     ASSERT_EQ(res.root_entities.size(), 1U);
     const auto boss_entity = res.root_entities[0];
@@ -464,7 +464,7 @@ TEST(scene_codec_tests, preserves_unrecognized_schema_data)
     EXPECT_FLOAT_EQ(actor.speed, 6.5F);
     EXPECT_EQ(actor.status, test_status_type::running);
 
-    // 4. Assert: Side-table captured both unknown component and extra field
+    // Assert: Side-table captured both unknown component and extra field
     ASSERT_EQ(res.unrecognized_data.entities.size(), 1U);
     const auto unrec_it = res.unrecognized_data.entities.find(1ULL);
     ASSERT_NE(unrec_it, res.unrecognized_data.entities.end());
@@ -479,18 +479,18 @@ TEST(scene_codec_tests, preserves_unrecognized_schema_data)
     EXPECT_EQ(fields_it->second[0].field_name, "future_shield_rating");
     EXPECT_EQ(fields_it->second[0].json_payload, "999");
 
-    // 5. Act: Serialize back to JSON with unrecognized_data
+    // Act: Serialize back to JSON with unrecognized_data
     const auto roundtrip_json = tempest::scene::scene_codec::serialize(
         reg, res.root_entities, res.unrecognized_data, {.format = tempest::json_format::pretty});
 
-    // 6. Assert: Output JSON contains both unknown component and extra field
+    // Assert: Output JSON contains both unknown component and extra field
     const auto roundtrip_view = tempest::string_view{roundtrip_json.data(), roundtrip_json.size()};
     EXPECT_NE(tempest::search(roundtrip_view, "\"alien_laser_component\""), roundtrip_view.end());
     EXPECT_NE(tempest::search(roundtrip_view, "\"future_shield_rating\""), roundtrip_view.end());
     EXPECT_NE(tempest::search(roundtrip_view, "999"), roundtrip_view.end());
     EXPECT_NE(tempest::search(roundtrip_view, "\"beams\""), roundtrip_view.end());
 
-    // 7. Act: Second round-trip deserialize and re-serialize to verify byte stability
+    // Act: Second round-trip deserialize and re-serialize to verify byte stability
     auto context2 = test_registry_context{};
     auto& reg2 = context2.registry;
     const auto res2 = tempest::scene::scene_codec::deserialize(reg2, tempest::scene::scene_handle{1, 1}, roundtrip_json);
@@ -498,6 +498,6 @@ TEST(scene_codec_tests, preserves_unrecognized_schema_data)
     const auto final_json = tempest::scene::scene_codec::serialize(
         reg2, res2.root_entities, res2.unrecognized_data, {.format = tempest::json_format::pretty});
 
-    // 8. Assert: Output is completely stable across round-trips
+    // Assert: Output is completely stable across round-trips
     EXPECT_EQ(roundtrip_json, final_json);
 }

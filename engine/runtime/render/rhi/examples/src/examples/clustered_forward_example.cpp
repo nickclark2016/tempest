@@ -123,7 +123,7 @@ namespace tempest::rhi::examples
         assets::mount_default_shader_roots(_asset_db);
         _asset_db.scan_and_index();
 
-        // 1. Configure renderer
+        // Configure renderer
         auto builder = render_system::renderer::builder{};
         builder.set_config(render_system::renderer_config{
             .render_width = 1280,
@@ -144,7 +144,7 @@ namespace tempest::rhi::examples
             return false;
         }
 
-        // 2. Camera Setup
+        // Camera Setup
         _camera_entity = _registry.create();
         _registry.assign(_camera_entity, render_system::camera_component{
                                              .aspect_ratio = 16.0F / 9.0F,
@@ -156,7 +156,7 @@ namespace tempest::rhi::examples
         cam_tx.rotation({0.0F, 0.0F, 0.0F});
         _registry.assign(_camera_entity, cam_tx);
 
-        // 3. Directional Sun Light Setup (Twilight / Sunset ambience)
+        // Directional Sun Light Setup (Twilight / Sunset ambience)
         auto sun = _registry.create();
         _registry.assign(sun, render_system::directional_light_component{
                                   .color = {1.0F, 0.92F, 0.82F},
@@ -175,7 +175,7 @@ namespace tempest::rhi::examples
         sun_tx.rotation({math::as_radians(70.0F), math::as_radians(25.0F), 0.0F});
         _registry.assign(sun, sun_tx);
 
-        // 4. Asset Loading (Sponza glTF or Multi-Tier Procedural Fallback)
+        // Asset Loading (Sponza glTF or Multi-Tier Procedural Fallback)
         auto asset_type_reg = assets::asset_type_registry{};
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &_meshes, &_textures, &_materials);
@@ -319,7 +319,7 @@ namespace tempest::rhi::examples
             }
         }
 
-        // 5. Procedural 128 Point Light Generation (Multi-Tiered Palette)
+        // Procedural 128 Point Light Generation (Multi-Tiered Palette)
         _light_entities.clear();
         _light_entities.reserve(128);
 
@@ -396,7 +396,7 @@ namespace tempest::rhi::examples
 
         _time += 1.0F / 120.0F;
 
-        // 1. Procedural 128 Point Light Dynamics & ECS Event Dirty Tracking
+        // Procedural 128 Point Light Dynamics & ECS Event Dirty Tracking
         for (size_t i = 0; i < _light_entities.size(); ++i)
         {
             auto tx = _registry.get<ecs::transform_component>(_light_entities[i]);
@@ -446,7 +446,7 @@ namespace tempest::rhi::examples
             _registry.assign_or_replace(_light_entities[i], tx);
         }
 
-        // 2. Orbiting & Touring Camera along Ground and 2nd Floor Mezzanine
+        // Orbiting & Touring Camera along Ground and 2nd Floor Mezzanine
         if (_camera_entity != ecs::tombstone)
         {
             const auto t = _time * 0.15F;
@@ -476,10 +476,10 @@ namespace tempest::rhi::examples
             _registry.assign_or_replace(_camera_entity, tx);
         }
 
-        // 3. Prepare frame graph
+        // Prepare frame graph
         _renderer->prepare_frame(info.width, info.height, info.swapchain_texture, info.swapchain_view);
 
-        // 4. Submit frame with synchronization
+        // Submit frame with synchronization
         const auto sync = render_graph::frame_sync_options{
             .wait_semaphore = info.acquire_semaphore,
             .wait_stages = rhi::pipeline_stage::attachment_output,

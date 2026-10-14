@@ -116,7 +116,7 @@ namespace tempest::rhi::examples
         assets::mount_default_shader_roots(_asset_db);
         _asset_db.scan_and_index();
 
-        // 1. Configure renderer
+        // Configure renderer
         auto builder = render_system::renderer::builder{};
         builder.set_config(render_system::renderer_config{
             .render_width = 1280,
@@ -137,7 +137,7 @@ namespace tempest::rhi::examples
             return false;
         }
 
-        // 2. Camera Setup
+        // Camera Setup
         _camera_entity = _registry.create();
         const auto near_plane = (_model == scene_model::chess) ? 0.01F : 0.1F;
         _registry.assign(_camera_entity, render_system::camera_component{
@@ -158,7 +158,7 @@ namespace tempest::rhi::examples
         }
         _registry.assign(_camera_entity, cam_tx);
 
-        // 3. Sun Light Setup
+        // Sun Light Setup
         auto sun = _registry.create();
         _registry.assign(sun, render_system::directional_light_component{
                                   .color = {1.0F, 0.98F, 0.92F},
@@ -187,7 +187,7 @@ namespace tempest::rhi::examples
         }
         _registry.assign(sun, sun_tx);
 
-        // 4. Asset Loading (glTF Model or Procedural Scene)
+        // Asset Loading (glTF Model or Procedural Scene)
         auto asset_type_reg = assets::asset_type_registry{};
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &_meshes, &_textures, &_materials);
@@ -289,10 +289,10 @@ namespace tempest::rhi::examples
             }
         }
 
-        // 1. Prepare frame graph
+        // Prepare frame graph
         _renderer->prepare_frame(info.width, info.height, info.swapchain_texture, info.swapchain_view);
 
-        // 2. Submit frame with synchronization
+        // Submit frame with synchronization
         const auto sync = render_graph::frame_sync_options{
             .wait_semaphore = info.acquire_semaphore,
             .wait_stages = rhi::pipeline_stage::attachment_output,

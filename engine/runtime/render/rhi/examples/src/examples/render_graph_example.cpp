@@ -89,7 +89,7 @@ namespace tempest::rhi::examples
     {
         _device = &dev;
 
-        // 1. Create Primary Triangle Buffers
+        // Create Primary Triangle Buffers
         const auto pos_desc = buffer_desc{
             .size = sizeof(primary_positions),
             .memory_usage = memory_usage::upload,
@@ -116,7 +116,7 @@ namespace tempest::rhi::examples
         }
         tempest::memcpy(_colors_buffer.cpu_address, primary_colors.data(), sizeof(primary_colors));
 
-        // 2. Create Accent Triangle Buffers
+        // Create Accent Triangle Buffers
         const auto accent_pos_desc = buffer_desc{
             .size = sizeof(accent_positions),
             .memory_usage = memory_usage::upload,
@@ -143,7 +143,7 @@ namespace tempest::rhi::examples
         }
         tempest::memcpy(_accent_colors_buffer.cpu_address, accent_colors.data(), sizeof(accent_colors));
 
-        // 3. Create Emblem Triangle Buffers
+        // Create Emblem Triangle Buffers
         const auto emblem_pos_desc = buffer_desc{
             .size = sizeof(emblem_positions),
             .memory_usage = memory_usage::upload,
@@ -170,7 +170,7 @@ namespace tempest::rhi::examples
         }
         tempest::memcpy(_emblem_colors_buffer.cpu_address, emblem_colors.data(), sizeof(emblem_colors));
 
-        // 4. Create Shared Index Buffer
+        // Create Shared Index Buffer
         const auto index_desc = buffer_desc{
             .size = sizeof(indices),
             .memory_usage = memory_usage::upload,
@@ -184,10 +184,10 @@ namespace tempest::rhi::examples
         }
         tempest::memcpy(_index_buffer.cpu_address, indices.data(), sizeof(indices));
 
-        // 5. Initialize Render Graph
+        // Initialize Render Graph
         _render_graph = make_unique<render_graph::render_graph>(1920, 1080);
 
-        // 6. Create Graphics Pipeline
+        // Create Graphics Pipeline
         return create_pipeline(dev, surface_format);
     }
 
@@ -247,7 +247,7 @@ namespace tempest::rhi::examples
             return;
         }
 
-        // 1. Reset and configure surface size for dynamic resolution evaluation
+        // Reset and configure surface size for dynamic resolution evaluation
         _render_graph->reset();
         _render_graph->set_surface_size(info.width, info.height);
 
@@ -261,7 +261,7 @@ namespace tempest::rhi::examples
             render_graph::rg_texture_id target;
         };
 
-        // 2. Pass 1: Primary Outer Triangle Pass (Clears swapchain to dark background)
+        // Pass 1: Primary Outer Triangle Pass (Clears swapchain to dark background)
         const auto& primary_pass = _render_graph->add_graphics_pass<primary_pass_data>(
             "PrimaryGeometryPass",
             [this, sc_tex](render_graph::pass_builder& builder, primary_pass_data& data) -> void {
@@ -300,7 +300,7 @@ namespace tempest::rhi::examples
             render_graph::rg_texture_id target;
         };
 
-        // 3. Pass 2: Inverted Accent Triangle Pass (Loads previous pass color target)
+        // Pass 2: Inverted Accent Triangle Pass (Loads previous pass color target)
         const auto& accent_pass = _render_graph->add_graphics_pass<accent_pass_data>(
             "AccentGeometryPass",
             [this, &primary_pass](render_graph::pass_builder& builder, accent_pass_data& data) -> void {
@@ -338,7 +338,7 @@ namespace tempest::rhi::examples
             render_graph::rg_texture_id target;
         };
 
-        // 4. Pass 3: Center Core Emblem Pass (Loads previous pass color target, Sinks DAG)
+        // Pass 3: Center Core Emblem Pass (Loads previous pass color target, Sinks DAG)
         _render_graph->add_graphics_pass<emblem_pass_data>(
             "CoreEmblemPass",
             [this, &accent_pass](render_graph::pass_builder& builder, emblem_pass_data& data) -> void {
@@ -369,7 +369,7 @@ namespace tempest::rhi::examples
                 pass_cmd.draw_indexed(3, 1, 0, 0, 0);
             });
 
-        // 5. Execute compiled multi-pass DAG directly via Render Graph
+        // Execute compiled multi-pass DAG directly via Render Graph
         const auto sync = render_graph::frame_sync_options{
             .wait_semaphore = info.acquire_semaphore,
             .wait_stages = rhi::pipeline_stage::attachment_output,

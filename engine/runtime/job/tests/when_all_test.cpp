@@ -16,7 +16,7 @@ namespace tempest::job::tests
     ///        a tuple of expected<T, E> results matching input types.
     TEST(when_all_test, variadic_when_all_success)
     {
-        // 1. Setup: 4-worker job system
+        // Setup: 4-worker job system
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -35,11 +35,11 @@ namespace tempest::job::tests
             co_return 100;
         };
 
-        // 2. Act: Execute when_all with variadic tasks dispatched to job_system
+        // Act: Execute when_all with variadic tasks dispatched to job_system
         auto run = [&]() -> task<void> {
             auto results = co_await when_all(sys, t1(), t2(), t3());
 
-            // 3. Assert: Verify each tuple element
+            // Assert: Verify each tuple element
             EXPECT_TRUE(get<0>(results).has_value());
             EXPECT_EQ(get<0>(results).value(), 42);
 
@@ -64,7 +64,7 @@ namespace tempest::job::tests
     ///        a vector of expected<T, E> results.
     TEST(when_all_test, dynamic_vector_when_all)
     {
-        // 1. Setup: 4-worker job system
+        // Setup: 4-worker job system
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -85,11 +85,11 @@ namespace tempest::job::tests
             tasks.push_back(task_gen(i));
         }
 
-        // 2. Act: Execute dynamic when_all
+        // Act: Execute dynamic when_all
         auto run = [&]() -> task<void> {
             auto results = co_await when_all(sys, tempest::move(tasks));
 
-            // 3. Assert: All 8 results match
+            // Assert: All 8 results match
             EXPECT_EQ(results.size(), static_cast<size_t>(count));
             for (auto i = 0u; i < static_cast<size_t>(count); ++i)
             {
@@ -113,7 +113,7 @@ namespace tempest::job::tests
     ///        aborting, preserving expected<T, E> error codes alongside successful values.
     TEST(when_all_test, structured_error_collection)
     {
-        // 1. Setup: 4-worker job system
+        // Setup: 4-worker job system
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -136,11 +136,11 @@ namespace tempest::job::tests
             co_return;
         };
 
-        // 2. Act: Execute when_all containing both success and failure tasks via sys.when_all
+        // Act: Execute when_all containing both success and failure tasks via sys.when_all
         auto run = [&]() -> task<void> {
             auto results = co_await sys.when_all(success_task(), fail_task(), void_fail_task());
 
-            // 3. Assert:
+            // Assert:
             // Element 0: Succeeded with value 999
             EXPECT_TRUE(get<0>(results).has_value());
             EXPECT_EQ(get<0>(results).value(), 999);
@@ -168,7 +168,7 @@ namespace tempest::job::tests
     /// @brief Verifies that structured bindings unpack variadic when_all results cleanly.
     TEST(when_all_test, structured_binding_unpacking)
     {
-        // 1. Setup: 4-worker job system
+        // Setup: 4-worker job system
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -187,11 +187,11 @@ namespace tempest::job::tests
             co_return;
         };
 
-        // 2. Act: Structured bindings with co_await sys.when_all(...)
+        // Act: Structured bindings with co_await sys.when_all(...)
         auto run = [&]() -> task<void> {
             auto [r1, r2, r3] = co_await sys.when_all(t1(), t2(), t3());
 
-            // 3. Assert: Unpacked expected results
+            // Assert: Unpacked expected results
             EXPECT_TRUE(r1.has_value());
             EXPECT_EQ(r1.value(), 10);
 
@@ -212,7 +212,7 @@ namespace tempest::job::tests
     ///        can be functionally chained using monadic expected operators.
     TEST(when_all_test, structured_binding_monadic_chaining)
     {
-        // 1. Setup
+        // Setup
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto cfg = job_system_config{
@@ -225,11 +225,11 @@ namespace tempest::job::tests
         auto t1 = []() -> task<int> { co_return 25; };
         auto t2 = []() -> task<int> { co_return 17; };
 
-        // 2. Act
+        // Act
         auto run = [&]() -> task<void> {
             auto [r1, r2] = co_await when_all(t1(), t2());
 
-            // 3. Assert: monadic functional chaining across structured binding results
+            // Assert: monadic functional chaining across structured binding results
             auto combined = r1.and_then([&](int a) {
                 return r2.transform([&](int b) { return a + b; });
             });
@@ -248,18 +248,18 @@ namespace tempest::job::tests
     /// @brief Verifies that dynamic vector when_all executes standalone without any job_system.
     TEST(when_all_test, standalone_vector_when_all)
     {
-        // 1. Setup
+        // Setup
         auto t1 = []() -> task<int> { co_return 100; };
         auto t2 = []() -> task<int> { co_return 200; };
         auto tasks = vector<task<int>>{};
         tasks.push_back(t1());
         tasks.push_back(t2());
 
-        // 2. Act
+        // Act
         auto run = [&]() -> task<void> {
             auto res = co_await when_all(tempest::move(tasks));
 
-            // 3. Assert
+            // Assert
             EXPECT_EQ(res.size(), 2u);
             EXPECT_TRUE(res[0].has_value());
             EXPECT_EQ(res[0].value(), 100);
@@ -276,7 +276,7 @@ namespace tempest::job::tests
     ///        allocations through the job allocator without triggering reference parameter diagnostics.
     TEST(when_all_test, when_all_routes_allocator_to_dispatch_allocator)
     {
-        // 1. Setup
+        // Setup
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -289,7 +289,7 @@ namespace tempest::job::tests
         auto t1 = []() -> task<int> { co_return 10; };
         auto t2 = []() -> task<int> { co_return 20; };
 
-        // 2. Act
+        // Act
         const auto telem_before = alloc.get_telemetry();
         auto run = [&]() -> task<void> {
             auto [r1, r2] = co_await when_all(sys, t1(), t2());
@@ -303,7 +303,7 @@ namespace tempest::job::tests
         main_task.resume();
         sys.wait_idle();
 
-        // 3. Assert: Slabs were utilized by when_all runner and awaiter frames
+        // Assert: Slabs were utilized by when_all runner and awaiter frames
         const auto telem_after = alloc.get_telemetry();
         auto slab_allocated = false;
         for (size_t i = 0; i < slab_class_count; ++i)
@@ -327,7 +327,7 @@ namespace tempest::job::tests
     ///        to the parent task.
     TEST(when_all_test, when_all_leaf_naming_and_provenance)
     {
-        // 1. Setup: 4-worker job system with active profiler
+        // Setup: 4-worker job system with active profiler
         auto log = logger{};
         auto prof = profiler::profiler_session{true};
         auto config = job_system_config{
@@ -343,7 +343,7 @@ namespace tempest::job::tests
         auto t1 = make_leaf(10).with_name("leaf_alpha");
         auto t2 = make_leaf(20).with_name("leaf_beta");
 
-        // 2. Act: Execute when_all inside a parent task
+        // Act: Execute when_all inside a parent task
         auto parent = [&]() -> task<void> {
             auto [r1, r2] = co_await when_all(sys, tempest::move(t1), tempest::move(t2));
             EXPECT_TRUE(r1.has_value());
@@ -359,7 +359,7 @@ namespace tempest::job::tests
         sys.schedule(parent_job);
         sys.wait_idle();
 
-        // 3. Assert: Verify completion and profiler chunk zones
+        // Assert: Verify completion and profiler chunk zones
         EXPECT_TRUE(parent_job.is_ready());
 
         auto chunks = prof.drain_completed_chunks();

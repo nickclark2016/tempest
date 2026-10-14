@@ -86,7 +86,7 @@ namespace tempest::rhi::examples
     {
         _device = &dev;
 
-        // 1. Create Staging Upload Buffer for template geometry
+        // Create Staging Upload Buffer for template geometry
         const auto staging_desc = buffer_desc{
             .size = sizeof(template_positions),
             .memory_usage = memory_usage::upload,
@@ -100,7 +100,7 @@ namespace tempest::rhi::examples
         }
         tempest::memcpy(_staging_buffer.cpu_address, template_positions.data(), sizeof(template_positions));
 
-        // 2. Create GPU Base Positions Buffer (Transfer Destination)
+        // Create GPU Base Positions Buffer (Transfer Destination)
         const auto base_pos_desc = buffer_desc{
             .size = sizeof(template_positions),
             .memory_usage = memory_usage::device_only,
@@ -113,7 +113,7 @@ namespace tempest::rhi::examples
             return false;
         }
 
-        // 3. Create Dynamic Output Positions Buffer (Compute RW -> Vertex Shader Read)
+        // Create Dynamic Output Positions Buffer (Compute RW -> Vertex Shader Read)
         const auto dyn_pos_desc = buffer_desc{
             .size = sizeof(template_positions),
             .memory_usage = memory_usage::device_only,
@@ -126,7 +126,7 @@ namespace tempest::rhi::examples
             return false;
         }
 
-        // 4. Create Dynamic Output Colors Buffer (Compute RW -> Vertex Shader Read)
+        // Create Dynamic Output Colors Buffer (Compute RW -> Vertex Shader Read)
         const auto dyn_col_desc = buffer_desc{
             .size = sizeof(vec3) * template_positions.size(),
             .memory_usage = memory_usage::device_only,
@@ -139,7 +139,7 @@ namespace tempest::rhi::examples
             return false;
         }
 
-        // 5. Create Index Buffer
+        // Create Index Buffer
         const auto index_desc = buffer_desc{
             .size = sizeof(indices),
             .memory_usage = memory_usage::upload,
@@ -153,10 +153,10 @@ namespace tempest::rhi::examples
         }
         tempest::memcpy(_index_buffer.cpu_address, indices.data(), sizeof(indices));
 
-        // 6. Initialize Render Graph
+        // Initialize Render Graph
         _render_graph = make_unique<render_graph::render_graph>(1920, 1080);
 
-        // 7. Create Graphics and Compute Pipelines
+        // Create Graphics and Compute Pipelines
         return create_pipeline(dev, surface_format) && create_compute_pipeline(dev);
     }
 

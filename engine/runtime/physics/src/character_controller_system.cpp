@@ -31,7 +31,7 @@ namespace tempest::physics
                 return;
             }
 
-            // 1. Normalize horizontal wish direction.
+            // Normalize horizontal wish direction.
             auto wish_direction = math::vec3<float>{intent.wish_direction.x, 0.0F, intent.wish_direction.z};
             const auto wish_length_squared = wish_direction.x * wish_direction.x + wish_direction.z * wish_direction.z;
             if (wish_length_squared > 1.0e-4F)
@@ -45,11 +45,11 @@ namespace tempest::physics
                 wish_direction = math::vec3<float>{0.0F, 0.0F, 0.0F};
             }
 
-            // 2. Calculate target horizontal velocity (d_wish * speed).
+            // Calculate target horizontal velocity (d_wish * speed).
             const auto speed = intent.sprint_requested ? controller.run_speed : controller.walk_speed;
             const auto target_horizontal_velocity = wish_direction * speed;
 
-            // 3. Lerp current horizontal velocity toward target with acceleration_rate.
+            // Lerp current horizontal velocity toward target with acceleration_rate.
             const auto current_linear_velocity = character->get_linear_velocity();
             auto current_horizontal_velocity = math::vec3<float>{current_linear_velocity.x, 0.0F, current_linear_velocity.z};
             const auto alpha = math::clamp(controller.acceleration_rate * dt, 0.0F, 1.0F);
@@ -61,7 +61,7 @@ namespace tempest::physics
                 current_horizontal_velocity = math::vec3<float>{0.0F, 0.0F, 0.0F};
             }
 
-            // 4. Manage vertical velocity.
+            // Manage vertical velocity.
             const auto ground_state = character->get_ground_state();
             const auto is_grounded = (ground_state == jolt::shim::ground_state::on_ground);
 
@@ -79,7 +79,7 @@ namespace tempest::physics
 
             vertical_velocity += gravity.y * dt;
 
-            // 5. Check stairs or cancel velocity towards steep slopes for horizontal movement.
+            // Check stairs or cancel velocity towards steep slopes for horizontal movement.
             auto horizontal_velocity = jolt::shim::vec3{
                 .x = current_horizontal_velocity.x,
                 .y = 0.0F,
@@ -90,7 +90,7 @@ namespace tempest::physics
                 horizontal_velocity = character->cancel_velocity_towards_steep_slopes(horizontal_velocity);
             }
 
-            // 6. Set composite linear velocity.
+            // Set composite linear velocity.
             const auto desired_velocity = jolt::shim::vec3{
                 .x = horizontal_velocity.x,
                 .y = vertical_velocity,
@@ -98,7 +98,7 @@ namespace tempest::physics
             };
             character->set_linear_velocity(desired_velocity);
 
-            // 7. Execute character->extended_update with stick_to_floor and walk_stairs settings.
+            // Execute character->extended_update with stick_to_floor and walk_stairs settings.
             const auto update_settings = jolt::shim::extended_update_settings{
                 .stick_to_floor_step_down = jolt::shim::vec3{
                     .x = 0.0F,
@@ -122,7 +122,7 @@ namespace tempest::physics
             };
             character->extended_update(dt, shim_gravity, update_settings);
 
-            // 8. Update character_controller_component runtime state.
+            // Update character_controller_component runtime state.
             const auto new_position = character->get_position();
             const auto new_rotation = character->get_rotation();
             const auto new_velocity = character->get_linear_velocity();
@@ -139,12 +139,12 @@ namespace tempest::physics
                 mutable_velocity->linear = math::vec3<float>{new_velocity.x, new_velocity.y, new_velocity.z};
             }
 
-            // 9. Update transform_component with new position and rotation.
+            // Update transform_component with new position and rotation.
             const auto final_position = math::vec3<float>{new_position.x, new_position.y, new_position.z};
             const auto final_rotation = math::quat<float>{new_rotation.x, new_rotation.y, new_rotation.z, new_rotation.w};
             transform.set(final_position, final_rotation);
 
-            // 10. If entity also has transform_history_component, update current_position and current_rotation.
+            // If entity also has transform_history_component, update current_position and current_rotation.
             if (auto* history = registry.try_get<ecs::transform_history_component>(self.entity))
             {
                 auto* mutable_history = const_cast<ecs::transform_history_component*>(history);

@@ -6,8 +6,8 @@
 ///
 /// An event_dispatcher<T> is the central broadcast point for events of type T. When publish()
 /// is called, it:
-///   1. Invokes all subscribed listener callables synchronously on the calling thread.
-///   2. Enqueues the event into all subscribed event_queue<T> instances.
+///   Invokes all subscribed listener callables synchronously on the calling thread.
+///   Enqueues the event into all subscribed event_queue<T> instances.
 ///
 /// Listeners are stored in a slot_map for O(1) subscribe/unsubscribe with dense iteration.
 /// Queue pointers are stored in a separate slot_map (non-owning — queues are owned by subsystems).

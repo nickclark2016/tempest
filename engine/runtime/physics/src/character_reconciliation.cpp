@@ -37,7 +37,7 @@ namespace tempest::physics
             const auto is_snap = (error_dist > config.snap_threshold);
             result.snapped = is_snap;
 
-            // 1. Update visual smoothing error if smoothing component is attached
+            // Update visual smoothing error if smoothing component is attached
             if (const auto* const smoothing = registry.try_get<reconciliation_smoothing_component>(player_entity))
             {
                 auto updated_smoothing = *smoothing;
@@ -57,10 +57,10 @@ namespace tempest::physics
                 registry.replace(player_entity, updated_smoothing);
             }
 
-            // 2. Rollback physical state to authoritative server snapshot
+            // Rollback physical state to authoritative server snapshot
             restore_character_snapshot(registry, player_entity, server_snapshot, &world);
 
-            // 3. Resimulate forward from server_tick + 1 up to latest_tick
+            // Resimulate forward from server_tick + 1 up to latest_tick
             if (const auto latest = buffer.latest_tick())
             {
                 const auto latest_tick = *latest;
@@ -77,7 +77,7 @@ namespace tempest::physics
             }
         }
 
-        // 4. Discard acknowledged frames up to server tick
+        // Discard acknowledged frames up to server tick
         buffer.discard_acked_inputs(server_tick);
 
         return result;

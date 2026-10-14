@@ -111,7 +111,7 @@ namespace tempest_model_prefab_test
 /// simulated re-imports with distinct paths and GUIDs.
 TEST(model_prefab_tests, gltf_reimport_preserves_deterministic_member_ids)
 {
-    // 1. Setup distinct GUIDs and node paths
+    // Setup distinct GUIDs and node paths
     const auto guid_alpha = *tempest::parse_guid("11111111-2222-3333-4444-555555555555");
     const auto guid_beta = *tempest::parse_guid("99999999-8888-7777-6666-555555555555");
 
@@ -119,7 +119,7 @@ TEST(model_prefab_tests, gltf_reimport_preserves_deterministic_member_ids)
     const auto path_node_zero = tempest::string_view{"/Root/Node_0"};
     const auto path_node_one = tempest::string_view{"/Root/Node_1"};
 
-    // 2. Act: compute hashes and local IDs
+    // Act: compute hashes and local IDs
     const auto hash_alpha_root = tempest::scene::fnv1a64(guid_alpha, path_root);
     const auto hash_alpha_root_repeat = tempest::scene::fnv1a64(guid_alpha, path_root);
     const auto hash_alpha_node_zero = tempest::scene::fnv1a64(guid_alpha, path_node_zero);
@@ -130,7 +130,7 @@ TEST(model_prefab_tests, gltf_reimport_preserves_deterministic_member_ids)
     const auto id_alpha_node_zero_repeat = tempest::scene::compute_model_prefab_local_id(guid_alpha, path_node_zero);
     const auto id_beta_node_zero = tempest::scene::compute_model_prefab_local_id(guid_beta, path_node_zero);
 
-    // 3. Assert: stability and uniqueness
+    // Assert: stability and uniqueness
     EXPECT_EQ(hash_alpha_root, hash_alpha_root_repeat);
     EXPECT_NE(hash_alpha_root, hash_alpha_node_zero);
     EXPECT_NE(hash_alpha_node_zero, hash_alpha_node_one);
@@ -140,7 +140,7 @@ TEST(model_prefab_tests, gltf_reimport_preserves_deterministic_member_ids)
     EXPECT_EQ(id_alpha_node_zero, id_alpha_node_zero_repeat);
     EXPECT_NE(id_alpha_node_zero, id_beta_node_zero);
 
-    // 4. Act & Assert: simulated re-import with synthesize_model_prefab
+    // Act & Assert: simulated re-import with synthesize_model_prefab
     auto context_first = tempest_model_prefab_test::test_registry_context{};
     const auto root_first = context_first.registry.create();
     context_first.registry.name(root_first, "Root");
@@ -219,7 +219,7 @@ TEST(model_prefab_tests, gltf_reimport_preserves_deterministic_member_ids)
 /// reflect updated template values, and overridden fields retain their instance values.
 TEST(model_prefab_tests, propagation_preserves_live_entity_handles)
 {
-    // 1. Setup initial template V1 with Root and Child
+    // Setup initial template V1 with Root and Child
     auto context = tempest_model_prefab_test::test_registry_context{};
     auto cache = tempest::scene::prefab_cache{};
     const auto prefab_guid = tempest::guid::generate_random_guid();
@@ -277,7 +277,7 @@ TEST(model_prefab_tests, propagation_preserves_live_entity_handles)
     EXPECT_EQ(context.registry.get<tempest_model_prefab_test::model_test_data_component>(live_child_entity).val, 20);
     EXPECT_FLOAT_EQ(context.registry.get<tempest_model_prefab_test::model_test_data_component>(live_child_entity).weight, 99.0F);
 
-    // 2. Act: build updated template V2 and propagate updates
+    // Act: build updated template V2 and propagate updates
     auto builder_v2 = tempest::scene::prefab_template_builder{};
     const auto root_idx_v2 = builder_v2.add_entity(local_id_root, "Root", tempest::nullopt);
     const auto child_idx_v2 = builder_v2.add_entity(local_id_child, "Child", root_idx_v2);
@@ -298,7 +298,7 @@ TEST(model_prefab_tests, propagation_preserves_live_entity_handles)
 
     const auto updated_count = cache.propagate_updates(context.registry, prefab_guid);
 
-    // 3. Assert: live entity handles preserved, non-overridden fields updated, overridden field retained
+    // Assert: live entity handles preserved, non-overridden fields updated, overridden field retained
     EXPECT_EQ(updated_count, 1U);
 
     EXPECT_TRUE(context.registry.is_valid(live_root_entity));
@@ -321,7 +321,7 @@ TEST(model_prefab_tests, propagation_preserves_live_entity_handles)
 /// @brief Verifies that adding members to template creates new entities on the instance, and removing members destroys their entities.
 TEST(model_prefab_tests, propagation_adds_and_removes_template_members)
 {
-    // 1. Setup template V1 with Root, ChildA, ChildB
+    // Setup template V1 with Root, ChildA, ChildB
     auto context = tempest_model_prefab_test::test_registry_context{};
     auto cache = tempest::scene::prefab_cache{};
     const auto prefab_guid = tempest::guid::generate_random_guid();
@@ -351,7 +351,7 @@ TEST(model_prefab_tests, propagation_adds_and_removes_template_members)
     ASSERT_TRUE(context.registry.is_valid(live_child_a));
     ASSERT_TRUE(context.registry.is_valid(live_child_b));
 
-    // 2. Act: build template V2 where ChildB is removed and ChildC is added
+    // Act: build template V2 where ChildB is removed and ChildC is added
     auto builder_v2 = tempest::scene::prefab_template_builder{};
     const auto root_idx_v2 = builder_v2.add_entity(local_id_root, "Root", tempest::nullopt);
     builder_v2.add_entity(local_id_child_a, "ChildA", root_idx_v2);
@@ -364,7 +364,7 @@ TEST(model_prefab_tests, propagation_adds_and_removes_template_members)
     const auto updated_count =
         tempest::scene::prefab_operations::propagate_template_updates(context.registry, prefab_guid, cache);
 
-    // 3. Assert: ChildB destroyed, ChildC created with proper parent relationship
+    // Assert: ChildB destroyed, ChildC created with proper parent relationship
     EXPECT_EQ(updated_count, 1U);
 
     EXPECT_TRUE(context.registry.is_valid(live_root));
@@ -398,7 +398,7 @@ TEST(model_prefab_tests, propagation_adds_and_removes_template_members)
 /// @brief Verifies that synthesize_model_prefab disambiguates siblings even when names collide (e.g. "Part_1" and "Part").
 TEST(model_prefab_tests, disambiguation_avoids_sibling_name_collisions)
 {
-    // 1. Setup: Create hierarchy with siblings named "Part_1", "Part", "Part"
+    // Setup: Create hierarchy with siblings named "Part_1", "Part", "Part"
     auto context = tempest_model_prefab_test::test_registry_context{};
     const auto source_guid = tempest::guid::generate_random_guid();
 
@@ -417,10 +417,10 @@ TEST(model_prefab_tests, disambiguation_avoids_sibling_name_collisions)
     context.registry.name(sibling_2, "Part");
     tempest::ecs::create_parent_child_relationship(context.registry, root_ent, sibling_2);
 
-    // 2. Act: Synthesize model prefab
+    // Act: Synthesize model prefab
     const auto tmpl = tempest::scene::synthesize_model_prefab(context.registry, root_ent, source_guid);
 
-    // 3. Assert: 4 distinct records with unique, non-colliding local IDs
+    // Assert: 4 distinct records with unique, non-colliding local IDs
     EXPECT_EQ(tmpl.entity_count(), 4U);
 
     auto seen_local_ids = tempest::flat_unordered_map<uint64_t, size_t>{};
@@ -437,7 +437,7 @@ TEST(model_prefab_tests, disambiguation_avoids_sibling_name_collisions)
 /// @brief Verifies that hot-propagation preserves added and removed component overrides on an instance.
 TEST(model_prefab_tests, propagation_preserves_added_and_removed_component_overrides)
 {
-    // 1. Setup: Build template with child possessing data component and extra component
+    // Setup: Build template with child possessing data component and extra component
     auto context = tempest_model_prefab_test::test_registry_context{};
     auto cache = tempest::scene::prefab_cache{};
     const auto prefab_guid = tempest::guid::generate_random_guid();
@@ -485,7 +485,7 @@ TEST(model_prefab_tests, propagation_preserves_added_and_removed_component_overr
     EXPECT_FALSE(context.registry.has<tempest_model_prefab_test::model_test_data_component>(live_child));
     EXPECT_TRUE(context.registry.has<tempest_model_prefab_test::model_test_extra_component>(live_child));
 
-    // 2. Act: Update template V2 with updated data component values and propagate
+    // Act: Update template V2 with updated data component values and propagate
     auto builder_v2 = tempest::scene::prefab_template_builder{};
     const auto root_idx_v2 = builder_v2.add_entity(local_id_root, "Root", tempest::nullopt);
     const auto child_idx_v2 = builder_v2.add_entity(local_id_child, "Child", root_idx_v2);
@@ -502,7 +502,7 @@ TEST(model_prefab_tests, propagation_preserves_added_and_removed_component_overr
         tempest::scene::prefab_operations::propagate_template_updates(context.registry, prefab_guid, cache);
     EXPECT_EQ(updated, 1U);
 
-    // 3. Assert: Child still does NOT have model_test_data_component (removed override kept),
+    // Assert: Child still does NOT have model_test_data_component (removed override kept),
     // and still possesses model_test_extra_component (added override kept)
     EXPECT_FALSE(context.registry.has<tempest_model_prefab_test::model_test_data_component>(live_child));
     EXPECT_TRUE(context.registry.has<tempest_model_prefab_test::model_test_extra_component>(live_child));
@@ -514,7 +514,7 @@ TEST(model_prefab_tests, propagation_preserves_added_and_removed_component_overr
 /// @brief Verifies that an instance-added non-prefab child attached to a template member is re-anchored when that member is deleted.
 TEST(model_prefab_tests, propagation_reanchors_instance_added_children_when_parent_removed)
 {
-    // 1. Setup: Template with Root -> ChildA
+    // Setup: Template with Root -> ChildA
     auto context = tempest_model_prefab_test::test_registry_context{};
     auto cache = tempest::scene::prefab_cache{};
     const auto prefab_guid = tempest::guid::generate_random_guid();
@@ -543,7 +543,7 @@ TEST(model_prefab_tests, propagation_reanchors_instance_added_children_when_pare
     inst_comp.overrides.added_children.push_back(tempest::scene::entity_local_id{9999});
     context.registry.assign_or_replace(live_root, inst_comp);
 
-    // 2. Act: Update template V2 omitting ChildA entirely (so ChildA is destroyed)
+    // Act: Update template V2 omitting ChildA entirely (so ChildA is destroyed)
     auto builder_v2 = tempest::scene::prefab_template_builder{};
     builder_v2.add_entity(local_id_root, "Root", tempest::nullopt);
     cache.unregister_template(prefab_guid);
@@ -553,7 +553,7 @@ TEST(model_prefab_tests, propagation_reanchors_instance_added_children_when_pare
         tempest::scene::prefab_operations::propagate_template_updates(context.registry, prefab_guid, cache);
     EXPECT_EQ(updated, 1U);
 
-    // 3. Assert: ChildA is destroyed, custom_child is still valid and re-anchored to live_root
+    // Assert: ChildA is destroyed, custom_child is still valid and re-anchored to live_root
     EXPECT_FALSE(context.registry.is_valid(live_child_a));
     EXPECT_TRUE(context.registry.is_valid(custom_child));
 
@@ -566,7 +566,7 @@ TEST(model_prefab_tests, propagation_reanchors_instance_added_children_when_pare
 /// @brief Verifies that propagate_template_updates updates multiple active instances in the same world.
 TEST(model_prefab_tests, propagation_across_multiple_instances)
 {
-    // 1. Setup: Template with Root -> Child
+    // Setup: Template with Root -> Child
     auto context = tempest_model_prefab_test::test_registry_context{};
     auto cache = tempest::scene::prefab_cache{};
     const auto prefab_guid = tempest::guid::generate_random_guid();
@@ -596,7 +596,7 @@ TEST(model_prefab_tests, propagation_across_multiple_instances)
     ASSERT_TRUE(inst_2.has_value());
     const auto live_child_2 = inst_2->local_to_entity[local_id_child.value];
 
-    // 2. Act: Update template V2 with val = 777
+    // Act: Update template V2 with val = 777
     auto builder_v2 = tempest::scene::prefab_template_builder{};
     const auto root_idx_v2 = builder_v2.add_entity(local_id_root, "Root", tempest::nullopt);
     const auto child_idx_v2 = builder_v2.add_entity(local_id_child, "Child", root_idx_v2);
@@ -612,7 +612,7 @@ TEST(model_prefab_tests, propagation_across_multiple_instances)
     const auto updated =
         tempest::scene::prefab_operations::propagate_template_updates(context.registry, prefab_guid, cache);
 
-    // 3. Assert: Both instances updated
+    // Assert: Both instances updated
     EXPECT_EQ(updated, 2U);
 
     const auto* comp_1 = context.registry.try_get<tempest_model_prefab_test::model_test_data_component>(live_child_1);

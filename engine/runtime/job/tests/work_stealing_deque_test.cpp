@@ -15,12 +15,12 @@ namespace tempest::job::tests
     ///        track size accurately, and handle empty underflow gracefully.
     TEST(work_stealing_deque_test, single_thread_push_pop)
     {
-        // 1. Setup: Construct a work-stealing deque with capacity 16
+        // Setup: Construct a work-stealing deque with capacity 16
         auto deque = work_stealing_deque<int, 16>{};
         EXPECT_TRUE(deque.empty());
         EXPECT_EQ(deque.size(), 0u);
 
-        // 2. Act: Push 5 items (10, 20, 30, 40, 50)
+        // Act: Push 5 items (10, 20, 30, 40, 50)
         for (auto val : {10, 20, 30, 40, 50})
         {
             EXPECT_TRUE(deque.try_push(val));
@@ -29,7 +29,7 @@ namespace tempest::job::tests
         EXPECT_FALSE(deque.empty());
         EXPECT_EQ(deque.size(), 5u);
 
-        // 3. Assert: Owner pops in strict LIFO order
+        // Assert: Owner pops in strict LIFO order
         auto p5 = deque.pop();
         auto p4 = deque.pop();
         auto p3 = deque.pop();
@@ -64,7 +64,7 @@ namespace tempest::job::tests
     ///        semantics and that every pushed element is popped or stolen exactly once.
     TEST(work_stealing_deque_test, multi_thread_concurrent_thief_steals)
     {
-        // 1. Setup: Capacity 1024 deque
+        // Setup: Capacity 1024 deque
         auto deque = work_stealing_deque<int, 1024>{};
         constexpr auto total_items = 800;
         constexpr auto num_thieves = 4;
@@ -73,7 +73,7 @@ namespace tempest::job::tests
         auto stolen_checksum = atomic<int64_t>{0};
         auto stop_thieves = atomic<bool>{false};
 
-        // 2. Act: Spawn thief threads
+        // Act: Spawn thief threads
         auto thieves = vector<tempest::thread>{};
         thieves.reserve(num_thieves);
 
@@ -130,7 +130,7 @@ namespace tempest::job::tests
             t.join();
         }
 
-        // 3. Assert: Exactly total_items consumed, with zero duplicates and zero lost items
+        // Assert: Exactly total_items consumed, with zero duplicates and zero lost items
         EXPECT_EQ(total_stolen.load(memory_order::relaxed) + owner_popped_count, total_items);
         EXPECT_EQ(stolen_checksum.load(memory_order::relaxed) + owner_checksum, expected_checksum);
     }
@@ -144,12 +144,12 @@ namespace tempest::job::tests
     ///        elements are removed via owner pop or thief steal.
     TEST(work_stealing_deque_test, bounded_capacity_saturation)
     {
-        // 1. Setup: Construct a work-stealing deque with capacity 64
+        // Setup: Construct a work-stealing deque with capacity 64
         auto deque = work_stealing_deque<int, 64>{};
         EXPECT_EQ(deque.capacity(), 64u);
         EXPECT_EQ(deque.size(), 0u);
 
-        // 2. Act & Assert: Push 64 items and verify each returns true
+        // Act & Assert: Push 64 items and verify each returns true
         for (auto index = 0; index < 64; ++index)
         {
             EXPECT_TRUE(deque.try_push(index));

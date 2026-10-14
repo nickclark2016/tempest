@@ -99,7 +99,7 @@ TEST(descriptor_test, bindless_storage_image_write)
     ASSERT_NE(env.dev, nullptr);
     auto& dev = env.dev;
 
-    // 1. Create storage texture (64x64 RGBA8)
+    // Create storage texture (64x64 RGBA8)
     constexpr uint32_t width = 64;
     constexpr uint32_t height = 64;
 
@@ -120,12 +120,12 @@ TEST(descriptor_test, bindless_storage_image_write)
     auto view = dev->create_texture_view(tex, texture_view_desc{});
     ASSERT_NE(view.handle, 0ULL);
 
-    // 2. Allocate and write storage image descriptor
+    // Allocate and write storage image descriptor
     auto storage_slot = dev->allocate_descriptor(descriptor_type::storage_image);
     ASSERT_NE(storage_slot.index, ~0U);
     dev->write_storage_image_descriptor(storage_slot, view, image_layout::general);
 
-    // 3. Create readback buffer
+    // Create readback buffer
     auto readback_desc = buffer_desc{
         .size = static_cast<uint64_t>(width) * height * 4,
         .memory_usage = memory_usage::readback,
@@ -136,7 +136,7 @@ TEST(descriptor_test, bindless_storage_image_write)
     ASSERT_NE(readback_buf.handle, 0ULL);
     ASSERT_NE(readback_buf.cpu_address, nullptr);
 
-    // 4. Create compute pipeline
+    // Create compute pipeline
     auto ir_bytes = span<const byte>{
         reinterpret_cast<const byte*>(test_bindless_storage::test_bindless_storage_spv),
         sizeof(test_bindless_storage::test_bindless_storage_spv),
@@ -152,7 +152,7 @@ TEST(descriptor_test, bindless_storage_image_write)
     auto pipe = dev->create_compute_pipeline(pipe_desc);
     ASSERT_NE(pipe.handle, 0ULL);
 
-    // 5. Record commands
+    // Record commands
     auto& compute_port = dev->get_async_compute_execution_port();
     auto& cmd = compute_port.acquire_command_list(0, command_list_lifetime::transient);
 
@@ -245,7 +245,7 @@ TEST(descriptor_test, bindless_storage_image_write)
     };
     dev->wait_for_sync(host_wait);
 
-    // 6. Verify written values in readback buffer
+    // Verify written values in readback buffer
     const auto* readback_data = static_cast<const uint8_t*>(readback_buf.cpu_address);
     ASSERT_NE(readback_data, nullptr);
 
@@ -270,7 +270,7 @@ TEST(descriptor_test, bindless_sampled_image_read)
     ASSERT_NE(env.dev, nullptr);
     auto& dev = env.dev;
 
-    // 1. Create a 2x2 RGBA8 texture with known colors:
+    // Create a 2x2 RGBA8 texture with known colors:
     // (0,0) Red (255, 0, 0, 255)
     // (1,0) Green (0, 255, 0, 255)
     // (0,1) Blue (0, 0, 255, 255)
@@ -323,7 +323,7 @@ TEST(descriptor_test, bindless_sampled_image_read)
     auto samp = dev->create_sampler(samp_desc);
     ASSERT_NE(samp.handle, 0ULL);
 
-    // 2. Allocate descriptors and write descriptors
+    // Allocate descriptors and write descriptors
     auto texture_slot = dev->allocate_descriptor(descriptor_type::sampled_image);
     ASSERT_NE(texture_slot.index, ~0U);
     dev->write_sampled_image_descriptor(texture_slot, view, image_layout::general);
@@ -332,7 +332,7 @@ TEST(descriptor_test, bindless_sampled_image_read)
     ASSERT_NE(sampler_slot.index, ~0U);
     dev->write_sampler_descriptor(sampler_slot, samp);
 
-    // 3. Create GPU output buffer for sampling results (2x2 float4s = 64 bytes)
+    // Create GPU output buffer for sampling results (2x2 float4s = 64 bytes)
     constexpr uint32_t sample_w = 2;
     constexpr uint32_t sample_h = 2;
     auto out_desc = buffer_desc{
@@ -345,7 +345,7 @@ TEST(descriptor_test, bindless_sampled_image_read)
     ASSERT_NE(out_buf.handle, 0ULL);
     ASSERT_NE(out_buf.cpu_address, nullptr);
 
-    // 4. Create compute pipeline
+    // Create compute pipeline
     auto ir_bytes = span<const byte>{
         reinterpret_cast<const byte*>(test_bindless_sample::test_bindless_sample_spv),
         sizeof(test_bindless_sample::test_bindless_sample_spv),
@@ -361,7 +361,7 @@ TEST(descriptor_test, bindless_sampled_image_read)
     auto pipe = dev->create_compute_pipeline(pipe_desc);
     ASSERT_NE(pipe.handle, 0ULL);
 
-    // 5. Upload texture and execute compute sampling
+    // Upload texture and execute compute sampling
     auto& graphics_port = dev->get_graphics_execution_port();
     auto& cmd = graphics_port.acquire_command_list(0, command_list_lifetime::transient);
 
@@ -458,7 +458,7 @@ TEST(descriptor_test, bindless_sampled_image_read)
     };
     dev->wait_for_sync(host_wait);
 
-    // 6. Verify sampled floats in output buffer
+    // Verify sampled floats in output buffer
     const auto* out_data = static_cast<const float*>(out_buf.cpu_address);
     ASSERT_NE(out_data, nullptr);
 

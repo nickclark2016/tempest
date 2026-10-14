@@ -618,7 +618,7 @@ namespace tempest::profiler
         auto hash_val = hash<uint64_t>{}(tid);
         auto slot_idx = hash_val % max_thread_slots;
 
-        // 1. Check if another thread registered this tid while we were waiting on the lock
+        // Check if another thread registered this tid while we were waiting on the lock
         for (size_t i = 0; i < max_thread_slots; ++i)
         {
             auto idx = (slot_idx + i) % max_thread_slots;
@@ -636,7 +636,7 @@ namespace tempest::profiler
             }
         }
 
-        // 2. Find an empty slot
+        // Find an empty slot
         auto thread_name = _query_native_thread_name(tid);
 
         for (size_t i = 0; i < max_thread_slots; ++i)
@@ -651,7 +651,7 @@ namespace tempest::profiler
             }
         }
 
-        // 3. If all 64 slots are occupied, use overflow
+        // If all 64 slots are occupied, use overflow
         auto ctx = make_unique<thread_profiler_context>(*this, tid, thread_name);
         auto* ptr = ctx.get();
         _overflow_contexts.push_back(tempest::move(ctx));

@@ -118,23 +118,23 @@ namespace tempest::ecs
 /// sizes, and alignments across primitive and math types.
 TEST(reflection_tests, type_descriptor_accurately_reflects_primitives_layout)
 {
-    // 1. Setup: build a type descriptor for all_primitives_component.
+    // Setup: build a type descriptor for all_primitives_component.
     auto builder = tempest::ecs::type_builder<all_primitives_component>{"all_primitives"};
     tempest::ecs::reflect<all_primitives_component>::describe(builder);
     const auto descriptor = builder.build();
 
-    // 2. Assert: verify descriptor header properties.
+    // Assert: verify descriptor header properties.
     ASSERT_EQ(descriptor.name, "all_primitives");
     ASSERT_EQ(descriptor.size, sizeof(all_primitives_component));
     ASSERT_EQ(descriptor.alignment, alignof(all_primitives_component));
     ASSERT_EQ(descriptor.version, 2U);
     ASSERT_EQ(descriptor.fields.size(), 14U);
 
-    // 3. Assert: verify non-existent field lookup returns nullptr.
+    // Assert: verify non-existent field lookup returns nullptr.
     const auto* missing_field = descriptor.find_field("non_existent");
     ASSERT_EQ(missing_field, nullptr);
 
-    // 4. Assert: verify each field descriptor metadata.
+    // Assert: verify each field descriptor metadata.
     const auto* flag_field = descriptor.find_field("flag");
     ASSERT_NE(flag_field, nullptr);
     ASSERT_EQ(flag_field->kind, tempest::ecs::field_kind::boolean);
@@ -223,13 +223,13 @@ TEST(reflection_tests, type_descriptor_accurately_reflects_primitives_layout)
 /// on primitive and composite fields.
 TEST(reflection_tests, field_getter_and_setter_mutate_instance_correctly)
 {
-    // 1. Setup: instance of all_primitives_component and its descriptor.
+    // Setup: instance of all_primitives_component and its descriptor.
     auto instance = all_primitives_component{};
     auto builder = tempest::ecs::type_builder<all_primitives_component>{"all_primitives"};
     tempest::ecs::reflect<all_primitives_component>::describe(builder);
     const auto descriptor = builder.build();
 
-    // 2. Act & Assert: test boolean field access.
+    // Act & Assert: test boolean field access.
     const auto* flag_field = descriptor.find_field("flag");
     ASSERT_NE(flag_field, nullptr);
     auto read_flag = false;
@@ -240,7 +240,7 @@ TEST(reflection_tests, field_getter_and_setter_mutate_instance_correctly)
     flag_field->set(&instance, &write_flag);
     ASSERT_TRUE(instance.flag);
 
-    // 3. Act & Assert: test integer fields.
+    // Act & Assert: test integer fields.
     const auto* int32_field = descriptor.find_field("int32_value");
     ASSERT_NE(int32_field, nullptr);
     const auto write_int32 = int32_t{-12345};
@@ -251,7 +251,7 @@ TEST(reflection_tests, field_getter_and_setter_mutate_instance_correctly)
     int32_field->get(&instance, &read_int32);
     ASSERT_EQ(read_int32, -12345);
 
-    // 4. Act & Assert: test float and double fields.
+    // Act & Assert: test float and double fields.
     const auto* float_field = descriptor.find_field("float_value");
     ASSERT_NE(float_field, nullptr);
     const auto write_float = 3.14159F;
@@ -264,7 +264,7 @@ TEST(reflection_tests, field_getter_and_setter_mutate_instance_correctly)
     double_field->set(&instance, &write_double);
     ASSERT_DOUBLE_EQ(instance.double_value, 2.718281828459);
 
-    // 5. Act & Assert: test math vectors and quaternions.
+    // Act & Assert: test math vectors and quaternions.
     const auto* vec3_field = descriptor.find_field("vec3_value");
     ASSERT_NE(vec3_field, nullptr);
     const auto write_vec3 = tempest::math::vec3<float>{1.5F, 2.5F, 3.5F};
@@ -279,7 +279,7 @@ TEST(reflection_tests, field_getter_and_setter_mutate_instance_correctly)
     quat_field->set(&instance, &write_quat);
     ASSERT_EQ(instance.quat_value.w, 0.9F);
 
-    // 6. Act & Assert: test entity and guid.
+    // Act & Assert: test entity and guid.
     const auto* entity_field = descriptor.find_field("entity_value");
     ASSERT_NE(entity_field, nullptr);
     const auto write_entity = static_cast<tempest::ecs::entity>(9999);
@@ -295,7 +295,7 @@ TEST(reflection_tests, field_getter_and_setter_mutate_instance_correctly)
     ASSERT_EQ(instance.guid_value.data[0], static_cast<tempest::byte>(0xAB));
     ASSERT_EQ(instance.guid_value.data[15], static_cast<tempest::byte>(0xCD));
 
-    // 7. Act & Assert: test enum field.
+    // Act & Assert: test enum field.
     const auto* status_field = descriptor.find_field("status");
     ASSERT_NE(status_field, nullptr);
     const auto write_status = test_status_code::active;
@@ -311,13 +311,13 @@ TEST(reflection_tests, field_getter_and_setter_mutate_instance_correctly)
 /// can be read and written without requiring direct member memory offsets.
 TEST(reflection_tests, property_accessors_invoke_functions_and_lambdas)
 {
-    // 1. Setup: instance of property_test_component and its descriptor.
+    // Setup: instance of property_test_component and its descriptor.
     auto instance = property_test_component{};
     auto builder = tempest::ecs::type_builder<property_test_component>{"property_component"};
     tempest::ecs::reflect<property_test_component>::describe(builder);
     const auto descriptor = builder.build();
 
-    // 2. Assert: verify fields have no_offset.
+    // Assert: verify fields have no_offset.
     const auto* secret_field = descriptor.find_field("secret");
     ASSERT_NE(secret_field, nullptr);
     ASSERT_EQ(secret_field->offset, tempest::ecs::field_descriptor::no_offset);
@@ -328,7 +328,7 @@ TEST(reflection_tests, property_accessors_invoke_functions_and_lambdas)
     ASSERT_EQ(multiplier_field->offset, tempest::ecs::field_descriptor::no_offset);
     ASSERT_EQ(multiplier_field->kind, tempest::ecs::field_kind::float32);
 
-    // 3. Act & Assert: test member function property getter and setter.
+    // Act & Assert: test member function property getter and setter.
     auto read_secret = int32_t{0};
     secret_field->get(&instance, &read_secret);
     ASSERT_EQ(read_secret, 42);
@@ -340,7 +340,7 @@ TEST(reflection_tests, property_accessors_invoke_functions_and_lambdas)
     secret_field->get(&instance, &read_secret);
     ASSERT_EQ(read_secret, 100);
 
-    // 4. Act & Assert: test lambda property getter and setter.
+    // Act & Assert: test lambda property getter and setter.
     auto read_multiplier = 0.0F;
     multiplier_field->get(&instance, &read_multiplier);
     ASSERT_FLOAT_EQ(read_multiplier, 2.0F);
@@ -361,11 +361,11 @@ TEST(reflection_tests, property_accessors_invoke_functions_and_lambdas)
 /// exposes reflected fields, and executes post_load to update its internal transform matrix.
 TEST(reflection_tests, transform_component_reflection_and_post_load_matrix_update)
 {
-    // 1. Setup: create registry and register transform_component.
+    // Setup: create registry and register transform_component.
     auto registry = tempest::ecs::component_type_registry{};
     const auto type_index = registry.register_reflected<tempest::ecs::transform_component>();
 
-    // 2. Assert: verify type info and descriptor lookup.
+    // Assert: verify type info and descriptor lookup.
     const auto& info = registry.type_info(type_index);
     ASSERT_TRUE(info.descriptor.has_value());
     ASSERT_TRUE(info.is_serializable);
@@ -374,7 +374,7 @@ TEST(reflection_tests, transform_component_reflection_and_post_load_matrix_updat
     ASSERT_NE(descriptor, nullptr);
     ASSERT_EQ(descriptor->version, 1U);
 
-    // 3. Assert: verify reflected fields exist.
+    // Assert: verify reflected fields exist.
     const auto* pos_field = descriptor->find_field("position");
     ASSERT_NE(pos_field, nullptr);
     ASSERT_EQ(pos_field->kind, tempest::ecs::field_kind::vec3);
@@ -389,7 +389,7 @@ TEST(reflection_tests, transform_component_reflection_and_post_load_matrix_updat
 
     ASSERT_NE(descriptor->post_load, nullptr);
 
-    // 4. Act: instantiate transform and mutate through field descriptors.
+    // Act: instantiate transform and mutate through field descriptors.
     auto transform = tempest::ecs::transform_component{};
     const auto initial_matrix = transform.matrix();
 
@@ -399,18 +399,18 @@ TEST(reflection_tests, transform_component_reflection_and_post_load_matrix_updat
     const auto target_scale = tempest::math::vec3<float>{2.0F, 2.0F, 2.0F};
     scale_field->set(&transform, &target_scale);
 
-    // 5. Act: verify readback through getter.
+    // Act: verify readback through getter.
     auto read_pos = tempest::math::vec3<float>{0.0F, 0.0F, 0.0F};
     pos_field->get(&transform, &read_pos);
     ASSERT_EQ(read_pos.x, 10.0F);
     ASSERT_EQ(read_pos.y, 20.0F);
     ASSERT_EQ(read_pos.z, 30.0F);
 
-    // 6. Act: invoke post_load to recompute the cached matrix.
+    // Act: invoke post_load to recompute the cached matrix.
     descriptor->post_load(&transform);
     const auto updated_matrix = transform.matrix();
 
-    // 7. Assert: verify the transform matrix reflects new position and scale.
+    // Assert: verify the transform matrix reflects new position and scale.
     ASSERT_NE(initial_matrix, updated_matrix);
     ASSERT_FLOAT_EQ(updated_matrix[3].x, 10.0F);
     ASSERT_FLOAT_EQ(updated_matrix[3].y, 20.0F);
@@ -428,7 +428,7 @@ TEST(reflection_tests, transform_component_reflection_and_post_load_matrix_updat
 /// via the is_serializable trait and component_type_registry.
 TEST(reflection_tests, serialization_policy_marks_internal_components_appropriately)
 {
-    // 1. Assert: verify compile-time trait values.
+    // Assert: verify compile-time trait values.
     static_assert(!tempest::ecs::is_serializable_v<tempest::ecs::relationship_component<tempest::ecs::entity>>,
                   "relationship_component must not be serializable");
     static_assert(!tempest::ecs::is_serializable_v<tempest::ecs::self_component>,
@@ -438,14 +438,14 @@ TEST(reflection_tests, serialization_policy_marks_internal_components_appropriat
     static_assert(tempest::ecs::is_serializable_v<tempest::ecs::transform_component>,
                   "transform_component must be serializable");
 
-    // 2. Setup: register all components in component_type_registry.
+    // Setup: register all components in component_type_registry.
     auto registry = tempest::ecs::component_type_registry{};
     const auto rel_index = registry.register_type<tempest::ecs::relationship_component<tempest::ecs::entity>>();
     const auto self_index = registry.register_type<tempest::ecs::self_component>();
     const auto history_index = registry.register_type<tempest::ecs::transform_history_component>();
     const auto transform_index = registry.register_type<tempest::ecs::transform_component>();
 
-    // 3. Assert: verify runtime registry flags match compile-time traits.
+    // Assert: verify runtime registry flags match compile-time traits.
     ASSERT_FALSE(registry.type_info(rel_index).is_serializable);
     ASSERT_FALSE(registry.type_info(self_index).is_serializable);
     ASSERT_FALSE(registry.type_info(history_index).is_serializable);
@@ -460,7 +460,7 @@ TEST(reflection_tests, serialization_policy_marks_internal_components_appropriat
 /// floating point, composite vectors like float3) and custom widget presentations.
 TEST(reflection_tests, ui_hints_support_integers_enums_and_composite_float3)
 {
-    // 1. Setup: declare a component with diverse UI hints.
+    // Setup: declare a component with diverse UI hints.
     struct custom_ui_component
     {
         int32_t health = 100;
@@ -522,7 +522,7 @@ TEST(reflection_tests, ui_hints_support_integers_enums_and_composite_float3)
 
     const auto descriptor = builder.build();
 
-    // 2. Assert: verify health hints.
+    // Assert: verify health hints.
     const auto* health_field = descriptor.find_field("health");
     ASSERT_NE(health_field, nullptr);
     ASSERT_TRUE(health_field->hints.min_value.has_value());
@@ -534,14 +534,14 @@ TEST(reflection_tests, ui_hints_support_integers_enums_and_composite_float3)
     ASSERT_EQ(health_field->hints.units, "hp");
     ASSERT_EQ(health_field->hints.display_name, "Health");
 
-    // 3. Assert: verify alpha hints.
+    // Assert: verify alpha hints.
     const auto* alpha_field = descriptor.find_field("alpha");
     ASSERT_NE(alpha_field, nullptr);
     ASSERT_TRUE(tempest::holds_alternative<double>(*alpha_field->hints.min_value));
     ASSERT_DOUBLE_EQ(tempest::get<double>(*alpha_field->hints.min_value), 0.0);
     ASSERT_DOUBLE_EQ(tempest::get<double>(*alpha_field->hints.max_value), 1.0);
 
-    // 4. Assert: verify composite float3 position hints with per-component vec3 bounds.
+    // Assert: verify composite float3 position hints with per-component vec3 bounds.
     const auto* pos_field = descriptor.find_field("position");
     ASSERT_NE(pos_field, nullptr);
     ASSERT_TRUE(pos_field->hints.min_value.has_value());
@@ -555,14 +555,14 @@ TEST(reflection_tests, ui_hints_support_integers_enums_and_composite_float3)
     ASSERT_EQ(pos_field->hints.widget, tempest::ecs::ui_widget_type::drag);
     ASSERT_FLOAT_EQ(pos_field->hints.drag_speed, 0.5F);
 
-    // 5. Assert: verify composite float3 color hints with color_picker widget.
+    // Assert: verify composite float3 color hints with color_picker widget.
     const auto* color_field = descriptor.find_field("color");
     ASSERT_NE(color_field, nullptr);
     ASSERT_EQ(color_field->hints.widget, tempest::ecs::ui_widget_type::color_picker);
     ASSERT_TRUE(tempest::holds_alternative<double>(*color_field->hints.min_value));
     ASSERT_DOUBLE_EQ(tempest::get<double>(*color_field->hints.min_value), 0.0);
 
-    // 6. Assert: verify enum dropdown hints.
+    // Assert: verify enum dropdown hints.
     const auto* status_field = descriptor.find_field("status");
     ASSERT_NE(status_field, nullptr);
     ASSERT_EQ(status_field->hints.widget, tempest::ecs::ui_widget_type::dropdown);

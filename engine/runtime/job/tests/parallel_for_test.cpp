@@ -17,7 +17,7 @@ namespace tempest::job::tests
     ///        correctly and processes every element without data races or missing indices.
     TEST(parallel_for_test, static_partitioning_correctness)
     {
-        // 1. Setup: 4-worker job system and output array of 1000 elements
+        // Setup: 4-worker job system and output array of 1000 elements
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -30,7 +30,7 @@ namespace tempest::job::tests
         auto values = vector<int>{};
         values.resize(count, 0);
 
-        // 2. Act: Execute parallel_for with static chunking
+        // Act: Execute parallel_for with static chunking
         auto run = [&]() -> task<void> {
             co_await sys.parallel_for<partitioner::static_chunk>(count, [&](size_t i) {
                 values[i] = static_cast<int>(i * 2);
@@ -40,7 +40,7 @@ namespace tempest::job::tests
         t.resume();
         sys.wait_idle();
 
-        // 3. Assert: Verify every element was updated
+        // Assert: Verify every element was updated
         ASSERT_TRUE(t.is_ready());
         for (auto i = 0u; i < count; ++i)
         {
@@ -56,7 +56,7 @@ namespace tempest::job::tests
     ///        correctly calculates the cumulative sum over a large range.
     TEST(parallel_for_test, guided_partitioning_correctness)
     {
-        // 1. Setup: 4-worker job system
+        // Setup: 4-worker job system
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -68,7 +68,7 @@ namespace tempest::job::tests
         constexpr auto count = 5000u;
         auto total_sum = atomic<int64_t>{0};
 
-        // 2. Act: Execute parallel_for with guided partitioning
+        // Act: Execute parallel_for with guided partitioning
         auto run = [&]() -> task<void> {
             co_await sys.parallel_for<partitioner::guided>(count, [&](size_t i) {
                 total_sum.fetch_add(static_cast<int64_t>(i + 1), memory_order::relaxed);
@@ -78,7 +78,7 @@ namespace tempest::job::tests
         t.resume();
         sys.wait_idle();
 
-        // 3. Assert: Sum 1..5000 = 5000 * 5001 / 2 = 12502500
+        // Assert: Sum 1..5000 = 5000 * 5001 / 2 = 12502500
         ASSERT_TRUE(t.is_ready());
         constexpr auto expected_sum = static_cast<int64_t>(count) * (count + 1) / 2;
         EXPECT_EQ(total_sum.load(memory_order::relaxed), expected_sum);
@@ -91,7 +91,7 @@ namespace tempest::job::tests
     /// @brief Verifies that parallel_for accepts a callable taking a range<size_t> chunk.
     TEST(parallel_for_test, subrange_chunk_body)
     {
-        // 1. Setup: 4-worker job system
+        // Setup: 4-worker job system
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -104,7 +104,7 @@ namespace tempest::job::tests
         auto values = vector<int>{};
         values.resize(count, 0);
 
-        // 2. Act: Parallel for with chunk-based body
+        // Act: Parallel for with chunk-based body
         auto run = [&]() -> task<void> {
             co_await sys.parallel_for<partitioner::static_chunk>(
                 range<size_t>{0, count}, task_priority::normal, [&](range<size_t> chunk) {
@@ -118,7 +118,7 @@ namespace tempest::job::tests
         t.resume();
         sys.wait_idle();
 
-        // 3. Assert: All elements filled
+        // Assert: All elements filled
         ASSERT_TRUE(t.is_ready());
         for (auto i = 0u; i < count; ++i)
         {
@@ -135,7 +135,7 @@ namespace tempest::job::tests
     ///        spawned_by_thread_id) links back to the parent task.
     TEST(parallel_for_test, parallel_for_chunks_provenance_and_naming)
     {
-        // 1. Setup: 4-worker job system with active profiler
+        // Setup: 4-worker job system with active profiler
         auto log = logger{};
         auto prof = profiler::profiler_session{true};
         auto config = job_system_config{
@@ -150,7 +150,7 @@ namespace tempest::job::tests
         auto guided_values = vector<int>{};
         guided_values.resize(count, 0);
 
-        // 2. Act: Execute both static and guided parallel_for inside a parent task
+        // Act: Execute both static and guided parallel_for inside a parent task
         auto parent_task = [&]() -> task<void> {
             co_await sys.parallel_for<partitioner::static_chunk>(count, [&](size_t i) {
                 static_values[i] = static_cast<int>(i + 1);
@@ -168,7 +168,7 @@ namespace tempest::job::tests
         sys.schedule(t);
         sys.wait_idle();
 
-        // 3. Assert: Verify execution completion
+        // Assert: Verify execution completion
         ASSERT_TRUE(t.is_ready());
         for (auto i = 0u; i < count; ++i)
         {

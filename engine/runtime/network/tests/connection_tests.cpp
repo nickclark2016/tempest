@@ -13,7 +13,7 @@ namespace tempest::network::tests
     /// @brief Verifies that bidirectional ping-pong through a simulator with 40ms one-way latency converges to ~80ms smoothed RTT.
     TEST(connection_tests, connection_ping_pong_rtt)
     {
-        // 1. Setup: Endpoints, connections, and simulator with 40ms one-way latency
+        // Setup: Endpoints, connections, and simulator with 40ms one-way latency
         const auto client_endpoint = endpoint(127, 0, 0, 1, 41001);
         const auto server_endpoint = endpoint(127, 0, 0, 1, 41002);
         constexpr auto session_id = 0xDEAD'BEEF'0123'4567ULL;
@@ -34,7 +34,7 @@ namespace tempest::network::tests
 
         const auto start_time = chrono::steady_clock::time_point{};
 
-        // 2. Act: Run simulation loop for 1,500ms in 10ms steps.
+        // Act: Run simulation loop for 1,500ms in 10ms steps.
         // Client sends ping every 100ms. Server immediately replies with pong upon delivery.
         for (auto time_offset_ms = 0U; time_offset_ms <= 1500U; time_offset_ms += 10U)
         {
@@ -74,7 +74,7 @@ namespace tempest::network::tests
             });
         }
 
-        // 3. Assert: Client's smoothed RTT must converge to approximately 80ms (40ms outbound + 40ms return)
+        // Assert: Client's smoothed RTT must converge to approximately 80ms (40ms outbound + 40ms return)
         EXPECT_NEAR(client_conn.smoothed_rtt_ms(), 80.0f, 1.5f);
         EXPECT_EQ(client_conn.state(), connection_state::connected);
         EXPECT_EQ(server_conn.state(), connection_state::connected);
@@ -87,7 +87,7 @@ namespace tempest::network::tests
     /// @brief Verifies that bidirectional packet exchange under 5% packet loss retains connection stability and tracks loss.
     TEST(connection_tests, connection_loss_recovery)
     {
-        // 1. Setup: Endpoints, connections, and simulator configured with 5% packet loss
+        // Setup: Endpoints, connections, and simulator configured with 5% packet loss
         const auto client_endpoint = endpoint(127, 0, 0, 1, 42001);
         const auto server_endpoint = endpoint(127, 0, 0, 1, 42002);
         constexpr auto session_id = 0x1122'3344'5566'7788ULL;
@@ -108,7 +108,7 @@ namespace tempest::network::tests
 
         const auto start_time = chrono::steady_clock::time_point{};
 
-        // 2. Act: Send 100 packets in each direction
+        // Act: Send 100 packets in each direction
         for (auto time_offset_ms = 0U; time_offset_ms <= 2000U; time_offset_ms += 10U)
         {
             const auto current_time = start_time + chrono::milliseconds(time_offset_ms);
@@ -146,7 +146,7 @@ namespace tempest::network::tests
             });
         }
 
-        // 3. Assert: Connection remains connected and loss rate reflects dropped packets (~5%)
+        // Assert: Connection remains connected and loss rate reflects dropped packets (~5%)
         EXPECT_EQ(client_conn.state(), connection_state::connected);
         EXPECT_EQ(server_conn.state(), connection_state::connected);
         EXPECT_GT(client_conn.packet_loss_rate(), 0.0f);
@@ -192,7 +192,7 @@ namespace tempest::network::tests
     /// @brief Verifies that custom ipacket_security transforms wire payloads and correctly restores plaintext upon reception.
     TEST(connection_tests, connection_security_filter)
     {
-        // 1. Setup: Security filter with XOR key 0x5A
+        // Setup: Security filter with XOR key 0x5A
         auto filter = xor_security_filter{0x5A};
         const auto remote_ep = endpoint(127, 0, 0, 1, 43001);
         constexpr auto session_id = 0xCAFE'BABE'0000'0001ULL;
@@ -204,7 +204,7 @@ namespace tempest::network::tests
         const auto plaintext_bytes = span<const byte>(reinterpret_cast<const byte*>(raw_message.data()), raw_message.size());
         const auto timestamp = chrono::steady_clock::time_point{};
 
-        // 2. Act: Sender builds an encrypted packet
+        // Act: Sender builds an encrypted packet
         const auto packet_bytes = sender_conn.build_packet(packet_type::input, plaintext_bytes, timestamp);
 
         // Verify wire format: Header (27 bytes) is plaintext, but payload bytes must be encrypted (XORed)
@@ -227,7 +227,7 @@ namespace tempest::network::tests
         const auto incoming = receiver_conn.process_packet(
             span<const byte>(packet_bytes.data(), packet_bytes.size()), timestamp);
 
-        // 3. Assert: Packet was decrypted and payload matches original plaintext
+        // Assert: Packet was decrypted and payload matches original plaintext
         ASSERT_TRUE(incoming.has_value());
         EXPECT_EQ(incoming->header.session_id, session_id);
         EXPECT_EQ(incoming->header.type, static_cast<uint8_t>(packet_type::input));
@@ -262,7 +262,7 @@ namespace tempest::network::tests
     /// does NOT update ack_bitfield, and does NOT acknowledge any sent packets.
     TEST(connection_tests, security_rejects_unauthenticated_header_mutation)
     {
-        // 1. Setup: Connection with rejecting security filter and an in-flight outgoing packet
+        // Setup: Connection with rejecting security filter and an in-flight outgoing packet
         auto rejecting_filter = rejecting_security_filter{};
         const auto remote_ep = endpoint(127, 0, 0, 1, 44001);
         constexpr auto session_id = 0xFEED'FACE'CAFE'BEEFULL;
@@ -300,12 +300,12 @@ namespace tempest::network::tests
         tempest::memcpy(forged_wire_packet.data(), &forged_header, sizeof(packet_header));
         tempest::memcpy(forged_wire_packet.data() + sizeof(packet_header), forged_payload.data(), forged_payload.size());
 
-        // 2. Act: Process the unauthenticated packet at start_time + 50ms
+        // Act: Process the unauthenticated packet at start_time + 50ms
         const auto receive_time = start_time + chrono::milliseconds(50);
         const auto result = test_conn.process_packet(
             span<const byte>(forged_wire_packet.data(), forged_wire_packet.size()), receive_time);
 
-        // 3. Assert: Packet is rejected, remote sequence did NOT advance, bitfield untouched, and sent packet NOT acked
+        // Assert: Packet is rejected, remote sequence did NOT advance, bitfield untouched, and sent packet NOT acked
         EXPECT_FALSE(result.has_value());
         EXPECT_EQ(test_conn.tracker().remote_sequence(), initial_remote_sequence);
         EXPECT_EQ(test_conn.tracker().ack_bitfield(), initial_ack_bitfield);
@@ -321,7 +321,7 @@ namespace tempest::network::tests
     /// without consuming sequence numbers.
     TEST(connection_tests, connection_build_packet_zero_allocation)
     {
-        // 1. Setup: Connection with remote endpoint and session ID
+        // Setup: Connection with remote endpoint and session ID
         const auto remote_endpoint = endpoint(127, 0, 0, 1, 45001);
         constexpr auto test_session_id = 0xA1B2'C3D4'E5F6'0718ULL;
         auto test_connection = connection{test_session_id, remote_endpoint};
@@ -334,7 +334,7 @@ namespace tempest::network::tests
         };
         const auto payload_span = span<const byte>(payload_data.data(), payload_data.size());
 
-        // 2. Act & Assert: Undersized output buffer must fail and reject write
+        // Act & Assert: Undersized output buffer must fail and reject write
         auto undersized_buffer = array<byte, sizeof(packet_header) + 4>{};
         const auto undersized_written = test_connection.build_packet(
             packet_type::input, payload_span,
@@ -343,14 +343,14 @@ namespace tempest::network::tests
         EXPECT_EQ(undersized_written, 0U);
         EXPECT_EQ(test_connection.tracker().next_sequence(), 1U);
 
-        // 3. Act: Zero-allocation framing into fixed stack buffer
+        // Act: Zero-allocation framing into fixed stack buffer
         auto packet_buffer = array<byte, 128>{};
         const auto expected_packet_size = sizeof(packet_header) + payload_data.size();
         const auto written_bytes = test_connection.build_packet(
             packet_type::input, payload_span,
             span<byte>(packet_buffer.data(), packet_buffer.size()), timestamp);
 
-        // 4. Assert: Exact byte count returned, sequence allocated, header and payload match
+        // Assert: Exact byte count returned, sequence allocated, header and payload match
         EXPECT_EQ(written_bytes, expected_packet_size);
         EXPECT_EQ(test_connection.tracker().next_sequence(), 2U);
 

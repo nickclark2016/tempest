@@ -185,7 +185,7 @@ namespace tempest::scene
                               entity_local_id instance_local_id, span<const guid> active_stack)
             -> expected<prefab_instance_result, prefab_error>
         {
-            // 1. Validate template
+            // Validate template
             if (tmpl.is_empty())
             {
                 return unexpected(prefab_error::invalid_template);
@@ -210,7 +210,7 @@ namespace tempest::scene
                 }
             }
 
-            // 2. Create entities in world registry
+            // Create entities in world registry
             auto all_entities = vector<ecs::entity>{};
             all_entities.reserve(records.size());
 
@@ -233,7 +233,7 @@ namespace tempest::scene
             const auto root_record_index = root_indices.front();
             const auto root_entity = all_entities[root_record_index];
 
-            // 3. Assign names
+            // Assign names
             for (auto record_index = size_t{0}; record_index < records.size(); ++record_index)
             {
                 if (!records[record_index].name.empty())
@@ -280,7 +280,7 @@ namespace tempest::scene
                 return false;
             };
 
-            // 4. Assign components from record.components, skipping removed_components
+            // Assign components from record.components, skipping removed_components
             for (auto record_index = size_t{0}; record_index < records.size(); ++record_index)
             {
                 const auto target_entity = all_entities[record_index];
@@ -306,7 +306,7 @@ namespace tempest::scene
                 }
             }
 
-            // 5. Assign prefab_member_component to each member entity
+            // Assign prefab_member_component to each member entity
             for (auto record_index = size_t{0}; record_index < records.size(); ++record_index)
             {
                 registry.assign(all_entities[record_index], prefab_member_component{
@@ -314,14 +314,14 @@ namespace tempest::scene
                                                             });
             }
 
-            // 6. Assign prefab_instance_component to the root entity
+            // Assign prefab_instance_component to the root entity
             registry.assign(root_entity, prefab_instance_component{
                                              .prefab_guid = prefab_guid,
                                              .instance_local_id = instance_local_id,
                                              .overrides = overrides,
                                          });
 
-            // 7. Build hierarchy using record.parent_index
+            // Build hierarchy using record.parent_index
             for (auto record_index = size_t{0}; record_index < records.size(); ++record_index)
             {
                 if (records[record_index].parent_index.has_value())
@@ -345,7 +345,7 @@ namespace tempest::scene
                 }
             }
 
-            // 8. Handle nested prefab records
+            // Handle nested prefab records
             for (auto record_index = size_t{0}; record_index < records.size(); ++record_index)
             {
                 const auto& rec = records[record_index];
@@ -471,7 +471,7 @@ namespace tempest::scene
                 return false;
             };
 
-            // 9. Apply added components (before field overrides so field overrides can target added components)
+            // Apply added components (before field overrides so field overrides can target added components)
             for (const auto& added_item : overrides.added_components)
             {
                 if (!added_item.target.empty() && is_nested_host_local_id(added_item.target.front()))
@@ -510,7 +510,7 @@ namespace tempest::scene
                 }
             }
 
-            // 10. Apply field overrides
+            // Apply field overrides
             struct post_load_target
             {
                 void* component_data{nullptr};
@@ -620,7 +620,7 @@ namespace tempest::scene
                 item.post_load_fn(item.component_data);
             }
 
-            // 11. Remap entity_ref fields from template local IDs to runtime ecs::entity
+            // Remap entity_ref fields from template local IDs to runtime ecs::entity
             for (const auto ent : all_entities)
             {
                 const auto types = ecs::raw_registry_access::get_component_types(registry, ent);
@@ -658,7 +658,7 @@ namespace tempest::scene
                 }
             }
 
-            // 12. Return successful result
+            // Return successful result
             auto result = prefab_instance_result{};
             result.root_entity = root_entity;
             result.all_entities = tempest::move(all_entities);

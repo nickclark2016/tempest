@@ -106,7 +106,7 @@ namespace tempest::render_graph
 
         auto result = compiled_dag{};
 
-        // 1. Evaluate pass enablement and gather aliases from disabled passes
+        // Evaluate pass enablement and gather aliases from disabled passes
         auto pass_enabled = vector<bool>(_passes.size(), true);
         for (auto i = size_t{0}; i < _passes.size(); ++i)
         {
@@ -154,7 +154,7 @@ namespace tempest::render_graph
             return current;
         };
 
-        // 2. Map resource versions to producing pass index
+        // Map resource versions to producing pass index
         auto texture_producer = flat_unordered_map<rg_texture_id, uint32_t>{};
         auto buffer_producer = flat_unordered_map<rg_buffer_id, uint32_t>{};
 
@@ -181,7 +181,7 @@ namespace tempest::render_graph
             }
         }
 
-        // 3. Backward reachability from sink passes (Dead-Code Culling)
+        // Backward reachability from sink passes (Dead-Code Culling)
         auto active_passes = vector<bool>(_passes.size(), false);
         auto work_queue = deque<uint32_t>{};
 
@@ -266,7 +266,7 @@ namespace tempest::render_graph
             return compiled_dag{};
         }
 
-        // 4. Build DAG adjacency graph among active passes
+        // Build DAG adjacency graph among active passes
         auto adjacency = vector<vector<uint32_t>>(_passes.size());
         auto in_degrees = vector<uint32_t>(_passes.size(), 0);
 
@@ -322,7 +322,7 @@ namespace tempest::render_graph
             }
         }
 
-        // 5. Kahn's Algorithm (Topological Sort)
+        // Kahn's Algorithm (Topological Sort)
         auto ready_queue = deque<uint32_t>{};
         for (auto i = size_t{0}; i < _passes.size(); ++i)
         {
@@ -355,7 +355,7 @@ namespace tempest::render_graph
             return unexpected(dag_compile_error::cycle_detected);
         }
 
-        // 6. Resource Lifetime Interval Calculation
+        // Resource Lifetime Interval Calculation
         auto update_texture_lifetime = [&](rg_texture_id tex, uint32_t order_idx) -> void {
             const auto resolved = resolve_texture(tex);
             if (resolved.is_valid())

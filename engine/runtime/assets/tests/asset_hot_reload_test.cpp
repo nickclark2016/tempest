@@ -57,7 +57,7 @@ namespace
 /// while preserving the asset GUID and source GUID strictly unchanged.
 TEST(asset_hot_reload_tests, hot_reload_on_source_modified)
 {
-    // 1. Setup: Create temporary watch directory and write initial asset content
+    // Setup: Create temporary watch directory and write initial asset content
     const auto temporary_directory = fs::temp_directory_path() / "tempest_test_hot_reload_modified";
     static_cast<void>(fs::remove_all(temporary_directory));
     ASSERT_TRUE(fs::create_directories(temporary_directory));
@@ -89,7 +89,7 @@ TEST(asset_hot_reload_tests, hot_reload_on_source_modified)
     tempest::this_thread::sleep_for(tempest::chrono::milliseconds{100});
     static_cast<void>(database.tick_file_watcher());
 
-    // 2. Act: Overwrite the source file with modified payload
+    // Act: Overwrite the source file with modified payload
     const auto updated_payload = tempest::array<tempest::byte, 8>{
         tempest::byte{0xAA}, tempest::byte{0xBB}, tempest::byte{0xCC}, tempest::byte{0xDD},
         tempest::byte{0xEE}, tempest::byte{0xFF}, tempest::byte{0x11}, tempest::byte{0x22}};
@@ -101,7 +101,7 @@ TEST(asset_hot_reload_tests, hot_reload_on_source_modified)
     });
     EXPECT_TRUE(reload_succeeded);
 
-    // 3. Assert: The blob is updated with new bytes and original GUIDs remain bit-for-bit unchanged
+    // Assert: The blob is updated with new bytes and original GUIDs remain bit-for-bit unchanged
     const auto reloaded_blob = database.get_blob(original_asset_guid);
     ASSERT_EQ(reloaded_blob.size(), 8u);
     EXPECT_EQ(reloaded_blob[0], tempest::byte{0xAA});
@@ -117,7 +117,7 @@ TEST(asset_hot_reload_tests, hot_reload_on_source_modified)
     EXPECT_EQ(source_entry_ptr->id, original_source_guid);
     EXPECT_EQ(source_entry_ptr->source_path, "shader_module.spv");
 
-    // 4. Teardown: Stop watcher and clean up test directory
+    // Teardown: Stop watcher and clean up test directory
     database.stop_file_watcher();
     static_cast<void>(fs::remove_all(temporary_directory));
 }
@@ -130,7 +130,7 @@ TEST(asset_hot_reload_tests, hot_reload_on_source_modified)
 /// to unregister the source entry and all its associated asset entries from the database.
 TEST(asset_hot_reload_tests, hot_reload_on_source_deleted)
 {
-    // 1. Setup: Create temporary watch directory and write source file with sidecar
+    // Setup: Create temporary watch directory and write source file with sidecar
     const auto temporary_directory = fs::temp_directory_path() / "tempest_test_hot_reload_deleted";
     static_cast<void>(fs::remove_all(temporary_directory));
     ASSERT_TRUE(fs::create_directories(temporary_directory));
@@ -158,7 +158,7 @@ TEST(asset_hot_reload_tests, hot_reload_on_source_deleted)
     tempest::this_thread::sleep_for(tempest::chrono::milliseconds{100});
     static_cast<void>(database.tick_file_watcher());
 
-    // 2. Act: Delete the source file from disk
+    // Act: Delete the source file from disk
     ASSERT_TRUE(fs::remove(source_file_path));
 
     const auto deletion_detected = poll_ticks_until(database, [&]() {
@@ -166,12 +166,12 @@ TEST(asset_hot_reload_tests, hot_reload_on_source_deleted)
     });
     EXPECT_TRUE(deletion_detected);
 
-    // 3. Assert: Both source entry and asset entries are completely unregistered
+    // Assert: Both source entry and asset entries are completely unregistered
     EXPECT_EQ(database.find_by_path("obsolete_asset.data"), nullptr);
     EXPECT_EQ(database.find_source_by_id(original_source_guid), nullptr);
     EXPECT_EQ(database.find_by_guid(original_asset_guid), nullptr);
 
-    // 4. Teardown: Stop watcher and clean up test directory
+    // Teardown: Stop watcher and clean up test directory
     database.stop_file_watcher();
     static_cast<void>(fs::remove_all(temporary_directory));
 }
@@ -184,7 +184,7 @@ TEST(asset_hot_reload_tests, hot_reload_on_source_deleted)
 /// relocate the source entry path and rename sidecar metadata without GUID churn.
 TEST(asset_hot_reload_tests, hot_reload_on_source_renamed)
 {
-    // 1. Setup: Create temporary watch directory, source file, and sidecar metadata
+    // Setup: Create temporary watch directory, source file, and sidecar metadata
     const auto temporary_directory = fs::temp_directory_path() / "tempest_test_hot_reload_renamed";
     static_cast<void>(fs::remove_all(temporary_directory));
     ASSERT_TRUE(fs::create_directories(temporary_directory));
@@ -221,7 +221,7 @@ TEST(asset_hot_reload_tests, hot_reload_on_source_renamed)
     tempest::this_thread::sleep_for(tempest::chrono::milliseconds{100});
     static_cast<void>(database.tick_file_watcher());
 
-    // 2. Act: Rename file on disk from initial_name.bin to relocated_name.bin
+    // Act: Rename file on disk from initial_name.bin to relocated_name.bin
     fs::rename(initial_file_path, target_file_path);
 
     const auto rename_detected = poll_ticks_until(database, [&]() {
@@ -229,7 +229,7 @@ TEST(asset_hot_reload_tests, hot_reload_on_source_renamed)
     });
     EXPECT_TRUE(rename_detected);
 
-    // 3. Assert: Old path is unindexed, new path resolves to original asset GUID
+    // Assert: Old path is unindexed, new path resolves to original asset GUID
     EXPECT_EQ(database.find_by_path("initial_name.bin"), nullptr);
 
     const auto* relocated_asset_ptr = database.find_by_path("relocated_name.bin");
@@ -246,7 +246,7 @@ TEST(asset_hot_reload_tests, hot_reload_on_source_renamed)
     EXPECT_TRUE(fs::exists(target_meta_file));
     EXPECT_FALSE(fs::exists(initial_meta_file));
 
-    // 4. Teardown: Stop watcher and clean up test directory
+    // Teardown: Stop watcher and clean up test directory
     database.stop_file_watcher();
     static_cast<void>(fs::remove_all(temporary_directory));
 }
@@ -259,7 +259,7 @@ TEST(asset_hot_reload_tests, hot_reload_on_source_renamed)
 /// onto the calling thread, ensuring zero data races or background mutations of the database.
 TEST(asset_hot_reload_tests, file_watcher_drain_on_tick)
 {
-    // 1. Setup: Create watch directory and start watcher
+    // Setup: Create watch directory and start watcher
     const auto temporary_directory = fs::temp_directory_path() / "tempest_test_hot_reload_drain";
     static_cast<void>(fs::remove_all(temporary_directory));
     ASSERT_TRUE(fs::create_directories(temporary_directory));
@@ -272,7 +272,7 @@ TEST(asset_hot_reload_tests, file_watcher_drain_on_tick)
     tempest::this_thread::sleep_for(tempest::chrono::milliseconds{100});
     static_cast<void>(database.tick_file_watcher());
 
-    // 2. Act: Create a new file on disk and wait for debounce interval to elapse
+    // Act: Create a new file on disk and wait for debounce interval to elapse
     const auto new_file_path = temporary_directory / "drain_target.spv";
     const auto new_payload =
         tempest::array<tempest::byte, 4>{tempest::byte{0xDE}, tempest::byte{0xAD}, tempest::byte{0xBE}, tempest::byte{0xEF}};
@@ -289,14 +289,14 @@ TEST(asset_hot_reload_tests, file_watcher_drain_on_tick)
     });
     EXPECT_TRUE(drain_succeeded);
 
-    // 3. Assert: Database was updated strictly upon calling tick_file_watcher()
+    // Assert: Database was updated strictly upon calling tick_file_watcher()
     const auto* newly_added_asset = database.find_by_path("drain_target.spv");
     ASSERT_NE(newly_added_asset, nullptr);
     const auto* newly_added_source = database.find_source_by_id(newly_added_asset->source_id);
     ASSERT_NE(newly_added_source, nullptr);
     EXPECT_EQ(newly_added_source->source_path, "drain_target.spv");
 
-    // 4. Teardown: Clean shutdown
+    // Teardown: Clean shutdown
     database.stop_file_watcher();
     static_cast<void>(fs::remove_all(temporary_directory));
 }
@@ -309,7 +309,7 @@ TEST(asset_hot_reload_tests, file_watcher_drain_on_tick)
 /// meshes, textures, and materials when resource registries are associated with the database.
 TEST(asset_hot_reload_tests, hot_reload_resource_registries_hot_swap)
 {
-    // 1. Setup: Create watch directory, asset database, and resource registries
+    // Setup: Create watch directory, asset database, and resource registries
     const auto temporary_directory = fs::temp_directory_path() / "tempest_test_hot_reload_registries";
     static_cast<void>(fs::remove_all(temporary_directory));
     ASSERT_TRUE(fs::create_directories(temporary_directory));
@@ -368,7 +368,7 @@ TEST(asset_hot_reload_tests, hot_reload_resource_registries_hot_swap)
     database.register_asset_with_guid(material_guid, tempest::assets::asset_type_id::of<tempest::core::material>(),
                                       "textures/diffuse.data");
 
-    // 2. Act: Store new blobs directly and invoke tick_file_watcher to simulate in-place swap
+    // Act: Store new blobs directly and invoke tick_file_watcher to simulate in-place swap
     database.store_blob(texture_guid, tex_bytes);
     database.store_blob(material_guid, mat_bytes);
 
@@ -394,7 +394,7 @@ TEST(asset_hot_reload_tests, hot_reload_resource_registries_hot_swap)
         current_mat.set_name("character_mat_reloaded");
     });
 
-    // 3. Assert: Registries reflect updated in-place values
+    // Assert: Registries reflect updated in-place values
     const auto tex_after = texture_reg.get_texture(texture_guid);
     ASSERT_TRUE(tex_after.has_value());
     EXPECT_EQ(tex_after->width, 32u);
@@ -405,7 +405,7 @@ TEST(asset_hot_reload_tests, hot_reload_resource_registries_hot_swap)
     EXPECT_FLOAT_EQ(mat_after->get_scalar(tempest::core::material::roughness_factor_name).value_or(0.0f), 0.9f);
     EXPECT_EQ(mat_after->get_name(), "character_mat_reloaded");
 
-    // 4. Teardown
+    // Teardown
     static_cast<void>(fs::remove_all(temporary_directory));
 }
 
@@ -417,7 +417,7 @@ TEST(asset_hot_reload_tests, hot_reload_resource_registries_hot_swap)
 /// the lifecycle and report running status accurately across starts and stops.
 TEST(asset_hot_reload_tests, file_watcher_lifecycle_management)
 {
-    // 1. Setup: Create temporary watch directory
+    // Setup: Create temporary watch directory
     const auto temporary_directory = fs::temp_directory_path() / "tempest_test_hot_reload_lifecycle";
     static_cast<void>(fs::remove_all(temporary_directory));
     ASSERT_TRUE(fs::create_directories(temporary_directory));
@@ -428,7 +428,7 @@ TEST(asset_hot_reload_tests, file_watcher_lifecycle_management)
     EXPECT_FALSE(database.is_file_watcher_running());
     EXPECT_EQ(database.tick_file_watcher(), 0u);
 
-    // 2. Act & Assert: Start file watcher on valid directory
+    // Act & Assert: Start file watcher on valid directory
     EXPECT_TRUE(database.start_file_watcher(temporary_directory, tempest::chrono::milliseconds{50}));
     EXPECT_TRUE(database.is_file_watcher_running());
 
@@ -444,6 +444,6 @@ TEST(asset_hot_reload_tests, file_watcher_lifecycle_management)
     database.stop_file_watcher();
     EXPECT_FALSE(database.is_file_watcher_running());
 
-    // 3. Teardown: Clean up test directory
+    // Teardown: Clean up test directory
     static_cast<void>(fs::remove_all(temporary_directory));
 }

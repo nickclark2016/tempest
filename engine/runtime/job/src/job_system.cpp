@@ -229,7 +229,7 @@ namespace tempest::job
     job_system::job_system(logger& log, profiler::profiler_session& profiler, job_system_config config)
         : _logger{log}, _profiler{profiler}, _config{tempest::move(config)}, _impl{make_unique<impl>()}
     {
-        // 1. Determine topology
+        // Determine topology
         if (_config.topology.has_value())
         {
             _impl->topology = *_config.topology;
@@ -239,7 +239,7 @@ namespace tempest::job
             _impl->topology = discover_cpu_topology();
         }
 
-        // 2. Determine worker counts
+        // Determine worker counts
         auto explicitly_zero = false;
         if (_config.performance_worker_count.has_value() && *_config.performance_worker_count == 0 &&
             _config.efficiency_worker_count.has_value() && *_config.efficiency_worker_count == 0)
@@ -334,7 +334,7 @@ namespace tempest::job
                 auto pop_or_steal = [this](worker_state& work_state) -> optional<queue_item> {
                     const auto low_idx = static_cast<size_t>(task_priority::low);
 
-                    // 1. Bulk Ingest External Mailbox
+                    // Bulk Ingest External Mailbox
                     work_state.mailbox.drain([&work_state](queue_item drained_item) {
                         auto priority_index = static_cast<size_t>(drained_item.priority);
                         if (priority_index >= static_cast<size_t>(task_priority::count))
@@ -347,7 +347,7 @@ namespace tempest::job
                         }
                     });
 
-                    // 2. Refill Chase-Lev Deques from private_overflow
+                    // Refill Chase-Lev Deques from private_overflow
                     for (auto priority_index = 0U; priority_index < static_cast<size_t>(task_priority::count);
                          ++priority_index)
                     {
@@ -362,7 +362,7 @@ namespace tempest::job
                         }
                     }
 
-                    // 3. Anti-starvation check
+                    // Anti-starvation check
                     if (work_state.anti_starvation_counter >= _config.starvation_quantum)
                     {
                         auto item = work_state.deques[low_idx].pop();
@@ -373,7 +373,7 @@ namespace tempest::job
                         }
                     }
 
-                    // 4. Pop Local Deques
+                    // Pop Local Deques
                     for (auto priority_index = 0U; priority_index < static_cast<size_t>(task_priority::count);
                          ++priority_index)
                     {
@@ -392,7 +392,7 @@ namespace tempest::job
                         }
                     }
 
-                    // 5. Work Stealing (Thieves)
+                    // Work Stealing (Thieves)
                     if (!_config.enable_work_stealing || _impl->workers.size() <= 1)
                     {
                         return nullopt;
@@ -515,7 +515,7 @@ namespace tempest::job
 
                     constexpr auto spin_limit = 200;
 
-                    // Phase 1: Bounded spin loop (~200 iterations)
+                    // Bounded spin loop (~200 iterations)
                     auto found_work = false;
                     for (auto spin = 0; spin < spin_limit; ++spin)
                     {
@@ -538,7 +538,7 @@ namespace tempest::job
                         continue;
                     }
 
-                    // Phase 2: OS Park
+                    // OS Park
                     _impl->idle_mask.mark_idle(worker->worker_index);
                     worker->park_state.store(1, memory_order::release);
                     atomic_thread_fence(memory_order::seq_cst);

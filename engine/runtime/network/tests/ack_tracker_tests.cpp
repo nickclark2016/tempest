@@ -12,13 +12,13 @@ namespace tempest::network::tests
     /// @brief Verifies sequence_greater_than handles normal linear sequences and 32-bit integer wrapping across 0xFFFFFFFF to 0.
     TEST(ack_tracker_tests, ack_tracker_sequence_wrapping)
     {
-        // 1. Setup: Define boundary sequence numbers
+        // Setup: Define boundary sequence numbers
         constexpr auto sequence_base = 0xFFFF'FFFEU;
         constexpr auto sequence_max = 0xFFFF'FFFFU;
         constexpr auto sequence_wrapped_zero = 0x0000'0000U;
         constexpr auto sequence_wrapped_one = 0x0000'0001U;
 
-        // 2. Act & Assert: Verify modular sequence ordering across boundary
+        // Act & Assert: Verify modular sequence ordering across boundary
         EXPECT_TRUE(sequence_greater_than(sequence_max, sequence_base));
         EXPECT_TRUE(sequence_greater_than(sequence_wrapped_zero, sequence_max));
         EXPECT_TRUE(sequence_greater_than(sequence_wrapped_one, sequence_wrapped_zero));
@@ -65,11 +65,11 @@ namespace tempest::network::tests
     /// @brief Verifies that sending 50 sequential packets in order results in a bitfield of all 1s.
     TEST(ack_tracker_tests, ack_bitfield_tracking_in_order)
     {
-        // 1. Setup: Instantiate tracker and simulated start time
+        // Setup: Instantiate tracker and simulated start time
         auto receiver_tracker = ack_tracker{};
         auto current_time = chrono::steady_clock::time_point{};
 
-        // 2. Act: Process 50 sequential packets from sequence 1 to 50
+        // Act: Process 50 sequential packets from sequence 1 to 50
         for (auto sequence = 1U; sequence <= 50U; ++sequence)
         {
             auto header = packet_header{};
@@ -77,7 +77,7 @@ namespace tempest::network::tests
             receiver_tracker.process_incoming_header(header, current_time);
         }
 
-        // 3. Assert: Remote sequence matches 50 and the sliding bitfield has all 32 bits set
+        // Assert: Remote sequence matches 50 and the sliding bitfield has all 32 bits set
         EXPECT_EQ(receiver_tracker.remote_sequence(), 50U);
         EXPECT_EQ(receiver_tracker.ack_bitfield(), 0xFFFF'FFFFU);
 
@@ -91,7 +91,7 @@ namespace tempest::network::tests
     /// @brief Verifies that deliberate packet drops are correctly marked as 0 in the bitfield and reported accurately.
     TEST(ack_tracker_tests, ack_bitfield_tracking_packet_drops)
     {
-        // 1. Setup: Instantiate receiver tracker and drop sequence set
+        // Setup: Instantiate receiver tracker and drop sequence set
         auto receiver_tracker = ack_tracker{};
         auto sender_tracker = ack_tracker{};
         auto current_time = chrono::steady_clock::time_point{};
@@ -103,7 +103,7 @@ namespace tempest::network::tests
                    seq == 60U || seq == 70U || seq == 80U || seq == 90U || seq == 95U;
         };
 
-        // 2. Act: Sender registers 100 packets; receiver receives 90 packets
+        // Act: Sender registers 100 packets; receiver receives 90 packets
         for (auto count = 1U; count <= 100U; ++count)
         {
             const auto outgoing_sequence = sender_tracker.register_outgoing_packet(current_time);
@@ -115,7 +115,7 @@ namespace tempest::network::tests
             }
         }
 
-        // 3. Assert: Receiver remote sequence is 100
+        // Assert: Receiver remote sequence is 100
         EXPECT_EQ(receiver_tracker.remote_sequence(), 100U);
 
         // Receiver has sent 0 packets, so it reports 0% unhandled packet loss for its own outgoing stream
@@ -155,11 +155,11 @@ namespace tempest::network::tests
     /// @brief Verifies out-of-order packets (1, 3, 2, 6, 4, 5) correctly populate the bitfield without corruption.
     TEST(ack_tracker_tests, ack_bitfield_tracking_out_of_order)
     {
-        // 1. Setup: Instantiate receiver tracker
+        // Setup: Instantiate receiver tracker
         auto receiver_tracker = ack_tracker{};
         const auto current_time = chrono::steady_clock::time_point{};
 
-        // 2. Act: Deliver packets in out-of-order sequence: 1, 3, 2, 6, 4, 5
+        // Act: Deliver packets in out-of-order sequence: 1, 3, 2, 6, 4, 5
         auto header = packet_header{};
 
         // Receive packet 1
@@ -210,7 +210,7 @@ namespace tempest::network::tests
         // Now all packets 1..5 preceding 6 are acknowledged!
         EXPECT_EQ(receiver_tracker.ack_bitfield(), 0b0001'1111U);
 
-        // 3. Assert: Verify all 5 preceding packets are set to 1 in the bitfield
+        // Assert: Verify all 5 preceding packets are set to 1 in the bitfield
         EXPECT_EQ(receiver_tracker.ack_bitfield(), 31U);
     }
 
@@ -221,12 +221,12 @@ namespace tempest::network::tests
     /// @brief Verifies that roundtrip ACK samples with fixed 100ms latency converge to ~100ms EWMA smoothed RTT.
     TEST(ack_tracker_tests, ack_tracker_rtt_ewma)
     {
-        // 1. Setup: Instantiate tracker and fixed time base
+        // Setup: Instantiate tracker and fixed time base
         auto tracker = ack_tracker{};
         const auto base_time = chrono::steady_clock::time_point{};
         constexpr auto fixed_rtt = chrono::milliseconds(100);
 
-        // 2. Act: Send and ACK 20 packets with exactly 100ms roundtrip delay
+        // Act: Send and ACK 20 packets with exactly 100ms roundtrip delay
         for (auto step = 0U; step < 20U; ++step)
         {
             const auto send_time = base_time + chrono::milliseconds(step * 50);
@@ -241,7 +241,7 @@ namespace tempest::network::tests
             tracker.process_incoming_header(ack_header, ack_time);
         }
 
-        // 3. Assert: Smoothed RTT must converge to approximately 100ms
+        // Assert: Smoothed RTT must converge to approximately 100ms
         EXPECT_NEAR(tracker.smoothed_rtt_ms(), 100.0f, 0.5f);
     }
 
@@ -253,18 +253,18 @@ namespace tempest::network::tests
     /// and correctly leaves only bit 31 set in the ACK bitfield, while delta > 32 resets the bitfield to 0.
     TEST(ack_tracker_tests, ack_tracker_sequence_delta_boundary_32)
     {
-        // 1. Setup: Instantiate tracker and base timestamp
+        // Setup: Instantiate tracker and base timestamp
         auto tracker = ack_tracker{};
         const auto timestamp = chrono::steady_clock::time_point{};
 
-        // 2. Act & Assert Step A: Send sequence 1
+        // Act & Assert Step A: Send sequence 1
         auto header_1 = packet_header{};
         header_1.sequence_id = 1U;
         tracker.process_incoming_header(header_1, timestamp);
         EXPECT_EQ(tracker.remote_sequence(), 1U);
         EXPECT_EQ(tracker.ack_bitfield(), 0U);
 
-        // 2. Act & Assert Step B: Send sequence 33 (delta == 32)
+        // Act & Assert Step B: Send sequence 33 (delta == 32)
         auto header_33 = packet_header{};
         header_33.sequence_id = 33U;
         tracker.process_incoming_header(header_33, timestamp);
@@ -273,7 +273,7 @@ namespace tempest::network::tests
         EXPECT_EQ(tracker.ack_bitfield(), 1U << 31);
         EXPECT_EQ(tracker.ack_bitfield(), 0x8000'0000U);
 
-        // 2. Act & Assert Step C: Send sequence 66 (delta == 33 > 32)
+        // Act & Assert Step C: Send sequence 66 (delta == 33 > 32)
         auto header_66 = packet_header{};
         header_66.sequence_id = 66U;
         tracker.process_incoming_header(header_66, timestamp);
@@ -289,12 +289,12 @@ namespace tempest::network::tests
     /// does not produce false 100% or erratic packet loss spikes, and only true drops register as loss.
     TEST(ack_tracker_tests, ack_tracker_loss_rate_resilient_to_jitter)
     {
-        // 1. Setup: Instantiate sender and receiver trackers with base timestamp
+        // Setup: Instantiate sender and receiver trackers with base timestamp
         auto sender_tracker = ack_tracker{};
         auto receiver_tracker = ack_tracker{};
         const auto base_time = chrono::steady_clock::time_point{};
 
-        // 2. Act: Send packets 1, 2, 3 with small timestamps
+        // Act: Send packets 1, 2, 3 with small timestamps
         const auto seq1 = sender_tracker.register_outgoing_packet(base_time);
         const auto seq2 = sender_tracker.register_outgoing_packet(base_time + chrono::milliseconds(5));
         const auto seq3 = sender_tracker.register_outgoing_packet(base_time + chrono::milliseconds(10));
@@ -316,11 +316,11 @@ namespace tempest::network::tests
         // Sender receives ACK at 30ms (well within the in-flight transit timeout threshold of >=100ms)
         sender_tracker.process_incoming_header(ack_header, base_time + chrono::milliseconds(30));
 
-        // 3. Assert: Packet 2 is within the bitfield window (distance 1 <= 32) and in-flight transit window (<100ms),
+        // Assert: Packet 2 is within the bitfield window (distance 1 <= 32) and in-flight transit window (<100ms),
         // so it must NOT trigger an erratic packet loss spike
         EXPECT_FLOAT_EQ(sender_tracker.packet_loss_rate(), 0.0F);
 
-        // 4. Act: Jittered packet 2 now arrives at receiver at 35ms
+        // Act: Jittered packet 2 now arrives at receiver at 35ms
         auto header2 = packet_header{};
         header2.sequence_id = seq2;
         receiver_tracker.process_incoming_header(header2, base_time + chrono::milliseconds(35));
@@ -333,7 +333,7 @@ namespace tempest::network::tests
         // Loss rate remains 0%
         EXPECT_FLOAT_EQ(sender_tracker.packet_loss_rate(), 0.0F);
 
-        // 5. Act & Assert: Simulate genuine packet drop: send packet 4 (which will be dropped),
+        // Act & Assert: Simulate genuine packet drop: send packet 4 (which will be dropped),
         // then send packets 5 through 45 (advancing remote sequence so packet 4 falls behind bitfield > 32).
         [[maybe_unused]] const auto seq_dropped =
             sender_tracker.register_outgoing_packet(base_time + chrono::milliseconds(50));

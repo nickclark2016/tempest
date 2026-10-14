@@ -38,7 +38,7 @@ namespace tempest::network
     auto network_simulator::send_packet(const endpoint& sender, const endpoint& destination,
                                         span<const byte> payload, chrono::steady_clock::time_point now) -> void
     {
-        // 1. Loss check
+        // Loss check
         if (_config.packet_loss_rate > 0.0F)
         {
             uniform_real_distribution<float> loss_distribution(0.0F, 1.0F);
@@ -48,7 +48,7 @@ namespace tempest::network
             }
         }
 
-        // 2. Jitter and latency calculation
+        // Jitter and latency calculation
         auto simulated_delay_ms = _config.latency_ms;
         if (_config.jitter_ms > 0.0F)
         {
@@ -61,7 +61,7 @@ namespace tempest::network
         const auto delay_microseconds = static_cast<int64_t>(simulated_delay_ms * 1000.0F);
         const auto deliver_time = now + chrono::microseconds(delay_microseconds);
 
-        // 3. Enqueue original packet
+        // Enqueue original packet
         vector<byte> payload_buffer(payload.size());
         if (!payload.empty())
         {
@@ -75,7 +75,7 @@ namespace tempest::network
             .deliver_time = deliver_time,
         });
 
-        // 4. Duplicate check
+        // Duplicate check
         if (_config.packet_duplicate_rate > 0.0F)
         {
             uniform_real_distribution<float> duplicate_distribution(0.0F, 1.0F);

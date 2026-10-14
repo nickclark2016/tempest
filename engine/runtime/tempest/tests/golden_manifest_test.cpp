@@ -73,11 +73,11 @@ namespace
 /// and schema hash across toolchains matching the golden reference file.
 TEST(golden_manifest_test, engine_types_match_golden_file)
 {
-    // 1. Setup: instantiate a component type registry and register all engine components.
+    // Setup: instantiate a component type registry and register all engine components.
     auto registry = tempest::ecs::component_type_registry{};
     tempest::register_engine_types(registry);
 
-    // 2. Act: export manifest and serialize to pretty JSON.
+    // Act: export manifest and serialize to pretty JSON.
     const auto manifest = registry.export_manifest();
     ASSERT_NE(manifest.schema_hash, 0ULL);
     EXPECT_EQ(manifest.schema_hash, registry.schema_hash());
@@ -85,12 +85,12 @@ TEST(golden_manifest_test, engine_types_match_golden_file)
     const auto json_str = manifest.to_json(tempest::core::json_format::pretty);
     ASSERT_FALSE(json_str.empty());
 
-    // 3. Resolve golden file path.
+    // Resolve golden file path.
     const auto golden_path = find_golden_file_path();
     const auto update_requested = should_update_golden();
     const auto file_exists = tempest::filesystem::exists(golden_path);
 
-    // 4. Update golden file if requested or if missing.
+    // Update golden file if requested or if missing.
     if (update_requested || !file_exists)
     {
         const auto byte_data = tempest::span<const tempest::byte>{
@@ -99,7 +99,7 @@ TEST(golden_manifest_test, engine_types_match_golden_file)
         ASSERT_TRUE(write_result.has_value());
     }
 
-    // 5. Read existing golden file contents from disk.
+    // Read existing golden file contents from disk.
     const auto read_result = tempest::read_file_to_string(golden_path);
     ASSERT_TRUE(read_result.has_value());
 
@@ -107,7 +107,7 @@ TEST(golden_manifest_test, engine_types_match_golden_file)
     const auto normalized_golden = normalize_line_endings(tempest::string_view{file_contents.data(), file_contents.size()});
     const auto normalized_actual = normalize_line_endings(tempest::string_view{json_str.data(), json_str.size()});
 
-    // 6. Assert: compare byte-for-byte.
+    // Assert: compare byte-for-byte.
     if (normalized_golden != normalized_actual)
     {
         FAIL() << "Golden manifest mismatch at: " << golden_path.c_str() << "\n"
@@ -124,11 +124,11 @@ TEST(golden_manifest_test, engine_types_match_golden_file)
 /// regardless of the order in which component types are registered.
 TEST(golden_manifest_test, schema_hash_deterministic_across_registration_order)
 {
-    // 1. Setup: standard forward registration.
+    // Setup: standard forward registration.
     auto forward_registry = tempest::ecs::component_type_registry{};
     tempest::register_engine_types(forward_registry);
 
-    // 2. Setup: manually registered in reversed order.
+    // Setup: manually registered in reversed order.
     auto reverse_registry = tempest::ecs::component_type_registry{};
     reverse_registry.register_type<tempest::physics::character_controller_component>();
     reverse_registry.register_type<tempest::physics::velocity_component>();
@@ -143,11 +143,11 @@ TEST(golden_manifest_test, schema_hash_deterministic_across_registration_order)
     reverse_registry.register_type<tempest::ecs::self_component>();
     reverse_registry.register_type<tempest::ecs::transform_component>();
 
-    // 3. Act: export manifests.
+    // Act: export manifests.
     const auto forward_manifest = forward_registry.export_manifest();
     const auto reverse_manifest = reverse_registry.export_manifest();
 
-    // 4. Assert: identical schema hashes and JSON manifests.
+    // Assert: identical schema hashes and JSON manifests.
     EXPECT_EQ(forward_manifest.schema_hash, reverse_manifest.schema_hash);
     EXPECT_EQ(forward_registry.schema_hash(), reverse_registry.schema_hash());
     EXPECT_EQ(forward_manifest.to_json(), reverse_manifest.to_json());

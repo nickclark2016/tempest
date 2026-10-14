@@ -17,7 +17,7 @@ namespace tempest::job::tests
     ///        across multi-word 64-bit boundaries up to 256 workers.
     TEST(idle_mask_test, basic_mark_and_clear)
     {
-        // 1. Setup: Construct a scalable_idle_mask supporting 256 workers
+        // Setup: Construct a scalable_idle_mask supporting 256 workers
         auto mask = scalable_idle_mask<256>{};
 
         for (auto index = size_t{0}; index < 256; ++index)
@@ -25,7 +25,7 @@ namespace tempest::job::tests
             EXPECT_FALSE(mask.is_idle(index));
         }
 
-        // 2. Act: Mark specific workers across word boundaries (word 0, 1, 2, 3)
+        // Act: Mark specific workers across word boundaries (word 0, 1, 2, 3)
         const auto test_indices = {size_t{0}, size_t{15}, size_t{63}, size_t{64}, size_t{100}, size_t{127},
                                    size_t{128}, size_t{200}, size_t{255}};
 
@@ -41,7 +41,7 @@ namespace tempest::job::tests
         EXPECT_FALSE(mask.is_idle(65));
         EXPECT_FALSE(mask.is_idle(129));
 
-        // 3. Assert: Clear idle workers and verify transition
+        // Assert: Clear idle workers and verify transition
         for (auto index : test_indices)
         {
             mask.clear_idle(index);
@@ -57,7 +57,7 @@ namespace tempest::job::tests
     ///        correctly masking sub-word boundaries and word transitions.
     TEST(idle_mask_test, find_idle_subrange)
     {
-        // 1. Setup: Mask with workers marked at 10, 62, 65, 70, 150
+        // Setup: Mask with workers marked at 10, 62, 65, 70, 150
         auto mask = scalable_idle_mask<256>{};
         mask.mark_idle(10);
         mask.mark_idle(62);
@@ -65,7 +65,7 @@ namespace tempest::job::tests
         mask.mark_idle(70);
         mask.mark_idle(150);
 
-        // 2. Act & Assert: Query within word 0 [0, 50) -> should find 10
+        // Act & Assert: Query within word 0 [0, 50) -> should find 10
         auto found = mask.find_idle(0, 50);
         ASSERT_TRUE(found.has_value());
         EXPECT_EQ(*found, 10u);
@@ -104,13 +104,13 @@ namespace tempest::job::tests
     /// @brief Verifies that claim_first_idle atomically claims and clears the first set bit.
     TEST(idle_mask_test, claim_first_idle_single_threaded)
     {
-        // 1. Setup: Mark workers 5, 64, 130
+        // Setup: Mark workers 5, 64, 130
         auto mask = scalable_idle_mask<256>{};
         mask.mark_idle(5);
         mask.mark_idle(64);
         mask.mark_idle(130);
 
-        // 2. Act & Assert: Claim sequentially
+        // Act & Assert: Claim sequentially
         auto first_claim = mask.claim_first_idle(200);
         ASSERT_TRUE(first_claim.has_value());
         EXPECT_EQ(*first_claim, 5u);
@@ -138,7 +138,7 @@ namespace tempest::job::tests
     ///        the same worker index.
     TEST(idle_mask_test, concurrent_claiming_stress)
     {
-        // 1. Setup: 128 workers all marked idle
+        // Setup: 128 workers all marked idle
         constexpr auto worker_count = size_t{128};
         auto mask = scalable_idle_mask<256>{};
         for (auto index = size_t{0}; index < worker_count; ++index)
@@ -155,7 +155,7 @@ namespace tempest::job::tests
 
         auto total_claimed = atomic<size_t>{0};
 
-        // 2. Act: 8 threads concurrently claim idle workers
+        // Act: 8 threads concurrently claim idle workers
         auto threads = vector<tempest::thread>{};
         threads.reserve(num_threads);
 
@@ -180,7 +180,7 @@ namespace tempest::job::tests
             thread.join();
         }
 
-        // 3. Assert: Exactly 128 workers claimed, each claimed exactly once
+        // Assert: Exactly 128 workers claimed, each claimed exactly once
         EXPECT_EQ(total_claimed.load(memory_order::relaxed), worker_count);
         for (auto index = size_t{0}; index < worker_count; ++index)
         {

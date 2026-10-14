@@ -475,7 +475,7 @@ namespace tempest::render_graph
     ///        passes (e.g. shadow map generation) can run immediately without stalling on async compute.
     TEST(barrier_solver_test, cross_queue_dependency_batch_splitting_and_wait_indices)
     {
-        // 1. Setup: Mock device, allocator with 1 buffer and 1 texture
+        // Setup: Mock device, allocator with 1 buffer and 1 texture
         auto dev = mock_test_device{};
         auto allocator = transient_allocator{};
 
@@ -585,11 +585,11 @@ namespace tempest::render_graph
             },
         };
 
-        // 2. Act: Solve synchronization
+        // Act: Solve synchronization
         auto solver = barrier_solver{};
         const auto sync = solver.solve(dag, passes, allocator, {});
 
-        // 3. Assert: 3 batches must be formed
+        // Assert: 3 batches must be formed
         // Batch 0: Async Compute [Pass 0] (no wait)
         // Batch 1: Graphics [Pass 1] (no wait on Batch 0, allows immediate shadow recording!)
         // Batch 2: Graphics [Pass 2] (waits on Batch 0)
@@ -617,7 +617,7 @@ namespace tempest::render_graph
     ///        false execution stalls at the start of the frame.
     TEST(barrier_solver_test, cleared_attachment_bypasses_persistent_state_to_top_of_pipe)
     {
-        // 1. Setup mock device, transient allocator, and registered depth texture
+        // Setup mock device, transient allocator, and registered depth texture
         auto dev = mock_test_device{};
         auto allocator = transient_allocator{};
 
@@ -656,7 +656,7 @@ namespace tempest::render_graph
         solver.set_texture_state(alloc->handle.handle, rhi::pipeline_stage::fragment, rhi::resource_access::read,
                                  rhi::image_layout::general, queue_type::graphics);
 
-        // 2. Act: Pass 0 clears the depth texture in early/late fragment tests
+        // Act: Pass 0 clears the depth texture in early/late fragment tests
         const auto passes = vector<pass_node>{
             init_list,
             pass_node{
@@ -682,7 +682,7 @@ namespace tempest::render_graph
 
         const auto sync = solver.solve(dag, passes, allocator, textures);
 
-        // 3. Assert: Initial transition must be from undefined at top_of_pipe, NOT waiting on fragment
+        // Assert: Initial transition must be from undefined at top_of_pipe, NOT waiting on fragment
         ASSERT_EQ(sync.pass_plans.size(), 1U);
         ASSERT_EQ(sync.pass_plans[0].texture_barriers.size(), 1U);
         const auto& b = sync.pass_plans[0].texture_barriers[0];
@@ -698,7 +698,7 @@ namespace tempest::render_graph
     ///        when consumed by downstream reading passes.
     TEST(barrier_solver_test, depth_attachment_optimal_transitions_to_optimal_layout)
     {
-        // 1. Setup mock device, transient allocator, and registered depth texture
+        // Setup mock device, transient allocator, and registered depth texture
         auto dev = mock_test_device{};
         auto allocator = transient_allocator{};
 
@@ -733,7 +733,7 @@ namespace tempest::render_graph
 
         auto solver = barrier_solver{};
 
-        // 2. Act: Pass 0 writes depth attachment in optimal layout, Pass 1 samples it
+        // Act: Pass 0 writes depth attachment in optimal layout, Pass 1 samples it
         const auto passes = vector<pass_node>{
             init_list,
             pass_node{
@@ -775,7 +775,7 @@ namespace tempest::render_graph
 
         const auto sync = solver.solve(dag, passes, allocator, textures);
 
-        // 3. Assert: Pass 0 transitions from undefined to depth_stencil_attachment_optimal
+        // Assert: Pass 0 transitions from undefined to depth_stencil_attachment_optimal
         ASSERT_EQ(sync.pass_plans.size(), 2U);
         ASSERT_EQ(sync.pass_plans[0].texture_barriers.size(), 1U);
         const auto& b0 = sync.pass_plans[0].texture_barriers[0];

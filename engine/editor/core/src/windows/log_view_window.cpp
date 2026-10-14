@@ -88,7 +88,7 @@ namespace tempest::editor
 
         if (ImGui::Begin(window_name().data(), &open))
         {
-            // 1. Toolbar
+            // Toolbar
             if (ImGui::Button("Clear"))
             {
                 store->clear();
@@ -160,7 +160,7 @@ namespace tempest::editor
             ImGui::SameLine();
             ImGui::Checkbox("Auto-scroll", &auto_scroll);
 
-            // 2. Virtualized Table
+            // Virtualized Table
             const auto table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable |
                                      ImGuiTableFlags_Hideable | ImGuiTableFlags_ScrollY |
                                      ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |

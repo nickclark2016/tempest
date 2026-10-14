@@ -95,7 +95,7 @@ namespace tempest::physics::tests
     /// across both the ECS components and the underlying Jolt CharacterVirtual object.
     TEST_F(physics_determinism_fixture, snapshot_restore_roundtrip_test)
     {
-        // 1. Setup: Instantiate physics world, floor, and character entity
+        // Setup: Instantiate physics world, floor, and character entity
         auto world = physics_world{make_description()};
         auto* const system = world.physics_system();
         ASSERT_NE(system, nullptr);
@@ -135,7 +135,7 @@ namespace tempest::physics::tests
         ASSERT_NE(virtual_character, nullptr);
         virtual_character->set_linear_velocity(jolt::shim::vec3{1.2F, -0.5F, 3.4F});
 
-        // 2. Act: Capture snapshot at tick 42
+        // Act: Capture snapshot at tick 42
         constexpr auto tick_id = 42U;
         const auto snapshot = capture_character_snapshot(tick_id, registry, entity);
 
@@ -160,7 +160,7 @@ namespace tempest::physics::tests
         // Restore snapshot
         restore_character_snapshot(registry, entity, snapshot, &world);
 
-        // 3. Assert: Entity and Jolt CharacterVirtual completely restored
+        // Assert: Entity and Jolt CharacterVirtual completely restored
         const auto& restored_transform = registry.get<ecs::transform_component>(entity);
         const auto& restored_velocity = registry.get<velocity_component>(entity);
         const auto& restored_history = registry.get<ecs::transform_history_component>(entity);
@@ -197,7 +197,7 @@ namespace tempest::physics::tests
     /// but cannot climb 60 deg steep slope (exceeding default 50 deg max slope limit).
     TEST_F(physics_determinism_fixture, ramp_traversal_slope_limits)
     {
-        // 1. Setup: Physics world with primitive sandbox
+        // Setup: Physics world with primitive sandbox
         auto world = physics_world{make_description()};
         auto* const system = world.physics_system();
         ASSERT_NE(system, nullptr);
@@ -232,14 +232,14 @@ namespace tempest::physics::tests
         constexpr auto delta_time = 1.0F / 60.0F;
         constexpr auto gravity = math::vec3<float>{0.0F, -9.81F, 0.0F};
 
-        // 2. Act: Walk up 30-deg ramp for 60 ticks (1 second)
+        // Act: Walk up 30-deg ramp for 60 ticks (1 second)
         for (auto step = 0; step < 60; ++step)
         {
             update_character_controllers(world, registry, delta_time, gravity);
             world.step(delta_time);
         }
 
-        // 3. Assert: Character climbed upwards (y increases significantly above ground plane)
+        // Assert: Character climbed upwards (y increases significantly above ground plane)
         const auto& climbed_transform = registry.get<ecs::transform_component>(entity);
         EXPECT_GT(climbed_transform.position().y, 1.5F);
         EXPECT_GT(climbed_transform.position().z, 6.5F);
@@ -261,7 +261,7 @@ namespace tempest::physics::tests
             world.step(delta_time);
         }
 
-        // 4. Assert: On 60-deg ramp, slope limit cancels steep velocity; character cannot climb up
+        // Assert: On 60-deg ramp, slope limit cancels steep velocity; character cannot climb up
         const auto& steep_transform = registry.get<ecs::transform_component>(entity);
         EXPECT_LT(steep_transform.position().y, 1.6F);
     }
@@ -276,7 +276,7 @@ namespace tempest::physics::tests
     /// Asserts |S_100A - S_100B| == 0 across character and dynamic box states.
     TEST_F(physics_determinism_fixture, input_replay_determinism_test)
     {
-        // 1. Setup: Instantiate world, primitive sandbox (with 20kg and 200kg boxes)
+        // Setup: Instantiate world, primitive sandbox (with 20kg and 200kg boxes)
         auto world = physics_world{make_description()};
         auto* const system = world.physics_system();
         ASSERT_NE(system, nullptr);
@@ -340,7 +340,7 @@ namespace tempest::physics::tests
             });
         }
 
-        // 2. Act (Pass A): Simulate 100 ticks forward
+        // Act (Pass A): Simulate 100 ticks forward
         for (auto tick_index = 0; tick_index < 100; ++tick_index)
         {
             const auto& current_input = input_sequence[static_cast<size_t>(tick_index)];
@@ -361,11 +361,11 @@ namespace tempest::physics::tests
         // Ensure box was indeed pushed during the 100 ticks
         EXPECT_GT(box_20kg_snapshot_100a.position.z, 2.6F);
 
-        // 3. Act: Restore state back to S_0
+        // Act: Restore state back to S_0
         restore_character_snapshot(registry, entity, initial_character_snapshot, &world);
         sandbox.reset_dynamic_boxes();
 
-        // 4. Act (Pass B): Replay identical 100 ticks
+        // Act (Pass B): Replay identical 100 ticks
         for (auto tick_index = 0; tick_index < 100; ++tick_index)
         {
             const auto& current_input = input_sequence[static_cast<size_t>(tick_index)];
@@ -383,7 +383,7 @@ namespace tempest::physics::tests
         const auto character_snapshot_100b = capture_character_snapshot(100, registry, entity);
         const auto box_20kg_snapshot_100b = sandbox.capture_box_20kg_snapshot(100);
 
-        // 5. Assert: Bit-exact determinism (|S_100A - S_100B| == 0)
+        // Assert: Bit-exact determinism (|S_100A - S_100B| == 0)
         EXPECT_EQ(character_snapshot_100a.position().x, character_snapshot_100b.position().x);
         EXPECT_EQ(character_snapshot_100a.position().y, character_snapshot_100b.position().y);
         EXPECT_EQ(character_snapshot_100a.position().z, character_snapshot_100b.position().z);

@@ -74,7 +74,7 @@ namespace tempest::math
         const auto raw_exponent = static_cast<uint32_t>((float_bits & float32_exponent_mask) >> float32_exponent_shift);
         const auto mantissa = float_bits & float32_mantissa_mask;
 
-        // 1. Zero and Subnormal Float32 values
+        // Zero and Subnormal Float32 values
         // Single-precision subnormals (< 2^-126) strictly underflow below half precision's minimum subnormal
         // round-up threshold (2^-25) and flush to zero with preserved sign.
         if (raw_exponent == 0)
@@ -82,7 +82,7 @@ namespace tempest::math
             return sign_bit;
         }
 
-        // 2. Infinity and NaN
+        // Infinity and NaN
         if (raw_exponent == float32_max_exponent_field)
         {
             if (mantissa != 0)
@@ -101,14 +101,14 @@ namespace tempest::math
 
         const auto unbiased_exponent = static_cast<int32_t>(raw_exponent) - float32_exponent_bias;
 
-        // 3. Overflow beyond maximum half-float exponent
+        // Overflow beyond maximum half-float exponent
         // If unbiased exponent > 15, value is >= 65536.0f, which strictly exceeds the half overflow threshold (65520.0f)
         if (unbiased_exponent > float16_max_unbiased_exponent)
         {
             return sign_bit | float16_infinity_bits;
         }
 
-        // 4. Subnormal half-floats and underflow to zero
+        // Subnormal half-floats and underflow to zero
         if (unbiased_exponent < float16_min_normal_unbiased_exponent)
         {
             const auto full_significand = mantissa | float32_implicit_leading_one;
@@ -134,7 +134,7 @@ namespace tempest::math
             return sign_bit | static_cast<uint16_t>(rounded);
         }
 
-        // 5. Normal half-floats
+        // Normal half-floats
         const auto full_significand = mantissa | float32_implicit_leading_one;
         constexpr auto shift = float_to_half_mantissa_shift;
 
@@ -177,7 +177,7 @@ namespace tempest::math
         const auto half_exponent = static_cast<uint32_t>((half_val & float16_exponent_mask) >> float16_exponent_shift);
         const auto half_mantissa = static_cast<uint32_t>(half_val & float16_mantissa_mask);
 
-        // 1. Zeros and Subnormals
+        // Zeros and Subnormals
         if (half_exponent == 0)
         {
             if (half_mantissa == 0)
@@ -196,7 +196,7 @@ namespace tempest::math
             return bit_cast<float>(sign | float_exponent | float_mantissa);
         }
 
-        // 2. Infinity and NaN
+        // Infinity and NaN
         if (half_exponent == float16_max_exponent_field)
         {
             const auto float_exponent = float32_max_exponent_field << float32_exponent_shift;
@@ -204,7 +204,7 @@ namespace tempest::math
             return bit_cast<float>(sign | float_exponent | float_mantissa);
         }
 
-        // 3. Normal half numbers
+        // Normal half numbers
         const auto float_exponent = (half_exponent + static_cast<uint32_t>(exponent_bias_delta)) << float32_exponent_shift;
         const auto float_mantissa = half_mantissa << float_to_half_mantissa_shift;
 

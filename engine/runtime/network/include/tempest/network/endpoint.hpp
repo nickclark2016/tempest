@@ -27,14 +27,14 @@ namespace tempest::network
 
         [[nodiscard]] static constexpr auto loopback(uint16_t port) noexcept -> endpoint
         {
-            // 127.0.0.1 -- Default loopback address
+            // 0.0.1 -- Default loopback address
             // NOLINTNEXTLINE
             return {127, 0, 0, 1, port};
         }
 
         [[nodiscard]] static constexpr auto any(uint16_t port) noexcept -> endpoint
         {
-            // 0.0.0.0 -- Default any address
+            // 0.0.0 -- Default any address
             // NOLINTNEXTLINE
             return {0, 0, 0, 0, port};
         }

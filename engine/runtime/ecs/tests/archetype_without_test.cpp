@@ -56,7 +56,7 @@ namespace
 /// @brief Verifies that entities possessing an excluded tag are omitted from view iteration.
 TEST(archetype_without, without_single_tag)
 {
-    // 1. Setup: Register components and create entities with and without disabled_tag
+    // Setup: Register components and create entities with and without disabled_tag
     auto event_reg = tempest::event::event_registry{};
     auto type_reg = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, type_reg};
@@ -70,7 +70,7 @@ TEST(archetype_without, without_single_tag)
     const auto e3 = reg.create<position_component>();
     reg.replace(e3, position_component{.x = 5.0f, .y = 6.0f});
 
-    // 2. Act: Query view with position_component and without disabled_tag
+    // Act: Query view with position_component and without disabled_tag
     auto matched_positions = tempest::vector<position_component>{};
     for (const auto& [pos] : reg.with<position_component>().without<disabled_tag>())
     {
@@ -85,7 +85,7 @@ TEST(archetype_without, without_single_tag)
         ++all_count;
     }
 
-    // 3. Assert: Excluded entity is omitted while non-tagged entities match
+    // Assert: Excluded entity is omitted while non-tagged entities match
     EXPECT_EQ(all_count, 3);
     EXPECT_EQ(matched_positions.size(), 2);
     EXPECT_FLOAT_EQ(matched_positions[0].x, 1.0f);
@@ -97,7 +97,7 @@ TEST(archetype_without, without_single_tag)
 /// @brief Verifies that entities possessing either tag in a multi-tag exclusion or chained without() are omitted.
 TEST(archetype_without, without_multiple_tags)
 {
-    // 1. Setup: Create entities across multiple archetypes with combinations of frozen_tag and hidden_tag
+    // Setup: Create entities across multiple archetypes with combinations of frozen_tag and hidden_tag
     auto event_reg = tempest::event::event_registry{};
     auto type_reg = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, type_reg};
@@ -122,7 +122,7 @@ TEST(archetype_without, without_multiple_tags)
     const auto e5 = reg.create<velocity_component>();
     reg.replace(e5, velocity_component{.vx = 3.0f, .vy = 3.0f});
 
-    // 2. Act: Iterate with variadic without<frozen_tag, hidden_tag>() and chained without().without()
+    // Act: Iterate with variadic without<frozen_tag, hidden_tag>() and chained without().without()
     auto variadic_matches = tempest::vector<velocity_component>{};
     for (const auto& [vel] : reg.with<velocity_component>().without<frozen_tag, hidden_tag>())
     {
@@ -135,7 +135,7 @@ TEST(archetype_without, without_multiple_tags)
         chained_matches.push_back(vel);
     }
 
-    // 3. Assert: Both variadic and chained forms produce identical results omitting e2, e3, and e4
+    // Assert: Both variadic and chained forms produce identical results omitting e2, e3, and e4
     EXPECT_EQ(variadic_matches.size(), 2);
     EXPECT_EQ(chained_matches.size(), 2);
 
@@ -149,7 +149,7 @@ TEST(archetype_without, without_multiple_tags)
 /// @brief Verifies that exclusion filters do not affect unrelated components and unregistered tags don't exclude.
 TEST(archetype_without, without_does_not_affect_unrelated)
 {
-    // 1. Setup: Create entities with health, armor, dead_tag, and unrelated archetypes
+    // Setup: Create entities with health, armor, dead_tag, and unrelated archetypes
     auto event_reg = tempest::event::event_registry{};
     auto type_reg = tempest::ecs::component_type_registry{};
     auto reg = tempest::ecs::basic_archetype_registry{event_reg, type_reg};
@@ -168,7 +168,7 @@ TEST(archetype_without, without_does_not_affect_unrelated)
     reg.replace(e4, health_component{.hp = 50});
     reg.replace(e4, armor_component{.value = 20});
 
-    // 2. Act: Query with single component exclusion, multi-component with exclusion, and unused tag exclusion
+    // Act: Query with single component exclusion, multi-component with exclusion, and unused tag exclusion
     auto health_alive_count = 0;
     for (const auto& [h] : reg.with<health_component>().without<dead_tag>())
     {
@@ -191,7 +191,7 @@ TEST(archetype_without, without_does_not_affect_unrelated)
         ++unused_tag_count;
     }
 
-    // 3. Assert: Dead entity omitted from health queries, armored entities intact, unrelated tag does not exclude
+    // Assert: Dead entity omitted from health queries, armored entities intact, unrelated tag does not exclude
     EXPECT_EQ(health_alive_count, 3);
     EXPECT_EQ(health_armor_alive_count, 2);
     EXPECT_EQ(unused_tag_count, 4);

@@ -227,7 +227,7 @@ auto main(int argc, char** argv) -> int
 
     println("Starting Tempest RHI Example: {}\nDescription: {}", example_meta->name, example_meta->description);
 
-    // 1. Initialize GLFW
+    // Initialize GLFW
     if (glfwInit() != GLFW_TRUE)
     {
         println_to(stderr_stream, "Failed to initialize GLFW.");
@@ -245,7 +245,7 @@ auto main(int argc, char** argv) -> int
         return 1;
     }
 
-    // 2. Create RHI Context and Device
+    // Create RHI Context and Device
     auto log_sink = stdout_log_sink{};
     auto log = logger{log_sink};
 
@@ -287,7 +287,7 @@ auto main(int argc, char** argv) -> int
         return 1;
     }
 
-    // 3. Create WSI Surface & Negotiate sRGB Swapchain Format
+    // Create WSI Surface & Negotiate sRGB Swapchain Format
 #ifdef TEMPEST_PLATFORM_WINDOWS
     auto native_handle = native_wsi_handle{
         .display = GetModuleHandle(nullptr),
@@ -375,7 +375,7 @@ auto main(int argc, char** argv) -> int
         return 1;
     }
 
-    // 4. Initialize Example Instance
+    // Initialize Example Instance
     if (!opts.model_name.empty())
     {
         if (opts.model_name == "chess" || opts.model_name == "abeautifulgame")
@@ -399,7 +399,7 @@ auto main(int argc, char** argv) -> int
         return 1;
     }
 
-    // 5. Setup Synchronization Objects
+    // Setup Synchronization Objects
     // - Acquire and timeline semaphores are per frame in flight
     // - Render (present) semaphores are indexed per swapchain image to ensure safe reuse
     constexpr auto max_frames_in_flight = size_t{2};
@@ -424,7 +424,7 @@ auto main(int argc, char** argv) -> int
     auto frame_index = uint64_t{0};
     auto need_recreate = false;
 
-    // 6. Main Render Loop
+    // Main Render Loop
     while (glfwWindowShouldClose(window) == GLFW_FALSE && (opts.max_frames == 0 || frame_index < opts.max_frames))
     {
         glfwPollEvents();
@@ -531,7 +531,7 @@ auto main(int argc, char** argv) -> int
         frame_index++;
     }
 
-    // 7. Cleanup & Shutdown
+    // Cleanup & Shutdown
     dev->wait_idle();
 
     example_instance->shutdown(*dev);

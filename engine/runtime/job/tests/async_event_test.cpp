@@ -43,7 +43,7 @@ namespace tempest::job::tests
     ///        coroutines and allows subsequent waiters to pass without suspending until reset.
     TEST(async_event_test, manual_reset_broadcast)
     {
-        // 1. Setup
+        // Setup
         auto evt = async_event{false, event_reset_mode::manual};
         auto w1_ran = false;
         auto w2_ran = false;
@@ -58,10 +58,10 @@ namespace tempest::job::tests
         EXPECT_FALSE(w1_ran);
         EXPECT_FALSE(w2_ran);
 
-        // 2. Act: Set event
+        // Act: Set event
         evt.set();
 
-        // 3. Assert: Both waiters awakened
+        // Assert: Both waiters awakened
         EXPECT_TRUE(w1_ran);
         EXPECT_TRUE(w2_ran);
         EXPECT_TRUE(evt.is_set());
@@ -79,17 +79,17 @@ namespace tempest::job::tests
     /// @brief Verifies that an event initialized in the signaled state passes waiters immediately.
     TEST(async_event_test, manual_reset_pre_signaled)
     {
-        // 1. Setup: Manual event initialized to true
+        // Setup: Manual event initialized to true
         auto evt = async_event{true, event_reset_mode::manual};
         EXPECT_TRUE(evt.is_set());
 
         auto ran = false;
 
-        // 2. Act: Wait on already signaled event
+        // Act: Wait on already signaled event
         auto t = waiter_task(evt, &ran);
         t.resume();
 
-        // 3. Assert: Waiter completed immediately without suspending
+        // Assert: Waiter completed immediately without suspending
         EXPECT_TRUE(ran);
         EXPECT_TRUE(evt.is_set());
     }
@@ -97,7 +97,7 @@ namespace tempest::job::tests
     /// @brief Verifies concurrent multi-threaded broadcast on a manual-reset event.
     TEST(async_event_test, manual_reset_concurrent_broadcast_stress)
     {
-        // 1. Setup: 16 waiting threads, each running a waiter coroutine
+        // Setup: 16 waiting threads, each running a waiter coroutine
         constexpr auto thread_count = 16;
         auto evt = async_event{false, event_reset_mode::manual};
         auto completed_count = atomic<int>{0};
@@ -127,7 +127,7 @@ namespace tempest::job::tests
             tempest::this_thread::yield();
         }
 
-        // 2. Act: Signal the event concurrently from multiple setter threads
+        // Act: Signal the event concurrently from multiple setter threads
         auto s1 = tempest::thread([&evt]() { evt.set(); });
         auto s2 = tempest::thread([&evt]() { evt.set(); });
         s1.join();
@@ -138,7 +138,7 @@ namespace tempest::job::tests
             thread.join();
         }
 
-        // 3. Assert: All waiters were awakened
+        // Assert: All waiters were awakened
         EXPECT_EQ(completed_count.load(memory_order::relaxed), thread_count);
         EXPECT_TRUE(evt.is_set());
 
@@ -155,7 +155,7 @@ namespace tempest::job::tests
     ///        leaving subsequent waiters suspended until the event is set again.
     TEST(async_event_test, auto_reset_single_wake)
     {
-        // 1. Setup
+        // Setup
         auto evt = async_event{false, event_reset_mode::auto_reset};
         auto w1_ran = false;
         auto w2_ran = false;
@@ -169,10 +169,10 @@ namespace tempest::job::tests
         EXPECT_FALSE(w1_ran);
         EXPECT_FALSE(w2_ran);
 
-        // 2. Act: First set
+        // Act: First set
         evt.set();
 
-        // 3. Assert: Exactly one waiter should have run
+        // Assert: Exactly one waiter should have run
         EXPECT_TRUE(w1_ran ^ w2_ran);
         EXPECT_FALSE(evt.is_set()); // Automatically reset
 
@@ -186,14 +186,14 @@ namespace tempest::job::tests
     ///        and automatically resets, suspending the second waiter until explicitly set.
     TEST(async_event_test, auto_reset_pre_signaled)
     {
-        // 1. Setup: Auto-reset event initialized to true
+        // Setup: Auto-reset event initialized to true
         auto evt = async_event{true, event_reset_mode::auto_reset};
         EXPECT_TRUE(evt.is_set());
 
         auto w1_ran = false;
         auto w2_ran = false;
 
-        // 2. Act: First waiter passes immediately
+        // Act: First waiter passes immediately
         auto t1 = waiter_task(evt, &w1_ran);
         t1.resume();
 
@@ -205,7 +205,7 @@ namespace tempest::job::tests
         t2.resume();
         EXPECT_FALSE(w2_ran);
 
-        // 3. Act & Assert: Setting event awakens the second waiter
+        // Act & Assert: Setting event awakens the second waiter
         evt.set();
         EXPECT_TRUE(w2_ran);
         EXPECT_FALSE(evt.is_set());
@@ -215,7 +215,7 @@ namespace tempest::job::tests
     ///        awakened in strict First-In, First-Out (FIFO) order through ingress/egress transfer.
     TEST(async_event_test, auto_reset_strict_fifo_wake)
     {
-        // 1. Setup
+        // Setup
         auto evt = async_event{false, event_reset_mode::auto_reset};
         auto wake_order = vector<int>{};
 
@@ -229,7 +229,7 @@ namespace tempest::job::tests
 
         EXPECT_TRUE(wake_order.empty());
 
-        // 2. Act: Successively trigger set() 3 times
+        // Act: Successively trigger set() 3 times
         evt.set();
         ASSERT_EQ(wake_order.size(), 1u);
         EXPECT_EQ(wake_order[0], 1);
@@ -242,7 +242,7 @@ namespace tempest::job::tests
         ASSERT_EQ(wake_order.size(), 3u);
         EXPECT_EQ(wake_order[2], 3);
 
-        // 3. Assert: All coroutines completed in FIFO order
+        // Assert: All coroutines completed in FIFO order
         EXPECT_TRUE(t1.is_ready());
         EXPECT_TRUE(t2.is_ready());
         EXPECT_TRUE(t3.is_ready());
@@ -251,7 +251,7 @@ namespace tempest::job::tests
     /// @brief Verifies flat combining under concurrent set() calls from multiple threads.
     TEST(async_event_test, auto_reset_concurrent_flat_combining_stress)
     {
-        // 1. Setup: 8 waiters and 8 concurrent setter threads
+        // Setup: 8 waiters and 8 concurrent setter threads
         constexpr auto count = 8;
         auto evt = async_event{false, event_reset_mode::auto_reset};
         auto completed_counter = atomic<int>{0};
@@ -266,7 +266,7 @@ namespace tempest::job::tests
 
         EXPECT_EQ(completed_counter.load(memory_order::relaxed), 0);
 
-        // 2. Act: Spawn 8 concurrent setter threads
+        // Act: Spawn 8 concurrent setter threads
         auto setters = vector<tempest::thread>{};
         setters.reserve(count);
         for (auto index = 0; index < count; ++index)
@@ -281,14 +281,14 @@ namespace tempest::job::tests
             setter.join();
         }
 
-        // 3. Assert: Exactly all 8 waiters were awakened
+        // Assert: Exactly all 8 waiters were awakened
         EXPECT_EQ(completed_counter.load(memory_order::relaxed), count);
     }
 
     /// @brief Stresses producer-consumer coordination using auto-reset events and job_system workers.
     TEST(async_event_test, auto_reset_job_system_worker_stress)
     {
-        // 1. Setup: Job system with 4 performance workers
+        // Setup: Job system with 4 performance workers
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -313,7 +313,7 @@ namespace tempest::job::tests
             co_return;
         };
 
-        // 2. Act: Launch consumer task on worker pool
+        // Act: Launch consumer task on worker pool
         auto consumer_task = consumer_coro();
         sys.schedule(consumer_task.handle());
 
@@ -332,14 +332,14 @@ namespace tempest::job::tests
 
         sys.wait_idle();
 
-        // 3. Assert: All signals were consumed
+        // Assert: All signals were consumed
         EXPECT_EQ(consumed_counter.load(memory_order::relaxed), total_iterations);
     }
 
     /// @brief Verifies that concurrent setters and waiters on an auto-reset event never suffer from lost wakeups.
     TEST(async_event_test, auto_reset_lost_wakeup_stress)
     {
-        // 1. Setup: 4 waiters and 4 concurrent setter threads across 100 rounds
+        // Setup: 4 waiters and 4 concurrent setter threads across 100 rounds
         constexpr auto rounds = 100;
         constexpr auto thread_count = 4;
         auto completed_count = atomic<int>{0};
@@ -356,7 +356,7 @@ namespace tempest::job::tests
                 tasks.back().resume();
             }
 
-            // 2. Act: 4 concurrent setter threads signal the event
+            // Act: 4 concurrent setter threads signal the event
             auto setters = vector<tempest::thread>{};
             setters.reserve(thread_count);
             for (auto i = 0; i < thread_count; ++i)
@@ -371,7 +371,7 @@ namespace tempest::job::tests
                 setter.join();
             }
 
-            // 3. Assert: All waiters in this round completed
+            // Assert: All waiters in this round completed
             for (auto& t : tasks)
             {
                 EXPECT_TRUE(t.is_ready());
@@ -384,7 +384,7 @@ namespace tempest::job::tests
     /// @brief Verifies that an event can be destroyed immediately by the awakened task without use-after-free.
     TEST(async_event_test, destruct_immediately_on_wake)
     {
-        // 1. Setup
+        // Setup
         for (auto iteration = 0; iteration < 100; ++iteration)
         {
             auto* evt = new async_event{false, event_reset_mode::auto_reset};
@@ -401,13 +401,13 @@ namespace tempest::job::tests
             auto t = destroy_on_wake();
             t.resume(); // Suspends on wait()
 
-            // 2. Act: Signal from another thread
+            // Act: Signal from another thread
             auto setter = tempest::thread([evt]() {
                 evt->set();
             });
             setter.join();
 
-            // 3. Assert: Event was destroyed cleanly
+            // Assert: Event was destroyed cleanly
             EXPECT_TRUE(done.load(memory_order::acquire));
             EXPECT_EQ(evt, nullptr);
         }
@@ -421,7 +421,7 @@ namespace tempest::job::tests
     ///        unlinks cleanly without use-after-free, and preserves subsequent signaling.
     TEST(async_event_test, destroy_suspended_coroutine_auto_reset)
     {
-        // 1. Setup
+        // Setup
         auto evt = async_event{false, event_reset_mode::auto_reset};
         auto cancelled_ran = false;
         auto subsequent_ran = false;
@@ -437,13 +437,13 @@ namespace tempest::job::tests
             t.resume(); // Suspends on wait()
             EXPECT_FALSE(cancelled_ran);
 
-            // 2. Act: Destroy task while suspended
+            // Act: Destroy task while suspended
         }
 
         // Signal event
         evt.set();
 
-        // 3. Assert: Signal was not consumed by the cancelled task; a new waiter receives it
+        // Assert: Signal was not consumed by the cancelled task; a new waiter receives it
         auto subsequent_coro = [&evt, &subsequent_ran]() -> task<void> {
             co_await evt.wait();
             subsequent_ran = true;
@@ -460,7 +460,7 @@ namespace tempest::job::tests
     ///        unlinks cleanly and doesn't prevent other waiters from being signaled.
     TEST(async_event_test, destroy_suspended_coroutine_manual_reset)
     {
-        // 1. Setup
+        // Setup
         auto evt = async_event{false, event_reset_mode::manual};
         auto cancelled_ran = false;
         auto active_ran = false;
@@ -478,12 +478,12 @@ namespace tempest::job::tests
             auto t_cancel = waiting_coro();
             t_cancel.resume();
 
-            // 2. Act: Destroy t_cancel while suspended
+            // Act: Destroy t_cancel while suspended
         }
 
         evt.set();
 
-        // 3. Assert: Active waiter ran, cancelled did not run
+        // Assert: Active waiter ran, cancelled did not run
         EXPECT_TRUE(active_ran);
         EXPECT_FALSE(cancelled_ran);
     }
@@ -492,7 +492,7 @@ namespace tempest::job::tests
     ///        receive signals in FIFO order without lost wakeups.
     TEST(async_event_test, auto_reset_multiple_waiters_interleaved_cancellation)
     {
-        // 1. Setup
+        // Setup
         auto evt = async_event{false, event_reset_mode::auto_reset};
         auto order = vector<int>{};
 
@@ -512,7 +512,7 @@ namespace tempest::job::tests
         t2.resume();
         t3.resume();
 
-        // 2. Act: Cancel t1 and t3
+        // Act: Cancel t1 and t3
         t1 = task<void>{};
         t3 = task<void>{};
 
@@ -520,7 +520,7 @@ namespace tempest::job::tests
         evt.set();
         evt.set();
 
-        // 3. Assert: Only t0 and t2 were awakened
+        // Assert: Only t0 and t2 were awakened
         ASSERT_EQ(order.size(), 2U);
         EXPECT_EQ(order[0], 0);
         EXPECT_EQ(order[1], 2);
@@ -530,7 +530,7 @@ namespace tempest::job::tests
     ///        safely without hanging or memory corruption when tasks are destroyed.
     TEST(async_event_test, destroy_async_event_with_pending_waiters)
     {
-        // 1. Setup & Act
+        // Setup & Act
         auto ran = false;
         auto t = task<void>{};
 
@@ -548,10 +548,10 @@ namespace tempest::job::tests
             // evt destroyed here
         }
 
-        // 2. Act: Destroy task after event was destroyed
+        // Act: Destroy task after event was destroyed
         t = task<void>{};
 
-        // 3. Assert
+        // Assert
         EXPECT_FALSE(ran);
     }
 } // namespace tempest::job::tests

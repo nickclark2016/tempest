@@ -304,17 +304,17 @@ namespace tempest::editor::tests
         auto engine_ctx = editor_engine_context{};
         auto viewport = viewport_window{engine_ctx};
 
-        // 1. Initial State & Docking
+        // Initial State & Docking
         EXPECT_EQ(viewport.desired_initial_dock(), editor_window::dock_location::center);
         EXPECT_EQ(viewport.window_name(), "Viewport");
         EXPECT_TRUE(viewport.is_mode_supported(simulation_state::stopped));
         EXPECT_TRUE(viewport.is_mode_supported(simulation_state::pause));
         EXPECT_TRUE(viewport.is_mode_supported(simulation_state::play));
 
-        // 2. Default Aspect Ratio (Zero-size safe fallback to 1.0)
+        // Default Aspect Ratio (Zero-size safe fallback to 1.0)
         EXPECT_FLOAT_EQ(viewport.aspect_ratio(), 1.0F);
 
-        // 3. Simulation State Switching
+        // Simulation State Switching
         EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::stopped);
         engine_ctx.set_simulation_state(simulation_state::play);
         EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::play);
@@ -328,7 +328,7 @@ namespace tempest::editor::tests
     /// "Editor Camera" entities into the ECS scene hierarchy registry.
     TEST(editor_window_test, scene_hierarchy_no_editor_camera)
     {
-        // 1. Setup Engine Context & Register Window
+        // Setup Engine Context & Register Window
         auto engine_ctx = editor_engine_context{};
         const auto desc = window_desc{
             .width = 1280,
@@ -344,15 +344,15 @@ namespace tempest::editor::tests
         auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
                                  engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
 
-        // 2. Initialize Editor Context
+        // Initialize Editor Context
         auto ed_ctx = editor_context(engine_ctx, reg_info.handle, ui_ctx);
 
-        // 3. Assert Zero Camera Entities in ECS Registry
+        // Assert Zero Camera Entities in ECS Registry
         auto& cam_sys = engine_ctx.get_renderer().get_camera_system();
         auto active_cam = cam_sys.get_active_camera_entity();
         EXPECT_FALSE(active_cam.has_value());
 
-        // 4. Assert Standalone Editor Camera is Initialized Directly on Engine Context
+        // Assert Standalone Editor Camera is Initialized Directly on Engine Context
         auto& editor_cam = engine_ctx.get_editor_camera();
         EXPECT_EQ(editor_cam.get_position(), math::vec3<float>(0.0F, 2.0F, -5.0F));
     }
@@ -361,7 +361,7 @@ namespace tempest::editor::tests
     /// synchronized with the viewport without creating dummy editor cameras.
     TEST(editor_window_test, editor_context_lifecycle_and_camera_sync)
     {
-        // 1. Setup Engine & Editor Context
+        // Setup Engine & Editor Context
         auto engine_ctx = editor_engine_context{};
         const auto desc = window_desc{
             .width = 1280,
@@ -379,7 +379,7 @@ namespace tempest::editor::tests
 
         auto ed_ctx = editor_context(engine_ctx, reg_info.handle, ui_ctx);
 
-        // 2. Add Game Camera Entity
+        // Add Game Camera Entity
         auto game_cam = engine_ctx.get_entities().create();
         engine_ctx.get_entities().name(game_cam, "Player Camera");
         engine_ctx.get_entities().assign(game_cam, ecs::transform_component{});
@@ -389,13 +389,13 @@ namespace tempest::editor::tests
                                                        .near_plane = 0.1F,
                                                    });
 
-        // 3. Assert Camera System Resolves the Game Camera
+        // Assert Camera System Resolves the Game Camera
         auto& cam_sys = engine_ctx.get_renderer().get_camera_system();
         auto active_cam = cam_sys.get_active_camera_entity();
         ASSERT_TRUE(active_cam.has_value());
         EXPECT_EQ(active_cam.value(), game_cam);
 
-        // 4. Draw Frame & Assert Clean Execution
+        // Draw Frame & Assert Clean Execution
         ui_ctx.begin_ui_commands();
         EXPECT_NO_THROW(ed_ctx.draw());
         ui_ctx.finish_ui_commands();
@@ -420,7 +420,7 @@ namespace tempest::editor::tests
         auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
                                  engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
 
-        // 1. Create editor_context in scoped block
+        // Create editor_context in scoped block
         {
             auto ed_ctx = editor_context(engine_ctx, reg_info.handle, ui_ctx);
             ui_ctx.begin_ui_commands();
@@ -428,7 +428,7 @@ namespace tempest::editor::tests
             ui_ctx.finish_ui_commands();
         }
 
-        // 2. editor_context destroyed; clearing callbacks ensures no dangling pointer access
+        // editor_context destroyed; clearing callbacks ensures no dangling pointer access
         EXPECT_NO_THROW(engine_ctx.clear_editor_callbacks());
     }
 
@@ -448,7 +448,7 @@ namespace tempest::editor::tests
     /// and that transform_component is properly synchronized via step and interpolate history.
     TEST(editor_window_test, play_mode_steps_and_interpolates_transform_history)
     {
-        // 1. Setup engine context and entity with transform and transform_history
+        // Setup engine context and entity with transform and transform_history
         auto engine_ctx = editor_engine_context{};
         const auto desc = window_desc{
             .width = 1280,
@@ -474,7 +474,7 @@ namespace tempest::editor::tests
 
         engine_ctx.set_simulation_state(simulation_state::play);
 
-        // 2. Act: register fixed update that moves the entity, and request close after ticks run
+        // Act: register fixed update that moves the entity, and request close after ticks run
         bool fixed_updated = false;
         engine_ctx.register_on_fixed_update_callback([&](engine_context& ctx, chrono::duration<double> dt) {
             fixed_updated = true;
@@ -495,7 +495,7 @@ namespace tempest::editor::tests
 
         engine_ctx.run();
 
-        // 3. Assert: transform_component was updated by interpolate_transform_history
+        // Assert: transform_component was updated by interpolate_transform_history
         ASSERT_TRUE(fixed_updated);
         const auto* updated_tx = reg.try_get<ecs::transform_component>(ent);
         ASSERT_NE(updated_tx, nullptr);
@@ -506,7 +506,7 @@ namespace tempest::editor::tests
     /// captures cursor exclusively in play mode, and restores normal cursor on pause/stop.
     TEST(editor_window_test, cursor_mode_and_play_mode_transitions)
     {
-        // 1. Setup: Create editor_engine_context and register a window
+        // Setup: Create editor_engine_context and register a window
         auto engine_ctx = editor_engine_context{};
         const auto desc = window_desc{
             .width = 1280,
@@ -521,25 +521,25 @@ namespace tempest::editor::tests
 
         auto& wm = engine_ctx.get_window_manager();
 
-        // 2. Assert initial state: stopped mode, not playing, cursor normal
+        // Assert initial state: stopped mode, not playing, cursor normal
         EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::stopped);
         EXPECT_FALSE(engine_ctx.is_play_mode());
         EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::normal);
         EXPECT_FALSE(wm.is_cursor_disabled(reg_info.handle));
 
-        // 3. Act & Assert: Transition to play mode captures cursor
+        // Act & Assert: Transition to play mode captures cursor
         engine_ctx.set_simulation_state(simulation_state::play);
         EXPECT_TRUE(engine_ctx.is_play_mode());
         EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::disabled);
         EXPECT_TRUE(wm.is_cursor_disabled(reg_info.handle));
 
-        // 4. Act & Assert: Transition to pause mode uncaptures cursor
+        // Act & Assert: Transition to pause mode uncaptures cursor
         engine_ctx.set_simulation_state(simulation_state::pause);
         EXPECT_FALSE(engine_ctx.is_play_mode());
         EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::normal);
         EXPECT_FALSE(wm.is_cursor_disabled(reg_info.handle));
 
-        // 5. Act & Assert: Transition to stopped mode retains normal cursor
+        // Act & Assert: Transition to stopped mode retains normal cursor
         engine_ctx.set_simulation_state(simulation_state::stopped);
         EXPECT_FALSE(engine_ctx.is_play_mode());
         EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::normal);

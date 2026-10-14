@@ -22,7 +22,7 @@ namespace tempest::server::tests
     /// receives an allocated session ID and slot, and causes the server to spawn a character.
     TEST(server_integration_tests, single_client_handshake)
     {
-        // 1. Setup: Headless server on loopback port
+        // Setup: Headless server on loopback port
         auto config = server_config{
             .port = 17777,
             .create_ground_plane = true,
@@ -36,7 +36,7 @@ namespace tempest::server::tests
         ASSERT_TRUE(client_socket.bind(network::endpoint::loopback(0)));
         const auto server_ep = network::endpoint::loopback(config.port);
 
-        // 2. Act: Send connect_request datagram to server
+        // Act: Send connect_request datagram to server
         auto writer = network::bit_writer{};
         network::write_connect_request(writer, network::connect_request_payload{
             .client_version = 1,
@@ -53,7 +53,7 @@ namespace tempest::server::tests
         // Server processes inbound datagrams
         server.poll_network_packets();
 
-        // 3. Assert: Server registered session
+        // Assert: Server registered session
         ASSERT_EQ(server.sessions().size(), 1U);
         EXPECT_EQ(server.sessions()[0].slot, 0U);
         EXPECT_NE(server.sessions()[0].session_id, 0ULL);
@@ -85,7 +85,7 @@ namespace tempest::server::tests
     /// and staggered spawn coordinates along the X axis.
     TEST(server_integration_tests, multi_client_staggered_spawning)
     {
-        // 1. Setup
+        // Setup
         auto config = server_config{
             .port = 17778,
             .create_ground_plane = true,
@@ -104,7 +104,7 @@ namespace tempest::server::tests
 
         const auto server_ep = network::endpoint::loopback(config.port);
 
-        // 2. Act: Send connect requests from both clients
+        // Act: Send connect requests from both clients
         auto writer1 = network::bit_writer{};
         network::write_connect_request(writer1, network::connect_request_payload{.client_nonce = 100ULL});
         writer1.flush();
@@ -124,7 +124,7 @@ namespace tempest::server::tests
         // Server processes datagrams
         server.poll_network_packets();
 
-        // 3. Assert
+        // Assert
         ASSERT_EQ(server.sessions().size(), 2U);
         EXPECT_EQ(server.sessions()[0].slot, 0U);
         EXPECT_EQ(server.sessions()[1].slot, 1U);
@@ -147,7 +147,7 @@ namespace tempest::server::tests
     /// and that broadcast snapshots replicate motion back to clients.
     TEST(server_integration_tests, authoritative_movement_and_snapshot_broadcast)
     {
-        // 1. Setup
+        // Setup
         auto config = server_config{
             .port = 17779,
             .create_ground_plane = true,
@@ -178,7 +178,7 @@ namespace tempest::server::tests
         const auto read_accepted = client_socket.receive_from(sender, span<byte>{buf.data(), buf.size()});
         ASSERT_GT(read_accepted, 0U);
 
-        // 2. Act: Client streams input moving forward (+Z) over 30 ticks (0.5s at 60Hz)
+        // Act: Client streams input moving forward (+Z) over 30 ticks (0.5s at 60Hz)
         constexpr auto delta = 1.0 / 60.0;
         for (auto t = 0; t < 30; ++t)
         {
@@ -204,7 +204,7 @@ namespace tempest::server::tests
         // Server broadcasts snapshot
         server.broadcast_snapshots();
 
-        // 3. Assert: Client receives snapshot
+        // Assert: Client receives snapshot
         const auto snap_bytes = client_socket.receive_from(sender, span<byte>{buf.data(), buf.size()});
         ASSERT_GT(snap_bytes, sizeof(network::packet_header));
 
@@ -232,7 +232,7 @@ namespace tempest::server::tests
     /// from physics simulation and removes the session from the server.
     TEST(server_integration_tests, client_disconnect_despawn)
     {
-        // 1. Setup
+        // Setup
         auto config = server_config{
             .port = 17780,
             .create_ground_plane = true,
@@ -258,7 +258,7 @@ namespace tempest::server::tests
         server.poll_network_packets();
         ASSERT_EQ(server.sessions().size(), 1U);
 
-        // 2. Act: Send disconnect packet
+        // Act: Send disconnect packet
         auto disc_writer = network::bit_writer{};
         network::write_disconnect(disc_writer, network::disconnect_payload{
             .reason = network::disconnect_reason::user_quit,
@@ -270,7 +270,7 @@ namespace tempest::server::tests
 
         server.poll_network_packets();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(server.sessions().empty());
     }
 } // namespace tempest::server::tests

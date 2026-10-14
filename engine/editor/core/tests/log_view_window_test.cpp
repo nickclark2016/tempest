@@ -88,18 +88,18 @@ namespace tempest::editor::tests
     /// @brief Verifies log_view_window properties: initial dock location, window name, and active states.
     TEST(log_view_window_test, window_properties_and_docking)
     {
-        // 1. Setup: Create log_store and log_view_window
+        // Setup: Create log_store and log_view_window
         auto store = log_store{};
         auto window = log_view_window{store};
 
-        // 2. Act: Query window properties
+        // Act: Query window properties
         const auto dock = window.desired_initial_dock();
         const auto name = window.window_name();
         const auto supported_stopped = window.is_mode_supported(simulation_state::stopped);
         const auto supported_pause = window.is_mode_supported(simulation_state::pause);
         const auto supported_play = window.is_mode_supported(simulation_state::play);
 
-        // 3. Assert: Verify all properties match architectural specification
+        // Assert: Verify all properties match architectural specification
         EXPECT_EQ(dock, editor_window::dock_location::bottom);
         EXPECT_EQ(name, "Log View");
         EXPECT_TRUE(supported_stopped);
@@ -117,14 +117,14 @@ namespace tempest::editor::tests
     /// @brief Verifies that ingesting warnings and errors accurately updates filter counters for status pill display.
     TEST(log_view_window_test, status_pill_telemetry_reflection)
     {
-        // 1. Setup: Create log_store and editor_log_sink
+        // Setup: Create log_store and editor_log_sink
         auto store = log_store{};
         auto sink = editor_log_sink{};
 
         EXPECT_EQ(store.filter().warn_count, 0U);
         EXPECT_EQ(store.filter().error_count, 0U);
 
-        // 2. Act: Ingest 3 warnings and 2 errors into the sink and drain into store
+        // Act: Ingest 3 warnings and 2 errors into the sink and drain into store
         sink.log(log_record{
             .level = log_level::warn,
             .timestamp_ns = 100'000'000ULL,
@@ -163,7 +163,7 @@ namespace tempest::editor::tests
 
         const auto drained = store.drain(sink);
 
-        // 3. Assert: Drain count matches, and warning/error counters reflect ingested counts
+        // Assert: Drain count matches, and warning/error counters reflect ingested counts
         EXPECT_EQ(drained, 5U);
         EXPECT_EQ(store.filter().warn_count, 3U);
         EXPECT_EQ(store.filter().error_count, 2U);
@@ -177,7 +177,7 @@ namespace tempest::editor::tests
     /// @brief Verifies that log_view_window executes clean ImGui drawing passes with various log entries and levels.
     TEST(log_view_window_test, window_draw_with_entries)
     {
-        // 1. Setup: Ingest diverse log records into store and initialize window with headless ImGui
+        // Setup: Ingest diverse log records into store and initialize window with headless ImGui
         auto store = log_store{};
         auto sink = editor_log_sink{};
 
@@ -242,16 +242,16 @@ namespace tempest::editor::tests
             auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
             ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
 
-            // 2. Act: Render frame 1 with all entries visible
+            // Act: Render frame 1 with all entries visible
             ui_ctx.begin_ui_commands();
             EXPECT_NO_THROW(window.draw());
             ui_ctx.finish_ui_commands();
 
-            // 3. Assert: Verify window remains open and auto_scroll state maintained
+            // Assert: Verify window remains open and auto_scroll state maintained
             EXPECT_TRUE(window.open);
             EXPECT_TRUE(window.auto_scroll);
 
-            // 4. Act: Render frame 2 with window closed (should early return without error)
+            // Act: Render frame 2 with window closed (should early return without error)
             window.open = false;
             ui_ctx.begin_ui_commands();
             EXPECT_NO_THROW(window.draw());
@@ -269,7 +269,7 @@ namespace tempest::editor::tests
     /// @brief Verifies search query updates, level toggles, and clear watermark interactions.
     TEST(log_view_window_test, clear_and_search_interactions)
     {
-        // 1. Setup: Create store and populate with distinct messages
+        // Setup: Create store and populate with distinct messages
         auto store = log_store{};
         auto sink = editor_log_sink{};
 
@@ -298,23 +298,23 @@ namespace tempest::editor::tests
         store.drain(sink);
         auto window = log_view_window{store};
 
-        // 2. Act: Apply search filter for "Shader"
+        // Act: Apply search filter for "Shader"
         store.set_filter_search("Shader");
 
-        // 3. Assert: Only the matching shader record is in matched sequences
+        // Assert: Only the matching shader record is in matched sequences
         EXPECT_EQ(store.filter().matched_sequences.size(), 1U);
         const auto matched_seq = store.filter().matched_sequences[0];
         const auto* const matched_entry = store.get_entry(matched_seq);
         ASSERT_NE(matched_entry, nullptr);
         EXPECT_EQ(matched_entry->message(), "Shader compilation failed");
 
-        // 4. Act: Reset search and invoke clear
+        // Act: Reset search and invoke clear
         store.set_filter_search("");
         EXPECT_EQ(store.filter().matched_sequences.size(), 3U);
 
         window.store->clear();
 
-        // 5. Assert: All visible matches cleared, watermark advanced
+        // Assert: All visible matches cleared, watermark advanced
         EXPECT_EQ(store.visible_count(), 0U);
         EXPECT_TRUE(store.filter().matched_sequences.empty());
         EXPECT_EQ(store.filter().warn_count, 0U);
@@ -328,10 +328,10 @@ namespace tempest::editor::tests
     /// @brief Verifies that editor_engine_context automatically captures logs and drains them each frame.
     TEST(log_view_window_test, editor_engine_context_log_integration)
     {
-        // 1. Setup: Create editor_engine_context
+        // Setup: Create editor_engine_context
         auto ctx = editor_engine_context{};
 
-        // 2. Act: Log through engine logger
+        // Act: Log through engine logger
         ctx.get_logger().info("Engine started");
         ctx.get_logger().warn("Low memory warning");
         ctx.get_logger().error("Resource not found");
@@ -339,7 +339,7 @@ namespace tempest::editor::tests
         // Drain into store (normally called during on_render_frame or on_frame_end)
         ctx.get_log_store().drain(ctx.get_log_sink());
 
-        // 3. Assert: Verify entries captured in context's log_store
+        // Assert: Verify entries captured in context's log_store
         EXPECT_EQ(ctx.get_log_store().filter().warn_count, 1U);
         EXPECT_EQ(ctx.get_log_store().filter().error_count, 1U);
         EXPECT_GE(ctx.get_log_store().visible_count(), 3U);

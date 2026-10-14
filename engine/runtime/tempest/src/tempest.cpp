@@ -311,7 +311,7 @@ namespace tempest
             _delta_frame_time = delta;
             _last_frame_time = frame_start_time;
 
-            // 1. External & Window / Network Event Polling
+            // External & Window / Network Event Polling
             on_poll_events();
             if (_should_close)
             {
@@ -321,7 +321,7 @@ namespace tempest
             get_main_thread_executor().dispatch_pending();
             get_scene_manager().tick();
 
-            // 2. Fixed Timestep Simulation
+            // Fixed Timestep Simulation
             _accumulator.accumulate(delta_ns);
             if (should_step_simulation())
             {
@@ -350,19 +350,19 @@ namespace tempest
                 break;
             }
 
-            // 3. Variable Timestep Update
+            // Variable Timestep Update
             _update_variable(_delta_frame_time);
 
-            // 4. Render / Presentation Phase
+            // Render / Presentation Phase
             const auto alpha = _accumulator.alpha();
             on_render_frame(alpha);
 
-            // 5. Frame Pacing / Sleep Budget
+            // Frame Pacing / Sleep Budget
             const auto frame_elapsed =
                 chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - frame_start_time);
             on_pace_frame(frame_elapsed);
 
-            // 6. Frame End / Profiling & Telemetry
+            // Frame End / Profiling & Telemetry
             on_frame_end();
         }
 

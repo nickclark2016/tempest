@@ -66,11 +66,11 @@ namespace tempest::profiler
             first_event = false;
         };
 
-        // 1. Process metadata
+        // Process metadata
         append_separator();
         json += R"(    {"name": "process_name", "ph": "M", "pid": 1, "args": {"name": "Tempest Engine"}})";
 
-        // 2. Thread metadata
+        // Thread metadata
         for (const auto& track : data.tracks)
         {
             append_separator();
@@ -83,7 +83,7 @@ namespace tempest::profiler
                                track.track_id, escaped_name.c_str());
         }
 
-        // 3. Zone and Marker Events
+        // Zone and Marker Events
         for (const auto& track : data.tracks)
         {
             const auto* const cat = (track.type == track_type::gpu_queue) ? "gpu" : "cpu";
@@ -178,7 +178,7 @@ namespace tempest::profiler
             }
         }
 
-        // 4. Metric Streams
+        // Metric Streams
         for (const auto& st : data.metrics)
         {
             auto escaped_stream_name = string{};

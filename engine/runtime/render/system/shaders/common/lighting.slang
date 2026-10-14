@@ -113,7 +113,7 @@ ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerCompari
         return result;
     }
 
-    // 1. Select Cascade
+    // Select Cascade
     int cascade_idx = -1;
     [unroll]
     for (uint i = 0; i < shadow_data.cascade_count; ++i) {
@@ -136,10 +136,10 @@ ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerCompari
     float slope = sqrt(max(0.0, 1.0 - cos_theta * cos_theta)) / cos_theta;
     float slope_factor = clamp(slope, 0.0, 4.0);
 
-    // 2. Slope-scaled normal bias
+    // Slope-scaled normal bias
     float3 biased_pos = world_pos + geom_normal * (shadow_data.normal_bias * (1.0 + slope_factor));
 
-    // 3. Project into Light Clip Space
+    // Project into Light Clip Space
     float4 light_clip = mul(cascade.view_proj, float4(biased_pos, 1.0));
     float3 light_ndc = light_clip.xyz / light_clip.w;
 
@@ -157,7 +157,7 @@ ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerCompari
     // Reverse-Z: lit if current_depth >= occluder depth (closer to near plane 1.0)
     float compare_depth = saturate(light_ndc.z + shadow_data.depth_bias * (1.0 + slope_factor * 0.5));
 
-    // 4. Per-pixel rotated Poisson PCF to eliminate discrete step banding
+    // Per-pixel rotated Poisson PCF to eliminate discrete step banding
     float angle = shadow_ign(screen_pos) * 6.28318530718;
     float s = sin(angle);
     float c = cos(angle);

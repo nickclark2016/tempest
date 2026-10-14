@@ -316,7 +316,7 @@ namespace tempest::rhi::vk
             return unexpected{.value = context_creation_error::context_creation_failed};
         }
 
-        // 1. Enumerate available layers and extensions
+        // Enumerate available layers and extensions
         auto layer_count = uint32_t{0};
         if (fp_vkEnumerateInstanceLayerProperties != nullptr)
         {
@@ -990,14 +990,14 @@ namespace tempest::rhi::vk
     {
         const auto support = query_swapchain_support(inst_table, desc.physical_device, desc.surface);
 
-        // 1. Min image count
+        // Min image count
         auto image_count = tempest::max(desc.preferred_image_count, support.capabilities.minImageCount);
         if (support.capabilities.maxImageCount > 0 && image_count > support.capabilities.maxImageCount)
         {
             image_count = support.capabilities.maxImageCount;
         }
 
-        // 2. Extent
+        // Extent
         constexpr uint32_t undefined_extent_dimension = 0xFFFFFFFFU;
         auto extent = VkExtent2D{};
         if (support.capabilities.currentExtent.width != undefined_extent_dimension)
@@ -1012,7 +1012,7 @@ namespace tempest::rhi::vk
                                            support.capabilities.maxImageExtent.height);
         }
 
-        // 3. Surface format
+        // Surface format
         auto chosen_format = support.formats.empty()
                                  ? VkSurfaceFormatKHR{.format = VK_FORMAT_B8G8R8A8_UNORM,
                                                       .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}
@@ -1026,7 +1026,7 @@ namespace tempest::rhi::vk
             }
         }
 
-        // 4. Present mode
+        // Present mode
         auto chosen_present_mode = VK_PRESENT_MODE_FIFO_KHR;
         for (const auto& mode : support.present_modes)
         {
@@ -1037,7 +1037,7 @@ namespace tempest::rhi::vk
             }
         }
 
-        // 5. Composite alpha
+        // Composite alpha
         auto composite_alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         const auto alpha_flags = array<VkCompositeAlphaFlagBitsKHR, 4>{
             VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,

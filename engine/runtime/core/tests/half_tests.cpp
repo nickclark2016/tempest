@@ -21,15 +21,15 @@ using tempest::uint32_t;
     /// @brief Verifies that +0.0f and -0.0f convert to their respective half representations with sign preserved.
     TEST(half_tests, half_zero_representation)
     {
-        // 1. Setup: Positive and negative single-precision floating-point zeros
+        // Setup: Positive and negative single-precision floating-point zeros
         constexpr auto positive_zero = 0.0f;
         constexpr auto negative_zero = -0.0f;
 
-        // 2. Act: Convert to 16-bit half precision
+        // Act: Convert to 16-bit half precision
         const auto half_pos_zero = float_to_half(positive_zero);
         const auto half_neg_zero = float_to_half(negative_zero);
 
-        // 3. Assert: Sign bit is preserved and mantissa/exponent are zero
+        // Assert: Sign bit is preserved and mantissa/exponent are zero
         EXPECT_EQ(half_pos_zero, 0x0000U);
         EXPECT_EQ(half_neg_zero, 0x8000U);
 
@@ -48,15 +48,15 @@ using tempest::uint32_t;
     /// @brief Verifies positive and negative infinity conversion and round-tripping.
     TEST(half_tests, half_infinity_representation)
     {
-        // 1. Setup: Positive and negative infinity float32 bit representations
+        // Setup: Positive and negative infinity float32 bit representations
         const auto pos_inf_f = bit_cast<float>(0x7F800000U);
         const auto neg_inf_f = bit_cast<float>(0xFF800000U);
 
-        // 2. Act: Convert float infinities to half precision
+        // Act: Convert float infinities to half precision
         const auto half_pos_inf = float_to_half(pos_inf_f);
         const auto half_neg_inf = float_to_half(neg_inf_f);
 
-        // 3. Assert: Exponent bits are all 1s and mantissa is 0
+        // Assert: Exponent bits are all 1s and mantissa is 0
         EXPECT_EQ(half_pos_inf, 0x7C00U);
         EXPECT_EQ(half_neg_inf, 0xFC00U);
         EXPECT_TRUE(is_inf_half(half_pos_inf));
@@ -79,7 +79,7 @@ using tempest::uint32_t;
     /// @brief Verifies quiet and signaling NaN handling, payload preservation, and non-collapse to infinity.
     TEST(half_tests, half_nan_quiet_and_signaling)
     {
-        // 1. Setup: Various quiet and signaling NaNs in single precision
+        // Setup: Various quiet and signaling NaNs in single precision
         // Standard quiet NaN (quiet bit 22 set, payload zero)
         const auto standard_qnan = bit_cast<float>(0x7FC00000U);
         // Negative quiet NaN
@@ -91,14 +91,14 @@ using tempest::uint32_t;
         // Signaling NaN with ONLY the lowest bit set (all bits [22:13] are zero)
         const auto lowest_bit_snan = bit_cast<float>(0x7F800001U);
 
-        // 2. Act: Convert to half precision
+        // Act: Convert to half precision
         const auto half_std_qnan = float_to_half(standard_qnan);
         const auto half_neg_qnan = float_to_half(neg_qnan);
         const auto half_payload_qnan = float_to_half(payload_qnan);
         const auto half_upper_snan = float_to_half(upper_snan);
         const auto half_lowest_bit_snan = float_to_half(lowest_bit_snan);
 
-        // 3. Assert: All results are NaN, non-zero payload is preserved, and NaN never collapses to infinity
+        // Assert: All results are NaN, non-zero payload is preserved, and NaN never collapses to infinity
         EXPECT_TRUE(is_nan_half(half_std_qnan));
         EXPECT_EQ(half_std_qnan, 0x7E00U); // Quiet bit 9 set, payload 0, never clobbered by | 1U
 
@@ -131,20 +131,20 @@ using tempest::uint32_t;
     /// @brief Verifies subnormal representations, exact decoding, and round-to-nearest ties-to-even behavior.
     TEST(half_tests, half_subnormals_and_underflow)
     {
-        // 1. Setup: Smallest and largest representable half subnormals
+        // Setup: Smallest and largest representable half subnormals
         // Smallest subnormal: 2^-24 = 5.9604644775390625e-8
         constexpr auto half_min_subnormal = 0x0001U;
         // Largest subnormal: 1023 * 2^-24 = (1 - 2^-10) * 2^-14
         constexpr auto half_max_subnormal = 0x03FFU;
 
-        // 2. Act & Assert: Exact round-trip of half subnormal extremes
+        // Act & Assert: Exact round-trip of half subnormal extremes
         const auto float_min_sub = half_to_float(half_min_subnormal);
         const auto float_max_sub = half_to_float(half_max_subnormal);
 
         EXPECT_EQ(float_to_half(float_min_sub), half_min_subnormal);
         EXPECT_EQ(float_to_half(float_max_sub), half_max_subnormal);
 
-        // 3. Round-up test for values in (2^-25, 2^-24) with unbiased_exponent == -25:
+        // Round-up test for values in (2^-25, 2^-24) with unbiased_exponent == -25:
         // A float value like 1.5 * 2^-25 is > 2^-25, so it MUST round UP to 2^-24 (0x0001)!
         // Float32 encoding for 1.5 * 2^-25:
         // Exponent = 127 - 25 = 102 (0x66), mantissa = 0x00400000
@@ -178,18 +178,18 @@ using tempest::uint32_t;
     /// @brief Verifies strict round-to-nearest, ties-to-even behavior across normal and subnormal ranges.
     TEST(half_tests, half_round_to_nearest_ties_to_even)
     {
-        // 1. Boundary between largest subnormal and smallest normal:
+        // Boundary between largest subnormal and smallest normal:
         // Largest subnormal: 1023 * 2^-24
         // Smallest normal:   1024 * 2^-24 = 2^-14
         // Exact midpoint:    1023.5 * 2^-24
         // 1023 is odd, 1024 is even. Under ties-to-even, 1023.5 must round to 1024 (0x0400)!
         // In float32: unbiased exponent is -15, float exponent is 112 (0x70).
-        // 1023.5 * 2^-24 = (1 + 1023/1024) * 2^-15 with round bit set:
+        // 5 * 2^-24 = (1 + 1023/1024) * 2^-15 with round bit set:
         // float significand has bits [22:13] = 0x3FF, bit 12 = 1, bits [11:0] = 0.
         const auto subnormal_to_normal_tie = bit_cast<float>((112U << 23) | (0x3FFU << 13) | (1U << 12));
         EXPECT_EQ(float_to_half(subnormal_to_normal_tie), 0x0400U);
 
-        // 2. Normal range tie: 1.0f (half 0x3C00, even mantissa 0)
+        // Normal range tie: 1.0f (half 0x3C00, even mantissa 0)
         // In half, at exponent 0 (biased 15), 1 ULP is 2^-10 = 1/1024.
         // Half ULP is 2^-11 = 1/2048.
         // Float 1.0f + 2^-11 is an exact tie between 0x3C00 (even) and 0x3C01 (odd).
@@ -214,19 +214,19 @@ using tempest::uint32_t;
     /// @brief Verifies maximum finite normal values and IEEE-754 overflow boundary at 65520.0f.
     TEST(half_tests, half_max_normal_and_overflow)
     {
-        // 1. Setup: Maximum finite half is 65504.0f (exponent 30, mantissa 1023 -> 0x7BFF)
+        // Setup: Maximum finite half is 65504.0f (exponent 30, mantissa 1023 -> 0x7BFF)
         constexpr auto max_half = 65504.0f;
         EXPECT_EQ(float_to_half(max_half), 0x7BFFU);
         EXPECT_EQ(float_to_half(-max_half), 0xFBFFU);
         EXPECT_FLOAT_EQ(half_to_float(0x7BFFU), max_half);
         EXPECT_FLOAT_EQ(half_to_float(0xFBFFU), -max_half);
 
-        // 2. Act: Values between 65504.0f and 65520.0f
-        // 65519.0f is strictly below the halfway mark 65520.0f -> rounds down to 65504.0f
+        // Act: Values between 65504.0f and 65520.0f
+        // 0f is strictly below the halfway mark 65520.0f -> rounds down to 65504.0f
         EXPECT_EQ(float_to_half(65519.0f), 0x7BFFU);
         EXPECT_EQ(float_to_half(-65519.0f), 0xFBFFU);
 
-        // 65520.0f is the exact tie between 65504 (mantissa ends in 1, odd) and 65536 (infinity).
+        // 0f is the exact tie between 65504 (mantissa ends in 1, odd) and 65536 (infinity).
         // Under ties-to-even, it must round UP to infinity (0x7C00)!
         EXPECT_EQ(float_to_half(65520.0f), 0x7C00U);
         EXPECT_EQ(float_to_half(-65520.0f), 0xFC00U);

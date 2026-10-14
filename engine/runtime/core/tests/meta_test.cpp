@@ -148,12 +148,12 @@ static_assert(!tempest::core::is_normalized_type_name_valid_v<anon_namespace_str
 /// names for primitive integer and floating-point types across toolchains.
 TEST(tempest_meta, test_normalized_primitive_types)
 {
-    // 1. Setup & Act: Query normalized names for primitive scalar types.
+    // Setup & Act: Query normalized names for primitive scalar types.
     const auto int32_name = tempest::core::normalized_type_name<int32_t>();
     const auto float_name = tempest::core::normalized_type_name<float>();
     const auto uint64_name = tempest::core::normalized_type_name<uint64_t>();
 
-    // 2. Assert: Verify canonical representations match expected exact strings.
+    // Assert: Verify canonical representations match expected exact strings.
     ASSERT_EQ(int32_name, "int");
     ASSERT_EQ(float_name, "float");
 #if defined(_MSC_VER)
@@ -167,11 +167,11 @@ TEST(tempest_meta, test_normalized_primitive_types)
 /// stripped and match their unqualified names.
 TEST(tempest_meta, test_normalized_simple_structs)
 {
-    // 1. Setup & Act: Query normalized names for plain global structs.
+    // Setup & Act: Query normalized names for plain global structs.
     const auto foo_name = tempest::core::normalized_type_name<Foo>();
     const auto bar_name = tempest::core::normalized_type_name<Bar>();
 
-    // 2. Assert: Verify elaborated keywords are completely stripped.
+    // Assert: Verify elaborated keywords are completely stripped.
     ASSERT_EQ(foo_name, "Foo");
     ASSERT_EQ(bar_name, "Bar");
 }
@@ -181,7 +181,7 @@ TEST(tempest_meta, test_normalized_simple_structs)
 /// templates, nested template brackets, and const qualifiers.
 TEST(tempest_meta, test_normalized_shape_tests)
 {
-    // 1. Setup & Act: Query normalized names across diverse C++ language shapes.
+    // Setup & Act: Query normalized names across diverse C++ language shapes.
     const auto namespaced_name = tempest::core::normalized_type_name<test_namespace::namespaced_struct>();
     const auto nested_name = tempest::core::normalized_type_name<test_namespace::nested_namespace::nested_struct>();
     const auto private_class_name = tempest::core::normalized_type_name<private_member_class>();
@@ -190,7 +190,7 @@ TEST(tempest_meta, test_normalized_shape_tests)
     const auto nested_templ_name = tempest::core::normalized_type_name<outer_template<inner_template<Foo>>>();
     const auto const_foo_name = tempest::core::normalized_type_name<const Foo>();
 
-    // 2. Assert: Exact string matching pins cross-toolchain identical formatting.
+    // Assert: Exact string matching pins cross-toolchain identical formatting.
     ASSERT_EQ(namespaced_name, "test_namespace::namespaced_struct");
     ASSERT_EQ(nested_name, "test_namespace::nested_namespace::nested_struct");
     ASSERT_EQ(private_class_name, "private_member_class");
@@ -204,12 +204,12 @@ TEST(tempest_meta, test_normalized_shape_tests)
 /// are preserved as whole identifiers and not corrupted by substring stripping.
 TEST(tempest_meta, test_normalized_keyword_substring_identifiers)
 {
-    // 1. Setup & Act: Query normalized names for types with keyword substrings.
+    // Setup & Act: Query normalized names for types with keyword substrings.
     const auto struct_class_name = tempest::core::normalized_type_name<my_struct_class>();
     const auto classifier_name = tempest::core::normalized_type_name<classifier>();
     const auto unionizer_name = tempest::core::normalized_type_name<unionizer>();
 
-    // 2. Assert: Verify identifiers remain intact.
+    // Assert: Verify identifiers remain intact.
     ASSERT_EQ(struct_class_name, "my_struct_class");
     ASSERT_EQ(classifier_name, "classifier");
     ASSERT_EQ(unionizer_name, "unionizer");
@@ -219,18 +219,18 @@ TEST(tempest_meta, test_normalized_keyword_substring_identifiers)
 /// hashes matching the normalized string, and discriminates distinct types.
 TEST(tempest_meta, test_normalized_type_hash)
 {
-    // 1. Setup: Calculate runtime FNV-1a hashes of the expected normalized strings.
+    // Setup: Calculate runtime FNV-1a hashes of the expected normalized strings.
     const auto expected_foo_hash = tempest::fnv1a64("Foo");
     const auto expected_bar_hash = tempest::fnv1a64("Bar");
     const auto expected_rel_hash =
         tempest::fnv1a64("test_relationship_component<test_entity>");
 
-    // 2. Act: Retrieve compile-time normalized_type_hash_v values.
+    // Act: Retrieve compile-time normalized_type_hash_v values.
     const auto foo_hash = tempest::core::normalized_type_hash_v<Foo>;
     const auto bar_hash = tempest::core::normalized_type_hash_v<Bar>;
     const auto rel_hash = tempest::core::normalized_type_hash_v<test_relationship_component<test_entity>>;
 
-    // 3. Assert: Hashes must match the normalized string FNV-1a hash and distinguish types.
+    // Assert: Hashes must match the normalized string FNV-1a hash and distinguish types.
     ASSERT_EQ(foo_hash, expected_foo_hash);
     ASSERT_EQ(bar_hash, expected_bar_hash);
     ASSERT_EQ(rel_hash, expected_rel_hash);
@@ -242,15 +242,15 @@ TEST(tempest_meta, test_normalized_type_hash)
 /// and lambda scopes) are detected and flagged invalid.
 TEST(tempest_meta, test_invalid_scope_rejection)
 {
-    // 1. Setup: Define a lambda.
+    // Setup: Define a lambda.
     auto sample_lambda = []() {
     };
 
-    // 2. Act & Assert: Verify that invalid scopes (anonymous namespace, lambda) are rejected.
+    // Act & Assert: Verify that invalid scopes (anonymous namespace, lambda) are rejected.
     ASSERT_FALSE(tempest::core::is_normalized_type_name_valid_v<anon_namespace_struct>);
     ASSERT_FALSE(tempest::core::is_normalized_type_name_valid_v<decltype(sample_lambda)>);
 
-    // 3. Assert: Valid global and namespaced types remain accepted.
+    // Assert: Valid global and namespaced types remain accepted.
     ASSERT_TRUE(tempest::core::is_normalized_type_name_valid_v<Foo>);
     ASSERT_TRUE(tempest::core::is_normalized_type_name_valid_v<int32_t>);
     ASSERT_TRUE(tempest::core::is_normalized_type_name_valid_v<test_namespace::namespaced_struct>);
@@ -264,16 +264,16 @@ TEST(tempest_meta, test_invalid_scope_rejection)
 /// accessor and iterator semantics (begin, end, cbegin, cend, size, empty, back, pop_back).
 TEST(tempest_meta, test_fixed_string_buffer_container_accessors)
 {
-    // 1. Setup: Construct an empty fixed_string_buffer.
+    // Setup: Construct an empty fixed_string_buffer.
     auto buffer = tempest::core::detail::fixed_string_buffer<64>{};
 
-    // 2. Assert Initial State: Verify buffer starts empty with matching iterators.
+    // Assert Initial State: Verify buffer starts empty with matching iterators.
     ASSERT_TRUE(buffer.empty());
     ASSERT_EQ(buffer.size(), 0);
     ASSERT_EQ(buffer.begin(), buffer.end());
     ASSERT_EQ(buffer.cbegin(), buffer.cend());
 
-    // 3. Act: Append characters and inspect container accessors.
+    // Act: Append characters and inspect container accessors.
     buffer.push_back('H');
     ASSERT_FALSE(buffer.empty());
     ASSERT_EQ(buffer.size(), 1);
@@ -284,7 +284,7 @@ TEST(tempest_meta, test_fixed_string_buffer_container_accessors)
     ASSERT_EQ(buffer.back(), 'o');
     ASSERT_EQ(buffer.view(), "Hello");
 
-    // 4. Assert Iterators: Verify forward traversal matches expected sequence.
+    // Assert Iterators: Verify forward traversal matches expected sequence.
     const auto& const_buffer = buffer;
     auto character_index = size_t{0};
     const auto expected_characters = "Hello";
@@ -295,11 +295,11 @@ TEST(tempest_meta, test_fixed_string_buffer_container_accessors)
     }
     ASSERT_EQ(character_index, 5);
 
-    // 5. Act: Modify through back() reference and verify change.
+    // Act: Modify through back() reference and verify change.
     buffer.back() = '!';
     ASSERT_EQ(buffer.view(), "Hell!");
 
-    // 6. Act: Pop elements and verify size and back progression.
+    // Act: Pop elements and verify size and back progression.
     buffer.pop_back();
     ASSERT_EQ(buffer.size(), 4);
     ASSERT_EQ(buffer.back(), 'l');
@@ -318,32 +318,32 @@ TEST(tempest_meta, test_fixed_string_buffer_container_accessors)
 /// modifier/keyword consumption, and trailing space trimming.
 TEST(tempest_meta, test_normalization_decomposed_helpers)
 {
-    // 1. Setup & Act: Test is_word_boundary.
+    // Setup & Act: Test is_word_boundary.
     const auto sample_text = tempest::string_view{"struct Foo_Bar"};
     ASSERT_TRUE(tempest::core::detail::is_word_boundary(sample_text.begin(), sample_text.begin()));
     ASSERT_FALSE(tempest::core::detail::is_word_boundary(sample_text.begin(), sample_text.begin() + 1));
     ASSERT_TRUE(tempest::core::detail::is_word_boundary(sample_text.begin(), sample_text.begin() + 7));
 
-    // 2. Setup & Act: Test skip_spaces.
+    // Setup & Act: Test skip_spaces.
     const auto spaced_text = tempest::string_view{"   target"};
     const auto skipped = tempest::core::detail::skip_spaces(spaced_text.begin(), spaced_text.end());
     ASSERT_EQ(skipped, spaced_text.begin() + 3);
     ASSERT_EQ(*skipped, 't');
 
-    // 3. Setup & Act: Test try_consume_modifier.
+    // Setup & Act: Test try_consume_modifier.
     const auto cdecl_text = tempest::string_view{"__cdecl void"};
     const auto after_modifier = tempest::core::detail::try_consume_modifier(cdecl_text.begin(), cdecl_text.end());
     ASSERT_NE(after_modifier, nullptr);
     ASSERT_EQ(*after_modifier, 'v');
 
-    // 4. Setup & Act: Test try_consume_elaborated_keyword.
+    // Setup & Act: Test try_consume_elaborated_keyword.
     const auto struct_text = tempest::string_view{"struct MyType"};
     const auto after_keyword =
         tempest::core::detail::try_consume_elaborated_keyword(struct_text.begin(), struct_text.end());
     ASSERT_NE(after_keyword, nullptr);
     ASSERT_EQ(*after_keyword, 'M');
 
-    // 5. Setup & Act: Test try_consume_type_replacement.
+    // Setup & Act: Test try_consume_type_replacement.
     auto replacement_buffer = tempest::core::detail::fixed_string_buffer<64>{};
     const auto int64_text = tempest::string_view{"__int64 value"};
     const auto after_replacement = tempest::core::detail::try_consume_type_replacement(
@@ -352,7 +352,7 @@ TEST(tempest_meta, test_normalization_decomposed_helpers)
     ASSERT_EQ(replacement_buffer.view(), "long long");
     ASSERT_EQ(*after_replacement, ' ');
 
-    // 6. Setup & Act: Test trim_trailing_spaces.
+    // Setup & Act: Test trim_trailing_spaces.
     auto space_buffer = tempest::core::detail::fixed_string_buffer<64>{};
     space_buffer.append("TrimMe   ");
     tempest::core::detail::trim_trailing_spaces(space_buffer);

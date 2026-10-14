@@ -216,7 +216,7 @@ namespace tempest::scene
 
         if (!result.success)
         {
-            // 1. Rollback: destroy any partially instantiated entities
+            // Rollback: destroy any partially instantiated entities
             for (const auto ent : result.all_entities)
             {
                 if (_registry->is_valid(ent))
@@ -283,7 +283,7 @@ namespace tempest::scene
             return false;
         }
 
-        // 1. Destroy all root entities and subtrees recursively
+        // Destroy all root entities and subtrees recursively
         auto roots_to_destroy = tempest::move(_scenes[handle.index].root_entities);
         for (const auto root : roots_to_destroy)
         {
@@ -293,7 +293,7 @@ namespace tempest::scene
             }
         }
 
-        // 2. Sweep: query any remaining entities with scene_entity_component where comp.scene == handle
+        // Sweep: query any remaining entities with scene_entity_component where comp.scene == handle
         auto sweep_entities = vector<ecs::entity>{};
         for (const auto [self, comp] : _registry->with<ecs::self_component, scene_entity_component>())
         {
@@ -310,10 +310,10 @@ namespace tempest::scene
             }
         }
 
-        // 3. Reset slot in _scenes, increment generation, push index to free list
+        // Reset slot in _scenes, increment generation, push index to free list
         free_slot(handle.index);
 
-        // 4. If _active_scene == handle, clear _active_scene
+        // If _active_scene == handle, clear _active_scene
         if (_active_scene == handle)
         {
             _active_scene = default_active_scene;

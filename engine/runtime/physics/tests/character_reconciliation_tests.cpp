@@ -147,7 +147,7 @@ namespace tempest::physics::tests
     /// offset remains zero, and acknowledged inputs up to that tick are discarded.
     TEST_F(character_reconciliation_fixture, reconciliation_in_sync_discards_acknowledged_frames)
     {
-        // 1. Setup: Floor and character entity with circular prediction buffer
+        // Setup: Floor and character entity with circular prediction buffer
         auto world = physics_world{make_description()};
         auto* const system = world.physics_system();
         ASSERT_NE(system, nullptr);
@@ -174,14 +174,14 @@ namespace tempest::physics::tests
         EXPECT_TRUE(buffer.has_frame(3));
         EXPECT_TRUE(buffer.has_frame(5));
 
-        // 2. Act: Receive matching server state snapshot for tick 3
+        // Act: Receive matching server state snapshot for tick 3
         const auto* const predicted_frame_3 = buffer.get_frame(3);
         ASSERT_NE(predicted_frame_3, nullptr);
         const auto server_snapshot = predicted_frame_3->predicted_state;
 
         const auto result = reconcile_client_character(world, registry, player_entity, buffer, server_snapshot);
 
-        // 3. Assert: In-sync acknowledgment; no rollback or visual error accumulation
+        // Assert: In-sync acknowledgment; no rollback or visual error accumulation
         EXPECT_FALSE(result.diverged);
         EXPECT_FALSE(result.reconciled);
         EXPECT_FALSE(result.snapped);
@@ -215,7 +215,7 @@ namespace tempest::physics::tests
     /// reconciliation_smoothing_component for visual decay.
     TEST_F(character_reconciliation_fixture, reconciliation_moderate_divergence_rolls_back_and_resimulates)
     {
-        // 1. Setup: Floor and character entity stepped predictively for 10 ticks
+        // Setup: Floor and character entity stepped predictively for 10 ticks
         auto world = physics_world{make_description()};
         auto* const system = world.physics_system();
         ASSERT_NE(system, nullptr);
@@ -240,14 +240,14 @@ namespace tempest::physics::tests
         const auto* const predicted_frame_5 = buffer.get_frame(5);
         ASSERT_NE(predicted_frame_5, nullptr);
 
-        // 2. Act: Inject an authoritative server state at tick 5 shifted laterally by +0.3m along X
+        // Act: Inject an authoritative server state at tick 5 shifted laterally by +0.3m along X
         auto server_snapshot = predicted_frame_5->predicted_state;
         const auto lateral_offset = math::vec3<float>{0.3F, 0.0F, 0.0F};
         server_snapshot.motion.position = server_snapshot.motion.position + lateral_offset;
 
         const auto result = reconcile_client_character(world, registry, player_entity, buffer, server_snapshot);
 
-        // 3. Assert: Divergence detected, rollback and 5 ticks (6..10) resimulated
+        // Assert: Divergence detected, rollback and 5 ticks (6..10) resimulated
         EXPECT_TRUE(result.diverged);
         EXPECT_TRUE(result.reconciled);
         EXPECT_FALSE(result.snapped);
@@ -289,7 +289,7 @@ namespace tempest::physics::tests
     /// resetting smoothing position_error to (0, 0, 0) to avoid visual smearing.
     TEST_F(character_reconciliation_fixture, reconciliation_large_divergence_hard_snaps)
     {
-        // 1. Setup: Floor and character entity stepped predictively for 6 ticks
+        // Setup: Floor and character entity stepped predictively for 6 ticks
         auto world = physics_world{make_description()};
         auto* const system = world.physics_system();
         ASSERT_NE(system, nullptr);
@@ -314,13 +314,13 @@ namespace tempest::physics::tests
         const auto* const predicted_frame_3 = buffer.get_frame(3);
         ASSERT_NE(predicted_frame_3, nullptr);
 
-        // 2. Act: Inject an authoritative server state at tick 3 teleported by 3.0m along X
+        // Act: Inject an authoritative server state at tick 3 teleported by 3.0m along X
         auto server_snapshot = predicted_frame_3->predicted_state;
         server_snapshot.motion.position.x += 3.0F;
 
         const auto result = reconcile_client_character(world, registry, player_entity, buffer, server_snapshot);
 
-        // 3. Assert: Large divergence detected, rollback and resimulate, but hard-snap triggered
+        // Assert: Large divergence detected, rollback and resimulate, but hard-snap triggered
         EXPECT_TRUE(result.diverged);
         EXPECT_TRUE(result.reconciled);
         EXPECT_TRUE(result.snapped);
@@ -347,7 +347,7 @@ namespace tempest::physics::tests
     /// without modifying physical controller or transform_history_component state.
     TEST_F(character_reconciliation_fixture, reconciliation_visual_smoothing_exponential_decay)
     {
-        // 1. Setup: Entity with transform_component and reconciliation_smoothing_component
+        // Setup: Entity with transform_component and reconciliation_smoothing_component
         const auto entity = registry.create<ecs::transform_component,
                                             ecs::transform_history_component,
                                             reconciliation_smoothing_component>();
@@ -368,7 +368,7 @@ namespace tempest::physics::tests
 
         constexpr auto render_dt = 1.0F / 60.0F; // 60 FPS display refresh rate
 
-        // 2. Act: Step smoothing update for 10 frames
+        // Act: Step smoothing update for 10 frames
         auto previous_error_x = 0.4F;
         for (auto frame = 0; frame < 10; ++frame)
         {
@@ -377,7 +377,7 @@ namespace tempest::physics::tests
             const auto& current_smoothing = registry.get<reconciliation_smoothing_component>(entity);
             const auto& current_transform = registry.get<ecs::transform_component>(entity);
 
-            // 3. Assert: Error strictly decreases monotonically toward zero
+            // Assert: Error strictly decreases monotonically toward zero
             EXPECT_LT(current_smoothing.position_error.x, previous_error_x);
             EXPECT_GE(current_smoothing.position_error.x, 0.0F);
             previous_error_x = current_smoothing.position_error.x;
@@ -405,7 +405,7 @@ namespace tempest::physics::tests
     /// reconciliation_smoothing_component without sudden discontinuity.
     TEST_F(character_reconciliation_fixture, reconciliation_multiple_accumulated_corrections)
     {
-        // 1. Setup: Stepped character entity
+        // Setup: Stepped character entity
         auto world = physics_world{make_description()};
         auto* const system = world.physics_system();
         ASSERT_NE(system, nullptr);
@@ -427,7 +427,7 @@ namespace tempest::physics::tests
             step_client_prediction(world, registry, player_entity, cmd, delta_time, buffer);
         }
 
-        // 2. Act: First correction at tick 3 (+0.1m X)
+        // Act: First correction at tick 3 (+0.1m X)
         auto* frame_3 = buffer.get_frame(3);
         ASSERT_NE(frame_3, nullptr);
         auto snapshot_3 = frame_3->predicted_state;
@@ -448,7 +448,7 @@ namespace tempest::physics::tests
         const auto result_2 = reconcile_client_character(world, registry, player_entity, buffer, snapshot_6);
         EXPECT_TRUE(result_2.reconciled);
 
-        // 3. Assert: Offsets accumulated smoothly
+        // Assert: Offsets accumulated smoothly
         const auto smoothing_2 = registry.get<reconciliation_smoothing_component>(player_entity);
         EXPECT_NEAR(smoothing_2.position_error.x, 0.25F, 1e-4F);
 
@@ -461,7 +461,7 @@ namespace tempest::physics::tests
     /// already evicted from the prediction buffer is handled gracefully without false rollbacks.
     TEST_F(character_reconciliation_fixture, reconciliation_missing_tick_handled_gracefully)
     {
-        // 1. Setup: Empty prediction buffer
+        // Setup: Empty prediction buffer
         auto world = physics_world{make_description()};
         const auto player_entity = spawn_test_player(world, math::vec3<float>{0.0F, 1.0F, 0.0F});
         auto buffer = character_prediction_buffer{};
@@ -469,10 +469,10 @@ namespace tempest::physics::tests
         auto snapshot = character_snapshot{};
         snapshot.motion.tick = 42;
 
-        // 2. Act: Reconcile with no frames present
+        // Act: Reconcile with no frames present
         const auto result = reconcile_client_character(world, registry, player_entity, buffer, snapshot);
 
-        // 3. Assert: Handled safely
+        // Assert: Handled safely
         EXPECT_FALSE(result.diverged);
         EXPECT_FALSE(result.reconciled);
         EXPECT_FALSE(result.snapped);

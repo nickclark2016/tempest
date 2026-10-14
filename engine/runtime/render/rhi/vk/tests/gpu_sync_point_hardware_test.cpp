@@ -63,7 +63,7 @@ namespace tempest::rhi::vk
     /// GPU buffer copy contents on the host.
     TEST(gpu_sync_point_hardware_test, coroutine_awaits_hardware_buffer_copy)
     {
-        // 1. Setup
+        // Setup
         auto env = create_test_env();
         ASSERT_NE(env.dev, nullptr);
         auto& dev = env.dev;
@@ -165,7 +165,7 @@ namespace tempest::rhi::vk
             .stages = pipeline_stage::copy,
         };
 
-        // 2. Act
+        // Act
         auto completed = atomic<bool>{false};
         auto sync_success = atomic<bool>{false};
 
@@ -195,7 +195,7 @@ namespace tempest::rhi::vk
             this_thread::sleep_for(chrono::milliseconds(1));
         }
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(completed.load(memory_order::acquire));
         EXPECT_TRUE(sync_success.load(memory_order::acquire));
 

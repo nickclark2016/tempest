@@ -113,26 +113,26 @@ namespace tempest::physics::tests
     /// and ensures slot map generation invalidation upon despawning.
     TEST_F(physics_fixture, character_spawn_and_despawn)
     {
-        // 1. Setup: Instantiate physics_world with job system integration
+        // Setup: Instantiate physics_world with job system integration
         auto world = physics_world{make_description()};
         const auto config = character_controller_component{
             .character_height = 1.8F,
             .character_radius = 0.4F,
         };
 
-        // 2. Act: Spawn a virtual character at initial position
+        // Act: Spawn a virtual character at initial position
         const auto character_id = world.spawn_character(config, math::vec3<float>{0.0F, 1.0F, 0.0F});
 
-        // 3. Assert: Character id is valid and pointer lookup succeeds
+        // Assert: Character id is valid and pointer lookup succeeds
         ASSERT_NE(character_id, invalid_character_id);
         auto* character = world.get_character(character_id);
         ASSERT_NE(character, nullptr);
         EXPECT_FLOAT_EQ(character->get_position().y, 1.0F);
 
-        // 4. Act: Despawn character
+        // Act: Despawn character
         world.despawn_character(character_id);
 
-        // 5. Assert: Subsequent lookup returns nullptr due to slot invalidation
+        // Assert: Subsequent lookup returns nullptr due to slot invalidation
         EXPECT_EQ(world.get_character(character_id), nullptr);
     }
 
@@ -144,7 +144,7 @@ namespace tempest::physics::tests
     /// position across simulation ticks, and propagates the new pose to transform_component.
     TEST_F(physics_fixture, character_movement_and_transform_sync)
     {
-        // 1. Setup: Physics world with static floor and ECS entity
+        // Setup: Physics world with static floor and ECS entity
         auto world = physics_world{make_description()};
         auto* const system = world.physics_system();
         ASSERT_NE(system, nullptr);
@@ -174,7 +174,7 @@ namespace tempest::physics::tests
         registry.replace(entity, initial_transform);
         registry.replace(entity, ecs::transform_history_component::create(initial_position));
 
-        // 2. Act: Advance simulation for 30 steps at 60 Hz (0.5 seconds)
+        // Act: Advance simulation for 30 steps at 60 Hz (0.5 seconds)
         constexpr auto delta_time = 1.0F / 60.0F;
         constexpr auto gravity = math::vec3<float>{0.0F, -9.81F, 0.0F};
         for (auto step = 0; step < 30; ++step)
@@ -183,7 +183,7 @@ namespace tempest::physics::tests
             world.step(delta_time);
         }
 
-        // 3. Assert: Entity position moved forward along +Z axis and synced to transform & history
+        // Assert: Entity position moved forward along +Z axis and synced to transform & history
         const auto& updated_transform = registry.get<ecs::transform_component>(entity);
         const auto& updated_history = registry.get<ecs::transform_history_component>(entity);
         const auto& updated_velocity = registry.get<velocity_component>(entity);
@@ -205,7 +205,7 @@ namespace tempest::physics::tests
     /// and executing a jump intent applies upward velocity and leaves ground contact.
     TEST_F(physics_fixture, character_jumping_and_grounding)
     {
-        // 1. Setup: Physics world with floor and character spawned slightly above floor
+        // Setup: Physics world with floor and character spawned slightly above floor
         auto world = physics_world{make_description()};
         auto* const system = world.physics_system();
         ASSERT_NE(system, nullptr);
@@ -246,7 +246,7 @@ namespace tempest::physics::tests
         const auto& grounded_controller = registry.get<character_controller_component>(entity);
         ASSERT_TRUE(grounded_controller.is_grounded);
 
-        // 2. Act: Trigger jump intent
+        // Act: Trigger jump intent
         registry.replace(entity, character_movement_intent{
             .wish_direction = math::vec3<float>{0.0F, 0.0F, 0.0F},
             .jump_requested = true,
@@ -256,7 +256,7 @@ namespace tempest::physics::tests
         update_character_controllers(world, registry, delta_time, gravity);
         world.step(delta_time);
 
-        // 3. Assert: Upward velocity applied matching sqrt(2 * g * jump_height)
+        // Assert: Upward velocity applied matching sqrt(2 * g * jump_height)
         const auto& jumping_velocity = registry.get<velocity_component>(entity);
         EXPECT_GT(jumping_velocity.linear.y, 4.0F);
 
@@ -291,7 +291,7 @@ namespace tempest::physics::tests
     /// step obstacle using walk_stairs settings during horizontal motion.
     TEST_F(physics_fixture, character_stair_stepping_ecs)
     {
-        // 1. Setup: Floor and a 0.25m obstacle step in front of the character
+        // Setup: Floor and a 0.25m obstacle step in front of the character
         auto world = physics_world{make_description()};
         auto* const system = world.physics_system();
         ASSERT_NE(system, nullptr);
@@ -325,7 +325,7 @@ namespace tempest::physics::tests
         });
         registry.replace(entity, initial_transform);
 
-        // 2. Act: Advance simulation for 60 ticks (1 second) toward the stair step
+        // Act: Advance simulation for 60 ticks (1 second) toward the stair step
         constexpr auto delta_time = 1.0F / 60.0F;
         constexpr auto gravity = math::vec3<float>{0.0F, -9.81F, 0.0F};
         for (auto step = 0; step < 60; ++step)
@@ -334,7 +334,7 @@ namespace tempest::physics::tests
             world.step(delta_time);
         }
 
-        // 3. Assert: Character successfully climbed up onto the step (y raised by >= 0.25m, z navigated past obstacle front)
+        // Assert: Character successfully climbed up onto the step (y raised by >= 0.25m, z navigated past obstacle front)
         const auto& final_transform = registry.get<ecs::transform_component>(entity);
         const auto& final_controller = registry.get<character_controller_component>(entity);
 

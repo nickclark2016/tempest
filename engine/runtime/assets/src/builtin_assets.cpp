@@ -209,7 +209,7 @@ namespace tempest::assets::builtin
         const auto half_height = height * 0.5f;
         const auto pi_constant = math::constants::pi<float>;
 
-        // 1. Generate cylinder side wall vertices
+        // Generate cylinder side wall vertices
         for (uint32_t ring_index = 0; ring_index <= 1; ++ring_index)
         {
             const auto y_position = (ring_index == 0) ? half_height : -half_height;
@@ -247,7 +247,7 @@ namespace tempest::assets::builtin
             mesh_data.indices.push_back(bottom_vertex_index + 1);
         }
 
-        // 2. Top cap (+Y)
+        // Top cap (+Y)
         const auto top_center_index = static_cast<uint32_t>(mesh_data.vertices.size());
         mesh_data.vertices.push_back(core::vertex{
             .position = {0.0f, half_height, 0.0f},
@@ -281,7 +281,7 @@ namespace tempest::assets::builtin
             mesh_data.indices.push_back(top_ring_start + sector_index);
         }
 
-        // 3. Bottom cap (-Y)
+        // Bottom cap (-Y)
         const auto bottom_center_index = static_cast<uint32_t>(mesh_data.vertices.size());
         mesh_data.vertices.push_back(core::vertex{
             .position = {0.0f, -half_height, 0.0f},

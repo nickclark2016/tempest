@@ -140,7 +140,7 @@ namespace tempest::tests
     /// and mouse clear methods properly reset pressed inputs to release.
     TEST(window_manager_test, focus_and_input_clearing)
     {
-        // 1. Setup window manager and create window
+        // Setup window manager and create window
         auto wm = window_manager{};
         const auto desc = window_desc{
             .width = 640,
@@ -151,11 +151,11 @@ namespace tempest::tests
         auto win = wm.create_window(desc);
         ASSERT_TRUE(win.is_valid());
 
-        // 2. Act & Assert: Verify is_focused returns a valid boolean state
+        // Act & Assert: Verify is_focused returns a valid boolean state
         const auto focused = wm.is_focused(win);
         EXPECT_TRUE(focused || !focused);
 
-        // 3. Act & Assert: Set keyboard key to press, verify is_key_down, then clear and verify released
+        // Act & Assert: Set keyboard key to press, verify is_key_down, then clear and verify released
         auto& kb = wm.get_keyboard(win);
         kb.set(core::key_state{
             .k = core::key::w,
@@ -166,7 +166,7 @@ namespace tempest::tests
         kb.clear();
         EXPECT_FALSE(kb.is_key_down(core::key::w));
 
-        // 4. Act & Assert: Set mouse button to press and position deltas, then clear and verify reset
+        // Act & Assert: Set mouse button to press and position deltas, then clear and verify reset
         auto& ms = wm.get_mouse(win);
         ms.set(core::mouse_button_state{
             .button = core::mouse_button::left,
@@ -183,7 +183,7 @@ namespace tempest::tests
         EXPECT_FLOAT_EQ(ms.dx(), 0.0F);
         EXPECT_FLOAT_EQ(ms.dy(), 0.0F);
 
-        // 5. Cleanup
+        // Cleanup
         wm.destroy_window(win);
     }
 
@@ -250,7 +250,7 @@ namespace tempest::tests
     ///        does not stall, starve, or abort active multi-frame background tasks (e.g. continuous physics simulation).
     TEST(engine_context_test, render_frame_with_concurrent_background_task_isolation)
     {
-        // 1. Setup: create testable subclass allowing direct invocation of _render_frame()
+        // Setup: create testable subclass allowing direct invocation of _render_frame()
         class testable_engine_context final : public standalone_engine_context
         {
           public:
@@ -269,7 +269,7 @@ namespace tempest::tests
         auto reg_info = ctx.register_window(desc);
         ASSERT_TRUE(reg_info.handle.is_valid());
 
-        // 2. Setup: spawn a continuous multi-frame background task (simulating physics simulation)
+        // Setup: spawn a continuous multi-frame background task (simulating physics simulation)
         auto stop_background = atomic<bool>{false};
         auto background_ticks = atomic<uint32_t>{0};
         auto& jobs = ctx.get_job_system();
@@ -281,17 +281,17 @@ namespace tempest::tests
             }
         });
 
-        // 3. Act: execute multiple frames of rendering while background task runs concurrently
+        // Act: execute multiple frames of rendering while background task runs concurrently
         constexpr auto test_frame_count = 5U;
         for (auto frame_index = 0U; frame_index < test_frame_count; ++frame_index)
         {
             ctx.render_frame_for_test();
         }
 
-        // 4. Assert: verify background task continued making forward progress without starvation
+        // Assert: verify background task continued making forward progress without starvation
         EXPECT_GT(background_ticks.load(memory_order::acquire), 0U);
 
-        // 5. Cleanup: signal background task to terminate cleanly
+        // Cleanup: signal background task to terminate cleanly
         stop_background.store(true, memory_order::release);
         while (!bg_task.is_ready())
         {
@@ -307,7 +307,7 @@ namespace tempest::tests
     ///        inherits from client_context, and graphical vs simulation systems are strictly segregated.
     TEST(engine_context_test, interface_segregation_hierarchy)
     {
-        // 1. Setup: instantiate standalone context in headless mode
+        // Setup: instantiate standalone context in headless mode
         const auto config = engine_config{
             .headless = true,
             .fixed_timestep = 1.0F / 60.0F,
@@ -315,11 +315,11 @@ namespace tempest::tests
         };
         auto standalone_context = standalone_engine_context{config};
 
-        // 2. Act: bind via references to segregated interfaces
+        // Act: bind via references to segregated interfaces
         auto& engine_interface = static_cast<engine_context&>(standalone_context);
         auto& client_interface = static_cast<client_context&>(standalone_context);
 
-        // 3. Assert: engine_context provides simulation primitives and accumulator
+        // Assert: engine_context provides simulation primitives and accumulator
         EXPECT_NO_THROW({
             [[maybe_unused]] auto& entities = engine_interface.get_entities();
             [[maybe_unused]] auto& events = engine_interface.get_events();
@@ -332,7 +332,7 @@ namespace tempest::tests
             EXPECT_DOUBLE_EQ(accumulator.fixed_delta().count(), static_cast<double>(1.0F / 60.0F));
         });
 
-        // 4. Assert: client_context provides graphical and asset subsystems
+        // Assert: client_context provides graphical and asset subsystems
         EXPECT_NO_THROW({
             [[maybe_unused]] auto& materials = client_interface.get_materials();
             [[maybe_unused]] auto& meshes = client_interface.get_meshes();
@@ -350,7 +350,7 @@ namespace tempest::tests
     ///        initialization callbacks -> [poll_events -> should_step_sim -> fixed_update -> variable_update -> render -> pace -> frame_end] -> close callbacks.
     TEST(engine_context_test, template_method_loop_hooks_dispatch_order)
     {
-        // 1. Setup: test subclass recording execution sequence of hooks
+        // Setup: test subclass recording execution sequence of hooks
         class hook_tracker_engine_context final : public standalone_engine_context
         {
           public:
@@ -418,15 +418,15 @@ namespace tempest::tests
             tracker_context.execution_log.push_back("variable_update");
         });
 
-        // 2. Act: run loop for 2 frames
+        // Act: run loop for 2 frames
         tracker_context.run();
 
-        // 3. Assert: initialization occurs first and close occurs last
+        // Assert: initialization occurs first and close occurs last
         ASSERT_FALSE(tracker_context.execution_log.empty());
         EXPECT_EQ(tracker_context.execution_log.front(), "on_initialize");
         EXPECT_EQ(tracker_context.execution_log.back(), "on_close");
 
-        // 4. Assert: verify first frame sequence begins with on_poll_events then should_step_simulation
+        // Assert: verify first frame sequence begins with on_poll_events then should_step_simulation
         auto first_poll_index = size_t{0};
         for (auto index = size_t{0}; index < tracker_context.execution_log.size(); ++index)
         {
@@ -444,7 +444,7 @@ namespace tempest::tests
     ///        fixed update callbacks do not execute and pending ticks are safely consumed/discarded.
     TEST(engine_context_test, template_method_paused_simulation_discards_ticks)
     {
-        // 1. Setup: test context with paused simulation override
+        // Setup: test context with paused simulation override
         class paused_engine_context final : public standalone_engine_context
         {
           public:
@@ -486,10 +486,10 @@ namespace tempest::tests
             ++variable_update_call_count;
         });
 
-        // 2. Act: run loop for 3 frames with paused simulation
+        // Act: run loop for 3 frames with paused simulation
         paused_context.run();
 
-        // 3. Assert: fixed update was never called, while variable update ran every frame
+        // Assert: fixed update was never called, while variable update ran every frame
         EXPECT_EQ(fixed_update_call_count, 0U);
         EXPECT_EQ(variable_update_call_count, 3U);
         EXPECT_FALSE(paused_context.get_accumulator().has_pending_ticks());
@@ -498,7 +498,7 @@ namespace tempest::tests
     /// @brief Verifies that tasks posted to main_thread_executor are dispatched at the start of each frame.
     TEST(engine_context_test, main_thread_executor_dispatched_in_frame_loop)
     {
-        // 1. Setup: test context
+        // Setup: test context
         class frame_executor_engine_context final : public standalone_engine_context
         {
           public:
@@ -520,7 +520,7 @@ namespace tempest::tests
         };
         auto ctx = frame_executor_engine_context{config};
 
-        // 2. Act: Post task to main_thread_executor
+        // Act: Post task to main_thread_executor
         ctx.get_main_thread_executor().post([&ctx]() {
             ctx.task_executed = true;
         });
@@ -528,7 +528,7 @@ namespace tempest::tests
         EXPECT_FALSE(ctx.task_executed);
         ctx.run();
 
-        // 3. Assert: Task was dispatched and executed during the frame loop
+        // Assert: Task was dispatched and executed during the frame loop
         EXPECT_TRUE(ctx.task_executed);
         EXPECT_TRUE(ctx.get_main_thread_executor().empty());
     }
@@ -548,7 +548,7 @@ namespace tempest::tests
     ///        the actual pass_name instead of "detached_task", and tags valid caller provenance.
     TEST(engine_context_test, pass_dispatcher_worker_slice_provenance_and_naming)
     {
-        // 1. Setup: Test context exposing _with_pass_dispatcher
+        // Setup: Test context exposing _with_pass_dispatcher
         const auto config = engine_config{
             .headless = true,
             .fixed_timestep = 1.0F / 60.0F,
@@ -578,12 +578,12 @@ namespace tempest::tests
             .pass_name = "LightingPass",
         });
 
-        // 2. Act: Invoke pass dispatcher
+        // Act: Invoke pass dispatcher
         ctx._with_pass_dispatcher([&passes](render_graph::pass_dispatcher_fn dispatcher) {
             dispatcher(span<const render_graph::pass_record_item>{passes.data(), passes.size()});
         });
 
-        // 3. Assert: All passes executed
+        // Assert: All passes executed
         EXPECT_TRUE(pass1_ran);
         EXPECT_TRUE(pass2_ran);
         EXPECT_TRUE(pass3_ran);
@@ -629,7 +629,7 @@ namespace tempest::tests
     /// @brief Verifies that engine_context exposes the scene_manager and permits entity creation and scene management.
     TEST(engine_context_test, scene_manager_lifecycle)
     {
-        // 1. Setup: Headless engine context
+        // Setup: Headless engine context
         const auto config = engine_config{
             .headless = true,
             .fixed_timestep = 1.0F / 60.0F,
@@ -637,7 +637,7 @@ namespace tempest::tests
         };
         auto ctx = standalone_engine_context{config};
 
-        // 2. Act: Retrieve scene manager and manage a scene
+        // Act: Retrieve scene manager and manage a scene
         auto& sm = ctx.get_scene_manager();
         EXPECT_EQ(sm.get_scene_count(), 0U);
 
@@ -651,7 +651,7 @@ namespace tempest::tests
         ASSERT_TRUE(ctx.get_entities().name(ent).has_value());
         EXPECT_EQ(*ctx.get_entities().name(ent), "Player");
 
-        // 3. Assert: Scene count and active scene
+        // Assert: Scene count and active scene
         EXPECT_EQ(sm.get_scene_count(), 1U);
         EXPECT_EQ(sm.get_active_scene(), handle);
 

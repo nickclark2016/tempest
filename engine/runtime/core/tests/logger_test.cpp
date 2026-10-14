@@ -53,7 +53,7 @@ namespace
 /// @brief Verify that a logger with multiple registered sinks dispatches records to all sinks.
 TEST(tempest_logger, default_logger_preserves_multiple_sinks)
 {
-    // 1. Setup: create multiple sinks and register them with a logger
+    // Setup: create multiple sinks and register them with a logger
     auto sink1 = recording_log_sink{};
     auto sink2 = recording_log_sink{};
     auto test_logger = tempest::logger{};
@@ -61,12 +61,12 @@ TEST(tempest_logger, default_logger_preserves_multiple_sinks)
     test_logger.add_sink(sink1);
     test_logger.add_sink(sink2);
 
-    // 2. Act: log messages of various levels
+    // Act: log messages of various levels
     test_logger.info("Message 1");
     test_logger.warn("Message 2");
     test_logger.error("Message 3");
 
-    // 3. Assert: both sinks received all messages with correct metadata
+    // Assert: both sinks received all messages with correct metadata
     static constexpr size_t expected_count = 3;
     ASSERT_EQ(sink1.record_count(), expected_count);
     ASSERT_EQ(sink2.record_count(), expected_count);
@@ -86,11 +86,11 @@ TEST(tempest_logger, default_logger_preserves_multiple_sinks)
     EXPECT_EQ(sink2.get_record(2).message, "Message 3");
     EXPECT_EQ(sink2.get_record(2).level, tempest::log_level::error);
 
-    // 4. Act: remove one sink and log another message
+    // Act: remove one sink and log another message
     test_logger.remove_sink(sink1);
     test_logger.info("Message 4");
 
-    // 5. Assert: only the remaining sink received Message 4
+    // Assert: only the remaining sink received Message 4
     EXPECT_EQ(sink1.record_count(), expected_count);
     EXPECT_EQ(sink2.record_count(), expected_count + 1);
     EXPECT_EQ(sink2.get_record(3).message, "Message 4");
@@ -103,20 +103,20 @@ TEST(tempest_logger, default_logger_preserves_multiple_sinks)
 /// @brief Verify that log timestamps within a single thread are strictly non-decreasing and non-zero.
 TEST(tempest_logger, monotonic_timestamps)
 {
-    // 1. Setup: initialize logger and recording sink
+    // Setup: initialize logger and recording sink
     auto sink = recording_log_sink{};
     auto test_logger = tempest::logger{};
     test_logger.add_sink(sink);
 
     static constexpr size_t log_iteration_count = 1000;
 
-    // 2. Act: log sequential messages
+    // Act: log sequential messages
     for (size_t i = 0; i < log_iteration_count; ++i)
     {
         test_logger.info("Monotonic timestamp check");
     }
 
-    // 3. Assert: all timestamps are non-zero, monotonic, and wall clock base is positive
+    // Assert: all timestamps are non-zero, monotonic, and wall clock base is positive
     ASSERT_EQ(sink.record_count(), log_iteration_count);
     EXPECT_GT(test_logger.wall_clock_base(), 0);
 
@@ -138,7 +138,7 @@ TEST(tempest_logger, monotonic_timestamps)
 /// @brief Stress test with 8 concurrent worker threads logging while dynamic sinks are added/removed.
 TEST(tempest_logger, dynamic_sinks_thread_safety)
 {
-    // 1. Setup: initialize logger with a persistent sink
+    // Setup: initialize logger with a persistent sink
     auto persistent_sink = recording_log_sink{};
     auto test_logger = tempest::logger{};
     test_logger.add_sink(persistent_sink);
@@ -150,7 +150,7 @@ TEST(tempest_logger, dynamic_sinks_thread_safety)
     auto start_flag = tempest::atomic<bool>{false};
     auto done_flag = tempest::atomic<bool>{false};
 
-    // 2. Act: spawn 8 worker threads logging concurrently
+    // Act: spawn 8 worker threads logging concurrently
     auto workers = tempest::vector<tempest::thread>{};
     workers.reserve(worker_thread_count);
 
@@ -205,6 +205,6 @@ TEST(tempest_logger, dynamic_sinks_thread_safety)
     done_flag.store(true, tempest::memory_order::release);
     sink_manager.join();
 
-    // 3. Assert: all worker log messages were captured by the persistent sink without loss or race
+    // Assert: all worker log messages were captured by the persistent sink without loss or race
     EXPECT_EQ(persistent_sink.record_count(), total_expected_logs);
 }

@@ -29,13 +29,13 @@ namespace
 } // namespace
 
 //=============================================================================
-// 1. Base-Class Hook Tests
+// Base-Class Hook Tests
 //=============================================================================
 
 /// @brief Verifies that a base-hook node stack supports push, drain, and reverse in LIFO/FIFO order.
 TEST(intrusive_stack_test, base_hook_push_drain_reverse)
 {
-    // 1. Setup
+    // Setup
     auto stack = tempest::intrusive_mpsc_stack<base_hook_node>{};
     EXPECT_TRUE(stack.empty());
     EXPECT_EQ(stack.drain(), nullptr);
@@ -47,17 +47,17 @@ TEST(intrusive_stack_test, base_hook_push_drain_reverse)
     auto node_three = base_hook_node{};
     node_three.value = 30;
 
-    // 2. Act: Push nodes one by one
+    // Act: Push nodes one by one
     stack.push(tempest::non_null<base_hook_node>{node_one});
     EXPECT_FALSE(stack.empty());
     stack.push(tempest::non_null<base_hook_node>{node_two});
     stack.push(tempest::non_null<base_hook_node>{node_three});
 
-    // 3. Act: Drain the stack
+    // Act: Drain the stack
     auto* drained_head = stack.drain();
     EXPECT_TRUE(stack.empty());
 
-    // 4. Assert: Treiber stack order is LIFO (30 -> 20 -> 10 -> nullptr)
+    // Assert: Treiber stack order is LIFO (30 -> 20 -> 10 -> nullptr)
     ASSERT_NE(drained_head, nullptr);
     EXPECT_EQ(drained_head->value, 30);
 
@@ -72,10 +72,10 @@ TEST(intrusive_stack_test, base_hook_push_drain_reverse)
     current_node = tempest::intrusive_mpsc_stack<base_hook_node>::next(current_node);
     EXPECT_EQ(current_node, nullptr);
 
-    // 5. Act: Reverse the drained chain to obtain FIFO order (10 -> 20 -> 30 -> nullptr)
+    // Act: Reverse the drained chain to obtain FIFO order (10 -> 20 -> 30 -> nullptr)
     auto* reversed_head = tempest::intrusive_mpsc_stack<base_hook_node>::reverse(drained_head);
 
-    // 6. Assert: Chain is reversed
+    // Assert: Chain is reversed
     ASSERT_NE(reversed_head, nullptr);
     EXPECT_EQ(reversed_head->value, 10);
 
@@ -94,29 +94,29 @@ TEST(intrusive_stack_test, base_hook_push_drain_reverse)
 /// @brief Verifies edge case behaviors for empty and single-element stacks and helper functions.
 TEST(intrusive_stack_test, edge_cases_empty_and_single_element)
 {
-    // 1. Setup
+    // Setup
     auto stack = tempest::intrusive_mpsc_stack<base_hook_node>{};
 
-    // 2. Act & Assert: Empty stack drain and next on nullptr
+    // Act & Assert: Empty stack drain and next on nullptr
     EXPECT_TRUE(stack.empty());
     EXPECT_EQ(stack.drain(), nullptr);
     EXPECT_EQ(tempest::intrusive_mpsc_stack<base_hook_node>::next(nullptr), nullptr);
     EXPECT_EQ(tempest::intrusive_mpsc_stack<base_hook_node>::reverse(nullptr), nullptr);
 
-    // 3. Act: Push a single element
+    // Act: Push a single element
     auto single_node = base_hook_node{};
     single_node.value = 42;
     stack.push(tempest::non_null<base_hook_node>{single_node});
     EXPECT_FALSE(stack.empty());
 
-    // 4. Assert: Drain single element
+    // Assert: Drain single element
     auto* drained = stack.drain();
     EXPECT_TRUE(stack.empty());
     ASSERT_NE(drained, nullptr);
     EXPECT_EQ(drained->value, 42);
     EXPECT_EQ(tempest::intrusive_mpsc_stack<base_hook_node>::next(drained), nullptr);
 
-    // 5. Assert: Reverse single-element chain returns the same node
+    // Assert: Reverse single-element chain returns the same node
     auto* reversed = tempest::intrusive_mpsc_stack<base_hook_node>::reverse(drained);
     ASSERT_NE(reversed, nullptr);
     EXPECT_EQ(reversed->value, 42);
@@ -124,13 +124,13 @@ TEST(intrusive_stack_test, edge_cases_empty_and_single_element)
 }
 
 //=============================================================================
-// 2. Member-Pointer Hook Tests
+// Member-Pointer Hook Tests
 //=============================================================================
 
 /// @brief Verifies that a member-pointer hook stack correctly accesses hook members, drains, and reverses.
 TEST(intrusive_stack_test, member_hook_push_drain_reverse)
 {
-    // 1. Setup
+    // Setup
     auto stack = tempest::intrusive_mpsc_stack<member_hook_node, &member_hook_node::hook>{};
     EXPECT_TRUE(stack.empty());
 
@@ -141,17 +141,17 @@ TEST(intrusive_stack_test, member_hook_push_drain_reverse)
     auto node_three = member_hook_node{};
     node_three.value = 300;
 
-    // 2. Act: Push nodes
+    // Act: Push nodes
     stack.push(tempest::non_null<member_hook_node>{node_one});
     stack.push(tempest::non_null<member_hook_node>{node_two});
     stack.push(tempest::non_null<member_hook_node>{node_three});
     EXPECT_FALSE(stack.empty());
 
-    // 3. Act: Drain
+    // Act: Drain
     auto* drained_head = stack.drain();
     EXPECT_TRUE(stack.empty());
 
-    // 4. Assert: LIFO order (300 -> 200 -> 100 -> nullptr)
+    // Assert: LIFO order (300 -> 200 -> 100 -> nullptr)
     ASSERT_NE(drained_head, nullptr);
     EXPECT_EQ(drained_head->value, 300);
 
@@ -169,11 +169,11 @@ TEST(intrusive_stack_test, member_hook_push_drain_reverse)
         tempest::intrusive_mpsc_stack<member_hook_node, &member_hook_node::hook>::next(current_node);
     EXPECT_EQ(current_node, nullptr);
 
-    // 5. Act: Reverse to FIFO order (100 -> 200 -> 300 -> nullptr)
+    // Act: Reverse to FIFO order (100 -> 200 -> 300 -> nullptr)
     auto* reversed_head =
         tempest::intrusive_mpsc_stack<member_hook_node, &member_hook_node::hook>::reverse(drained_head);
 
-    // 6. Assert: FIFO order
+    // Assert: FIFO order
     ASSERT_NE(reversed_head, nullptr);
     EXPECT_EQ(reversed_head->value, 100);
 
@@ -193,13 +193,13 @@ TEST(intrusive_stack_test, member_hook_push_drain_reverse)
 }
 
 //=============================================================================
-// 3. Range Operations
+// Range Operations
 //=============================================================================
 
 /// @brief Verifies push_range attaches an entire pre-linked chain atomically to the stack.
 TEST(intrusive_stack_test, push_range_prelinked_chain)
 {
-    // 1. Setup: Create nodes
+    // Setup: Create nodes
     auto stack = tempest::intrusive_mpsc_stack<base_hook_node>{};
 
     auto chain_a1 = base_hook_node{};
@@ -223,14 +223,14 @@ TEST(intrusive_stack_test, push_range_prelinked_chain)
     chain_b1.next = &chain_b2;
     chain_b2.next = nullptr;
 
-    // 2. Act: Push chain A, then push chain B
+    // Act: Push chain A, then push chain B
     stack.push_range(tempest::non_null<base_hook_node>{chain_a1}, tempest::non_null<base_hook_node>{chain_a3});
     stack.push_range(tempest::non_null<base_hook_node>{chain_b1}, tempest::non_null<base_hook_node>{chain_b2});
 
-    // 3. Act: Drain the stack
+    // Act: Drain the stack
     auto* drained = stack.drain();
 
-    // 4. Assert: Chain B is on top, followed by Chain A: b1 -> b2 -> a1 -> a2 -> a3 -> nullptr
+    // Assert: Chain B is on top, followed by Chain A: b1 -> b2 -> a1 -> a2 -> a3 -> nullptr
     ASSERT_NE(drained, nullptr);
     EXPECT_EQ(drained->value, 4);
 
@@ -255,13 +255,13 @@ TEST(intrusive_stack_test, push_range_prelinked_chain)
 }
 
 //=============================================================================
-// 4. High-Concurrency MPSC Stress Tests
+// High-Concurrency MPSC Stress Tests
 //=============================================================================
 
 /// @brief Stress-tests concurrent pushes from multiple producer threads and a single consumer draining concurrently.
 TEST(intrusive_stack_test, concurrent_mpsc_stress_push_and_drain)
 {
-    // 1. Setup: Constants and pre-allocated node buffers
+    // Setup: Constants and pre-allocated node buffers
     constexpr auto producer_thread_count = 4U;
     constexpr auto items_per_thread = 10000U;
     constexpr auto total_node_count = producer_thread_count * items_per_thread;
@@ -282,7 +282,7 @@ TEST(intrusive_stack_test, concurrent_mpsc_stress_push_and_drain)
     auto start_barrier = tempest::atomic<bool>{false};
     auto producers_finished_count = tempest::atomic<uint32_t>{0};
 
-    // 2. Act: Spawn producer threads
+    // Act: Spawn producer threads
     auto producer_threads = tempest::vector<tempest::thread>{};
     for (auto thread_idx = 0U; thread_idx < producer_thread_count; ++thread_idx)
     {
@@ -330,7 +330,7 @@ TEST(intrusive_stack_test, concurrent_mpsc_stress_push_and_drain)
         }));
     }
 
-    // 3. Act: Start concurrent execution and consumer draining
+    // Act: Start concurrent execution and consumer draining
     start_barrier.store(true, tempest::memory_order::release);
 
     auto received_counts = tempest::vector<uint32_t>(total_node_count, 0U);
@@ -375,7 +375,7 @@ TEST(intrusive_stack_test, concurrent_mpsc_stress_push_and_drain)
         producer_thread.join();
     }
 
-    // 4. Assert: All nodes were received exactly once with no duplicates or omissions
+    // Assert: All nodes were received exactly once with no duplicates or omissions
     EXPECT_EQ(total_received, total_node_count);
     for (auto verification_index = 0U; verification_index < total_node_count; ++verification_index)
     {

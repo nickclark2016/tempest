@@ -105,7 +105,7 @@ namespace tempest::ecs
 /// a transform_component on the root entity, and that deserialization rejects root transforms.
 TEST(prefab_codec_test, root_transform_never_persisted_to_file)
 {
-    // 1. Setup: Author an entity with transform_component and gameplay component
+    // Setup: Author an entity with transform_component and gameplay component
     auto ctx = tempest_prefab_codec_test::test_registry_context{};
     auto& registry = ctx.registry;
     const auto root_ent = registry.create();
@@ -121,11 +121,11 @@ TEST(prefab_codec_test, root_transform_never_persisted_to_file)
     };
     registry.assign(root_ent, gameplay);
 
-    // 2. Act: Serialize entity hierarchy to .tprefab JSON
+    // Act: Serialize entity hierarchy to .tprefab JSON
     const auto prefab_guid = *tempest::parse_guid("12345678-1234-5678-0102-030405060708");
     const auto json_str = tempest::scene::prefab_codec::serialize(registry, root_ent, prefab_guid);
 
-    // 3. Assert: JSON output must NOT contain transform_component on root
+    // Assert: JSON output must NOT contain transform_component on root
     EXPECT_FALSE(json_str.empty());
     EXPECT_FALSE(tempest::contains(tempest::string_view{json_str.data(), json_str.size()}, "transform_component"));
 
@@ -145,7 +145,7 @@ TEST(prefab_codec_test, root_transform_never_persisted_to_file)
     EXPECT_TRUE(comps_obj.contains("tempest_prefab_codec_test::test_gameplay_component") ||
                 comps_obj.contains("test_gameplay_component"));
 
-    // 4. Act & Assert: Deserialization of a .tprefab containing root transform_component is rejected
+    // Act & Assert: Deserialization of a .tprefab containing root transform_component is rejected
     const auto invalid_json = tempest::string_view{
         R"({
             "format": "tempest.prefab",
@@ -172,7 +172,7 @@ TEST(prefab_codec_test, root_transform_never_persisted_to_file)
 /// @brief Verifies that non-root child entities in a prefab template persist their transform_component.
 TEST(prefab_codec_test, child_transform_is_persisted)
 {
-    // 1. Setup: Author root entity and child entity, child having transform_component
+    // Setup: Author root entity and child entity, child having transform_component
     auto ctx = tempest_prefab_codec_test::test_registry_context{};
     auto& registry = ctx.registry;
 
@@ -189,11 +189,11 @@ TEST(prefab_codec_test, child_transform_is_persisted)
     child_tx.position(tempest::math::vec3<float>{5.0F, 10.0F, 15.0F});
     registry.assign(child_ent, child_tx);
 
-    // 2. Act: Serialize to .tprefab JSON
+    // Act: Serialize to .tprefab JSON
     const auto prefab_guid = *tempest::parse_guid("abcdef01-2345-6789-0001-020304050607");
     const auto json_str = tempest::scene::prefab_codec::serialize(registry, root_ent, prefab_guid);
 
-    // 3. Assert: Child transform is preserved in JSON and root transform is absent
+    // Assert: Child transform is preserved in JSON and root transform is absent
     EXPECT_FALSE(json_str.empty());
     auto alloc = tempest::system_allocator{};
     const auto doc_res = tempest::json_document::from_string(json_str, alloc);
@@ -213,7 +213,7 @@ TEST(prefab_codec_test, child_transform_is_persisted)
     EXPECT_TRUE(child_comps.contains("tempest::ecs::transform_component") ||
                 child_comps.contains("transform_component"));
 
-    // 4. Act: Deserialize the prefab back
+    // Act: Deserialize the prefab back
     const auto decode_res = tempest::scene::prefab_codec::deserialize(json_str, ctx.type_reg);
     ASSERT_TRUE(decode_res.has_value());
     const auto& tmpl = decode_res->template_record;
@@ -241,7 +241,7 @@ TEST(prefab_codec_test, child_transform_is_persisted)
 /// @brief Verifies that a prefab template round-trips through serialize and deserialize cleanly.
 TEST(prefab_codec_test, prefab_codec_round_trip)
 {
-    // 1. Setup: Build a multi-entity template with components
+    // Setup: Build a multi-entity template with components
     auto ctx = tempest_prefab_codec_test::test_registry_context{};
     auto builder = tempest::scene::prefab_template_builder{};
 
@@ -267,16 +267,16 @@ TEST(prefab_codec_test, prefab_codec_round_trip)
 
     const auto source_guid = *tempest::parse_guid("55555555-6666-7777-0809-0a0b0c0d0e0f");
 
-    // 2. Act: Serialize template to .tprefab JSON
+    // Act: Serialize template to .tprefab JSON
     const auto json_str = tempest::scene::prefab_codec::serialize(original_tmpl, source_guid);
     EXPECT_FALSE(json_str.empty());
 
-    // 3. Act: Deserialize back into a template
+    // Act: Deserialize back into a template
     const auto decode_res = tempest::scene::prefab_codec::deserialize(json_str, ctx.type_reg);
     ASSERT_TRUE(decode_res.has_value());
     const auto& decoded_tmpl = decode_res->template_record;
 
-    // 4. Assert: Entity count, local IDs, names, hierarchy, and component payloads match
+    // Assert: Entity count, local IDs, names, hierarchy, and component payloads match
     EXPECT_EQ(decode_res->prefab_guid, source_guid);
     ASSERT_EQ(decoded_tmpl.entity_count(), 2U);
 
@@ -311,7 +311,7 @@ TEST(prefab_codec_test, prefab_codec_round_trip)
 /// when an entity possesses prefab_instance_component.
 TEST(prefab_codec_test, scene_codec_serializes_prefab_instance_block)
 {
-    // 1. Setup: Create registry with an entity possessing prefab_instance_component
+    // Setup: Create registry with an entity possessing prefab_instance_component
     auto ctx = tempest_prefab_codec_test::test_registry_context{};
     auto& reg = ctx.registry;
 
@@ -348,11 +348,11 @@ TEST(prefab_codec_test, scene_codec_serializes_prefab_instance_block)
     auto root_entities = tempest::vector<tempest::ecs::entity>{};
     root_entities.push_back(instance_ent);
 
-    // 2. Act: Serialize scene
+    // Act: Serialize scene
     const auto scene_json = tempest::scene::scene_codec::serialize(reg, root_entities);
     EXPECT_FALSE(scene_json.empty());
 
-    // 3. Assert: Verify the "prefab" block in JSON output
+    // Assert: Verify the "prefab" block in JSON output
     auto alloc = tempest::system_allocator{};
     const auto doc_res = tempest::json_document::from_string(scene_json, alloc);
     ASSERT_TRUE(doc_res.has_value());
@@ -390,7 +390,7 @@ TEST(prefab_codec_test, scene_codec_serializes_prefab_instance_block)
 /// prefab templates and applies field overrides upon loading.
 TEST(prefab_codec_test, scene_codec_deserializes_prefab_instance_with_cache)
 {
-    // 1. Setup: Register template in prefab_cache
+    // Setup: Register template in prefab_cache
     auto ctx = tempest_prefab_codec_test::test_registry_context{};
     auto cache = tempest::scene::prefab_cache{};
 
@@ -406,7 +406,7 @@ TEST(prefab_codec_test, scene_codec_deserializes_prefab_instance_with_cache)
 
     cache.register_template(prefab_guid, builder.build());
 
-    // 2. Act: Craft scene JSON referencing this prefab with an override power = 88.0F
+    // Act: Craft scene JSON referencing this prefab with an override power = 88.0F
     const auto scene_json = tempest::format(
         R"({{
             "version": 1,
@@ -438,7 +438,7 @@ TEST(prefab_codec_test, scene_codec_deserializes_prefab_instance_with_cache)
     const auto scene_id = tempest::scene::scene_handle{2, 1};
     const auto des_res = tempest::scene::scene_codec::deserialize(ctx.registry, scene_id, scene_json, &cache);
 
-    // 3. Assert: Deserialization succeeded and override was applied to instantiated entity
+    // Assert: Deserialization succeeded and override was applied to instantiated entity
     ASSERT_TRUE(des_res.success);
     ASSERT_EQ(des_res.root_entities.size(), 1U);
     const auto instantiated_ent = des_res.root_entities[0];
@@ -459,19 +459,19 @@ TEST(prefab_codec_test, scene_codec_deserializes_prefab_instance_with_cache)
 /// @brief Verifies that parse_id_path strictly rejects paths exceeding max_id_path_depth (8).
 TEST(prefab_codec_test, id_path_depth_exceeded_rejected)
 {
-    // 1. Act & Assert: Valid 8-depth path succeeds
+    // Act & Assert: Valid 8-depth path succeeds
     const auto valid_8_path = tempest::string_view{"1/2/3/4/5/6/7/8"};
     const auto valid_res = tempest::scene::parse_id_path(valid_8_path);
     ASSERT_TRUE(valid_res.has_value());
     EXPECT_EQ(valid_res->size(), 8U);
 
-    // 2. Act & Assert: 9-depth slash path is rejected
+    // Act & Assert: 9-depth slash path is rejected
     const auto invalid_9_path = tempest::string_view{"1/2/3/4/5/6/7/8/9"};
     const auto invalid_res = tempest::scene::parse_id_path(invalid_9_path);
     EXPECT_FALSE(invalid_res.has_value());
     EXPECT_EQ(invalid_res.error(), tempest::scene::prefab_codec_error::depth_exceeded);
 
-    // 3. Act & Assert: 9-element JSON array is rejected
+    // Act & Assert: 9-element JSON array is rejected
     const auto invalid_json_arr =
         tempest::string_view{R"(["1","2","3","4","5","6","7","8","9"])"};
     const auto json_arr_res = tempest::scene::parse_id_path(invalid_json_arr);
@@ -487,10 +487,10 @@ TEST(prefab_codec_test, id_path_depth_exceeded_rejected)
 /// non-existent parent references, or multiple roots.
 TEST(prefab_codec_test, validation_rules_enforce_single_root_and_valid_references)
 {
-    // 1. Setup: Registry context
+    // Setup: Registry context
     auto ctx = tempest_prefab_codec_test::test_registry_context{};
 
-    // 2. Act & Assert: Duplicate entity ID is rejected
+    // Act & Assert: Duplicate entity ID is rejected
     const auto duplicate_id_json = tempest::string_view{R"({
         "format": "tempest.prefab",
         "format_version": 1,
@@ -504,7 +504,7 @@ TEST(prefab_codec_test, validation_rules_enforce_single_root_and_valid_reference
     EXPECT_FALSE(dup_res.has_value());
     EXPECT_EQ(dup_res.error(), tempest::scene::prefab_codec_error::invalid_entity_record);
 
-    // 3. Act & Assert: Non-existent parent reference is rejected
+    // Act & Assert: Non-existent parent reference is rejected
     const auto invalid_parent_json = tempest::string_view{R"({
         "format": "tempest.prefab",
         "format_version": 1,
@@ -518,7 +518,7 @@ TEST(prefab_codec_test, validation_rules_enforce_single_root_and_valid_reference
     EXPECT_FALSE(parent_res.has_value());
     EXPECT_EQ(parent_res.error(), tempest::scene::prefab_codec_error::invalid_entity_record);
 
-    // 4. Act & Assert: Multiple roots are rejected
+    // Act & Assert: Multiple roots are rejected
     const auto multi_root_json = tempest::string_view{R"({
         "format": "tempest.prefab",
         "format_version": 1,
@@ -541,7 +541,7 @@ TEST(prefab_codec_test, validation_rules_enforce_single_root_and_valid_reference
 /// allowing field overrides to target components dynamically added to an instance.
 TEST(prefab_codec_test, added_components_applied_before_field_overrides)
 {
-    // 1. Setup: Registry, cache, and simple prefab template
+    // Setup: Registry, cache, and simple prefab template
     auto ctx = tempest_prefab_codec_test::test_registry_context{};
     auto cache = tempest::scene::prefab_cache{};
 
@@ -568,7 +568,7 @@ TEST(prefab_codec_test, added_components_applied_before_field_overrides)
     const auto prefab_guid = tmpl_res->prefab_guid;
     cache.register_template(prefab_guid, tempest::move(tmpl_res->template_record));
 
-    // 2. Act: Configure instance overrides where test_metadata_component is added,
+    // Act: Configure instance overrides where test_metadata_component is added,
     // and field_overrides targets tag_id = 777 on the newly added component.
     auto overrides = tempest::scene::prefab_overrides{};
 
@@ -590,7 +590,7 @@ TEST(prefab_codec_test, added_components_applied_before_field_overrides)
     const auto inst_res = tempest::scene::prefab_instantiator::instantiate(
         prefab_guid, cache, ctx.registry, overrides);
 
-    // 3. Assert: Entity was instantiated with the added component having the overridden field value
+    // Assert: Entity was instantiated with the added component having the overridden field value
     ASSERT_TRUE(inst_res.has_value());
     const auto ent = inst_res->root_entity;
     EXPECT_TRUE(ctx.registry.has<tempest_prefab_codec_test::test_metadata_component>(ent));
@@ -608,7 +608,7 @@ TEST(prefab_codec_test, added_components_applied_before_field_overrides)
 /// in a scene produces unique, collision-free local IDs across all child entities upon reload.
 TEST(prefab_codec_test, multiple_instances_receive_unique_scene_local_ids)
 {
-    // 1. Setup: Registry, cache, and 2-entity prefab template (Root -> Child)
+    // Setup: Registry, cache, and 2-entity prefab template (Root -> Child)
     auto ctx = tempest_prefab_codec_test::test_registry_context{};
     auto cache = tempest::scene::prefab_cache{};
 
@@ -645,7 +645,7 @@ TEST(prefab_codec_test, multiple_instances_receive_unique_scene_local_ids)
     const auto prefab_guid = tmpl_res->prefab_guid;
     cache.register_template(prefab_guid, tempest::move(tmpl_res->template_record));
 
-    // 2. Act: Instantiate two instances into scene registry
+    // Act: Instantiate two instances into scene registry
     const auto inst1_res = tempest::scene::prefab_instantiator::instantiate(
         prefab_guid, cache, ctx.registry, tempest::scene::prefab_overrides{});
     ASSERT_TRUE(inst1_res.has_value());
@@ -676,7 +676,7 @@ TEST(prefab_codec_test, multiple_instances_receive_unique_scene_local_ids)
         ctx2.registry, scene_id, ser_json, &cache);
     ASSERT_TRUE(des_res.success);
 
-    // 3. Assert: All deserialized entities have unique local_ids (4 entities total)
+    // Assert: All deserialized entities have unique local_ids (4 entities total)
     auto seen_ids = tempest::vector<tempest::scene::entity_local_id>{};
     for (const auto ent : des_res.all_entities)
     {

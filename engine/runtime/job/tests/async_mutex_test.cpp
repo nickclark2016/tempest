@@ -38,10 +38,10 @@ namespace tempest::job::tests
     ///        immediately without yielding or suspending the calling thread.
     TEST(async_mutex_test, uncontended_fast_path)
     {
-        // 1. Setup
+        // Setup
         auto mtx = async_mutex{};
 
-        // 2. Act & Assert: try_lock
+        // Act & Assert: try_lock
         EXPECT_TRUE(mtx.try_lock());
         EXPECT_FALSE(mtx.try_lock()); // Already held
         mtx.unlock();
@@ -68,7 +68,7 @@ namespace tempest::job::tests
     ///        is awakened to acquire the lock upon unlock.
     TEST(async_mutex_test, contended_yield_and_wakeup)
     {
-        // 1. Setup
+        // Setup
         auto mtx = async_mutex{};
         EXPECT_TRUE(mtx.try_lock()); // Manually hold the lock
 
@@ -79,7 +79,7 @@ namespace tempest::job::tests
             co_return;
         };
 
-        // 2. Act
+        // Act
         auto t2 = second_task();
         t2.resume(); // Should suspend because lock is held
         EXPECT_FALSE(acquired_second);
@@ -87,7 +87,7 @@ namespace tempest::job::tests
 
         mtx.unlock(); // Wakes t2
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(acquired_second);
         EXPECT_TRUE(t2.is_ready());
     }
@@ -96,13 +96,13 @@ namespace tempest::job::tests
     ///        they acquire the lock in strict First-In, First-Out (FIFO) order.
     TEST(async_mutex_test, strict_fifo_acquisition_order)
     {
-        // 1. Setup
+        // Setup
         auto mtx = async_mutex{};
         auto acquisition_order = vector<int>{};
 
         EXPECT_TRUE(mtx.try_lock()); // Lock is held initially
 
-        // 2. Act: Enqueue 3 waiters in order 1, 2, 3
+        // Act: Enqueue 3 waiters in order 1, 2, 3
         auto t1 = lock_and_record(mtx, 1, &acquisition_order);
         auto t2 = lock_and_record(mtx, 2, &acquisition_order);
         auto t3 = lock_and_record(mtx, 3, &acquisition_order);
@@ -116,7 +116,7 @@ namespace tempest::job::tests
         // Unlock initial lock -> hands off to t1
         mtx.unlock();
 
-        // 3. Assert: Verify FIFO execution sequence
+        // Assert: Verify FIFO execution sequence
         ASSERT_EQ(acquisition_order.size(), 3u);
         EXPECT_EQ(acquisition_order[0], 1);
         EXPECT_EQ(acquisition_order[1], 2);
@@ -130,7 +130,7 @@ namespace tempest::job::tests
     /// @brief Stresses tight-loop lock and immediate unlock across concurrent coroutines to ensure no double-resumes or frame UAF.
     TEST(async_mutex_test, contended_immediate_unlock_stress)
     {
-        // 1. Setup
+        // Setup
         auto mtx = async_mutex{};
         constexpr auto iterations = 500;
         constexpr auto thread_count = 4;
@@ -151,7 +151,7 @@ namespace tempest::job::tests
         auto tasks = vector<task<void>>{};
         tasks.reserve(thread_count);
 
-        // 2. Act: Spawn threads running coroutines that contend heavily
+        // Act: Spawn threads running coroutines that contend heavily
         for (auto index = 0; index < thread_count; ++index)
         {
             tasks.push_back(worker_coro());
@@ -165,14 +165,14 @@ namespace tempest::job::tests
             thread.join();
         }
 
-        // 3. Assert: All iterations executed with exclusive access, zero double resumes
+        // Assert: All iterations executed with exclusive access, zero double resumes
         EXPECT_EQ(executed_count.load(memory_order::relaxed), thread_count * iterations);
     }
 
     /// @brief Verifies Store-Load sequential consistency between releasing the mutex and checking for newly enqueued waiters.
     TEST(async_mutex_test, store_load_interleaving_stress)
     {
-        // 1. Setup: Alternating tight unlock and lock interleaving
+        // Setup: Alternating tight unlock and lock interleaving
         auto mtx = async_mutex{};
         auto counter = 0;
         constexpr auto loop_count = 1000;
@@ -186,7 +186,7 @@ namespace tempest::job::tests
             co_return;
         };
 
-        // 2. Act
+        // Act
         auto t1 = worker_coro();
         auto t2 = worker_coro();
 
@@ -196,7 +196,7 @@ namespace tempest::job::tests
         thread1.join();
         thread2.join();
 
-        // 3. Assert: Counter accurately reflects all critical section executions
+        // Assert: Counter accurately reflects all critical section executions
         EXPECT_EQ(counter, 2 * loop_count);
     }
 
@@ -204,7 +204,7 @@ namespace tempest::job::tests
     ///        by the awakened coroutine without memory corruption or use-after-free under TSan.
     TEST(async_mutex_test, destruct_immediately_on_unlock)
     {
-        // 1. Setup: 100 iterations of allocating a mutex, suspending a waiter, and unlocking it
+        // Setup: 100 iterations of allocating a mutex, suspending a waiter, and unlocking it
         for (auto iteration = 0; iteration < 100; ++iteration)
         {
             auto* mtx = new async_mutex{};
@@ -224,13 +224,13 @@ namespace tempest::job::tests
             waiter_task.resume(); // Suspends because lock is held
             EXPECT_FALSE(done_flag.load(memory_order::acquire));
 
-            // 2. Act: Unlock from another thread
+            // Act: Unlock from another thread
             auto unlocking_thread = tempest::thread([mtx]() {
                 mtx->unlock();
             });
             unlocking_thread.join();
 
-            // 3. Assert: Mutex was acquired, destroyed, and task completed cleanly
+            // Assert: Mutex was acquired, destroyed, and task completed cleanly
             EXPECT_TRUE(done_flag.load(memory_order::acquire));
             EXPECT_EQ(mtx, nullptr);
         }
@@ -239,7 +239,7 @@ namespace tempest::job::tests
     /// @brief Stresses high-concurrency race windows between lock acquisition, suspension, and release.
     TEST(async_mutex_test, high_concurrency_race_window_stress)
     {
-        // 1. Setup: 8 threads repeatedly acquiring and releasing the lock
+        // Setup: 8 threads repeatedly acquiring and releasing the lock
         auto mtx = async_mutex{};
         constexpr auto thread_count = 8;
         constexpr auto iterations_per_thread = 500;
@@ -260,7 +260,7 @@ namespace tempest::job::tests
         auto tasks = vector<task<void>>{};
         tasks.reserve(thread_count);
 
-        // 2. Act
+        // Act
         for (auto thread_index = 0; thread_index < thread_count; ++thread_index)
         {
             tasks.push_back(worker_coroutine());
@@ -274,7 +274,7 @@ namespace tempest::job::tests
             thread.join();
         }
 
-        // 3. Assert: Exclusivity was strictly maintained without lost wakeups or dropped updates
+        // Assert: Exclusivity was strictly maintained without lost wakeups or dropped updates
         EXPECT_EQ(shared_counter, thread_count * iterations_per_thread);
     }
 
@@ -283,7 +283,7 @@ namespace tempest::job::tests
     ///        via co_await mtx.scoped_lock().
     TEST(async_mutex_test, scoped_lock_guard_ergonomics)
     {
-        // 1. Assert: scoped_lock_guard cannot be constructed from an async_mutex lvalue or rvalue
+        // Assert: scoped_lock_guard cannot be constructed from an async_mutex lvalue or rvalue
         static_assert(!is_constructible_v<scoped_lock_guard, async_mutex&>,
                       "scoped_lock_guard must not be publicly constructible from async_mutex reference");
         static_assert(!is_constructible_v<scoped_lock_guard, async_mutex>,
@@ -293,7 +293,7 @@ namespace tempest::job::tests
         static_assert(is_move_constructible_v<scoped_lock_guard>,
                       "scoped_lock_guard must be move-constructible");
 
-        // 2. Setup & Act: Legitimate acquisition via co_await mtx.scoped_lock()
+        // Setup & Act: Legitimate acquisition via co_await mtx.scoped_lock()
         auto mtx = async_mutex{};
         auto acquired = false;
 
@@ -306,7 +306,7 @@ namespace tempest::job::tests
         auto t = test_coro();
         t.resume();
 
-        // 3. Assert
+        // Assert
         EXPECT_TRUE(acquired);
     }
 
@@ -319,7 +319,7 @@ namespace tempest::job::tests
     ///        subsequent tasks to acquire the lock.
     TEST(async_mutex_test, destroy_suspended_coroutine_lock)
     {
-        // 1. Setup: Mutex is initially locked
+        // Setup: Mutex is initially locked
         auto mtx = async_mutex{};
         EXPECT_TRUE(mtx.try_lock());
 
@@ -338,14 +338,14 @@ namespace tempest::job::tests
             t.resume(); // Suspends because mtx is locked
             EXPECT_FALSE(cancelled_task_ran);
 
-            // 2. Act: Destroy t while suspended
+            // Act: Destroy t while suspended
         }
 
         // Unlock mtx. The cancelled waiter must be skipped and retired cleanly.
         mtx.unlock();
         EXPECT_FALSE(cancelled_task_ran);
 
-        // 3. Assert: Subsequent acquisition succeeds
+        // Assert: Subsequent acquisition succeeds
         auto subsequent_coro = [&mtx, &subsequent_task_ran]() -> task<void> {
             co_await mtx.lock();
             subsequent_task_ran = true;
@@ -362,7 +362,7 @@ namespace tempest::job::tests
     ///        unlinks cleanly and preserves mutex integrity.
     TEST(async_mutex_test, destroy_suspended_coroutine_scoped_lock)
     {
-        // 1. Setup: Mutex is initially locked
+        // Setup: Mutex is initially locked
         auto mtx = async_mutex{};
         EXPECT_TRUE(mtx.try_lock());
 
@@ -380,13 +380,13 @@ namespace tempest::job::tests
             t.resume(); // Suspends because mtx is locked
             EXPECT_FALSE(cancelled_task_ran);
 
-            // 2. Act: Destroy t while suspended
+            // Act: Destroy t while suspended
         }
 
         mtx.unlock();
         EXPECT_FALSE(cancelled_task_ran);
 
-        // 3. Assert: Subsequent scoped_lock succeeds
+        // Assert: Subsequent scoped_lock succeeds
         auto subsequent_coro = [&mtx, &subsequent_task_ran]() -> task<void> {
             auto guard = co_await mtx.scoped_lock();
             subsequent_task_ran = true;
@@ -402,7 +402,7 @@ namespace tempest::job::tests
     ///        handled in FIFO order without lost wakeups or corruption.
     TEST(async_mutex_test, multiple_waiters_with_interleaved_cancellation)
     {
-        // 1. Setup: Hold lock
+        // Setup: Hold lock
         auto mtx = async_mutex{};
         EXPECT_TRUE(mtx.try_lock());
 
@@ -424,14 +424,14 @@ namespace tempest::job::tests
         t2.resume();
         t3.resume();
 
-        // 2. Act: Cancel t1 and t3 before unlocking
+        // Act: Cancel t1 and t3 before unlocking
         t1 = task<void>{};
         t3 = task<void>{};
 
         // Unlock mtx -> t0 should acquire and finish
         mtx.unlock();
 
-        // 3. Assert: t0 executed, t2 executed, cancelled ones did not execute
+        // Assert: t0 executed, t2 executed, cancelled ones did not execute
         ASSERT_EQ(order.size(), 2U);
         EXPECT_EQ(order[0], 0);
         EXPECT_EQ(order[1], 2);
@@ -441,7 +441,7 @@ namespace tempest::job::tests
     ///        safely without hanging or use-after-free when the coroutines are destroyed.
     TEST(async_mutex_test, destroy_async_mutex_with_pending_waiters)
     {
-        // 1. Setup & Act: Create mutex and suspend tasks on it, then destroy mutex
+        // Setup & Act: Create mutex and suspend tasks on it, then destroy mutex
         auto ran = false;
         auto t = task<void>{};
 
@@ -461,10 +461,10 @@ namespace tempest::job::tests
             // mtx goes out of scope and is destroyed here
         }
 
-        // 2. Act: Destroy t after mutex was destroyed
+        // Act: Destroy t after mutex was destroyed
         t = task<void>{};
 
-        // 3. Assert: Did not crash or hang
+        // Assert: Did not crash or hang
         EXPECT_FALSE(ran);
     }
 } // namespace tempest::job::tests

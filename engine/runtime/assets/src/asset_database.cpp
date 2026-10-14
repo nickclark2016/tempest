@@ -128,7 +128,7 @@ namespace tempest::assets
                 return false;
             }
 
-            // 1. Check extension
+            // Check extension
             auto dot_pos = string::npos;
             for (size_t i = path.size(); i > 0; --i)
             {
@@ -150,7 +150,7 @@ namespace tempest::assets
                 }
             }
 
-            // 2. Check path segments
+            // Check path segments
             size_t start = 0;
             while (start < path.size())
             {
@@ -983,13 +983,13 @@ namespace tempest::assets
 
                     if (it->is_directory())
                     {
-                        // 1. Skip hidden directories starting with '.' (length > 1)
+                        // Skip hidden directories starting with '.' (length > 1)
                         if (filename_str.size() > 1 && filename_str[0] == '.')
                         {
                             continue;
                         }
 
-                        // 2. Check built-in and configured ignored directories
+                        // Check built-in and configured ignored directories
                         bool is_ignored = false;
                         for (const auto& ignored_dir : _ignored_directories)
                         {
@@ -1018,7 +1018,7 @@ namespace tempest::assets
                             continue;
                         }
 
-                        // 3. Custom predicate check for directory
+                        // Custom predicate check for directory
                         if (options.predicate && !options.predicate(child_rel, true))
                         {
                             continue;
@@ -1028,7 +1028,7 @@ namespace tempest::assets
                     }
                     else if (it->is_regular_file())
                     {
-                        // 1. Extract extension
+                        // Extract extension
                         auto ext_dot = string::npos;
                         for (size_t i = filename_str.size(); i > 0; --i)
                         {
@@ -1043,7 +1043,7 @@ namespace tempest::assets
                                 ? string(tempest::substr(filename_str, ext_dot, filename_str.size() - ext_dot))
                                 : string("");
 
-                        // 2. Check ignored extensions
+                        // Check ignored extensions
                         if (!ext_str.empty())
                         {
                             bool is_ext_ignored = false;
@@ -1061,7 +1061,7 @@ namespace tempest::assets
                             }
                         }
 
-                        // 3. Check whitelist (if specified)
+                        // Check whitelist (if specified)
                         if (!normalized_whitelist.empty())
                         {
                             bool in_whitelist = false;
@@ -1079,13 +1079,13 @@ namespace tempest::assets
                             }
                         }
 
-                        // 4. Custom predicate check for file
+                        // Custom predicate check for file
                         if (options.predicate && !options.predicate(child_rel, false))
                         {
                             continue;
                         }
 
-                        // 5. Build canonical entry key
+                        // Build canonical entry key
                         auto entry_key = string{};
                         if (mp.alias.empty())
                         {
@@ -1099,7 +1099,7 @@ namespace tempest::assets
                             entry_key.append(child_rel);
                         }
 
-                        // 6. Query timestamp without reading file contents
+                        // Query timestamp without reading file contents
                         auto disk_p = resolve_disk_path(entry_key);
                         auto disk_mtime = disk_p.has_value() ? get_file_last_write_time(disk_p.value()) : 0;
 
@@ -1269,14 +1269,14 @@ namespace tempest::assets
             return nullptr;
         }
 
-        // 1. Direct path lookup
+        // Direct path lookup
         const auto* entry = find_by_path(normalized);
         if (entry != nullptr)
         {
             return entry;
         }
 
-        // 2. Basename index lookup
+        // Basename index lookup
         auto base_it = _basename_to_relative_path.find(normalized);
         if (base_it != _basename_to_relative_path.end())
         {
@@ -1287,7 +1287,7 @@ namespace tempest::assets
             }
         }
 
-        // 3. Fallback: try prepending or stripping "shaders/"
+        // Fallback: try prepending or stripping "shaders/"
         if (!tempest::starts_with(normalized, "shaders/"))
         {
             auto with_shaders = string("shaders/");
@@ -1308,7 +1308,7 @@ namespace tempest::assets
             }
         }
 
-        // 4. On-demand search across mounted roots (only for non-ignored shaders)
+        // On-demand search across mounted roots (only for non-ignored shaders)
         if (tempest::ends_with(normalized, ".spv") || tempest::ends_with(normalized, ".slang"))
         {
             if (!is_path_ignored(normalized, _ignored_directories, _ignored_extensions))
@@ -1373,26 +1373,26 @@ namespace tempest::assets
                 aliased_key.append(normalized_sub);
             }
 
-            // 1. Direct match in _relative_path_to_source_path
+            // Direct match in _relative_path_to_source_path
             auto it = _relative_path_to_source_path.find(aliased_key);
             if (it != _relative_path_to_source_path.end())
             {
                 return it->second;
             }
 
-            // 2. Direct match in _source_path_to_index (if not .spv)
+            // Direct match in _source_path_to_index (if not .spv)
             if (!tempest::ends_with(aliased_key, ".spv") && _source_path_to_index.contains(aliased_key))
             {
                 return aliased_key;
             }
 
-            // 3. If ends with .slang, return aliased_key
+            // If ends with .slang, return aliased_key
             if (tempest::ends_with(aliased_key, ".slang"))
             {
                 return aliased_key;
             }
 
-            // 4. If ends with .spv, try mapping to .slang
+            // If ends with .spv, try mapping to .slang
             if (tempest::ends_with(aliased_key, ".spv"))
             {
                 auto fs_path = filesystem::path(normalized_sub.c_str());
@@ -1422,7 +1422,7 @@ namespace tempest::assets
                 }
             }
 
-            // 5. Check if resolves on disk under matching alias mount roots
+            // Check if resolves on disk under matching alias mount roots
             if (resolve_disk_path(aliased_key).has_value())
             {
                 return aliased_key;
@@ -1437,14 +1437,14 @@ namespace tempest::assets
             return nullopt;
         }
 
-        // 1. Check relative path to source path mapping
+        // Check relative path to source path mapping
         auto it = _relative_path_to_source_path.find(normalized);
         if (it != _relative_path_to_source_path.end())
         {
             return it->second;
         }
 
-        // 2. Check basename map
+        // Check basename map
         auto base_it = _basename_to_relative_path.find(normalized);
         if (base_it != _basename_to_relative_path.end())
         {
@@ -1456,13 +1456,13 @@ namespace tempest::assets
             return base_it->second;
         }
 
-        // 3. If ends with .slang, return normalized
+        // If ends with .slang, return normalized
         if (tempest::ends_with(normalized, ".slang"))
         {
             return normalized;
         }
 
-        // 4. If ends with .spv, try mapping to .slang
+        // If ends with .spv, try mapping to .slang
         if (tempest::ends_with(normalized, ".spv"))
         {
             auto fs_path = filesystem::path(normalized.c_str());
@@ -1489,13 +1489,13 @@ namespace tempest::assets
             }
         }
 
-        // 5. Check indexed sources (for non-.spv)
+        // Check indexed sources (for non-.spv)
         if (!tempest::ends_with(normalized, ".spv") && _source_path_to_index.contains(normalized))
         {
             return normalized;
         }
 
-        // 6. Check if resolves on disk
+        // Check if resolves on disk
         if (resolve_disk_path(normalized).has_value())
         {
             return normalized;
@@ -2163,7 +2163,7 @@ namespace tempest::assets
 
     auto asset_database::rebuild_from_workspace(const project_workspace& workspace, bool start_watching) -> bool
     {
-        // 1. Ensure cache directory exists and set db path
+        // Ensure cache directory exists and set db path
         const auto cache_dir = workspace.cache_directory();
         if (!cache_dir.empty())
         {
@@ -2171,7 +2171,7 @@ namespace tempest::assets
         }
         _db_path = workspace.cache_db_path();
 
-        // 2. Clear current database entries
+        // Clear current database entries
         _sources.clear();
         _source_path_to_index.clear();
         _source_id_to_index.clear();
@@ -2189,7 +2189,7 @@ namespace tempest::assets
         clear_mount_roots();
         clear_ignores();
 
-        // 3. Configure mount roots
+        // Configure mount roots
         for (const auto& mount : workspace.mounts)
         {
             auto mount_disk_path = filesystem::path{};
@@ -2204,7 +2204,7 @@ namespace tempest::assets
             mount_root(mount_disk_path.generic_string(), mount.priority, mount.alias);
         }
 
-        // 4. Scan mounts and discover assets & sidecars
+        // Scan mounts and discover assets & sidecars
         for (const auto& mount_point_entry : _mount_roots)
         {
             const auto root_path = filesystem::path(mount_point_entry.path.c_str());
@@ -2443,7 +2443,7 @@ namespace tempest::assets
             return {};
         }
 
-        // 1. Check against registered mount roots
+        // Check against registered mount roots
         for (const auto& mount : _mount_roots)
         {
             auto normalized_mount_path = normalize_path_str(mount.path);
@@ -2470,7 +2470,7 @@ namespace tempest::assets
             }
         }
 
-        // 2. Check against watcher root directory if active
+        // Check against watcher root directory if active
         if (_watcher && !_watcher->watch_path().empty())
         {
             auto normalized_watch_path = normalize_path_str(_watcher->watch_path().generic_string());
@@ -2498,14 +2498,14 @@ namespace tempest::assets
             return nullptr;
         }
 
-        // 1. Direct path lookup in source index
+        // Direct path lookup in source index
         auto direct_iterator = _source_path_to_index.find(normalized_disk_path);
         if (direct_iterator != _source_path_to_index.end())
         {
             return _sources[direct_iterator->second].get();
         }
 
-        // 2. Check canonical key
+        // Check canonical key
         auto canonical_key = _compute_canonical_entry_key(filesystem::path(normalized_disk_path.c_str()));
         if (!canonical_key.empty())
         {
@@ -2516,7 +2516,7 @@ namespace tempest::assets
             }
         }
 
-        // 3. Match against sources via paths_match or disk resolution
+        // Match against sources via paths_match or disk resolution
         auto filesystem_path = filesystem::path(normalized_disk_path.c_str());
         auto filename_string = filesystem_path.filename().string();
 
@@ -2652,28 +2652,28 @@ namespace tempest::assets
             return true;
         }
 
-        // 1. Filter out .cache directories / files
+        // Filter out .cache directories / files
         if (tempest::contains(path_string, "/.cache") || tempest::contains(path_string, "\\.cache") ||
             event.path.filename().string() == ".cache")
         {
             return true;
         }
 
-        // 2. Filter out workspace project files and temp files
+        // Filter out workspace project files and temp files
         if (tempest::ends_with(path_string, ".tproject") || tempest::ends_with(path_string, ".tmp") ||
             tempest::ends_with(path_string, ".swp") || tempest::ends_with(path_string, "~"))
         {
             return true;
         }
 
-        // 3. Filter directory-only events for added/modified
+        // Filter directory-only events for added/modified
         if (event.type != file_watch_event_type::removed && filesystem::exists(event.path) &&
             filesystem::is_directory(event.path))
         {
             return true;
         }
 
-        // 4. Filter ignored extensions / directories
+        // Filter ignored extensions / directories
         if (is_path_ignored(path_string, _ignored_directories, _ignored_extensions))
         {
             return true;

@@ -61,7 +61,7 @@ namespace tempest::rhi::examples
 
     auto triangle_example::init(rhi::device& dev, rhi::render_surface_format surface_format) -> bool
     {
-        // 1. Create storage buffer for vertex positions
+        // Create storage buffer for vertex positions
         auto pos_desc = buffer_desc{
             .size = sizeof(positions),
             .memory_usage = memory_usage::upload,
@@ -75,7 +75,7 @@ namespace tempest::rhi::examples
         }
         tempest::memcpy(_positions_buffer.cpu_address, positions.data(), sizeof(positions));
 
-        // 2. Create storage buffer for vertex colors
+        // Create storage buffer for vertex colors
         auto color_desc = buffer_desc{
             .size = sizeof(colors),
             .memory_usage = memory_usage::upload,
@@ -89,7 +89,7 @@ namespace tempest::rhi::examples
         }
         tempest::memcpy(_colors_buffer.cpu_address, colors.data(), sizeof(colors));
 
-        // 3. Create index buffer
+        // Create index buffer
         auto index_desc = buffer_desc{
             .size = sizeof(indices),
             .memory_usage = memory_usage::upload,
@@ -103,7 +103,7 @@ namespace tempest::rhi::examples
         }
         tempest::memcpy(_index_buffer.cpu_address, indices.data(), sizeof(indices));
 
-        // 4. Create graphics pipeline
+        // Create graphics pipeline
         return create_pipeline(dev, surface_format);
     }
 

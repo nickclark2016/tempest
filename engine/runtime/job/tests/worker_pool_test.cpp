@@ -19,7 +19,7 @@ namespace tempest::job::tests
     ///        asynchronous tasks across background threads until completion.
     TEST(worker_pool_test, multi_threaded_execution_stress)
     {
-        // 1. Setup: Job system with 4 performance workers
+        // Setup: Job system with 4 performance workers
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -34,7 +34,7 @@ namespace tempest::job::tests
         auto tasks = vector<task<void>>{};
         tasks.reserve(task_count);
 
-        // 2. Act: Dispatch 200 tasks in parallel
+        // Act: Dispatch 200 tasks in parallel
         for (auto i = 0; i < task_count; ++i)
         {
             tasks.push_back(sys.async([&counter] {
@@ -45,7 +45,7 @@ namespace tempest::job::tests
         // Wait for all workers to complete active tasks
         sys.wait_idle();
 
-        // 3. Assert: All 200 tasks ran to completion
+        // Assert: All 200 tasks ran to completion
         EXPECT_EQ(counter.load(memory_order::relaxed), task_count);
     }
 
@@ -57,7 +57,7 @@ namespace tempest::job::tests
     ///        strictly to P-cores and core_class::efficiency to E-cores.
     TEST(worker_pool_test, core_affinity_routing)
     {
-        // 1. Setup: Injected topology with 2 P-cores (cores 0, 1) and 2 E-cores (cores 2, 3)
+        // Setup: Injected topology with 2 P-cores (cores 0, 1) and 2 E-cores (cores 2, 3)
         auto sim_topo = cpu_topology{};
         for (auto i = 0u; i < 2u; ++i)
         {
@@ -99,7 +99,7 @@ namespace tempest::job::tests
         auto tasks = vector<task<void>>{};
         tasks.reserve(40);
 
-        // 2. Act: Schedule 20 P-tasks and 20 E-tasks
+        // Act: Schedule 20 P-tasks and 20 E-tasks
         for (auto i = 0; i < 20; ++i)
         {
             tasks.push_back(sys.async(task_priority::normal, core_class::performance,
@@ -125,7 +125,7 @@ namespace tempest::job::tests
 
         sys.wait_idle();
 
-        // 3. Assert: Verify every task ran on its respective core class
+        // Assert: Verify every task ran on its respective core class
         EXPECT_EQ(p_executed_count.load(memory_order::relaxed), 20);
         EXPECT_EQ(e_executed_count.load(memory_order::relaxed), 20);
         EXPECT_TRUE(p_routed_correctly.load(memory_order::relaxed));
@@ -140,7 +140,7 @@ namespace tempest::job::tests
     ///        tasks tagged with core_class::performance, even under high load.
     TEST(worker_pool_test, cross_core_stealing_rules)
     {
-        // 1. Setup: 1 P-worker and 3 E-workers
+        // Setup: 1 P-worker and 3 E-workers
         auto sim_topo = cpu_topology{};
         sim_topo.cores.push_back(core_info{
             .core_id = 0,
@@ -177,7 +177,7 @@ namespace tempest::job::tests
         auto tasks = vector<task<void>>{};
         tasks.reserve(heavy_task_count);
 
-        // 2. Act: Flood system with performance-only tasks
+        // Act: Flood system with performance-only tasks
         for (auto i = 0; i < heavy_task_count; ++i)
         {
             tasks.push_back(sys.async(task_priority::normal, core_class::performance,
@@ -196,7 +196,7 @@ namespace tempest::job::tests
 
         sys.wait_idle();
 
-        // 3. Assert: 100% of performance tasks executed on P-core; zero thefts by E-cores
+        // Assert: 100% of performance tasks executed on P-core; zero thefts by E-cores
         EXPECT_EQ(perf_task_executed_by_p.load(memory_order::relaxed), heavy_task_count);
         EXPECT_FALSE(forbidden_theft_detected.load(memory_order::relaxed));
     }
@@ -204,7 +204,7 @@ namespace tempest::job::tests
     /// @brief Verify direct coroutine scheduling via job_context without ambient TLS or thread lookups.
     TEST(worker_pool_test, job_context_direct_schedule)
     {
-        // 1. Setup: Multi-threaded worker pool with 2 workers
+        // Setup: Multi-threaded worker pool with 2 workers
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -216,7 +216,7 @@ namespace tempest::job::tests
 
         auto executed = atomic<int>{0};
 
-        // 2. Act: Construct an explicit job_context pointing to worker 0
+        // Act: Construct an explicit job_context pointing to worker 0
         auto ctx = job_context{
             .system = sys,
             .allocator = sys.get_dispatch_allocator(),
@@ -242,7 +242,7 @@ namespace tempest::job::tests
 
         sys.wait_idle();
 
-        // 3. Assert: All coroutines scheduled through job_context executed to completion
+        // Assert: All coroutines scheduled through job_context executed to completion
         EXPECT_EQ(executed.load(memory_order::relaxed), task_count);
     }
 
@@ -255,7 +255,7 @@ namespace tempest::job::tests
     ///        explicit with_profiler() calls, and that worker threads register valid tracks.
     TEST(worker_pool_test, worker_thread_and_coroutine_profiling_auto_binding)
     {
-        // 1. Setup: Enable profiling session and job_system with performance and efficiency workers
+        // Setup: Enable profiling session and job_system with performance and efficiency workers
         auto log = logger{};
         auto prof = profiler::profiler_session{true};
         auto config = job_system_config{
@@ -265,7 +265,7 @@ namespace tempest::job::tests
         };
         auto sys = job_system{log, prof, config};
 
-        // 2. Act: Execute tasks via async, parallel_for, and when_all without manual with_profiler
+        // Act: Execute tasks via async, parallel_for, and when_all without manual with_profiler
         auto async_executed = atomic<int>{0};
         auto async_task = sys.async([&async_executed]() -> task<void> {
             async_executed.store(1, memory_order::release);
@@ -299,7 +299,7 @@ namespace tempest::job::tests
         EXPECT_EQ(pfor_executed.load(memory_order::relaxed), 20);
         EXPECT_EQ(when_all_executed.load(memory_order::relaxed), 4);
 
-        // 3. Assert: Capture profiler data and verify worker threads have recorded tracks and zones
+        // Assert: Capture profiler data and verify worker threads have recorded tracks and zones
         auto capture = profiler::create_capture_from_session(prof);
 
         auto found_worker_track = false;
@@ -334,7 +334,7 @@ namespace tempest::job::tests
     ///        multi-group server topology, properly routing tasks across P-cores and E-cores.
     TEST(worker_pool_test, high_core_count_worker_routing_and_execution)
     {
-        // 1. Setup: Synthesize 128-core topology (64 P-cores in Group 0 + 64 E-cores in Group 1)
+        // Setup: Synthesize 128-core topology (64 P-cores in Group 0 + 64 E-cores in Group 1)
         auto sim_topo = cpu_topology{};
         for (auto i = 0u; i < 64u; ++i)
         {
@@ -372,7 +372,7 @@ namespace tempest::job::tests
         EXPECT_EQ(sys.performance_worker_count(), 4u);
         EXPECT_EQ(sys.efficiency_worker_count(), 4u);
 
-        // 2. Act: Dispatch mixed tasks across P-cores and E-cores
+        // Act: Dispatch mixed tasks across P-cores and E-cores
         auto p_executed_count = atomic<int>{0};
         auto e_executed_count = atomic<int>{0};
         constexpr auto task_batch = 50;
@@ -394,7 +394,7 @@ namespace tempest::job::tests
 
         sys.wait_idle();
 
-        // 3. Assert: All 100 tasks on the 128-core simulated topology completed
+        // Assert: All 100 tasks on the 128-core simulated topology completed
         EXPECT_EQ(p_executed_count.load(memory_order::relaxed), task_batch);
         EXPECT_EQ(e_executed_count.load(memory_order::relaxed), task_batch);
     }

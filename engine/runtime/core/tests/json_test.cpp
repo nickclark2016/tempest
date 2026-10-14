@@ -58,14 +58,14 @@ namespace
 /// @brief Verify parsing valid JSON strings returns expected root elements.
 TEST(json_tests, document_from_string_valid)
 {
-    // 1. Setup: Allocator and test JSON string
+    // Setup: Allocator and test JSON string
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{R"({ "name": "tempest", "count": 42, "enabled": true })"};
 
-    // 2. Act: Parse document from string
+    // Act: Parse document from string
     auto doc_res = tempest::json_document::from_string(json_str, alloc);
 
-    // 3. Assert: Document parsed successfully and properties are valid
+    // Assert: Document parsed successfully and properties are valid
     ASSERT_TRUE(doc_res.has_value());
     auto root = doc_res->root();
     EXPECT_TRUE(root.is_valid());
@@ -76,16 +76,16 @@ TEST(json_tests, document_from_string_valid)
 /// @brief Verify parsing JSON from a byte span.
 TEST(json_tests, document_from_bytes_valid)
 {
-    // 1. Setup: Allocator and byte buffer
+    // Setup: Allocator and byte buffer
     auto alloc = tempest::system_allocator{};
     constexpr char raw_str[] = R"([1, 2, 3, "test"])";
     auto bytes =
         tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(raw_str), sizeof(raw_str) - 1};
 
-    // 2. Act: Parse document from bytes
+    // Act: Parse document from bytes
     auto doc_res = tempest::json_document::from_bytes(bytes, alloc);
 
-    // 3. Assert: Document parsed successfully and has root array
+    // Assert: Document parsed successfully and has root array
     ASSERT_TRUE(doc_res.has_value());
     auto root = doc_res->root();
     EXPECT_TRUE(root.is_valid());
@@ -95,20 +95,20 @@ TEST(json_tests, document_from_bytes_valid)
 /// @brief Verify syntax errors, incomplete tokens, and empty strings return parse_error.
 TEST(json_tests, document_parse_syntax_errors)
 {
-    // 1. Setup: Allocator and malformed JSON payloads
+    // Setup: Allocator and malformed JSON payloads
     auto alloc = tempest::system_allocator{};
 
-    // 2. Act & Assert: Empty string fails
+    // Act & Assert: Empty string fails
     auto res_empty = tempest::json_document::from_string("", alloc);
     EXPECT_FALSE(res_empty.has_value());
     EXPECT_EQ(res_empty.error(), tempest::json_error::parse_error);
 
-    // 3. Act & Assert: Unclosed braces fail
+    // Act & Assert: Unclosed braces fail
     auto res_unclosed = tempest::json_document::from_string(R"({ "key": 1 )", alloc);
     EXPECT_FALSE(res_unclosed.has_value());
     EXPECT_EQ(res_unclosed.error(), tempest::json_error::parse_error);
 
-    // 4. Act & Assert: Random binary garbage fails
+    // Act & Assert: Random binary garbage fails
     auto res_junk = tempest::json_document::from_string("NOT JSON AT ALL", alloc);
     EXPECT_FALSE(res_junk.has_value());
     EXPECT_EQ(res_junk.error(), tempest::json_error::parse_error);
@@ -117,24 +117,24 @@ TEST(json_tests, document_parse_syntax_errors)
 /// @brief Verify document move construction and move assignment transfer ownership.
 TEST(json_tests, document_move_semantics)
 {
-    // 1. Setup: Parse initial document
+    // Setup: Parse initial document
     auto alloc = tempest::system_allocator{};
     auto doc1_res = tempest::json_document::from_string(R"({ "x": 10 })", alloc);
     ASSERT_TRUE(doc1_res.has_value());
 
-    // 2. Act: Move construct doc2 from doc1
+    // Act: Move construct doc2 from doc1
     auto doc2 = tempest::move(*doc1_res);
 
-    // 3. Assert: doc1 is empty/invalid and doc2 owns the root
+    // Assert: doc1 is empty/invalid and doc2 owns the root
     EXPECT_FALSE(doc1_res->is_valid());
     EXPECT_TRUE(doc2.is_valid());
     EXPECT_EQ(doc2.root()["x"].as_int32().value(), 10);
 
-    // 4. Act: Move assign doc3 from doc2
+    // Act: Move assign doc3 from doc2
     auto doc3 = tempest::json_document{};
     doc3 = tempest::move(doc2);
 
-    // 5. Assert: doc2 is empty and doc3 owns the root
+    // Assert: doc2 is empty and doc3 owns the root
     EXPECT_FALSE(doc2.is_valid());
     EXPECT_TRUE(doc3.is_valid());
     EXPECT_EQ(doc3.root()["x"].as_int32().value(), 10);
@@ -143,10 +143,10 @@ TEST(json_tests, document_move_semantics)
 /// @brief Verify all allocated memory is completely freed upon document destruction.
 TEST(json_tests, document_custom_allocator_lifecycle)
 {
-    // 1. Setup: Instantiate tracking allocator
+    // Setup: Instantiate tracking allocator
     auto track_alloc = tracking_allocator{};
 
-    // 2. Act: Parse document and query values within nested scope
+    // Act: Parse document and query values within nested scope
     {
         auto doc_res = tempest::json_document::from_string(
             R"({ "mesh": "Cube", "indices": [0, 1, 2, 3], "nested": { "val": 3.14 } })", track_alloc);
@@ -158,7 +158,7 @@ TEST(json_tests, document_custom_allocator_lifecycle)
         EXPECT_TRUE(root["indices"].is_array());
     }
 
-    // 3. Assert: After document destruction, active allocations must be exactly 0
+    // Assert: After document destruction, active allocations must be exactly 0
     EXPECT_EQ(track_alloc.active_allocations, 0U);
     EXPECT_GT(track_alloc.total_allocations, 0U);
     EXPECT_EQ(track_alloc.total_allocations, track_alloc.total_deallocations);
@@ -171,7 +171,7 @@ TEST(json_tests, document_custom_allocator_lifecycle)
 /// @brief Verify type query predicates accurately identify JSON primitives.
 TEST(json_tests, value_type_predicates)
 {
-    // 1. Setup: Parse document with diverse types
+    // Setup: Parse document with diverse types
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{
         R"({ "null_val": null, "bool_val": false, "int_val": 42, "real_val": 3.14, "str_val": "text", "arr_val": [], "obj_val": {} })"};
@@ -180,7 +180,7 @@ TEST(json_tests, value_type_predicates)
 
     auto root = doc->root();
 
-    // 2. Act & Assert: Check each field's predicates
+    // Act & Assert: Check each field's predicates
     EXPECT_TRUE(root["null_val"].is_null());
     EXPECT_FALSE(root["null_val"].is_bool());
 
@@ -203,7 +203,7 @@ TEST(json_tests, value_type_predicates)
 /// @brief Verify boolean and string conversions, including error cases on mismatched types.
 TEST(json_tests, value_bool_and_string)
 {
-    // 1. Setup: Parse JSON with boolean and string fields
+    // Setup: Parse JSON with boolean and string fields
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{R"({ "flag": true, "msg": "hello \"world\"" })"};
     auto doc = tempest::json_document::from_string(json_str, alloc);
@@ -211,7 +211,7 @@ TEST(json_tests, value_bool_and_string)
 
     auto root = doc->root();
 
-    // 2. Act & Assert: Boolean conversions
+    // Act & Assert: Boolean conversions
     auto bool_val = root["flag"].as_bool();
     ASSERT_TRUE(bool_val.has_value());
     EXPECT_TRUE(*bool_val);
@@ -220,7 +220,7 @@ TEST(json_tests, value_bool_and_string)
     EXPECT_FALSE(bool_mismatch.has_value());
     EXPECT_EQ(bool_mismatch.error(), tempest::json_error::type_mismatch);
 
-    // 3. Act & Assert: String conversions
+    // Act & Assert: String conversions
     auto str_val = root["msg"].as_string();
     ASSERT_TRUE(str_val.has_value());
     EXPECT_EQ(*str_val, "hello \"world\"");
@@ -233,7 +233,7 @@ TEST(json_tests, value_bool_and_string)
 /// @brief Verify strict numeric matching differentiates integers and reals and guards against overflow.
 TEST(json_tests, value_strict_numeric_matching)
 {
-    // 1. Setup: Parse numbers of varying representations
+    // Setup: Parse numbers of varying representations
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{
         R"({ "real_num": 100.5, "zero_real": 0.0, "int_pos": 42, "int_neg": -10, "int_large": 9223372036854775807 })"};
@@ -242,7 +242,7 @@ TEST(json_tests, value_strict_numeric_matching)
 
     auto root = doc->root();
 
-    // 2. Act & Assert: Real numbers succeed with as_double/as_float
+    // Act & Assert: Real numbers succeed with as_double/as_float
     auto double_val = root["real_num"].as_double();
     ASSERT_TRUE(double_val.has_value());
     EXPECT_DOUBLE_EQ(*double_val, 100.5);
@@ -251,17 +251,17 @@ TEST(json_tests, value_strict_numeric_matching)
     ASSERT_TRUE(float_val.has_value());
     EXPECT_FLOAT_EQ(*float_val, 100.5F);
 
-    // 3. Act & Assert: Real numbers fail on as_int64 (strict type matching)
+    // Act & Assert: Real numbers fail on as_int64 (strict type matching)
     auto real_as_int = root["real_num"].as_int64();
     EXPECT_FALSE(real_as_int.has_value());
     EXPECT_EQ(real_as_int.error(), tempest::json_error::type_mismatch);
 
-    // 4. Act & Assert: Integers fail on as_double (strict type matching)
+    // Act & Assert: Integers fail on as_double (strict type matching)
     auto int_as_double = root["int_pos"].as_double();
     EXPECT_FALSE(int_as_double.has_value());
     EXPECT_EQ(int_as_double.error(), tempest::json_error::type_mismatch);
 
-    // 5. Act & Assert: Signed integers extract properly
+    // Act & Assert: Signed integers extract properly
     auto neg_val = root["int_neg"].as_int64();
     ASSERT_TRUE(neg_val.has_value());
     EXPECT_EQ(*neg_val, -10);
@@ -271,7 +271,7 @@ TEST(json_tests, value_strict_numeric_matching)
     EXPECT_FALSE(neg_as_uint.has_value());
     EXPECT_EQ(neg_as_uint.error(), tempest::json_error::out_of_range);
 
-    // 6. Act & Assert: Integer bounds checking
+    // Act & Assert: Integer bounds checking
     auto large_as_int32 = root["int_large"].as_int32();
     EXPECT_FALSE(large_as_int32.has_value());
     EXPECT_EQ(large_as_int32.error(), tempest::json_error::out_of_range);
@@ -284,7 +284,7 @@ TEST(json_tests, value_strict_numeric_matching)
 /// @brief Verify ergonomic get(out) helper assigns on success and leaves out unchanged on failure.
 TEST(json_tests, value_ergonomic_get_helpers)
 {
-    // 1. Setup: Parse JSON
+    // Setup: Parse JSON
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{R"({ "count": 100, "name": "sample" })"};
     auto doc = tempest::json_document::from_string(json_str, alloc);
@@ -292,13 +292,13 @@ TEST(json_tests, value_ergonomic_get_helpers)
 
     auto root = doc->root();
 
-    // 2. Act & Assert: Successful get
+    // Act & Assert: Successful get
     auto count = tempest::uint32_t{0};
     auto count_ok = root["count"].get(count);
     EXPECT_TRUE(count_ok);
     EXPECT_EQ(count, 100U);
 
-    // 3. Act & Assert: Failed get leaves out untouched
+    // Act & Assert: Failed get leaves out untouched
     auto str_out = tempest::string_view{"unchanged"};
     auto fail_ok = root["count"].get(str_out);
     EXPECT_FALSE(fail_ok);
@@ -312,7 +312,7 @@ TEST(json_tests, value_ergonomic_get_helpers)
 /// @brief Verify indexing missing keys or out-of-bounds indices safely chains null json_value.
 TEST(json_tests, value_subscript_null_object_chaining)
 {
-    // 1. Setup: Parse nested structure
+    // Setup: Parse nested structure
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{R"({ "a": { "b": [10, 20] } })"};
     auto doc = tempest::json_document::from_string(json_str, alloc);
@@ -320,10 +320,10 @@ TEST(json_tests, value_subscript_null_object_chaining)
 
     auto root = doc->root();
 
-    // 2. Act & Assert: Valid access
+    // Act & Assert: Valid access
     EXPECT_EQ(root["a"]["b"][1].as_int32().value(), 20);
 
-    // 3. Act & Assert: Missing intermediate key does not crash and chains safely
+    // Act & Assert: Missing intermediate key does not crash and chains safely
     auto missing = root["non_existent"]["further"][99]["leaf"];
     EXPECT_FALSE(missing.is_valid());
     EXPECT_TRUE(missing.is_null());
@@ -332,7 +332,7 @@ TEST(json_tests, value_subscript_null_object_chaining)
     EXPECT_FALSE(extract_fail.has_value());
     EXPECT_EQ(extract_fail.error(), tempest::json_error::type_mismatch);
 
-    // 4. Act & Assert: Subscripting non-object / non-array primitives returns null value
+    // Act & Assert: Subscripting non-object / non-array primitives returns null value
     auto invalid_subscript = root["a"]["b"][0]["cannot_index_int"];
     EXPECT_FALSE(invalid_subscript.is_valid());
 }
@@ -344,25 +344,25 @@ TEST(json_tests, value_subscript_null_object_chaining)
 /// @brief Verify json_object iteration, structured bindings, and size queries.
 TEST(json_tests, object_iteration_and_structured_bindings)
 {
-    // 1. Setup: Parse multi-field object
+    // Setup: Parse multi-field object
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{R"({ "first": 1, "second": 2, "third": 3 })"};
     auto doc = tempest::json_document::from_string(json_str, alloc);
     ASSERT_TRUE(doc.has_value());
 
-    // 2. Act: Obtain json_object
+    // Act: Obtain json_object
     auto obj_res = doc->root().as_object();
     ASSERT_TRUE(obj_res.has_value());
     auto obj = *obj_res;
 
-    // 3. Assert: Size and containment
+    // Assert: Size and containment
     EXPECT_EQ(obj.size(), 3U);
     EXPECT_FALSE(obj.empty());
     EXPECT_TRUE(obj.contains("first"));
     EXPECT_TRUE(obj.contains("second"));
     EXPECT_FALSE(obj.contains("fourth"));
 
-    // 4. Act & Assert: Range-based for loop with structured bindings
+    // Act & Assert: Range-based for loop with structured bindings
     auto keys = tempest::vector<tempest::string_view>{};
     auto values = tempest::vector<tempest::int32_t>{};
 
@@ -388,18 +388,18 @@ TEST(json_tests, object_iteration_and_structured_bindings)
 /// @brief Verify json_array iteration, indexing, and size queries.
 TEST(json_tests, array_iteration_and_indexing)
 {
-    // 1. Setup: Parse array
+    // Setup: Parse array
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{R"([100, 200, 300])"};
     auto doc = tempest::json_document::from_string(json_str, alloc);
     ASSERT_TRUE(doc.has_value());
 
-    // 2. Act: Obtain json_array
+    // Act: Obtain json_array
     auto arr_res = doc->root().as_array();
     ASSERT_TRUE(arr_res.has_value());
     auto arr = *arr_res;
 
-    // 3. Assert: Size and index access
+    // Assert: Size and index access
     EXPECT_EQ(arr.size(), 3U);
     EXPECT_FALSE(arr.empty());
     EXPECT_EQ(arr[0].as_int32().value(), 100);
@@ -407,7 +407,7 @@ TEST(json_tests, array_iteration_and_indexing)
     EXPECT_EQ(arr[2].as_int32().value(), 300);
     EXPECT_FALSE(arr[3].is_valid());
 
-    // 4. Act & Assert: Range-based for loop
+    // Act & Assert: Range-based for loop
     auto total = tempest::int32_t{0};
     auto count = tempest::size_t{0};
     for (auto val : arr)
@@ -428,7 +428,7 @@ TEST(json_tests, array_iteration_and_indexing)
 /// values.
 TEST(json_tests, narrow_integer_conversions_and_bounds)
 {
-    // 1. Setup: JSON payload containing valid boundaries and out-of-range values
+    // Setup: JSON payload containing valid boundaries and out-of-range values
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{R"({
         "i8_min": -128,
@@ -453,25 +453,25 @@ TEST(json_tests, narrow_integer_conversions_and_bounds)
 
     auto root = doc->root();
 
-    // 2. Act & Assert: 8-bit signed integer conversions
+    // Act & Assert: 8-bit signed integer conversions
     EXPECT_EQ(root["i8_min"].as_int8().value(), -128);
     EXPECT_EQ(root["i8_max"].as_int8().value(), 127);
     EXPECT_EQ(root["i8_underflow"].as_int8().error(), tempest::json_error::out_of_range);
     EXPECT_EQ(root["i8_overflow"].as_int8().error(), tempest::json_error::out_of_range);
 
-    // 3. Act & Assert: 8-bit unsigned integer conversions
+    // Act & Assert: 8-bit unsigned integer conversions
     EXPECT_EQ(root["u8_min"].as_uint8().value(), 0U);
     EXPECT_EQ(root["u8_max"].as_uint8().value(), 255U);
     EXPECT_EQ(root["u8_overflow"].as_uint8().error(), tempest::json_error::out_of_range);
     EXPECT_EQ(root["u8_neg"].as_uint8().error(), tempest::json_error::out_of_range);
 
-    // 4. Act & Assert: 16-bit signed integer conversions
+    // Act & Assert: 16-bit signed integer conversions
     EXPECT_EQ(root["i16_min"].as_int16().value(), -32768);
     EXPECT_EQ(root["i16_max"].as_int16().value(), 32767);
     EXPECT_EQ(root["i16_underflow"].as_int16().error(), tempest::json_error::out_of_range);
     EXPECT_EQ(root["i16_overflow"].as_int16().error(), tempest::json_error::out_of_range);
 
-    // 5. Act & Assert: 16-bit unsigned integer conversions
+    // Act & Assert: 16-bit unsigned integer conversions
     EXPECT_EQ(root["u16_min"].as_uint16().value(), 0U);
     EXPECT_EQ(root["u16_max"].as_uint16().value(), 65535U);
     EXPECT_EQ(root["u16_overflow"].as_uint16().error(), tempest::json_error::out_of_range);
@@ -485,7 +485,7 @@ TEST(json_tests, narrow_integer_conversions_and_bounds)
 /// @brief Verify as_float detects float overflow and as_number coerces any numeric representation to double.
 TEST(json_tests, float_limits_and_as_number_coercion)
 {
-    // 1. Setup: Document with float overflow and mixed numeric representations
+    // Setup: Document with float overflow and mixed numeric representations
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{R"({
         "huge_double": 1e50,
@@ -500,7 +500,7 @@ TEST(json_tests, float_limits_and_as_number_coercion)
 
     auto root = doc->root();
 
-    // 2. Act & Assert: Float bounds checking
+    // Act & Assert: Float bounds checking
     EXPECT_EQ(root["huge_double"].as_float().error(), tempest::json_error::out_of_range);
     EXPECT_EQ(root["neg_huge_double"].as_float().error(), tempest::json_error::out_of_range);
 
@@ -508,7 +508,7 @@ TEST(json_tests, float_limits_and_as_number_coercion)
     ASSERT_TRUE(valid_flt.has_value());
     EXPECT_NEAR(*valid_flt, 3.14159F, 1e-5F);
 
-    // 3. Act & Assert: as_number extracts integers, negative integers, and reals as double
+    // Act & Assert: as_number extracts integers, negative integers, and reals as double
     auto num_from_int = root["int_val"].as_number();
     ASSERT_TRUE(num_from_int.has_value());
     EXPECT_DOUBLE_EQ(*num_from_int, 42.0);
@@ -521,7 +521,7 @@ TEST(json_tests, float_limits_and_as_number_coercion)
     ASSERT_TRUE(num_from_real.has_value());
     EXPECT_DOUBLE_EQ(*num_from_real, 2.71828);
 
-    // 4. Act & Assert: Non-numbers fail on as_number
+    // Act & Assert: Non-numbers fail on as_number
     EXPECT_EQ(doc->root().as_number().error(), tempest::json_error::type_mismatch);
 }
 
@@ -532,7 +532,7 @@ TEST(json_tests, float_limits_and_as_number_coercion)
 /// @brief Verify as<T>() template specializations dispatch to corresponding conversion methods.
 TEST(json_tests, template_as_specializations)
 {
-    // 1. Setup: Document with various typed fields
+    // Setup: Document with various typed fields
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{R"({
         "b": true,
@@ -555,7 +555,7 @@ TEST(json_tests, template_as_specializations)
 
     auto root = doc->root();
 
-    // 2. Act & Assert: Dispatch through as<T>()
+    // Act & Assert: Dispatch through as<T>()
     EXPECT_EQ(root["b"].as<bool>().value(), true);
     EXPECT_EQ(root["i64"].as<tempest::int64_t>().value(), -9000000000LL);
     EXPECT_EQ(root["u64"].as<tempest::uint64_t>().value(), 18000000000ULL);
@@ -585,7 +585,7 @@ TEST(json_tests, template_as_specializations)
 /// @brief Verify contains, size, empty, and explicit operator bool semantics on json_value and containers.
 TEST(json_tests, container_ergonomics_and_truthiness)
 {
-    // 1. Setup: Document with nested containers and empty elements
+    // Setup: Document with nested containers and empty elements
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{R"({
         "items": [10, 20, 30],
@@ -597,14 +597,14 @@ TEST(json_tests, container_ergonomics_and_truthiness)
     auto doc = tempest::json_document::from_string(json_str, alloc);
     ASSERT_TRUE(doc.has_value());
 
-    // 2. Act & Assert: json_document truthiness
+    // Act & Assert: json_document truthiness
     EXPECT_TRUE(static_cast<bool>(*doc));
     auto empty_doc = tempest::json_document{};
     EXPECT_FALSE(static_cast<bool>(empty_doc));
 
     auto root = doc->root();
 
-    // 3. Act & Assert: json_value size, empty, and contains
+    // Act & Assert: json_value size, empty, and contains
     EXPECT_EQ(root["items"].size(), 3U);
     EXPECT_FALSE(root["items"].empty());
     EXPECT_EQ(root["empty_arr"].size(), 0U);
@@ -623,7 +623,7 @@ TEST(json_tests, container_ergonomics_and_truthiness)
     EXPECT_TRUE(root["flag"].empty());
     EXPECT_FALSE(root["flag"].contains("key"));
 
-    // 4. Act & Assert: json_object and json_array truthiness
+    // Act & Assert: json_object and json_array truthiness
     auto items_arr = root["items"].as_array().value();
     EXPECT_TRUE(static_cast<bool>(items_arr));
     auto empty_arr_obj = root["empty_arr"].as_array().value();
@@ -636,7 +636,7 @@ TEST(json_tests, container_ergonomics_and_truthiness)
     auto default_obj = tempest::json_object{};
     EXPECT_FALSE(static_cast<bool>(default_obj));
 
-    // 5. Act & Assert: Iterating empty containers is safe and executes 0 times
+    // Act & Assert: Iterating empty containers is safe and executes 0 times
     auto empty_arr_count = 0U;
     for ([[maybe_unused]] auto val : empty_arr_obj)
     {
@@ -659,7 +659,7 @@ TEST(json_tests, container_ergonomics_and_truthiness)
 /// @brief Verify unescaping of standard escape sequences and UTF-8 characters.
 TEST(json_tests, string_escape_sequences)
 {
-    // 1. Setup: JSON string with special escapes: quotes, backslashes, tabs, newlines, and unicode
+    // Setup: JSON string with special escapes: quotes, backslashes, tabs, newlines, and unicode
     auto alloc = tempest::system_allocator{};
     constexpr auto json_str = tempest::string_view{R"({
         "escapes": "line1\nline2\ttabbed\\path\"quoted\"",
@@ -670,12 +670,12 @@ TEST(json_tests, string_escape_sequences)
 
     auto root = doc->root();
 
-    // 2. Act & Assert: Escapes correctly unescaped
+    // Act & Assert: Escapes correctly unescaped
     auto escapes_res = root["escapes"].as_string();
     ASSERT_TRUE(escapes_res.has_value());
     EXPECT_EQ(*escapes_res, "line1\nline2\ttabbed\\path\"quoted\"");
 
-    // 3. Act & Assert: Unicode escape \u0048\u0065\u006c\u006c\u006f decodes to "Hello"
+    // Act & Assert: Unicode escape \u0048\u0065\u006c\u006c\u006f decodes to "Hello"
     auto unicode_res = root["unicode"].as_string();
     ASSERT_TRUE(unicode_res.has_value());
     EXPECT_EQ(*unicode_res, "Hello");
@@ -798,7 +798,7 @@ namespace
 /// @brief Verify serialization of all supported primitive types, strings, and null.
 TEST(json_tests, writer_primitive_types)
 {
-    // 1. Setup: Instantiate writer and test data
+    // Setup: Instantiate writer and test data
     auto writer = tempest::json_writer{};
     auto root = writer.create_object();
 
@@ -810,7 +810,7 @@ TEST(json_tests, writer_primitive_types)
     constexpr auto expected_double = 2.718281828459;
     constexpr auto expected_str = tempest::string_view{"tempest engine"};
 
-    // 2. Act: Set primitive properties on root object
+    // Act: Set primitive properties on root object
     root.set("flag_true", true);
     root.set("flag_false", false);
     root.set("int32_val", expected_i32);
@@ -826,14 +826,14 @@ TEST(json_tests, writer_primitive_types)
     auto serialized_str = writer.to_string(tempest::json_format::compact);
     auto serialized_bytes = writer.to_bytes(tempest::json_format::compact);
 
-    // 3. Assert: Byte representation matches string representation
+    // Assert: Byte representation matches string representation
     ASSERT_EQ(serialized_bytes.size(), serialized_str.size());
     for (auto byte_index = size_t{0}; byte_index < serialized_bytes.size(); ++byte_index)
     {
         EXPECT_EQ(static_cast<char>(serialized_bytes[byte_index]), serialized_str[byte_index]);
     }
 
-    // 4. Assert: Parse back and verify all primitive values
+    // Assert: Parse back and verify all primitive values
     auto alloc = tempest::system_allocator{};
     auto doc_res = tempest::json_document::from_string(serialized_str, alloc);
     ASSERT_TRUE(doc_res.has_value());
@@ -854,12 +854,12 @@ TEST(json_tests, writer_primitive_types)
 /// @brief Verify serialization of nested objects and arrays of arbitrary depth.
 TEST(json_tests, writer_nested_objects_and_arrays)
 {
-    // 1. Setup: Instantiate writer and construct nested hierarchy
+    // Setup: Instantiate writer and construct nested hierarchy
     auto writer = tempest::json_writer{};
     auto root = writer.create_object();
     root.set("title", "nested_hierarchy");
 
-    // 2. Act: Populate child object and nested arrays
+    // Act: Populate child object and nested arrays
     auto child_meta = root.create_child_object("metadata");
     child_meta.set("author", "tempest");
     child_meta.set("version", static_cast<tempest::int32_t>(1));
@@ -880,7 +880,7 @@ TEST(json_tests, writer_nested_objects_and_arrays)
     writer.set_root(root);
     auto serialized = writer.to_string(tempest::json_format::compact);
 
-    // 3. Assert: Parse back and traverse full hierarchy
+    // Assert: Parse back and traverse full hierarchy
     auto alloc = tempest::system_allocator{};
     auto doc_res = tempest::json_document::from_string(serialized, alloc);
     ASSERT_TRUE(doc_res.has_value());
@@ -909,7 +909,7 @@ TEST(json_tests, writer_nested_objects_and_arrays)
 /// @brief Verify key order in serialized output preserves the exact order keys were inserted.
 TEST(json_tests, writer_key_order_preservation)
 {
-    // 1. Setup: Create writer and define explicit non-alphabetical insertion order
+    // Setup: Create writer and define explicit non-alphabetical insertion order
     auto writer = tempest::json_writer{};
     auto root = writer.create_object();
 
@@ -920,10 +920,10 @@ TEST(json_tests, writer_key_order_preservation)
     root.set("gamma", static_cast<tempest::int32_t>(5));
     writer.set_root(root);
 
-    // 2. Act: Serialize to compact JSON
+    // Act: Serialize to compact JSON
     auto serialized = writer.to_string(tempest::json_format::compact);
 
-    // 3. Assert: Keys appear in serialized text in the exact sequence inserted
+    // Assert: Keys appear in serialized text in the exact sequence inserted
     auto serialized_view = tempest::string_view{serialized.data(), serialized.size()};
     auto it_zeta = tempest::search(serialized_view, "zeta");
     auto it_beta = tempest::search(serialized_view, "beta");
@@ -942,7 +942,7 @@ TEST(json_tests, writer_key_order_preservation)
     EXPECT_LT(it_theta, it_alpha);
     EXPECT_LT(it_alpha, it_gamma);
 
-    // 4. Assert: Iterating parsed object produces matching keys in insertion order
+    // Assert: Iterating parsed object produces matching keys in insertion order
     auto alloc = tempest::system_allocator{};
     auto doc_res = tempest::json_document::from_string(serialized, alloc);
     ASSERT_TRUE(doc_res.has_value());
@@ -963,21 +963,21 @@ TEST(json_tests, writer_key_order_preservation)
 /// @brief Verify compact formatting emits minimal whitespace while pretty format emits 2-space indented lines.
 TEST(json_tests, writer_compact_vs_pretty_format)
 {
-    // 1. Setup: Create writer with simple structure
+    // Setup: Create writer with simple structure
     auto writer = tempest::json_writer{};
     auto root = writer.create_object();
     root.set("name", "tempest");
     root.set("version", static_cast<tempest::int32_t>(1));
     writer.set_root(root);
 
-    // 2. Act: Generate both formats
+    // Act: Generate both formats
     auto compact_output = writer.to_string(tempest::json_format::compact);
     auto pretty_output = writer.to_string(tempest::json_format::pretty);
 
-    // 3. Assert: Compact has no spaces or newlines around tokens
+    // Assert: Compact has no spaces or newlines around tokens
     EXPECT_EQ(compact_output, R"({"name":"tempest","version":1})");
 
-    // 4. Assert: Pretty has newlines and 2-space indentation
+    // Assert: Pretty has newlines and 2-space indentation
     constexpr auto expected_pretty = "{\n  \"name\": \"tempest\",\n  \"version\": 1\n}";
     EXPECT_EQ(pretty_output, expected_pretty);
 }
@@ -985,7 +985,7 @@ TEST(json_tests, writer_compact_vs_pretty_format)
 /// @brief Verify floating-point values serialize using shortest round-trip representation without precision loss.
 TEST(json_tests, writer_shortest_roundtrip_float)
 {
-    // 1. Setup: Create writer with various float and double numbers
+    // Setup: Create writer with various float and double numbers
     auto writer = tempest::json_writer{};
     auto root = writer.create_object();
 
@@ -1002,21 +1002,21 @@ TEST(json_tests, writer_shortest_roundtrip_float)
     root.set("dbl_small", test_double_small);
     writer.set_root(root);
 
-    // 2. Act: Serialize and parse back
+    // Act: Serialize and parse back
     auto serialized = writer.to_string(tempest::json_format::compact);
     auto alloc = tempest::system_allocator{};
     auto doc_res = tempest::json_document::from_string(serialized, alloc);
     ASSERT_TRUE(doc_res.has_value());
     auto parsed_root = doc_res->root();
 
-    // 3. Assert: Round-trip preserves exact values
+    // Assert: Round-trip preserves exact values
     EXPECT_FLOAT_EQ(parsed_root["flt_frac"].as_float().value(), test_float_fraction);
     EXPECT_FLOAT_EQ(parsed_root["flt_arb"].as_float().value(), test_float_arbitrary);
     EXPECT_DOUBLE_EQ(parsed_root["dbl_pi"].as_double().value(), test_double_pi);
     EXPECT_DOUBLE_EQ(parsed_root["dbl_large"].as_double().value(), test_double_large);
     EXPECT_DOUBLE_EQ(parsed_root["dbl_small"].as_double().value(), test_double_small);
 
-    // 4. Assert: No superfluous trailing zeros (e.g., "0.125", not "0.12500000000000000")
+    // Assert: No superfluous trailing zeros (e.g., "0.125", not "0.12500000000000000")
     auto serialized_view = tempest::string_view{serialized.data(), serialized.size()};
     EXPECT_NE(tempest::search(serialized_view, "\"flt_frac\":0.125"), serialized_view.end());
 }
@@ -1024,7 +1024,7 @@ TEST(json_tests, writer_shortest_roundtrip_float)
 /// @brief Verify round-trip determinism: write(doc) == write(parse(write(doc))).
 TEST(json_tests, writer_roundtrip_determinism)
 {
-    // 1. Setup: Build complex document
+    // Setup: Build complex document
     auto initial_writer = tempest::json_writer{};
     auto root = initial_writer.create_object();
     root.set("app", "tempest");
@@ -1043,10 +1043,10 @@ TEST(json_tests, writer_roundtrip_determinism)
     list.push_back(false);
     initial_writer.set_root(root);
 
-    // 2. Act: First write
+    // Act: First write
     auto write1 = initial_writer.to_string(tempest::json_format::compact);
 
-    // 3. Act: Parse write1 and perform second write
+    // Act: Parse write1 and perform second write
     auto alloc = tempest::system_allocator{};
     auto doc1_res = tempest::json_document::from_string(write1, alloc);
     ASSERT_TRUE(doc1_res.has_value());
@@ -1085,25 +1085,25 @@ TEST(json_tests, writer_roundtrip_determinism)
 
     auto write2 = serialize_doc(*doc1_res);
 
-    // 4. Assert: write1 matches write2
+    // Assert: write1 matches write2
     EXPECT_EQ(write1, write2);
 
-    // 5. Act: Parse write2 and perform third write
+    // Act: Parse write2 and perform third write
     auto doc2_res = tempest::json_document::from_string(write2, alloc);
     ASSERT_TRUE(doc2_res.has_value());
     auto write3 = serialize_doc(*doc2_res);
 
-    // 6. Assert: write2 matches write3
+    // Assert: write2 matches write3
     EXPECT_EQ(write2, write3);
 }
 
 /// @brief Verify zero memory leaks when json_writer is used with tracking_allocator.
 TEST(json_tests, writer_zero_memory_leaks_tracking_allocator)
 {
-    // 1. Setup: Instantiate tracking allocator
+    // Setup: Instantiate tracking allocator
     auto track_alloc = tracking_allocator{};
 
-    // 2. Act: Create and populate writer inside nested scope
+    // Act: Create and populate writer inside nested scope
     {
         auto writer = tempest::json_writer{track_alloc};
         auto root = writer.create_object();
@@ -1129,7 +1129,7 @@ TEST(json_tests, writer_zero_memory_leaks_tracking_allocator)
         EXPECT_FALSE(serialized_bytes.empty());
     }
 
-    // 3. Assert: All allocations through tracking_allocator are released cleanly
+    // Assert: All allocations through tracking_allocator are released cleanly
     EXPECT_EQ(track_alloc.active_allocations, 0U);
     EXPECT_GT(track_alloc.total_allocations, 0U);
     EXPECT_EQ(track_alloc.total_allocations, track_alloc.total_deallocations);
@@ -1138,11 +1138,11 @@ TEST(json_tests, writer_zero_memory_leaks_tracking_allocator)
 /// @brief Verify serialization with an array as the root entity and array mutation methods.
 TEST(json_tests, writer_array_root_and_methods)
 {
-    // 1. Setup: Instantiate writer with array root
+    // Setup: Instantiate writer with array root
     auto writer = tempest::json_writer{};
     auto root_arr = writer.create_array();
 
-    // 2. Act: Push various primitive types, null, and containers
+    // Act: Push various primitive types, null, and containers
     root_arr.push_back(true);
     root_arr.push_back(static_cast<tempest::int32_t>(-100));
     root_arr.push_back(static_cast<tempest::uint32_t>(200U));
@@ -1162,7 +1162,7 @@ TEST(json_tests, writer_array_root_and_methods)
     writer.set_root(root_arr);
     auto serialized = writer.to_string(tempest::json_format::compact);
 
-    // 3. Assert: Parse back and verify root is array with expected items
+    // Assert: Parse back and verify root is array with expected items
     auto alloc = tempest::system_allocator{};
     auto doc_res = tempest::json_document::from_string(serialized, alloc);
     ASSERT_TRUE(doc_res.has_value());
@@ -1186,24 +1186,24 @@ TEST(json_tests, writer_array_root_and_methods)
 /// @brief Verify move construction and move assignment of json_writer transfer ownership correctly.
 TEST(json_tests, writer_move_semantics)
 {
-    // 1. Setup: Create initial writer with populated root
+    // Setup: Create initial writer with populated root
     auto writer1 = tempest::json_writer{};
     auto root1 = writer1.create_object();
     root1.set("key", "value1");
     writer1.set_root(root1);
 
-    // 2. Act: Move construct writer2 from writer1
+    // Act: Move construct writer2 from writer1
     auto writer2 = tempest::move(writer1);
 
-    // 3. Assert: writer2 serializes correctly
+    // Assert: writer2 serializes correctly
     auto str2 = writer2.to_string(tempest::json_format::compact);
     EXPECT_EQ(str2, R"({"key":"value1"})");
 
-    // 4. Act: Move assign writer3 from writer2
+    // Act: Move assign writer3 from writer2
     auto writer3 = tempest::json_writer{};
     writer3 = tempest::move(writer2);
 
-    // 5. Assert: writer3 serializes correctly
+    // Assert: writer3 serializes correctly
     auto str3 = writer3.to_string(tempest::json_format::compact);
     EXPECT_EQ(str3, R"({"key":"value1"})");
 }
@@ -1211,11 +1211,11 @@ TEST(json_tests, writer_move_semantics)
 /// @brief Verify tempest::core namespace aliases for json types compile and behave identically.
 TEST(json_tests, writer_namespace_core_aliases)
 {
-    // 1. Setup: Use tempest::core types exclusively
+    // Setup: Use tempest::core types exclusively
     auto writer = tempest::core::json_writer{};
     auto root = writer.create_object();
 
-    // 2. Act: Populate using core handles
+    // Act: Populate using core handles
     root.set("alias_test", true);
     auto child = root.create_child_array("items");
     child.push_back(static_cast<tempest::int32_t>(7));
@@ -1223,7 +1223,7 @@ TEST(json_tests, writer_namespace_core_aliases)
 
     auto result = writer.to_string(tempest::core::json_format::compact);
 
-    // 3. Assert: Output is valid
+    // Assert: Output is valid
     EXPECT_EQ(result, R"({"alias_test":true,"items":[7]})");
 }
 

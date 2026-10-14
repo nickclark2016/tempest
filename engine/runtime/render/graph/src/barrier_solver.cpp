@@ -55,7 +55,7 @@ namespace tempest::render_graph
                 .buffer_barriers = {},
             };
 
-            // 1. Texture Barriers
+            // Texture Barriers
             for (const auto& access : pass.texture_accesses)
             {
                 const auto* alloc = allocator.get_texture(access.texture.id);
@@ -193,7 +193,7 @@ namespace tempest::render_graph
                 }
             }
 
-            // 2. Buffer Barriers
+            // Buffer Barriers
             for (const auto& access : pass.buffer_accesses)
             {
                 const auto* alloc = allocator.get_buffer(access.buffer.id);
@@ -290,7 +290,7 @@ namespace tempest::render_graph
             result.pass_plans.push_back(tempest::move(plan));
         }
 
-        // 3. Form contiguous queue execution batches with cross-queue dependency tracking
+        // Form contiguous queue execution batches with cross-queue dependency tracking
         auto pass_to_batch = flat_unordered_map<uint32_t, size_t>{};
 
         for (const auto pass_idx : dag.sorted_pass_indices)

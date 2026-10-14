@@ -103,7 +103,7 @@ namespace tempest::ecs
 /// .tprefab JSON document, tags live entities in-place with member/instance components, and preserves root transform.
 TEST(prefab_operations_test, save_as_prefab_links_in_place_and_writes_file)
 {
-    // 1. Setup: Author live entity hierarchy with root and child
+    // Setup: Author live entity hierarchy with root and child
     auto ctx = tempest_prefab_ops_test::test_registry_context{};
     auto& registry = ctx.registry;
     auto cache = tempest::scene::prefab_cache{};
@@ -124,11 +124,11 @@ TEST(prefab_operations_test, save_as_prefab_links_in_place_and_writes_file)
     const auto prefab_guid = tempest::guid::generate_random_guid();
     const auto temp_file_path = tempest::string{"bin/Debug/test_author_prefab.tprefab"};
 
-    // 2. Act: Save as prefab
+    // Act: Save as prefab
     const auto save_res =
         tempest::scene::prefab_operations::save_as_prefab(registry, root_ent, prefab_guid, temp_file_path, cache);
 
-    // 3. Assert: Verify template generation and in-place component linkage
+    // Assert: Verify template generation and in-place component linkage
     ASSERT_TRUE(save_res.has_value());
     const auto& tmpl = *save_res;
     EXPECT_EQ(tmpl.entity_count(), 2U);
@@ -185,7 +185,7 @@ TEST(prefab_operations_test, save_as_prefab_links_in_place_and_writes_file)
 /// and removes the field override record from the instance component.
 TEST(prefab_operations_test, revert_field_override_restores_template_value)
 {
-    // 1. Setup: Build template, register in cache, and instantiate with field override
+    // Setup: Build template, register in cache, and instantiate with field override
     auto ctx = tempest_prefab_ops_test::test_registry_context{};
     auto& registry = ctx.registry;
     auto cache = tempest::scene::prefab_cache{};
@@ -230,11 +230,11 @@ TEST(prefab_operations_test, revert_field_override_restores_template_value)
     ASSERT_NE(child_comp_before, nullptr);
     EXPECT_EQ(child_comp_before->val, 777);
 
-    // 2. Act: Revert field override on child
+    // Act: Revert field override on child
     const auto revert_res = tempest::scene::prefab_operations::revert_field_override(
         registry, root_ent, child_path, "test_op_data_component", "val", cache);
 
-    // 3. Assert: Value reverted to template default 20 and override removed
+    // Assert: Value reverted to template default 20 and override removed
     ASSERT_TRUE(revert_res.has_value());
 
     const auto* child_comp_after = registry.try_get<tempest_prefab_ops_test::test_op_data_component>(child_ent);
@@ -249,7 +249,7 @@ TEST(prefab_operations_test, revert_field_override_restores_template_value)
 /// @brief Verifies reverting both added components (removed from entity) and removed components (restored onto entity).
 TEST(prefab_operations_test, revert_added_and_removed_components)
 {
-    // 1. Setup: Build template with data component and extra component
+    // Setup: Build template with data component and extra component
     auto ctx = tempest_prefab_ops_test::test_registry_context{};
     auto& registry = ctx.registry;
     auto cache = tempest::scene::prefab_cache{};
@@ -286,12 +286,12 @@ TEST(prefab_operations_test, revert_added_and_removed_components)
     // Verify test_op_extra_component was removed by instantiate
     EXPECT_FALSE(registry.has<tempest_prefab_ops_test::test_op_extra_component>(root_ent));
 
-    // 2. Act Part A: Revert removed component
+    // Act Part A: Revert removed component
     const auto revert_rm_res = tempest::scene::prefab_operations::revert_removed_component(
         registry, root_ent, {}, "test_op_extra_component", cache);
     ASSERT_TRUE(revert_rm_res.has_value());
 
-    // 3. Assert Part A: Component restored with template value and override removed
+    // Assert Part A: Component restored with template value and override removed
     EXPECT_TRUE(registry.has<tempest_prefab_ops_test::test_op_extra_component>(root_ent));
     const auto* restored_extra = registry.try_get<tempest_prefab_ops_test::test_op_extra_component>(root_ent);
     ASSERT_NE(restored_extra, nullptr);
@@ -301,7 +301,7 @@ TEST(prefab_operations_test, revert_added_and_removed_components)
     ASSERT_NE(inst_comp_after_rm, nullptr);
     EXPECT_TRUE(inst_comp_after_rm->overrides.removed_components.empty());
 
-    // 4. Act Part B: Add component override, then revert it
+    // Act Part B: Add component override, then revert it
     auto staged_added = tempest::scene::staged_component{
         .type_info = extra_info,
         .data = tempest_prefab_ops_test::to_bytes(tempest_prefab_ops_test::test_op_extra_component{.extra_value = 888}),
@@ -319,7 +319,7 @@ TEST(prefab_operations_test, revert_added_and_removed_components)
         registry, root_ent, {}, "test_op_extra_component");
     ASSERT_TRUE(revert_add_res.has_value());
 
-    // 5. Assert Part B: Component removed from entity and override removed
+    // Assert Part B: Component removed from entity and override removed
     EXPECT_FALSE(registry.has<tempest_prefab_ops_test::test_op_extra_component>(root_ent));
     const auto* final_inst = registry.try_get<tempest::scene::prefab_instance_component>(root_ent);
     ASSERT_NE(final_inst, nullptr);
@@ -334,7 +334,7 @@ TEST(prefab_operations_test, revert_added_and_removed_components)
 /// updates the cache and file on disk, and clears overrides from the instance component.
 TEST(prefab_operations_test, apply_to_prefab_updates_template_and_clears_overrides)
 {
-    // 1. Setup: Author live hierarchy, save as prefab, then apply modifications
+    // Setup: Author live hierarchy, save as prefab, then apply modifications
     auto ctx = tempest_prefab_ops_test::test_registry_context{};
     auto& registry = ctx.registry;
     auto cache = tempest::scene::prefab_cache{};
@@ -373,12 +373,12 @@ TEST(prefab_operations_test, apply_to_prefab_updates_template_and_clears_overrid
     });
     registry.assign_or_replace(root_ent, tempest::move(updated_inst));
 
-    // 2. Act: Apply live modifications to prefab
+    // Act: Apply live modifications to prefab
     const auto apply_res =
         tempest::scene::prefab_operations::apply_to_prefab(registry, root_ent, temp_file_path, cache);
     ASSERT_TRUE(apply_res.has_value());
 
-    // 3. Assert: Overrides cleared on live instance
+    // Assert: Overrides cleared on live instance
     const auto* inst_comp_after = registry.try_get<tempest::scene::prefab_instance_component>(root_ent);
     ASSERT_NE(inst_comp_after, nullptr);
     EXPECT_TRUE(inst_comp_after->overrides.empty());
@@ -426,7 +426,7 @@ TEST(prefab_operations_test, apply_to_prefab_updates_template_and_clears_overrid
 /// while leaving nested prefab instances and their children untouched.
 TEST(prefab_operations_test, unpack_leaves_nested_prefabs_intact)
 {
-    // 1. Setup: Author hierarchy with outer root, outer child, and nested prefab instance
+    // Setup: Author hierarchy with outer root, outer child, and nested prefab instance
     auto ctx = tempest_prefab_ops_test::test_registry_context{};
     auto& registry = ctx.registry;
     auto cache = tempest::scene::prefab_cache{};
@@ -476,11 +476,11 @@ TEST(prefab_operations_test, unpack_leaves_nested_prefabs_intact)
                                      .template_local_id = tempest::scene::entity_local_id{2},
                                  });
 
-    // 2. Act: Unpack immediate outer instance
+    // Act: Unpack immediate outer instance
     const auto unpack_res = tempest::scene::prefab_operations::unpack(registry, outer_root);
     ASSERT_TRUE(unpack_res.has_value());
 
-    // 3. Assert: Outer instance stripped, nested instance preserved
+    // Assert: Outer instance stripped, nested instance preserved
     EXPECT_FALSE(registry.has<tempest::scene::prefab_instance_component>(outer_root));
     EXPECT_FALSE(registry.has<tempest::scene::prefab_member_component>(outer_root));
     EXPECT_FALSE(registry.has<tempest::scene::prefab_member_component>(outer_child));
@@ -501,7 +501,7 @@ TEST(prefab_operations_test, unpack_leaves_nested_prefabs_intact)
 /// from both outer and nested prefab instances throughout the entire subtree.
 TEST(prefab_operations_test, unpack_completely_strips_all_instances)
 {
-    // 1. Setup: Author hierarchy with outer root and nested prefab instance
+    // Setup: Author hierarchy with outer root and nested prefab instance
     auto ctx = tempest_prefab_ops_test::test_registry_context{};
     auto& registry = ctx.registry;
 
@@ -543,11 +543,11 @@ TEST(prefab_operations_test, unpack_completely_strips_all_instances)
                                       .template_local_id = tempest::scene::entity_local_id{20},
                                   });
 
-    // 2. Act: Completely unpack entire subtree
+    // Act: Completely unpack entire subtree
     const auto unpack_res = tempest::scene::prefab_operations::unpack_completely(registry, outer_root);
     ASSERT_TRUE(unpack_res.has_value());
 
-    // 3. Assert: All prefab components stripped across the entire hierarchy
+    // Assert: All prefab components stripped across the entire hierarchy
     EXPECT_FALSE(registry.has<tempest::scene::prefab_instance_component>(outer_root));
     EXPECT_FALSE(registry.has<tempest::scene::prefab_member_component>(outer_root));
 
@@ -574,7 +574,7 @@ TEST(prefab_operations_test, unpack_completely_strips_all_instances)
 /// @brief Verifies appropriate error codes for invalid entities, missing components, and missing templates.
 TEST(prefab_operations_test, error_handling_and_validation)
 {
-    // 1. Setup
+    // Setup
     auto ctx = tempest_prefab_ops_test::test_registry_context{};
     auto& registry = ctx.registry;
     auto cache = tempest::scene::prefab_cache{};
@@ -582,7 +582,7 @@ TEST(prefab_operations_test, error_handling_and_validation)
     const auto invalid_ent = tempest::ecs::entity{tempest::ecs::tombstone};
     const auto valid_ent = registry.create();
 
-    // 2. Act & Assert: Invalid entity passed to operations
+    // Act & Assert: Invalid entity passed to operations
     const auto bad_save = tempest::scene::prefab_operations::save_as_prefab(
         registry, invalid_ent, tempest::guid{}, {}, cache);
     ASSERT_FALSE(bad_save.has_value());

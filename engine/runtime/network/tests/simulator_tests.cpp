@@ -12,7 +12,7 @@ namespace tempest::network::tests
     /// @brief Verifies that packets delayed with 50ms latency are not dispatched before 50ms and all dispatched after.
     TEST(simulator_tests, simulator_latency_delay)
     {
-        // 1. Setup: Configure simulator with 50ms latency and 0 jitter/loss/duplication
+        // Setup: Configure simulator with 50ms latency and 0 jitter/loss/duplication
         auto config = network_simulator_config{
             .latency_ms = 50.0f,
             .jitter_ms = 0.0f,
@@ -26,7 +26,7 @@ namespace tempest::network::tests
         const auto sender_endpoint = endpoint(127, 0, 0, 1, 60001);
         const auto destination_endpoint = endpoint(127, 0, 0, 1, 60002);
 
-        // 2. Act: Send 5 packets at t = 0ms
+        // Act: Send 5 packets at t = 0ms
         const auto payload_data = array<byte, 4>{byte{1}, byte{2}, byte{3}, byte{4}};
         for (auto count = 0U; count < 5U; ++count)
         {
@@ -43,7 +43,7 @@ namespace tempest::network::tests
             ++dispatched_early;
         });
 
-        // 3. Assert: No packets dispatched before 50ms, all 5 pending
+        // Assert: No packets dispatched before 50ms, all 5 pending
         EXPECT_EQ(dispatched_early, 0U);
         EXPECT_EQ(simulator.pending_packet_count(), 5U);
 
@@ -69,7 +69,7 @@ namespace tempest::network::tests
     /// @brief Verifies that high random jitter produces intentional packet reordering while preserving timestamp order.
     TEST(simulator_tests, simulator_jitter_reordering)
     {
-        // 1. Setup: Configure simulator with 100ms latency and 50ms jitter
+        // Setup: Configure simulator with 100ms latency and 50ms jitter
         auto config = network_simulator_config{
             .latency_ms = 100.0f,
             .jitter_ms = 50.0f,
@@ -83,7 +83,7 @@ namespace tempest::network::tests
         const auto sender_endpoint = endpoint(127, 0, 0, 1, 27001);
         const auto destination_endpoint = endpoint(127, 0, 0, 1, 27002);
 
-        // 2. Act: Send 100 sequential packets tagged with packet index
+        // Act: Send 100 sequential packets tagged with packet index
         constexpr auto packet_count = 100U;
         for (auto index = 0U; index < packet_count; ++index)
         {
@@ -113,7 +113,7 @@ namespace tempest::network::tests
             });
         }
 
-        // 3. Assert: All 100 packets delivered
+        // Assert: All 100 packets delivered
         EXPECT_EQ(received_indices.size(), packet_count);
 
         // Check if at least one packet arrived out of order due to jitter
@@ -136,7 +136,7 @@ namespace tempest::network::tests
     /// @brief Verifies that 1,000 packets with 10% configured packet loss yield actual loss within statistical expectation (10% +/- 2%).
     TEST(simulator_tests, simulator_packet_loss_statistical)
     {
-        // 1. Setup: Configure 10% packet loss with deterministic seed
+        // Setup: Configure 10% packet loss with deterministic seed
         auto config = network_simulator_config{
             .latency_ms = 10.0f,
             .jitter_ms = 0.0f,
@@ -151,7 +151,7 @@ namespace tempest::network::tests
         const auto destination_endpoint = endpoint(127, 0, 0, 1, 28002);
         const auto dummy_payload = array<byte, 1>{byte{42}};
 
-        // 2. Act: Send 1,000 packets
+        // Act: Send 1,000 packets
         constexpr auto total_sent = 1000U;
         for (auto count = 0U; count < total_sent; ++count)
         {
@@ -166,7 +166,7 @@ namespace tempest::network::tests
             ++delivered_count;
         });
 
-        // 3. Assert: Dropped count is within 10% +/- 2% (between 80 and 120 dropped out of 1000)
+        // Assert: Dropped count is within 10% +/- 2% (between 80 and 120 dropped out of 1000)
         const auto dropped_count = total_sent - delivered_count;
         EXPECT_GE(dropped_count, 80U);
         EXPECT_LE(dropped_count, 120U);
@@ -179,7 +179,7 @@ namespace tempest::network::tests
     /// @brief Verifies that configuring packet duplication generates duplicate packets with distinct delivery timestamps.
     TEST(simulator_tests, simulator_packet_duplication)
     {
-        // 1. Setup: Configure simulator with 20% duplicate rate
+        // Setup: Configure simulator with 20% duplicate rate
         auto config = network_simulator_config{
             .latency_ms = 10.0f,
             .jitter_ms = 0.0f,
@@ -193,7 +193,7 @@ namespace tempest::network::tests
         const auto sender_endpoint = endpoint(127, 0, 0, 1, 29001);
         const auto destination_endpoint = endpoint(127, 0, 0, 1, 29002);
 
-        // 2. Act: Send 100 packets tagged with payload index
+        // Act: Send 100 packets tagged with payload index
         constexpr auto total_sent = 100U;
         for (auto index = 0U; index < total_sent; ++index)
         {
@@ -215,7 +215,7 @@ namespace tempest::network::tests
             ++received_count;
         });
 
-        // 3. Assert: More packets received than sent due to duplicates
+        // Assert: More packets received than sent due to duplicates
         EXPECT_GT(received_count, total_sent);
 
         auto duplicate_detected = false;
@@ -238,7 +238,7 @@ namespace tempest::network::tests
     /// maintains exact ascending deliver_time order via binary search insertion.
     TEST(simulator_tests, simulator_burst_ordering_performance)
     {
-        // 1. Setup: Configure simulator with 0 jitter, 0 loss, 0 duplication, 0 base latency
+        // Setup: Configure simulator with 0 jitter, 0 loss, 0 duplication, 0 base latency
         auto config = network_simulator_config{
             .latency_ms = 0.0f,
             .jitter_ms = 0.0f,
@@ -252,7 +252,7 @@ namespace tempest::network::tests
         const auto sender_endpoint = endpoint(127, 0, 0, 1, 30001);
         const auto destination_endpoint = endpoint(127, 0, 0, 1, 30002);
 
-        // 2. Act: Enqueue 200 packets with varied delays in reverse order (longest delay first)
+        // Act: Enqueue 200 packets with varied delays in reverse order (longest delay first)
         constexpr auto packet_count = 200U;
         for (auto index = 0U; index < packet_count; ++index)
         {
@@ -291,7 +291,7 @@ namespace tempest::network::tests
             delivered_delays.push_back(delay_val);
         });
 
-        // 3. Assert: All 200 packets were dispatched in strictly ascending delay order
+        // Assert: All 200 packets were dispatched in strictly ascending delay order
         EXPECT_EQ(dispatched, packet_count);
         EXPECT_EQ(delivered_delays.size(), packet_count);
         EXPECT_EQ(simulator.pending_packet_count(), 0U);

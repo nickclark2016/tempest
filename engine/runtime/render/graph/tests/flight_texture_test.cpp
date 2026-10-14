@@ -449,14 +449,14 @@ namespace tempest::render_graph
     ///        correctly maps slot indices with modulo wrapping, and allocates valid sampled descriptors.
     TEST(flight_texture_test, initialization_and_indexing)
     {
-        // 1. Setup: Create mock device and flight_texture
+        // Setup: Create mock device and flight_texture
         auto dev = mock_flight_device{};
         auto tex = flight_texture{};
 
         EXPECT_FALSE(tex.is_allocated());
         EXPECT_EQ(tex.get_slot_count(), 0U);
 
-        // 2. Act: Initialize flight_texture with 3 flight slots
+        // Act: Initialize flight_texture with 3 flight slots
         const auto ok = tex.init(dev,
                                  flight_texture_desc{
                                      .desc =
@@ -471,7 +471,7 @@ namespace tempest::render_graph
                                  },
                                  2048, 2048);
 
-        // 3. Assert: Verify allocations and slot mapping
+        // Assert: Verify allocations and slot mapping
         EXPECT_TRUE(ok);
         EXPECT_TRUE(tex.is_allocated());
         EXPECT_EQ(tex.get_slot_count(), 3U);
@@ -506,7 +506,7 @@ namespace tempest::render_graph
     ///        all textures, views, and descriptors into flight_resources for deferred deletion.
     TEST(flight_texture_test, resource_extraction_handover)
     {
-        // 1. Setup: Initialize flight_texture with 2 slots
+        // Setup: Initialize flight_texture with 2 slots
         auto dev = mock_flight_device{};
         auto tex = flight_texture{};
 
@@ -526,10 +526,10 @@ namespace tempest::render_graph
         const auto saved_t0 = tex.get_texture(0);
         const auto saved_t1 = tex.get_texture(1);
 
-        // 2. Act: Extract resources
+        // Act: Extract resources
         auto extracted = tex.extract_resources();
 
-        // 3. Assert: Container is empty and resources are preserved in extracted container
+        // Assert: Container is empty and resources are preserved in extracted container
         EXPECT_FALSE(tex.is_allocated());
         EXPECT_EQ(tex.get_slot_count(), 0U);
         EXPECT_EQ(extracted.textures.size(), 2U);
@@ -549,7 +549,7 @@ namespace tempest::render_graph
     ///        in the same frame to read from it without cross-frame hazards.
     TEST(flight_texture_test, pass_builder_flight_depth_stencil_attachment)
     {
-        // 1. Setup: Create device, context, flight texture with 2 slots, and render graph
+        // Setup: Create device, context, flight texture with 2 slots, and render graph
         auto dev = mock_flight_device{};
         auto ctx = test_context{};
         auto tex = flight_texture{};
@@ -569,7 +569,7 @@ namespace tempest::render_graph
 
         auto graph = render_graph{ctx.jobs, 2048, 2048};
 
-        // 2. Act: Record Frame 0 accessing flight slot 0
+        // Act: Record Frame 0 accessing flight slot 0
         struct shadow_data
         {
             rg_texture_id shadow_atlas;
@@ -607,7 +607,7 @@ namespace tempest::render_graph
             []([[maybe_unused]] const pbr_data& data, [[maybe_unused]] pass_execution_context& exec_ctx,
                [[maybe_unused]] rhi::command_list& cmd) {});
 
-        // 3. Assert: Compile DAG and verify pass ordering and texture versioning
+        // Assert: Compile DAG and verify pass ordering and texture versioning
         const auto compile_res = graph.compile();
         ASSERT_TRUE(compile_res.has_value());
 
@@ -624,7 +624,7 @@ namespace tempest::render_graph
     ///        and marks the attachment output appropriately.
     TEST(flight_texture_test, pass_builder_flight_color_attachment)
     {
-        // 1. Setup: Create device, context, flight texture, and render graph
+        // Setup: Create device, context, flight texture, and render graph
         auto dev = mock_flight_device{};
         auto ctx = test_context{};
         auto tex = flight_texture{};
@@ -644,7 +644,7 @@ namespace tempest::render_graph
 
         auto graph = render_graph{ctx.jobs, 1920, 1080};
 
-        // 2. Act: Record a color write pass using flight slot 1
+        // Act: Record a color write pass using flight slot 1
         struct draw_data
         {
             rg_texture_id out_color;
@@ -663,7 +663,7 @@ namespace tempest::render_graph
             []([[maybe_unused]] const draw_data& data, [[maybe_unused]] pass_execution_context& exec_ctx,
                [[maybe_unused]] rhi::command_list& cmd) {});
 
-        // 3. Assert: Compile DAG and verify pass is preserved as sink
+        // Assert: Compile DAG and verify pass is preserved as sink
         const auto compile_res = graph.compile();
         ASSERT_TRUE(compile_res.has_value());
 

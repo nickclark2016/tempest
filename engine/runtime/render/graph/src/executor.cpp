@@ -121,7 +121,7 @@ namespace tempest::render_graph
                 pass_cmd.begin_debug_region(rhi::debug_label{.name = pass->name.c_str()});
 #endif
 
-                // 1. Issue pre-pass pipeline barriers FIRST before the start timestamp query
+                // Issue pre-pass pipeline barriers FIRST before the start timestamp query
                 if (plan != nullptr)
                 {
                     if (!plan->texture_barriers.empty() || !plan->buffer_barriers.empty())
@@ -130,7 +130,7 @@ namespace tempest::render_graph
                     }
                 }
 
-                // 2. Pass start timestamp & begin stats query
+                // Pass start timestamp & begin stats query
                 if (ts_pool.handle != 0)
                 {
                     pass_cmd.write_timestamp(ts_pool, alloc.start_ts, rhi::pipeline_stage::bottom_of_pipe);
@@ -140,7 +140,7 @@ namespace tempest::render_graph
                     pass_cmd.begin_query(stat_pool, *alloc.stat_idx);
                 }
 
-                // 3. Detect color and depth-stencil attachments for dynamic rendering
+                // Detect color and depth-stencil attachments for dynamic rendering
                 auto color_attachments = vector<rhi::color_attachment>{};
                 auto depth_attachment = optional<rhi::depth_stencil_attachment>{nullopt};
                 auto render_width = uint32_t{0};
@@ -208,7 +208,7 @@ namespace tempest::render_graph
                     }
                 }
 
-                // 4. End stats query & write end timestamp
+                // End stats query & write end timestamp
                 if (alloc.stat_idx.has_value() && stat_pool.handle != 0)
                 {
                     pass_cmd.end_query(stat_pool, *alloc.stat_idx);
@@ -251,7 +251,7 @@ namespace tempest::render_graph
         }
         auto& flight_state = _flight_query_rings[flight_slot];
 
-        // 1. Query readback from previous frame on this flight slot
+        // Query readback from previous frame on this flight slot
         if (!flight_state.recorded_passes.empty() && flight_state.recorded_timestamp_count > 0)
         {
             auto ts_results = vector<uint64_t>(flight_state.recorded_timestamp_count, 0);
@@ -423,7 +423,7 @@ namespace tempest::render_graph
             plan_map[plan.pass_index] = &plan;
         }
 
-        // 2. Count passes and calculate required query pool capacities for current frame
+        // Count passes and calculate required query pool capacities for current frame
         auto active_pass_count = size_t{0};
         auto needed_stats_per_queue = flat_unordered_map<queue_type, uint32_t>{};
         auto union_stats_per_queue = flat_unordered_map<queue_type, enum_mask<rhi::pipeline_statistic_flags>>{};

@@ -80,7 +80,7 @@ namespace tempest::ecs
 /// member and instance components, hierarchy relationships, and local_to_entity mappings.
 TEST(prefab_instancing_test, instantiate_basic_template)
 {
-    // 1. Setup: Register component types and build a two-entity template
+    // Setup: Register component types and build a two-entity template
     auto ctx = tempest_prefab_instancing_test::test_registry_context{};
     auto& registry = ctx.registry;
     auto& type_reg = ctx.type_reg;
@@ -108,11 +108,11 @@ TEST(prefab_instancing_test, instantiate_basic_template)
     const auto test_guid = tempest::guid::generate_random_guid();
     const auto inst_local_id = tempest::scene::entity_local_id{99};
 
-    // 2. Act: Instantiate the template
+    // Act: Instantiate the template
     const auto result = tempest::scene::prefab_instantiator::instantiate(tmpl, registry, {}, nullptr, test_guid,
                                                                         inst_local_id);
 
-    // 3. Assert: Entity instantiation and component population
+    // Assert: Entity instantiation and component population
     ASSERT_TRUE(result.has_value());
     EXPECT_TRUE(result->success);
     EXPECT_EQ(result->all_entities.size(), 2U);
@@ -166,7 +166,7 @@ TEST(prefab_instancing_test, instantiate_basic_template)
 /// component values and execute post_load lifecycle callbacks.
 TEST(prefab_instancing_test, instantiate_applies_field_overrides)
 {
-    // 1. Setup: Register reflected component types and build template
+    // Setup: Register reflected component types and build template
     auto ctx = tempest_prefab_instancing_test::test_registry_context{};
     auto& registry = ctx.registry;
     auto& type_reg = ctx.type_reg;
@@ -217,10 +217,10 @@ TEST(prefab_instancing_test, instantiate_applies_field_overrides)
         .value_bytes = tempest_prefab_instancing_test::to_bytes(tempest::math::vec3<float>{10.0F, 20.0F, 30.0F}),
     });
 
-    // 2. Act: Instantiate with overrides
+    // Act: Instantiate with overrides
     const auto result = tempest::scene::prefab_instantiator::instantiate(tmpl, registry, overrides);
 
-    // 3. Assert: Overridden field values and post_load transform update
+    // Assert: Overridden field values and post_load transform update
     ASSERT_TRUE(result.has_value());
     const auto root_ent = result->root_entity;
     const auto child_iter = result->local_to_entity.find(2ULL);
@@ -253,7 +253,7 @@ TEST(prefab_instancing_test, instantiate_applies_field_overrides)
 /// @brief Verifies that added_component entries attach new components to target entities.
 TEST(prefab_instancing_test, instantiate_applies_added_components)
 {
-    // 1. Setup: Template with empty root entity
+    // Setup: Template with empty root entity
     auto ctx = tempest_prefab_instancing_test::test_registry_context{};
     auto& registry = ctx.registry;
     auto& type_reg = ctx.type_reg;
@@ -281,10 +281,10 @@ TEST(prefab_instancing_test, instantiate_applies_added_components)
             },
     });
 
-    // 2. Act: Instantiate with added component
+    // Act: Instantiate with added component
     const auto result = tempest::scene::prefab_instantiator::instantiate(tmpl, registry, overrides);
 
-    // 3. Assert: Component is assigned and populated
+    // Assert: Component is assigned and populated
     ASSERT_TRUE(result.has_value());
     const auto root_ent = result->root_entity;
     EXPECT_TRUE(registry.has<tempest_prefab_instancing_test::test_data_component>(root_ent));
@@ -298,7 +298,7 @@ TEST(prefab_instancing_test, instantiate_applies_added_components)
 /// @brief Verifies that removed_component entries prevent components from being assigned during instantiation.
 TEST(prefab_instancing_test, instantiate_applies_removed_components)
 {
-    // 1. Setup: Template with root containing test_data_component and transform_component
+    // Setup: Template with root containing test_data_component and transform_component
     auto ctx = tempest_prefab_instancing_test::test_registry_context{};
     auto& registry = ctx.registry;
     auto& type_reg = ctx.type_reg;
@@ -325,10 +325,10 @@ TEST(prefab_instancing_test, instantiate_applies_removed_components)
         .component_name = "test_data_component",
     });
 
-    // 2. Act: Instantiate template
+    // Act: Instantiate template
     const auto result = tempest::scene::prefab_instantiator::instantiate(tmpl, registry, overrides);
 
-    // 3. Assert: test_data_component was omitted, transform_component remains
+    // Assert: test_data_component was omitted, transform_component remains
     ASSERT_TRUE(result.has_value());
     const auto root_ent = result->root_entity;
     EXPECT_FALSE(registry.has<tempest_prefab_instancing_test::test_data_component>(root_ent));
@@ -342,7 +342,7 @@ TEST(prefab_instancing_test, instantiate_applies_removed_components)
 /// @brief Verifies recursive instantiation of nested prefabs and override application via hierarchical id_path.
 TEST(prefab_instancing_test, instantiate_nested_prefab)
 {
-    // 1. Setup: Register types and create inner and outer prefab templates
+    // Setup: Register types and create inner and outer prefab templates
     auto ctx = tempest_prefab_instancing_test::test_registry_context{};
     auto& registry = ctx.registry;
     auto& type_reg = ctx.type_reg;
@@ -394,10 +394,10 @@ TEST(prefab_instancing_test, instantiate_nested_prefab)
         .value_bytes = tempest_prefab_instancing_test::to_bytes(float{9.25F}),
     });
 
-    // 2. Act: Instantiate outer template
+    // Act: Instantiate outer template
     const auto result = tempest::scene::prefab_instantiator::instantiate(outer_guid, cache, registry, overrides);
 
-    // 3. Assert: Hierarchy and override application
+    // Assert: Hierarchy and override application
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->all_entities.size(), 4U);
 
@@ -449,7 +449,7 @@ TEST(prefab_instancing_test, instantiate_nested_prefab)
 /// @brief Verifies that self-referential or cyclic nested prefabs are rejected with cyclic_nesting error.
 TEST(prefab_instancing_test, cyclic_nesting_is_rejected)
 {
-    // 1. Setup: Direct self-referencing template A -> A
+    // Setup: Direct self-referencing template A -> A
     auto ctx = tempest_prefab_instancing_test::test_registry_context{};
     auto& registry = ctx.registry;
 
@@ -461,14 +461,14 @@ TEST(prefab_instancing_test, cyclic_nesting_is_rejected)
     self_builder.set_nested_prefab(self_root_idx, self_guid, tempest::scene::entity_local_id{10});
     cache.register_template(self_guid, self_builder.build());
 
-    // 2. Act: Attempt instantiating self-referential prefab
+    // Act: Attempt instantiating self-referential prefab
     const auto self_result = tempest::scene::prefab_instantiator::instantiate(self_guid, cache, registry);
 
-    // 3. Assert: Direct cycle is detected and rejected
+    // Assert: Direct cycle is detected and rejected
     ASSERT_FALSE(self_result.has_value());
     EXPECT_EQ(self_result.error(), tempest::scene::prefab_error::cyclic_nesting);
 
-    // 4. Setup: Mutual cycle A -> B -> A
+    // Setup: Mutual cycle A -> B -> A
     const auto guid_a = tempest::guid::generate_random_guid();
     const auto guid_b = tempest::guid::generate_random_guid();
 
@@ -482,10 +482,10 @@ TEST(prefab_instancing_test, cyclic_nesting_is_rejected)
     builder_b.set_nested_prefab(root_b_idx, guid_a, tempest::scene::entity_local_id{20});
     cache.register_template(guid_b, builder_b.build());
 
-    // 5. Act: Attempt instantiating mutual cycle
+    // Act: Attempt instantiating mutual cycle
     const auto mutual_result = tempest::scene::prefab_instantiator::instantiate(guid_a, cache, registry);
 
-    // 6. Assert: Mutual cycle is detected and rejected
+    // Assert: Mutual cycle is detected and rejected
     ASSERT_FALSE(mutual_result.has_value());
     EXPECT_EQ(mutual_result.error(), tempest::scene::prefab_error::cyclic_nesting);
 }
@@ -499,19 +499,19 @@ TEST(prefab_instancing_test, error_handling_and_validation)
 
     auto cache = tempest::scene::prefab_cache{};
 
-    // 1. Empty template
+    // Empty template
     const auto empty_tmpl = tempest::scene::prefab_template{};
     const auto empty_res = tempest::scene::prefab_instantiator::instantiate(empty_tmpl, registry);
     ASSERT_FALSE(empty_res.has_value());
     EXPECT_EQ(empty_res.error(), tempest::scene::prefab_error::invalid_template);
 
-    // 2. Missing template in cache
+    // Missing template in cache
     const auto missing_guid = tempest::guid::generate_random_guid();
     const auto missing_res = tempest::scene::prefab_instantiator::instantiate(missing_guid, cache, registry);
     ASSERT_FALSE(missing_res.has_value());
     EXPECT_EQ(missing_res.error(), tempest::scene::prefab_error::template_not_found);
 
-    // 3. Build a valid simple template
+    // Build a valid simple template
     auto builder = tempest::scene::prefab_template_builder{};
     const auto root_idx = builder.add_entity(tempest::scene::entity_local_id{1}, "Root");
     const auto* comp_info = type_reg.type_info(
@@ -520,7 +520,7 @@ TEST(prefab_instancing_test, error_handling_and_validation)
     builder.add_component(root_idx, comp_info, tempest_prefab_instancing_test::to_bytes(data));
     const auto valid_tmpl = builder.build();
 
-    // 4. Override targeting non-existent field
+    // Override targeting non-existent field
     auto invalid_field_overrides = tempest::scene::prefab_overrides{};
     invalid_field_overrides.field_overrides.push_back(tempest::scene::field_override{
         .target = {},
@@ -533,7 +533,7 @@ TEST(prefab_instancing_test, error_handling_and_validation)
     ASSERT_FALSE(bad_field_res.has_value());
     EXPECT_EQ(bad_field_res.error(), tempest::scene::prefab_error::field_not_found);
 
-    // 5. Override targeting non-existent entity
+    // Override targeting non-existent entity
     auto bad_target_overrides = tempest::scene::prefab_overrides{};
     auto bad_path = tempest::scene::id_path{};
     bad_path.push_back(tempest::scene::entity_local_id{99999});
@@ -552,16 +552,16 @@ TEST(prefab_instancing_test, error_handling_and_validation)
 /// @brief Verifies that id_path formatting via to_string produces correct slash-separated hex strings.
 TEST(prefab_instancing_test, id_path_to_string_formatting)
 {
-    // 1. Setup: Empty id_path
+    // Setup: Empty id_path
     const auto empty_path = tempest::scene::id_path{};
     EXPECT_EQ(tempest::scene::to_string(empty_path), "");
 
-    // 2. Act & Assert: Single element id_path
+    // Act & Assert: Single element id_path
     auto single_path = tempest::scene::id_path{};
     single_path.push_back(tempest::scene::entity_local_id{1});
     EXPECT_EQ(tempest::scene::to_string(single_path), "0x0000000000000001");
 
-    // 3. Act & Assert: Multi-element id_path
+    // Act & Assert: Multi-element id_path
     auto multi_path = tempest::scene::id_path{};
     multi_path.push_back(tempest::scene::entity_local_id{1});
     multi_path.push_back(tempest::scene::entity_local_id{0xbeef});

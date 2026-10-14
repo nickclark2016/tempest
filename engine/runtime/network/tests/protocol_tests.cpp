@@ -15,7 +15,7 @@ namespace tempest::network::tests
     /// across wire bitstreams with exact field preservation.
     TEST(protocol_tests, connect_request_round_trip)
     {
-        // 1. Setup
+        // Setup
         auto writer = bit_writer{};
 
         const auto original = connect_request_payload{
@@ -23,14 +23,14 @@ namespace tempest::network::tests
             .client_nonce = 0xDEADBEEFCAFE1234ULL,
         };
 
-        // 2. Act
+        // Act
         write_connect_request(writer, original);
         writer.flush();
 
         auto reader = bit_reader{writer.data()};
         const auto decoded = read_connect_request(reader);
 
-        // 3. Assert
+        // Assert
         ASSERT_TRUE(decoded.has_value());
         EXPECT_EQ(decoded->client_version, original.client_version);
         EXPECT_EQ(decoded->client_nonce, original.client_nonce);
@@ -40,14 +40,14 @@ namespace tempest::network::tests
     /// @brief Verifies that truncated buffers fail gracefully when deserializing connect_request.
     TEST(protocol_tests, connect_request_truncated_buffer_fails)
     {
-        // 1. Setup
+        // Setup
         auto buffer = array<byte, 4>{}; // 4 bytes is shorter than the required 10 bytes (2 + 8)
         auto reader = bit_reader{span<const byte>{buffer.data(), buffer.size()}};
 
-        // 2. Act
+        // Act
         const auto decoded = read_connect_request(reader);
 
-        // 3. Assert
+        // Assert
         EXPECT_FALSE(decoded.has_value());
     }
 
@@ -59,7 +59,7 @@ namespace tempest::network::tests
     /// across wire bitstreams with all session and tick parameters intact.
     TEST(protocol_tests, connect_accepted_round_trip)
     {
-        // 1. Setup
+        // Setup
         auto writer = bit_writer{};
 
         const auto original = connect_accepted_payload{
@@ -69,14 +69,14 @@ namespace tempest::network::tests
             .tick_rate = 60,
         };
 
-        // 2. Act
+        // Act
         write_connect_accepted(writer, original);
         writer.flush();
 
         auto reader = bit_reader{writer.data()};
         const auto decoded = read_connect_accepted(reader);
 
-        // 3. Assert
+        // Assert
         ASSERT_TRUE(decoded.has_value());
         EXPECT_EQ(decoded->session_id, original.session_id);
         EXPECT_EQ(decoded->player_slot, original.player_slot);
@@ -88,14 +88,14 @@ namespace tempest::network::tests
     /// @brief Verifies that truncated buffers fail gracefully when deserializing connect_accepted.
     TEST(protocol_tests, connect_accepted_truncated_buffer_fails)
     {
-        // 1. Setup
+        // Setup
         auto buffer = array<byte, 10>{}; // 10 bytes is shorter than the required 18 bytes (8 + 4 + 4 + 2)
         auto reader = bit_reader{span<const byte>{buffer.data(), buffer.size()}};
 
-        // 2. Act
+        // Act
         const auto decoded = read_connect_accepted(reader);
 
-        // 3. Assert
+        // Assert
         EXPECT_FALSE(decoded.has_value());
     }
 
@@ -116,18 +116,18 @@ namespace tempest::network::tests
 
         for (const auto reason : reasons)
         {
-            // 1. Setup
+            // Setup
             auto writer = bit_writer{};
             const auto original = disconnect_payload{.reason = reason};
 
-            // 2. Act
+            // Act
             write_disconnect(writer, original);
             writer.flush();
 
             auto reader = bit_reader{writer.data()};
             const auto decoded = read_disconnect(reader);
 
-            // 3. Assert
+            // Assert
             ASSERT_TRUE(decoded.has_value());
             EXPECT_EQ(decoded->reason, original.reason);
             EXPECT_EQ(*decoded, original);

@@ -539,7 +539,7 @@ namespace tempest::render_graph
     /// addresses.
     TEST(transient_allocator_test, buffer_device_address_propagation)
     {
-        // 1. Setup: Mock device and transient allocator
+        // Setup: Mock device and transient allocator
         auto dev = mock_device{};
         auto allocator = transient_allocator{};
         allocator.set_frames_in_flight(1);
@@ -547,7 +547,7 @@ namespace tempest::render_graph
 
         const auto imported_gpu_addr = 0xDEADBEEF0000ULL;
 
-        // 2. Act: Register 1 transient buffer and 1 imported buffer
+        // Act: Register 1 transient buffer and 1 imported buffer
         const auto buffers = vector<registered_buffer>{
             init_list,
             registered_buffer{
@@ -590,7 +590,7 @@ namespace tempest::render_graph
 
         allocator.allocate(dev, dag, {}, buffers, 1920, 1080);
 
-        // 3. Assert: Both buffers have valid non-zero device addresses matching their physical GPU handles
+        // Assert: Both buffers have valid non-zero device addresses matching their physical GPU handles
         const auto* transient_alloc = allocator.get_buffer(0);
         ASSERT_NE(transient_alloc, nullptr);
         EXPECT_NE(transient_alloc->device_address, 0ULL);
@@ -600,7 +600,7 @@ namespace tempest::render_graph
         ASSERT_NE(imported_alloc, nullptr);
         EXPECT_EQ(imported_alloc->device_address, imported_gpu_addr);
 
-        // 4. Teardown
+        // Teardown
         allocator.release_all(dev);
         EXPECT_EQ(dev.destroyed_buffers, 1U);
     }
@@ -609,7 +609,7 @@ namespace tempest::render_graph
     /// resize.
     TEST(transient_allocator_test, stale_surface_relative_texture_eviction_on_resize)
     {
-        // 1. Setup: Mock device and transient allocator with frames_in_flight = 2
+        // Setup: Mock device and transient allocator with frames_in_flight = 2
         auto dev = mock_device{};
         auto allocator = transient_allocator{};
         allocator.set_frames_in_flight(2);
@@ -644,7 +644,7 @@ namespace tempest::render_graph
             .buffer_lifetimes = {},
         };
 
-        // 2. Act: Render at 1280x720 across 2 frames in flight
+        // Act: Render at 1280x720 across 2 frames in flight
         allocator.set_frame_slot(0);
         allocator.allocate(dev, dag, textures, {}, 1280, 720);
         EXPECT_EQ(dev.created_textures, 1U);
@@ -655,7 +655,7 @@ namespace tempest::render_graph
         EXPECT_EQ(dev.created_textures, 2U);
         EXPECT_EQ(allocator.get_texture_pool_count(), 2U);
 
-        // 3. Act: Resize viewport to 1920x1080 on frame slot 0
+        // Act: Resize viewport to 1920x1080 on frame slot 0
         allocator.set_frame_slot(0);
         allocator.allocate(dev, dag, textures, {}, 1920, 1080);
         // Slot 0 allocated a new 1920x1080 texture and evicted the old 1280x720 texture from slot 0
@@ -663,7 +663,7 @@ namespace tempest::render_graph
         EXPECT_EQ(dev.destroyed_textures, 1U);
         EXPECT_EQ(allocator.get_texture_pool_count(), 2U); // 1 stale from slot 1, 1 new from slot 0
 
-        // 4. Act: Next frame on frame slot 1 at 1920x1080
+        // Act: Next frame on frame slot 1 at 1920x1080
         allocator.set_frame_slot(1);
         allocator.allocate(dev, dag, textures, {}, 1920, 1080);
         // Slot 1 allocated a new 1920x1080 texture and evicted the old 1280x720 texture from slot 1
@@ -671,7 +671,7 @@ namespace tempest::render_graph
         EXPECT_EQ(dev.destroyed_textures, 2U);
         EXPECT_EQ(allocator.get_texture_pool_count(), 2U); // Only the 2 new 1920x1080 textures remain in pool
 
-        // 5. Subsequent frames at 1920x1080 recycle smoothly with zero allocations or destructions
+        // Subsequent frames at 1920x1080 recycle smoothly with zero allocations or destructions
         allocator.set_frame_slot(0);
         allocator.allocate(dev, dag, textures, {}, 1920, 1080);
         EXPECT_EQ(dev.created_textures, 4U);
@@ -684,7 +684,7 @@ namespace tempest::render_graph
         EXPECT_EQ(dev.destroyed_textures, 2U);
         EXPECT_EQ(allocator.get_texture_pool_count(), 2U);
 
-        // 6. Teardown
+        // Teardown
         allocator.release_all(dev);
         EXPECT_EQ(dev.destroyed_textures, 4U);
     }
@@ -692,7 +692,7 @@ namespace tempest::render_graph
     /// @brief Tests that unused transient buffers are aged out and evicted after max_unused_cycles.
     TEST(transient_allocator_test, unused_buffer_eviction_after_max_cycles)
     {
-        // 1. Setup: Mock device and transient allocator with max_unused_cycles = 2
+        // Setup: Mock device and transient allocator with max_unused_cycles = 2
         auto dev = mock_device{};
         auto allocator = transient_allocator{};
         allocator.set_frames_in_flight(1);
@@ -735,22 +735,22 @@ namespace tempest::render_graph
             .buffer_lifetimes = {},
         };
 
-        // 2. Act: Allocate buffer in frame 0
+        // Act: Allocate buffer in frame 0
         allocator.allocate(dev, dag_with_buffer, {}, buffers, 1920, 1080);
         EXPECT_EQ(dev.created_buffers, 1U);
         EXPECT_EQ(allocator.get_buffer_pool_count(), 1U);
 
-        // 3. Act: Frame 1 with empty DAG (unused cycle 1, should NOT evict yet since max_unused_cycles = 2)
+        // Act: Frame 1 with empty DAG (unused cycle 1, should NOT evict yet since max_unused_cycles = 2)
         allocator.allocate(dev, empty_dag, {}, buffers, 1920, 1080);
         EXPECT_EQ(dev.destroyed_buffers, 0U);
         EXPECT_EQ(allocator.get_buffer_pool_count(), 1U);
 
-        // 4. Act: Frame 2 with empty DAG (unused cycle 2, hits max_unused_cycles, evicts buffer)
+        // Act: Frame 2 with empty DAG (unused cycle 2, hits max_unused_cycles, evicts buffer)
         allocator.allocate(dev, empty_dag, {}, buffers, 1920, 1080);
         EXPECT_EQ(dev.destroyed_buffers, 1U);
         EXPECT_EQ(allocator.get_buffer_pool_count(), 0U);
 
-        // 5. Teardown
+        // Teardown
         allocator.release_all(dev);
         EXPECT_EQ(dev.destroyed_buffers, 1U);
     }

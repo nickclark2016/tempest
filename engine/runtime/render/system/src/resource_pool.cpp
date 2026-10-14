@@ -231,7 +231,7 @@ namespace tempest::render_system
             return;
         }
 
-        // 1. Persistent Device-Local Buffers (VRAM)
+        // Persistent Device-Local Buffers (VRAM)
         _vertex_buffer = _device->create_buffer(rhi::buffer_desc{
             .size = _cfg.initial_vertex_buffer_size,
             .memory_usage = rhi::memory_usage::device_only,
@@ -261,7 +261,7 @@ namespace tempest::render_system
             .name = "ResourceStagingBuffer",
         });
 
-        // 2. Dynamic Per-Frame Upload Buffers (Host-Visible / Coherent)
+        // Dynamic Per-Frame Upload Buffers (Host-Visible / Coherent)
         _scene_constants_buffer = _device->create_buffer(rhi::buffer_desc{
             .size = sizeof(scene_constants) * _cfg.frames_in_flight,
             .memory_usage = rhi::memory_usage::upload,
@@ -407,7 +407,7 @@ namespace tempest::render_system
             // Pack into staging buffer
             auto* current_staging = staging_ptr + staging_byte_offset;
 
-            // 1. Positions
+            // Positions
             for (uint32_t i = 0; i < vtx_count; ++i)
             {
                 auto* pos_dst = reinterpret_cast<float*>(current_staging + pos_offset + (i * 3 * sizeof(float)));
@@ -416,7 +416,7 @@ namespace tempest::render_system
                 pos_dst[2] = m.vertices[i].position.z;
             }
 
-            // 2. Interleaved: uv, normal, tangent, color
+            // Interleaved: uv, normal, tangent, color
             for (uint32_t i = 0; i < vtx_count; ++i)
             {
                 auto* attr_dst = reinterpret_cast<float*>(current_staging + interleave_offset + (i * stride));
@@ -439,7 +439,7 @@ namespace tempest::render_system
                 attr_dst[12] = m.vertices[i].color.w;
             }
 
-            // 3. Indices
+            // Indices
             if (idx_count > 0)
             {
                 tempest::memcpy(current_staging + idx_offset, m.indices.data(), idx_size);

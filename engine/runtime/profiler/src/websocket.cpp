@@ -227,10 +227,10 @@ namespace tempest::profiler
         auto frame = vector<byte>{};
         const auto payload_size = payload.size();
 
-        // 1. Byte 0: FIN bit (0x80) | opcode
+        // Byte 0: FIN bit (0x80) | opcode
         frame.push_back(static_cast<byte>(0x80 | (static_cast<uint8_t>(opcode) & 0x0F)));
 
-        // 2. Length (Server to client: mask bit is 0)
+        // Length (Server to client: mask bit is 0)
         if (payload_size <= 125)
         {
             frame.push_back(static_cast<byte>(payload_size));
@@ -250,7 +250,7 @@ namespace tempest::profiler
             }
         }
 
-        // 3. Append payload
+        // Append payload
         frame.insert(frame.end(), payload.begin(), payload.end());
         return frame;
     }
@@ -260,10 +260,10 @@ namespace tempest::profiler
         auto frame = vector<byte>{};
         const auto payload_size = payload.size();
 
-        // 1. Byte 0: FIN bit (0x80) | opcode
+        // Byte 0: FIN bit (0x80) | opcode
         frame.push_back(static_cast<byte>(0x80 | (static_cast<uint8_t>(opcode) & 0x0F)));
 
-        // 2. Length (Client to server: mask bit is 0x80)
+        // Length (Client to server: mask bit is 0x80)
         if (payload_size <= 125)
         {
             frame.push_back(static_cast<byte>(0x80 | static_cast<uint8_t>(payload_size)));
@@ -283,7 +283,7 @@ namespace tempest::profiler
             }
         }
 
-        // 3. Mask Key
+        // Mask Key
         const uint8_t mask_bytes[4] = {
             static_cast<uint8_t>((mask_key >> 24) & 0xFF),
             static_cast<uint8_t>((mask_key >> 16) & 0xFF),
@@ -295,7 +295,7 @@ namespace tempest::profiler
             frame.push_back(static_cast<byte>(mask_bytes[i]));
         }
 
-        // 4. Mask and append payload
+        // Mask and append payload
         frame.reserve(frame.size() + payload_size);
         for (auto i = size_t{0}; i < payload_size; ++i)
         {

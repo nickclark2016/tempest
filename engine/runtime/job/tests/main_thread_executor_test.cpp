@@ -32,14 +32,14 @@ namespace tempest::job::tests
     ///        when dispatch_pending() is invoked on the main thread.
     TEST(job_main_thread_executor_test, post_callback_executes_in_order)
     {
-        // 1. Setup: Construct an empty main_thread_executor
+        // Setup: Construct an empty main_thread_executor
         auto executor = main_thread_executor{};
         EXPECT_TRUE(executor.empty());
         EXPECT_EQ(executor.capacity(), 2048u);
 
         auto execution_order = vector<int>{};
 
-        // 2. Act: Post sequential callbacks recording ordered values
+        // Act: Post sequential callbacks recording ordered values
         executor.post([&execution_order]() { execution_order.push_back(10); });
         executor.post([&execution_order]() { execution_order.push_back(20); });
         executor.post([&execution_order]() { execution_order.push_back(30); });
@@ -51,7 +51,7 @@ namespace tempest::job::tests
         // Drain pending tasks on main thread
         const auto dispatched = executor.dispatch_pending();
 
-        // 3. Assert: All callbacks executed in exact FIFO order
+        // Assert: All callbacks executed in exact FIFO order
         EXPECT_EQ(dispatched, 5u);
         EXPECT_TRUE(executor.empty());
         ASSERT_EQ(execution_order.size(), 5u);
@@ -65,14 +65,14 @@ namespace tempest::job::tests
     /// @brief Verifies that dispatch_pending() returns 0 when the executor is empty.
     TEST(job_main_thread_executor_test, empty_executor_dispatch_returns_zero)
     {
-        // 1. Setup: Empty executor
+        // Setup: Empty executor
         auto executor = main_thread_executor{};
         EXPECT_TRUE(executor.empty());
 
-        // 2. Act: Dispatch on empty executor
+        // Act: Dispatch on empty executor
         const auto dispatched = executor.dispatch_pending();
 
-        // 3. Assert: Zero tasks were dispatched
+        // Assert: Zero tasks were dispatched
         EXPECT_EQ(dispatched, 0u);
         EXPECT_TRUE(executor.empty());
     }
@@ -81,11 +81,11 @@ namespace tempest::job::tests
     ///        and that the subsequent callback executes properly.
     TEST(job_main_thread_executor_test, nested_callback_posts_and_dispatches)
     {
-        // 1. Setup: Executor and state tracking
+        // Setup: Executor and state tracking
         auto executor = main_thread_executor{};
         auto nested_executed = false;
 
-        // 2. Act: Post outer task which posts inner task
+        // Act: Post outer task which posts inner task
         executor.post([&executor, &nested_executed]() {
             executor.post([&nested_executed]() {
                 nested_executed = true;
@@ -94,7 +94,7 @@ namespace tempest::job::tests
 
         const auto first_dispatched = executor.dispatch_pending();
 
-        // 3. Assert: Outer task ran, inner task ran (or drained)
+        // Assert: Outer task ran, inner task ran (or drained)
         EXPECT_GT(first_dispatched, 0u);
         if (!nested_executed)
         {
@@ -114,7 +114,7 @@ namespace tempest::job::tests
     ///        main thread with matching thread identity.
     TEST(job_main_thread_executor_test, coroutine_resumes_on_main_thread)
     {
-        // 1. Setup: Executor and thread identity trackers
+        // Setup: Executor and thread identity trackers
         auto executor = main_thread_executor{};
         const auto main_thread_id = tempest::this_thread::get_id();
         auto background_thread_id = tempest::thread::id{};
@@ -123,7 +123,7 @@ namespace tempest::job::tests
 
         auto worker_task = async_worker_task(executor, &background_thread_id, &resumed_thread_id, &completed);
 
-        // 2. Act: Resume the coroutine on a background thread until it awaits resume_on_main_thread
+        // Act: Resume the coroutine on a background thread until it awaits resume_on_main_thread
         auto worker = tempest::thread{[&worker_task]() {
             worker_task.resume();
         }};
@@ -136,7 +136,7 @@ namespace tempest::job::tests
         // Dispatch on main thread
         const auto dispatched = executor.dispatch_pending();
 
-        // 3. Assert: Resumed on the main thread and completed
+        // Assert: Resumed on the main thread and completed
         EXPECT_EQ(dispatched, 1u);
         EXPECT_TRUE(completed.load(memory_order::acquire));
         EXPECT_NE(background_thread_id, main_thread_id);
@@ -153,7 +153,7 @@ namespace tempest::job::tests
     ///        while the main thread concurrently pumps dispatch_pending().
     TEST(job_main_thread_executor_test, high_contention_stress_test)
     {
-        // 1. Setup: Initialize executor and synchronization counters
+        // Setup: Initialize executor and synchronization counters
         constexpr auto thread_count = size_t{16};
         constexpr auto tasks_per_thread = size_t{3125};
         constexpr auto total_tasks = thread_count * tasks_per_thread; // Exactly 50,000 tasks
@@ -162,7 +162,7 @@ namespace tempest::job::tests
         auto executed_count = atomic<size_t>{0};
         auto threads_finished = atomic<size_t>{0};
 
-        // 2. Act: Spawn 16 concurrent background worker threads posting tasks
+        // Act: Spawn 16 concurrent background worker threads posting tasks
         auto workers = vector<tempest::thread>{};
         workers.reserve(thread_count);
 
@@ -195,7 +195,7 @@ namespace tempest::job::tests
         // Final pump to drain any trailing items
         total_dispatched += executor.dispatch_pending();
 
-        // 3. Assert: Exactly 50,000 tasks were dispatched and executed with zero dropped items
+        // Assert: Exactly 50,000 tasks were dispatched and executed with zero dropped items
         EXPECT_EQ(total_dispatched, total_tasks);
         EXPECT_EQ(executed_count.load(memory_order::acquire), total_tasks);
         EXPECT_TRUE(executor.empty());

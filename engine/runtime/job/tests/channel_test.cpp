@@ -33,7 +33,7 @@ namespace tempest::job::tests
     ///        and that a consumer pop awakens the producer to complete its push.
     TEST(channel_test, full_channel_yield_and_consumer_wakeup)
     {
-        // 1. Setup: Channel with capacity 2
+        // Setup: Channel with capacity 2
         auto chan = channel<int, 2>{};
         EXPECT_TRUE(chan.try_push(10).has_value());
         EXPECT_TRUE(chan.try_push(20).has_value());
@@ -44,7 +44,7 @@ namespace tempest::job::tests
         bool p3_done = false;
         auto p3 = producer_coro(chan, 30, &p3_done);
 
-        // 2. Act: Producer tries to push and suspends
+        // Act: Producer tries to push and suspends
         p3.resume();
         EXPECT_FALSE(p3_done);
         EXPECT_FALSE(p3.is_ready());
@@ -54,7 +54,7 @@ namespace tempest::job::tests
         auto c1 = consumer_coro(chan, &popped1);
         c1.resume();
 
-        // 3. Assert: Consumer read first item and awakened p3
+        // Assert: Consumer read first item and awakened p3
         EXPECT_EQ(popped1, 10);
         EXPECT_TRUE(p3_done);
         EXPECT_TRUE(p3.is_ready());
@@ -75,7 +75,7 @@ namespace tempest::job::tests
     ///        compete for a newly freed slot upon consumer pop.
     TEST(channel_test, guarded_race_loss_retry_loop)
     {
-        // 1. Setup: Capacity 2 channel filled with 2 items
+        // Setup: Capacity 2 channel filled with 2 items
         auto chan = channel<int, 2>{};
         EXPECT_TRUE(chan.try_push(100).has_value());
         EXPECT_TRUE(chan.try_push(150).has_value());
@@ -98,7 +98,7 @@ namespace tempest::job::tests
         auto t1 = p1();
         auto t2 = p2();
 
-        // 2. Act: Both producers attempt to push and suspend
+        // Act: Both producers attempt to push and suspend
         t1.resume();
         t2.resume();
 
@@ -110,7 +110,7 @@ namespace tempest::job::tests
         EXPECT_TRUE(item1.has_value());
         EXPECT_EQ(item1.value(), 100);
 
-        // 3. Assert: Exactly one producer committed into the newly freed slot
+        // Assert: Exactly one producer committed into the newly freed slot
         EXPECT_TRUE(p1_done || p2_done);
         EXPECT_FALSE(p1_done && p2_done);
 
@@ -130,13 +130,13 @@ namespace tempest::job::tests
     ///        throughput, ordering, and checksum integrity across thousands of items.
     TEST(channel_test, spsc_throughput_and_ordering)
     {
-        // 1. Setup
+        // Setup
         auto chan = spsc_channel<int, 64>{};
         constexpr int count = 5000;
         int64_t push_checksum = 0;
         int64_t pop_checksum = 0;
 
-        // 2. Act
+        // Act
         for (int i = 0; i < count; ++i)
         {
             push_checksum += i;
@@ -148,7 +148,7 @@ namespace tempest::job::tests
             pop_checksum += val;
         }
 
-        // 3. Assert
+        // Assert
         EXPECT_EQ(pop_checksum, push_checksum);
     }
 
@@ -161,7 +161,7 @@ namespace tempest::job::tests
     ///        commit when sys.step() is explicitly called.
     TEST(channel_test, deterministic_stepping_channel_yield)
     {
-        // 1. Setup: Single-stepped job system harness
+        // Setup: Single-stepped job system harness
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -176,7 +176,7 @@ namespace tempest::job::tests
 
         bool producer_committed = false;
 
-        // 2. Act: Spawn producer task into job system
+        // Act: Spawn producer task into job system
         [[maybe_unused]] auto prod_task = sys.async([&chan, &producer_committed]() -> task<void> {
             co_await chan.push(99);
             producer_committed = true;
@@ -195,7 +195,7 @@ namespace tempest::job::tests
         // Producer has been awakened into the ready queue, but has NOT stepped yet!
         EXPECT_FALSE(producer_committed);
 
-        // 3. Assert: Step the job system -> producer commits
+        // Assert: Step the job system -> producer commits
         sys.step();
         EXPECT_TRUE(producer_committed);
 

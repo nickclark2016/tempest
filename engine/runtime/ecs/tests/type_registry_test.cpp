@@ -37,25 +37,25 @@ namespace
 /// completely isolated type indices with zero cross-contamination.
 TEST(component_type_registry_tests, separate_registries_isolate_indices)
 {
-    // 1. Setup two independent type registries.
+    // Setup two independent type registries.
     auto registry_a = tempest::ecs::component_type_registry{};
     auto registry_b = tempest::ecs::component_type_registry{};
 
-    // 2. Act: register Alpha then Beta on registry A.
+    // Act: register Alpha then Beta on registry A.
     const auto alpha_idx_a = registry_a.register_type<component_alpha>();
     const auto beta_idx_a = registry_a.register_type<component_beta>();
 
-    // 3. Act: register Beta then Alpha on registry B in inverted order.
+    // Act: register Beta then Alpha on registry B in inverted order.
     const auto beta_idx_b = registry_b.register_type<component_beta>();
     const auto alpha_idx_b = registry_b.register_type<component_alpha>();
 
-    // 4. Assert: verify distinct indices between the registries.
+    // Assert: verify distinct indices between the registries.
     ASSERT_EQ(alpha_idx_a, 0U);
     ASSERT_EQ(beta_idx_a, 1U);
     ASSERT_EQ(beta_idx_b, 0U);
     ASSERT_EQ(alpha_idx_b, 1U);
 
-    // 5. Assert: query type_index accessors to ensure zero cross-contamination.
+    // Assert: query type_index accessors to ensure zero cross-contamination.
     const auto lookup_beta_a = registry_a.type_index<component_beta>();
     const auto lookup_beta_b = registry_b.type_index<component_beta>();
 
@@ -68,15 +68,15 @@ TEST(component_type_registry_tests, separate_registries_isolate_indices)
 /// @brief Verifies that registering the same component type multiple times is idempotent.
 TEST(component_type_registry_tests, ensure_is_idempotent)
 {
-    // 1. Setup type registry.
+    // Setup type registry.
     auto registry = tempest::ecs::component_type_registry{};
 
-    // 2. Act: register the same type multiple times.
+    // Act: register the same type multiple times.
     const auto first_idx = registry.ensure<component_alpha>();
     const auto second_idx = registry.ensure<component_alpha>();
     const auto third_idx = registry.register_type<component_alpha>();
 
-    // 3. Assert: verify returned index is stable and registry count remains 1.
+    // Assert: verify returned index is stable and registry count remains 1.
     ASSERT_EQ(first_idx, 0U);
     ASSERT_EQ(second_idx, 0U);
     ASSERT_EQ(third_idx, 0U);
@@ -87,13 +87,13 @@ TEST(component_type_registry_tests, ensure_is_idempotent)
 /// @brief Verifies that component_type_info retrieves correct size, alignment, and metadata.
 TEST(component_type_registry_tests, type_info_retrieval)
 {
-    // 1. Setup type registry.
+    // Setup type registry.
     auto registry = tempest::ecs::component_type_registry{};
 
-    // 2. Act: register a component type.
+    // Act: register a component type.
     const auto idx = registry.register_type<component_beta>();
 
-    // 3. Assert: inspect type_info by index and by name.
+    // Assert: inspect type_info by index and by name.
     const auto& info_by_idx = registry.type_info(idx);
     ASSERT_EQ(info_by_idx.index, idx);
     ASSERT_EQ(info_by_idx.size, sizeof(component_beta));
@@ -108,25 +108,25 @@ TEST(component_type_registry_tests, type_info_retrieval)
 /// @brief Verifies alias resolution for legacy and migrated component names.
 TEST(component_type_registry_tests, alias_resolution)
 {
-    // 1. Setup type registry.
+    // Setup type registry.
     auto registry = tempest::ecs::component_type_registry{};
 
-    // 2. Act: register alias before type registration.
+    // Act: register alias before type registration.
     static constexpr auto legacy_name = tempest::string_view{"OldTransform"};
     static constexpr auto canonical_name = tempest::string_view{"Transform"};
 
     registry.add_alias(legacy_name, canonical_name);
 
-    // 3. Assert: alias resolution directly.
+    // Assert: alias resolution directly.
     ASSERT_EQ(registry.resolve_alias(legacy_name), canonical_name);
     ASSERT_EQ(registry.resolve_alias(canonical_name), canonical_name);
 
-    // 4. Act: register type with canonical name.
+    // Act: register type with canonical name.
     const auto canonical_idx = registry.register_type<component_alpha>();
     // Add alias pointing to the registered canonical name.
     registry.add_alias(legacy_name, registry.type_info(canonical_idx).name);
 
-    // 5. Assert: type_index and type_info with legacy alias return canonical entry.
+    // Assert: type_index and type_info with legacy alias return canonical entry.
     const auto legacy_idx = registry.type_index(legacy_name);
     ASSERT_TRUE(legacy_idx.has_value());
     ASSERT_EQ(*legacy_idx, canonical_idx);
@@ -160,14 +160,14 @@ namespace
 /// exceeding capacity triggers an assertion failure.
 TEST(component_type_registry_tests, max_capacity_hard_error)
 {
-    // 1. Setup registry with max capacity constant.
+    // Setup registry with max capacity constant.
     auto registry = tempest::ecs::component_type_registry{};
     static constexpr auto max_types = tempest::ecs::component_type_registry::max_component_types;
 
-    // 2. Act: register exactly 256 distinct component types.
+    // Act: register exactly 256 distinct component types.
     register_dummy_types<max_types>(registry);
 
-    // 3. Assert: verify all 256 types registered.
+    // Assert: verify all 256 types registered.
     ASSERT_EQ(registry.size(), max_types);
 
     const auto first_dummy = registry.type_index<dummy_component<0>>();
@@ -177,7 +177,7 @@ TEST(component_type_registry_tests, max_capacity_hard_error)
     ASSERT_EQ(*first_dummy, 0U);
     ASSERT_EQ(*last_dummy, static_cast<uint32_t>(max_types - 1));
 
-    // 4. Assert: registering the 257th type fails / asserts in debug builds.
+    // Assert: registering the 257th type fails / asserts in debug builds.
 #ifndef NDEBUG
     ASSERT_DEATH_IF_SUPPORTED({ registry.register_type<dummy_component<max_types>>(); }, ".*");
 #endif
@@ -190,13 +190,13 @@ TEST(component_type_registry_tests, max_capacity_hard_error)
 /// @brief Verifies that hash_mask produces correct bit patterns for component type packs.
 TEST(component_type_registry_tests, hash_mask_generation)
 {
-    // 1. Setup type registry.
+    // Setup type registry.
     auto registry = tempest::ecs::component_type_registry{};
 
-    // 2. Act: compute hash mask for Alpha, Beta, Gamma.
+    // Act: compute hash mask for Alpha, Beta, Gamma.
     const auto mask = registry.hash_mask<component_alpha, component_beta, component_gamma>();
 
-    // 3. Assert: verify bits corresponding to Alpha, Beta, Gamma are set.
+    // Assert: verify bits corresponding to Alpha, Beta, Gamma are set.
     const auto alpha_idx = *registry.type_index<component_alpha>();
     const auto beta_idx = *registry.type_index<component_beta>();
     const auto gamma_idx = *registry.type_index<component_gamma>();
@@ -214,19 +214,19 @@ TEST(component_type_registry_tests, hash_mask_generation)
 /// component_type_registry share identical component indices and interoperable types.
 TEST(component_type_registry_tests, shared_type_registry_with_archetypes)
 {
-    // 1. Setup shared component_type_registry and event registry.
+    // Setup shared component_type_registry and event registry.
     auto shared_types = tempest::ecs::component_type_registry{};
     auto events = tempest::event::event_registry{};
 
-    // 2. Setup two basic_archetype_registry instances sharing the same type registry.
+    // Setup two basic_archetype_registry instances sharing the same type registry.
     auto registry_a = tempest::ecs::basic_archetype_registry{events, shared_types};
     auto registry_b = tempest::ecs::basic_archetype_registry{events, shared_types};
 
-    // 3. Act: create entities with components in both registries.
+    // Act: create entities with components in both registries.
     const auto entity_a = registry_a.create_initialized(component_alpha{.value = 42}, component_beta{.x = 1.0F, .y = 2.0F});
     const auto entity_b = registry_b.create_initialized(component_beta{.x = 3.0F, .y = 4.0F}, component_gamma{.identifier = 999});
 
-    // 4. Assert: both registries have access to the same type indices.
+    // Assert: both registries have access to the same type indices.
     ASSERT_EQ(&registry_a.type_registry(), &shared_types);
     ASSERT_EQ(&registry_b.type_registry(), &shared_types);
 
@@ -242,7 +242,7 @@ TEST(component_type_registry_tests, shared_type_registry_with_archetypes)
     ASSERT_TRUE(beta_idx_b.has_value());
     ASSERT_EQ(*beta_idx_a, *beta_idx_b);
 
-    // 5. Assert: components are retrieved correctly from their respective entities.
+    // Assert: components are retrieved correctly from their respective entities.
     ASSERT_TRUE((registry_a.has<component_alpha, component_beta>(entity_a)));
     ASSERT_EQ(registry_a.get<component_alpha>(entity_a).value, 42);
 
@@ -291,7 +291,7 @@ namespace tempest::ecs
 /// fields by offset then name deterministically.
 TEST(component_type_registry_tests, export_manifest_deterministic_sorting)
 {
-    // 1. Setup: create two registries registering types in opposite orders.
+    // Setup: create two registries registering types in opposite orders.
     auto registry_a = tempest::ecs::component_type_registry{};
     auto registry_b = tempest::ecs::component_type_registry{};
 
@@ -303,17 +303,17 @@ TEST(component_type_registry_tests, export_manifest_deterministic_sorting)
     registry_b.register_type<component_gamma>();
     registry_b.register_type<reflected_manifest_component>();
 
-    // 2. Act: export manifests.
+    // Act: export manifests.
     const auto manifest_a = registry_a.export_manifest();
     const auto manifest_b = registry_b.export_manifest();
 
-    // 3. Assert: manifests match identically in size, schema hash, and entry ordering.
+    // Assert: manifests match identically in size, schema hash, and entry ordering.
     ASSERT_EQ(manifest_a.types.size(), 3U);
     ASSERT_EQ(manifest_b.types.size(), 3U);
     EXPECT_EQ(manifest_a.schema_hash, manifest_b.schema_hash);
     EXPECT_EQ(manifest_a.to_json(), manifest_b.to_json());
 
-    // 4. Assert: reflected component fields are sorted by offset (second_field at 0, first_field at 4).
+    // Assert: reflected component fields are sorted by offset (second_field at 0, first_field at 4).
     const auto* reflected_entry = static_cast<const tempest::ecs::type_manifest_entry*>(nullptr);
     for (const auto& entry : manifest_a.types)
     {
@@ -335,7 +335,7 @@ TEST(component_type_registry_tests, export_manifest_deterministic_sorting)
 /// while still including them in the full exported manifest.
 TEST(component_type_registry_tests, schema_hash_ignores_non_serializable_types)
 {
-    // 1. Setup: registry with only serializable components.
+    // Setup: registry with only serializable components.
     auto base_registry = tempest::ecs::component_type_registry{};
     base_registry.register_type<component_alpha>();
     base_registry.register_type<component_beta>();
@@ -343,13 +343,13 @@ TEST(component_type_registry_tests, schema_hash_ignores_non_serializable_types)
     const auto base_hash = base_registry.schema_hash();
     ASSERT_NE(base_hash, 0ULL);
 
-    // 2. Act: add non-serializable component.
+    // Act: add non-serializable component.
     base_registry.register_type<non_serializable_manifest_component>();
 
-    // 3. Assert: schema_hash remains identical.
+    // Assert: schema_hash remains identical.
     EXPECT_EQ(base_registry.schema_hash(), base_hash);
 
-    // 4. Assert: exported manifest contains the non-serializable entry marked correctly.
+    // Assert: exported manifest contains the non-serializable entry marked correctly.
     const auto manifest = base_registry.export_manifest();
     EXPECT_EQ(manifest.schema_hash, base_hash);
     ASSERT_EQ(manifest.types.size(), 3U);

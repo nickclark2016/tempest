@@ -498,7 +498,7 @@
       return;
     }
 
-    // 1. Process CPU tracks, markers, and metrics for frame.frame_index
+    // Process CPU tracks, markers, and metrics for frame.frame_index
     let cpuFrame = state.frames.find(f => f.frame_index === frame.frame_index);
     if (!cpuFrame) {
       cpuFrame = {
@@ -531,7 +531,7 @@
       }
     }
     updateDataBounds(cpuFrame);
-    // 2. Process GPU tracks: route each GPU zone to its originating CPU frame_index
+    // Process GPU tracks: route each GPU zone to its originating CPU frame_index
     const affectedFrames = new Set();
     affectedFrames.add(cpuFrame);
 
@@ -941,16 +941,16 @@
       state.tracks = logicalTracks;
     } else {
       state.tracks = Array.from(trackMap.values()).sort((a, b) => {
-        // 1. CPU tracks above GPU tracks
+        // CPU tracks above GPU tracks
         if (a.type !== b.type) {
           return a.type === 'cpu' ? -1 : 1;
         }
-        // 2. Main Thread first among CPU tracks
+        // Main Thread first among CPU tracks
         if (a.type === 'cpu') {
           if (a.name === 'Main Thread') return -1;
           if (b.name === 'Main Thread') return 1;
         }
-        // 3. Graphics Queue first among GPU tracks
+        // Graphics Queue first among GPU tracks
         if (a.type === 'gpu') {
           if (a.name.includes('Graphics')) return -1;
           if (b.name.includes('Graphics')) return 1;
@@ -1068,10 +1068,10 @@
     const nsToX = (ns) => ((ns - state.viewStartNs) / visibleDuration) * width;
     const xToNs = (x) => state.viewStartNs + (x / width) * visibleDuration;
 
-    // 1. Draw Grid Lines & Time Subdivisions
+    // Draw Grid Lines & Time Subdivisions
     renderGrid(timelineCtx, width, height, nsToX, visibleDuration);
 
-    // 2. Draw Tracks & Zones
+    // Draw Tracks & Zones
     let currentY = state.rulerHeight - state.scrollY;
     state.searchResultsCount = 0;
 
@@ -1126,11 +1126,11 @@
       if (currentY + trackHeight >= state.rulerHeight && currentY <= height) {
         const isGpu = track.type === 'gpu';
 
-        // 1. Horizontal Separator between threads/queues
+        // Horizontal Separator between threads/queues
         timelineCtx.fillStyle = '#30363d';
         timelineCtx.fillRect(0, currentY, width, 1);
 
-        // 2. Track Header Background (just below the separator)
+        // Track Header Background (just below the separator)
         timelineCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.12)' : '#161b22';
         timelineCtx.fillRect(0, currentY + 1, width, state.trackHeaderHeight - 1);
 
@@ -1165,7 +1165,7 @@
         timelineCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.02)' : 'rgba(88, 166, 255, 0.02)';
         timelineCtx.fillRect(0, currentY + state.trackHeaderHeight + 1, width, state.frameHeaderHeight - 1);
 
-        // 3. Zones: Start vertically beneath the frame header lane
+        // Zones: Start vertically beneath the frame header lane
         if (!isCollapsed) {
           let lastDrawnPixel = -1;
           const query = state.searchQuery.trim().toLowerCase();
@@ -1261,13 +1261,13 @@
 
     state.totalContentHeight = currentY + state.scrollY;
 
-    // 3. Draw Cross-Thread Coroutine Flow Curves (SVG Overlay)
+    // Draw Cross-Thread Coroutine Flow Curves (SVG Overlay)
     renderFlowOverlay(width, height, nsToX);
 
-    // 4. Draw Frame Boundaries (CPU vs GPU frames & correlation)
+    // Draw Frame Boundaries (CPU vs GPU frames & correlation)
     renderFrameBoundaries(timelineCtx, width, height, nsToX, visibleDuration);
 
-    // 5. Draw Marquee Selection
+    // Draw Marquee Selection
     if (state.selectionRange) {
       const selStartX = nsToX(state.selectionRange.startNs);
       const selEndX = nsToX(state.selectionRange.endNs);
@@ -1282,7 +1282,7 @@
       timelineCtx.strokeRect(selX, state.rulerHeight, selW, height - state.rulerHeight);
     }
 
-    // 6. Draw Sticky Top Ruler
+    // Draw Sticky Top Ruler
     renderRuler(timelineCtx, width, nsToX, visibleDuration);
 
     // Update search count badge
@@ -1411,7 +1411,7 @@
       <g clip-path="url(#${idPrefix}-flow-clip)">
     `;
 
-    // 1. Slice-to-slice flow curves (teal)
+    // Slice-to-slice flow curves (teal)
     if (slices.length >= 2) {
       for (let i = 0; i < slices.length - 1; i++) {
         const s1 = slices[i];
@@ -1464,7 +1464,7 @@
       }
     }
 
-    // 2. Spawn provenance curve (dashed purple #a371f7)
+    // Spawn provenance curve (dashed purple #a371f7)
     const prov = getCoroutineProvenance(activeCoroId);
     if (prov) {
       const childSlice0 = slices[0];
@@ -1581,7 +1581,7 @@
       }
     }
 
-    // 3. Await provenance curve (dashed amber #d29922)
+    // Await provenance curve (dashed amber #d29922)
     if (prov) {
       const childFinalSlice = slices[slices.length - 1];
       const childGeom = childFinalSlice ? getZoneGeometry(childFinalSlice, nsToX, trackMapById, isPopout, tracks) : null;
@@ -1728,7 +1728,7 @@
     for (const frame of state.frames) {
       const isHovered = (state.hoveredFrameIndex === frame.frame_index);
 
-      // 1. CPU Frame Boundary
+      // CPU Frame Boundary
       if (frame.cpuStartNs !== null && frame.cpuEndNs !== null) {
         const x0 = nsToX(frame.cpuStartNs);
         const x1 = nsToX(frame.cpuEndNs);
@@ -1770,7 +1770,7 @@
         frame.cpuBadgeRect = null;
       }
 
-      // 2. GPU Frame Boundary
+      // GPU Frame Boundary
       if (frame.gpuStartNs !== null && frame.gpuEndNs !== null) {
         const gx0 = nsToX(frame.gpuStartNs);
         const gx1 = nsToX(frame.gpuEndNs);
@@ -1812,7 +1812,7 @@
         frame.gpuBadgeRect = null;
       }
 
-      // 3. Correlation Indicator for Hovered Frame
+      // Correlation Indicator for Hovered Frame
       if (isHovered && frame.cpuEndNs !== null && frame.gpuStartNs !== null) {
         const cpuEndX = nsToX(frame.cpuEndNs);
         const gpuStartX = nsToX(frame.gpuStartNs);
@@ -2339,7 +2339,7 @@
       const chainDiv = document.createElement('div');
       chainDiv.className = 'coroutine-causality-chain';
 
-      // 1. Spawned By Step
+      // Spawned By Step
       const spawnStep = document.createElement('div');
       spawnStep.className = 'causality-step';
       let spawnContent = '';
@@ -2363,7 +2363,7 @@
       }
       chainDiv.appendChild(spawnStep);
 
-      // 2. Coroutine Slices Step
+      // Coroutine Slices Step
       const curStep = document.createElement('div');
       curStep.className = 'causality-step';
       const slices = state.coroutineIndex.get(zone.coroutine_id) || [zone];
@@ -2381,7 +2381,7 @@
       });
       chainDiv.appendChild(curStep);
 
-      // 3. Awaited By Step
+      // Awaited By Step
       const awaitStep = document.createElement('div');
       awaitStep.className = 'causality-step';
       let awaitContent = '';
@@ -2891,10 +2891,10 @@
     if (visibleDuration <= 0) return;
     const nsToX = (ns) => ((ns - popoutState.viewStartNs) / visibleDuration) * width;
 
-    // 1. Grid
+    // Grid
     renderPopoutGrid(popoutCtx, width, height, nsToX, visibleDuration);
 
-    // 2. Tracks rendering with AGENTS.md Rule 25 layout
+    // Tracks rendering with AGENTS.md Rule 25 layout
     popoutCtx.save();
     popoutCtx.beginPath();
     popoutCtx.rect(0, state.rulerHeight, width, height - state.rulerHeight);
@@ -2915,11 +2915,11 @@
       if (currentY + trackHeight >= state.rulerHeight && currentY <= height) {
         const isGpu = track.type === 'gpu';
 
-        // 1. Horizontal separator
+        // Horizontal separator
         popoutCtx.fillStyle = '#30363d';
         popoutCtx.fillRect(0, currentY, width, 1);
 
-        // 2. Lane 1: Track Header Strip (22px)
+        // Lane 1: Track Header Strip (22px)
         popoutCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.12)' : '#161b22';
         popoutCtx.fillRect(0, currentY + 1, width, state.trackHeaderHeight - 1);
 
@@ -2944,7 +2944,7 @@
         popoutCtx.font = '10px monospace';
         popoutCtx.fillText(`(${track.zones.length} zones)`, 24 + popoutCtx.measureText(trackTitle).width + 8, currentY + 15);
 
-        // 3. Lane 2: Frame Header Lane (18px)
+        // Lane 2: Frame Header Lane (18px)
         popoutCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.02)' : 'rgba(88, 166, 255, 0.02)';
         popoutCtx.fillRect(0, currentY + state.trackHeaderHeight + 1, width, state.frameHeaderHeight - 1);
 
@@ -2975,7 +2975,7 @@
           }
         }
 
-        // 4. Lane 3: Call Stack Zone Area (Rule 25 offset)
+        // Lane 3: Call Stack Zone Area (Rule 25 offset)
         if (!isCollapsed) {
           let lastDrawnPixel = -1;
           for (const zone of track.zones) {
@@ -3051,7 +3051,7 @@
 
     popoutState.totalContentHeight = currentY + popoutState.scrollY;
 
-    // 3. Visual flight latency connector line/arrow from CPU frame end to GPU frame start
+    // Visual flight latency connector line/arrow from CPU frame end to GPU frame start
     if (frameObj && frameObj.cpuEndNs !== null && frameObj.gpuStartNs !== null) {
       let cpuBottomY = -1;
       let gpuTopY = Infinity;
@@ -3116,10 +3116,10 @@
 
     popoutCtx.restore();
 
-    // 4. Sticky Top Ruler
+    // Sticky Top Ruler
     renderPopoutRuler(popoutCtx, width, nsToX, visibleDuration);
 
-    // 5. Draw Cross-Thread Coroutine Flow Curves in Popout (SVG Overlay)
+    // Draw Cross-Thread Coroutine Flow Curves in Popout (SVG Overlay)
     renderFlowOverlay({
       width,
       height,

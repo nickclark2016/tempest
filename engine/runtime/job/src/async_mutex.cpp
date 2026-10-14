@@ -248,7 +248,7 @@ namespace tempest::job
 
         while (true)
         {
-            // 1. If we have waiters in _waiters_out, pop the first valid one (FIFO order)
+            // If we have waiters in _waiters_out, pop the first valid one (FIFO order)
             while (_waiters_out != nullptr)
             {
                 auto* const waiter = _waiters_out;
@@ -271,7 +271,7 @@ namespace tempest::job
                 break;
             }
 
-            // 2. _waiters_out is empty. Check if there are incoming waiters in _waiters_in.
+            // _waiters_out is empty. Check if there are incoming waiters in _waiters_in.
             auto* current_in = _waiters_in.load(memory_order::acquire);
             if (current_in != nullptr && current_in != _locked_sentinel())
             {
@@ -279,7 +279,7 @@ namespace tempest::job
                 continue;
             }
 
-            // 3. No incoming waiters and _waiters_out is empty.
+            // No incoming waiters and _waiters_out is empty.
             // Attempt to unlock by transitioning _waiters_in from _locked_sentinel() to nullptr.
             auto* expected = _locked_sentinel();
             if (_waiters_in.compare_exchange_strong(expected, nullptr, memory_order::release, memory_order::acquire))

@@ -30,8 +30,8 @@ namespace tempest::render_system
         }
 
         // Guard against underflow & overflow:
-        // 1. Total border padding along an axis is 2 * _padding. Check if padding alone exceeds atlas dimensions.
-        // 2. Rather than checking (width + total_padding > _atlas_width), which can overflow uint32_t when width is near UINT32_MAX,
+        // Total border padding along an axis is 2 * _padding. Check if padding alone exceeds atlas dimensions.
+        // Rather than checking (width + total_padding > _atlas_width), which can overflow uint32_t when width is near UINT32_MAX,
         //    we compare (width > _atlas_width - total_padding).
         // Since we verify _atlas_width >= total_padding first, the subtraction is guaranteed never to underflow,
         // and subsequent addition `width + total_padding` is guaranteed <= _atlas_width and will never overflow uint32_t.

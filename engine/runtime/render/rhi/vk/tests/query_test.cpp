@@ -84,7 +84,7 @@ namespace tempest::rhi::vk
     /// @brief Verify creation, reset, timestamp writing, and monotonic result readback.
     TEST(query_test, timestamp_query_lifecycle_and_monotonicity)
     {
-        // 1. Setup test environment, query pool, and synchronization primitives
+        // Setup test environment, query pool, and synchronization primitives
         const auto env = create_test_env();
         ASSERT_NE(env.dev, nullptr);
         const auto& dev = env.dev;
@@ -123,7 +123,7 @@ namespace tempest::rhi::vk
         auto& graphics_port = dev->get_graphics_execution_port();
         auto& cmd = graphics_port.acquire_command_list(0, command_list_lifetime::transient);
 
-        // 2. Act: Record reset, top-of-pipe timestamp, work, transfer timestamp, and submit
+        // Act: Record reset, top-of-pipe timestamp, work, transfer timestamp, and submit
         cmd.begin();
         cmd.reset_query_pool(pool, 0, 4);
         cmd.write_timestamp(pool, 0, pipeline_stage::top_of_pipe);
@@ -159,7 +159,7 @@ namespace tempest::rhi::vk
         // Wait for GPU execution to complete before reading back results
         dev->wait_for_sync(host_sync_point{.semaphore = timeline_sem, .value = 1});
 
-        // 3. Assert: Results are successfully read and timestamps are strictly monotonic
+        // Assert: Results are successfully read and timestamps are strictly monotonic
         auto results = array<uint64_t, 4>{0, 0, 0, 0};
         const auto read_success = dev->get_query_pool_results(pool, 0, 3, span<uint64_t>{results.data(), 3}, false);
         EXPECT_TRUE(read_success);
@@ -186,7 +186,7 @@ namespace tempest::rhi::vk
     /// draw.
     TEST(query_test, pipeline_statistics_raster_draw)
     {
-        // 1. Setup rendering target, graphics pipeline, and pipeline statistics query pool
+        // Setup rendering target, graphics pipeline, and pipeline statistics query pool
         const auto env = create_test_env();
         ASSERT_NE(env.dev, nullptr);
         const auto& dev = env.dev;
@@ -262,7 +262,7 @@ namespace tempest::rhi::vk
         const auto timeline_sem = dev->create_timeline_semaphore();
         ASSERT_NE(timeline_sem.handle, 0ULL);
 
-        // 2. Act: Record begin_query / end_query around a single triangle draw pass
+        // Act: Record begin_query / end_query around a single triangle draw pass
         auto& graphics_port = dev->get_graphics_execution_port();
         auto& cmd = graphics_port.acquire_command_list(0, command_list_lifetime::transient);
 
@@ -333,7 +333,7 @@ namespace tempest::rhi::vk
 
         dev->wait_for_sync(host_sync_point{.semaphore = timeline_sem, .value = 1});
 
-        // 3. Assert: Statistics query returns non-zero vertex, primitive, and fragment counts
+        // Assert: Statistics query returns non-zero vertex, primitive, and fragment counts
         auto stats = array<uint64_t, 6>{0, 0, 0, 0, 0, 0};
         const auto read_success =
             dev->get_query_pool_results(pool, 0, 1, span<uint64_t>{stats.data(), stats.size()}, false);
@@ -367,7 +367,7 @@ namespace tempest::rhi::vk
     /// @brief Verify multi-queue query independence between graphics, compute, and transfer queues.
     TEST(query_test, multi_queue_query_independence)
     {
-        // 1. Setup test environment and independent query pools per queue
+        // Setup test environment and independent query pools per queue
         const auto env = create_test_env();
         ASSERT_NE(env.dev, nullptr);
         const auto& dev = env.dev;
@@ -411,7 +411,7 @@ namespace tempest::rhi::vk
         const auto test_buf = dev->create_buffer(dev_desc);
         ASSERT_NE(test_buf.handle, 0ULL);
 
-        // 2. Act: Record and submit independent queries across all three execution ports
+        // Act: Record and submit independent queries across all three execution ports
         auto& transfer_port = dev->get_async_transfer_execution_port();
         auto& transfer_cmd = transfer_port.acquire_command_list(0, command_list_lifetime::transient);
         transfer_cmd.begin();
@@ -477,7 +477,7 @@ namespace tempest::rhi::vk
         dev->wait_for_sync(host_sync_point{.semaphore = compute_sem, .value = 1});
         dev->wait_for_sync(host_sync_point{.semaphore = gfx_sem, .value = 1});
 
-        // 3. Assert: Read back timestamps from each queue independently and verify ordering
+        // Assert: Read back timestamps from each queue independently and verify ordering
         auto transfer_res = array<uint64_t, 2>{0, 0};
         auto compute_res = array<uint64_t, 2>{0, 0};
         auto gfx_res = array<uint64_t, 2>{0, 0};
@@ -508,7 +508,7 @@ namespace tempest::rhi::vk
     /// @brief Verify CPU-GPU clock calibration maps GPU timestamps accurately within the CPU submission bracket.
     TEST(query_test, clock_calibration_bracketing)
     {
-        // 1. Setup test environment, timestamp query pool, and timeline semaphore
+        // Setup test environment, timestamp query pool, and timeline semaphore
         const auto env = create_test_env();
         ASSERT_NE(env.dev, nullptr);
         const auto& dev = env.dev;
@@ -534,7 +534,7 @@ namespace tempest::rhi::vk
         cmd.write_timestamp(pool, 1, pipeline_stage::bottom_of_pipe);
         cmd.end();
 
-        // 2. Act: Measure CPU bracket around queue submission and completion
+        // Act: Measure CPU bracket around queue submission and completion
         const auto cpu_start_ns = timeline_calibrator::query_cpu_timestamp_ns();
 
         const auto* cmd_ptr = &cmd;
@@ -557,7 +557,7 @@ namespace tempest::rhi::vk
         const auto read_success = dev->get_query_pool_results(pool, 0, 2, span<uint64_t>{gpu_ticks.data(), 2}, false);
         EXPECT_TRUE(read_success);
 
-        // 3. Assert: Converted CPU timestamps are monotonic and within reasonable bounds
+        // Assert: Converted CPU timestamps are monotonic and within reasonable bounds
         const auto converted_cpu_0 = dev->convert_gpu_timestamp_to_cpu_ns(gpu_ticks[0]);
         const auto converted_cpu_1 = dev->convert_gpu_timestamp_to_cpu_ns(gpu_ticks[1]);
 

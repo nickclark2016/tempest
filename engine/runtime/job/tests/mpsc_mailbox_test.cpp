@@ -85,12 +85,12 @@ namespace tempest::job::tests
     ///        under single-threaded producer-consumer usage.
     TEST(mpsc_mailbox_test, single_producer_push_and_drain)
     {
-        // 1. Setup: Construct an mpsc_mailbox with capacity 8
+        // Setup: Construct an mpsc_mailbox with capacity 8
         auto mailbox = mpsc_mailbox<int, 8>{};
         EXPECT_TRUE(mailbox.empty());
         EXPECT_EQ(mailbox.capacity(), 8u);
 
-        // 2. Act: Push four sequential values
+        // Act: Push four sequential values
         EXPECT_EQ(mailbox.try_push(10), push_result::success);
         EXPECT_EQ(mailbox.try_push(20), push_result::success);
         EXPECT_EQ(mailbox.try_push(30), push_result::success);
@@ -98,7 +98,7 @@ namespace tempest::job::tests
 
         EXPECT_FALSE(mailbox.empty());
 
-        // 3. Assert: Drain all items and verify FIFO ordering
+        // Assert: Drain all items and verify FIFO ordering
         auto received_items = vector<int>{};
         const auto drained_count = mailbox.drain([&received_items](int value) {
             received_items.push_back(value);
@@ -126,12 +126,12 @@ namespace tempest::job::tests
     ///        recycles slots so subsequent pushes succeed.
     TEST(mpsc_mailbox_test, capacity_and_full_detection)
     {
-        // 1. Setup: Construct an mpsc_mailbox with small capacity of 4
+        // Setup: Construct an mpsc_mailbox with small capacity of 4
         auto mailbox = mpsc_mailbox<int, 4>{};
         EXPECT_EQ(mailbox.capacity(), 4u);
         EXPECT_TRUE(mailbox.empty());
 
-        // 2. Act: Fill the mailbox to exact capacity
+        // Act: Fill the mailbox to exact capacity
         EXPECT_EQ(mailbox.try_push(1), push_result::success);
         EXPECT_EQ(mailbox.try_push(2), push_result::success);
         EXPECT_EQ(mailbox.try_push(3), push_result::success);
@@ -142,7 +142,7 @@ namespace tempest::job::tests
         EXPECT_EQ(mailbox.try_push(5), push_result::full);
         EXPECT_EQ(mailbox.try_push(6), push_result::full);
 
-        // 3. Assert: Drain mailbox and verify slot recycling on subsequent pushes
+        // Assert: Drain mailbox and verify slot recycling on subsequent pushes
         auto received_items = vector<int>{};
         const auto initial_drain_count = mailbox.drain([&received_items](int value) {
             received_items.push_back(value);
@@ -183,10 +183,10 @@ namespace tempest::job::tests
     ///        properly on push, drain, and mailbox destruction without leaking.
     TEST(mpsc_mailbox_test, non_trivial_type_lifecycle)
     {
-        // 1. Setup: Reset lifecycle tracking counters
+        // Setup: Reset lifecycle tracking counters
         lifecycle_tracker::reset();
 
-        // 2. Act: Push elements and drain them
+        // Act: Push elements and drain them
         {
             auto mailbox = mpsc_mailbox<lifecycle_tracker, 4>{};
 
@@ -206,7 +206,7 @@ namespace tempest::job::tests
             EXPECT_EQ(drained_values[1], 200);
         }
 
-        // 3. Assert: All instances are cleanly destructed
+        // Assert: All instances are cleanly destructed
         EXPECT_EQ(lifecycle_tracker::live_count, 0);
         EXPECT_EQ(lifecycle_tracker::constructor_count + lifecycle_tracker::copy_count + lifecycle_tracker::move_count,
                   lifecycle_tracker::destructor_count);
@@ -234,11 +234,11 @@ namespace tempest::job::tests
     ///        and drained with perfect forwarding.
     TEST(mpsc_mailbox_test, move_only_types)
     {
-        // 1. Setup: Construct an mpsc_mailbox holding move-only tempest::unique_ptr
+        // Setup: Construct an mpsc_mailbox holding move-only tempest::unique_ptr
         auto mailbox = mpsc_mailbox<tempest::unique_ptr<int>, 8>{};
         EXPECT_TRUE(mailbox.empty());
 
-        // 2. Act: Push move-only unique_ptr instances
+        // Act: Push move-only unique_ptr instances
         auto pointer_one = tempest::make_unique<int>(42);
         auto pointer_two = tempest::make_unique<int>(84);
 
@@ -249,7 +249,7 @@ namespace tempest::job::tests
         EXPECT_EQ(pointer_two.get(), nullptr);
         EXPECT_FALSE(mailbox.empty());
 
-        // 3. Assert: Drain move-only items and verify contents
+        // Assert: Drain move-only items and verify contents
         auto extracted_values = vector<int>{};
         const auto drained_count = mailbox.drain([&extracted_values](tempest::unique_ptr<int> pointer) {
             ASSERT_NE(pointer.get(), nullptr);
@@ -271,7 +271,7 @@ namespace tempest::job::tests
     ///        while 1 consumer thread drains concurrently, ensuring zero dropped or duplicate items.
     TEST(mpsc_mailbox_test, multi_producer_concurrent_stress)
     {
-        // 1. Setup: Allocate mailbox on heap with capacity 2048
+        // Setup: Allocate mailbox on heap with capacity 2048
         constexpr auto num_producers = size_t{16};
         constexpr auto items_per_producer = size_t{6250};
         constexpr auto total_items = num_producers * items_per_producer; // 100,000 total
@@ -284,7 +284,7 @@ namespace tempest::job::tests
         auto seen_items = vector<uint8_t>(total_items, uint8_t{0});
         auto detected_duplicate = false;
 
-        // 2. Act: Start single consumer thread
+        // Act: Start single consumer thread
         auto consumer_thread = tempest::thread{[&mailbox, &producers_done, &drained_count, &consumed_checksum,
                                                 &seen_items, &detected_duplicate] {
             while (!producers_done.load(memory_order::acquire) || !mailbox->empty())
@@ -354,7 +354,7 @@ namespace tempest::job::tests
         producers_done.store(true, memory_order::release);
         consumer_thread.join();
 
-        // 3. Assert: Verify exact count, expected checksum, zero duplicates, and zero dropped items
+        // Assert: Verify exact count, expected checksum, zero duplicates, and zero dropped items
         constexpr auto expected_checksum =
             static_cast<int64_t>(total_items) * static_cast<int64_t>(total_items - 1) / 2;
 

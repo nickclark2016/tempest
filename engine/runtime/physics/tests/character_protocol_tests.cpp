@@ -15,7 +15,7 @@ namespace tempest::physics::tests
     /// with zero floating-point drift and exact ground state preservation.
     TEST(character_protocol_tests, character_snapshot_round_trip)
     {
-        // 1. Setup
+        // Setup
         auto writer = network::bit_writer{};
 
         auto original = character_snapshot{};
@@ -28,14 +28,14 @@ namespace tempest::physics::tests
         original.current_ground_state = jolt::shim::ground_state::on_ground;
         original.ground_normal = math::vec3<float>{0.0F, 1.0F, 0.0F};
 
-        // 2. Act
+        // Act
         write_character_snapshot(writer, original);
         writer.flush();
 
         auto reader = network::bit_reader{writer.data()};
         const auto decoded = read_character_snapshot(reader);
 
-        // 3. Assert
+        // Assert
         ASSERT_TRUE(decoded.has_value());
         EXPECT_EQ(decoded->tick(), original.tick());
         EXPECT_FLOAT_EQ(decoded->position().x, original.position().x);
@@ -68,14 +68,14 @@ namespace tempest::physics::tests
     /// @brief Verifies that attempting to read a character snapshot from an undersized buffer fails.
     TEST(character_protocol_tests, character_snapshot_truncated_buffer_fails)
     {
-        // 1. Setup
+        // Setup
         auto buffer = array<byte, 16>{}; // Character snapshot requires > 60 bytes
         auto reader = network::bit_reader{span<const byte>{buffer.data(), buffer.size()}};
 
-        // 2. Act
+        // Act
         const auto decoded = read_character_snapshot(reader);
 
-        // 3. Assert
+        // Assert
         EXPECT_FALSE(decoded.has_value());
     }
 
@@ -86,7 +86,7 @@ namespace tempest::physics::tests
     /// @brief Verifies that an empty world_snapshot_packet encodes and decodes cleanly.
     TEST(character_protocol_tests, world_snapshot_empty_round_trip)
     {
-        // 1. Setup
+        // Setup
         auto writer = network::bit_writer{};
 
         const auto original = world_snapshot_packet{
@@ -95,7 +95,7 @@ namespace tempest::physics::tests
             .players = {},
         };
 
-        // 2. Act
+        // Act
         write_world_snapshot(writer, original);
         writer.flush();
 
@@ -103,7 +103,7 @@ namespace tempest::physics::tests
         auto decoded = world_snapshot_packet{};
         const auto success = read_world_snapshot(reader, decoded);
 
-        // 3. Assert
+        // Assert
         ASSERT_TRUE(success);
         EXPECT_EQ(decoded.server_tick, original.server_tick);
         EXPECT_EQ(decoded.ack_client_tick, original.ack_client_tick);
@@ -115,7 +115,7 @@ namespace tempest::physics::tests
     /// preserves all sessions and character states with exact fidelity.
     TEST(character_protocol_tests, world_snapshot_multi_player_round_trip)
     {
-        // 1. Setup
+        // Setup
         auto writer = network::bit_writer{};
 
         auto player1 = character_snapshot{};
@@ -140,7 +140,7 @@ namespace tempest::physics::tests
         original.players.push_back(player_snapshot_entry{.session_id = 1001ULL, .snapshot = player1});
         original.players.push_back(player_snapshot_entry{.session_id = 1002ULL, .snapshot = player2});
 
-        // 2. Act
+        // Act
         write_world_snapshot(writer, original);
         writer.flush();
 
@@ -148,7 +148,7 @@ namespace tempest::physics::tests
         auto decoded = world_snapshot_packet{};
         const auto success = read_world_snapshot(reader, decoded);
 
-        // 3. Assert
+        // Assert
         ASSERT_TRUE(success);
         EXPECT_EQ(decoded.server_tick, original.server_tick);
         EXPECT_EQ(decoded.ack_client_tick, original.ack_client_tick);

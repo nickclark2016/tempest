@@ -26,10 +26,10 @@
 /// @brief Verify single-threaded nested zone hierarchies, start/end timestamps, and depth calculation.
 TEST(profiler_tests, nested_zone_hierarchies)
 {
-    // 1. Setup profiler session
+    // Setup profiler session
     auto session = tempest::profiler::profiler_session{};
 
-    // 2. Act: Record nested scopes
+    // Act: Record nested scopes
     {
         [[maybe_unused]] const auto root_zone = tempest::profiler::scoped_zone{session, "RootZone"};
         {
@@ -43,7 +43,7 @@ TEST(profiler_tests, nested_zone_hierarchies)
         }
     }
 
-    // 3. Assert: Drain chunks and verify records
+    // Assert: Drain chunks and verify records
     auto chunks = session.drain_completed_chunks();
     ASSERT_FALSE(chunks.empty());
 
@@ -87,14 +87,14 @@ TEST(profiler_tests, nested_zone_hierarchies)
 /// @brief Verify 16+ threads concurrently recording 100,000+ zones without race conditions or data loss.
 TEST(profiler_tests, concurrent_multithreaded_recording)
 {
-    // 1. Setup: Create profiler session and configure 16 worker threads
+    // Setup: Create profiler session and configure 16 worker threads
     auto session = tempest::profiler::profiler_session{};
     constexpr auto thread_count = size_t{16};
     constexpr auto zones_per_thread = size_t{10000}; // 16 * 10,000 = 160,000 zones
     auto threads = tempest::vector<tempest::thread>{};
     threads.reserve(thread_count);
 
-    // 2. Act: Spawn threads and record zones concurrently
+    // Act: Spawn threads and record zones concurrently
     for (auto i = size_t{0}; i < thread_count; ++i)
     {
         threads.push_back(tempest::thread([&session]() -> void {
@@ -110,7 +110,7 @@ TEST(profiler_tests, concurrent_multithreaded_recording)
         t.join();
     }
 
-    // 3. Assert: Drain chunks and verify exact count without data loss
+    // Assert: Drain chunks and verify exact count without data loss
     auto chunks = session.drain_completed_chunks();
     auto total_recorded_zones = size_t{0};
     for (const auto& chunk : chunks)
@@ -127,11 +127,11 @@ TEST(profiler_tests, concurrent_multithreaded_recording)
 /// @brief Verify complete instance isolation between two separate profiler_session objects.
 TEST(profiler_tests, session_instance_isolation)
 {
-    // 1. Setup two independent profiler sessions
+    // Setup two independent profiler sessions
     auto session_a = tempest::profiler::profiler_session{};
     auto session_b = tempest::profiler::profiler_session{};
 
-    // 2. Act: Record events into session A and session B independently
+    // Act: Record events into session A and session B independently
     {
         [[maybe_unused]] const auto zone_a = tempest::profiler::scoped_zone{session_a, "SessionA_Zone"};
     }
@@ -140,7 +140,7 @@ TEST(profiler_tests, session_instance_isolation)
         [[maybe_unused]] const auto zone_b2 = tempest::profiler::scoped_zone{session_b, "SessionB_Zone2"};
     }
 
-    // 3. Assert: Drain chunks and verify strict separation
+    // Assert: Drain chunks and verify strict separation
     auto chunks_a = session_a.drain_completed_chunks();
     auto chunks_b = session_b.drain_completed_chunks();
 
@@ -175,17 +175,17 @@ TEST(profiler_tests, session_instance_isolation)
 /// @brief Verify implicit thread registration and OS thread naming on background threads.
 TEST(profiler_tests, implicit_thread_registration_and_naming)
 {
-    // 1. Setup session
+    // Setup session
     auto session = tempest::profiler::profiler_session{};
 
-    // 2. Act: Spawn a thread, set thread name, and record a zone
+    // Act: Spawn a thread, set thread name, and record a zone
     auto worker = tempest::thread([&session]() -> void {
         session.set_thread_name("WorkerThread-Alpha");
         [[maybe_unused]] const auto zone = tempest::profiler::scoped_zone{session, "WorkerTask"};
     });
     worker.join();
 
-    // 3. Assert: Verify thread registration and thread name
+    // Assert: Verify thread registration and thread name
     ASSERT_GE(session.registered_thread_count(), 1U);
     auto chunks = session.drain_completed_chunks();
     ASSERT_FALSE(chunks.empty());
@@ -208,10 +208,10 @@ TEST(profiler_tests, implicit_thread_registration_and_naming)
 /// @brief Verify instant markers and attached metrics within active zones.
 TEST(profiler_tests, markers_and_attached_metrics)
 {
-    // 1. Setup session
+    // Setup session
     auto session = tempest::profiler::profiler_session{};
 
-    // 2. Act: Emit markers and attach metrics within a scoped zone
+    // Act: Emit markers and attach metrics within a scoped zone
     tempest::profiler::emit_marker(session, "FrameStart");
     {
         auto zone = tempest::profiler::scoped_zone{session, "RenderPass"};
@@ -221,7 +221,7 @@ TEST(profiler_tests, markers_and_attached_metrics)
     }
     tempest::profiler::emit_marker(session, "FrameEnd");
 
-    // 3. Assert: Drain and verify markers and attached metrics
+    // Assert: Drain and verify markers and attached metrics
     auto chunks = session.drain_completed_chunks();
     ASSERT_FALSE(chunks.empty());
 
@@ -264,10 +264,10 @@ TEST(profiler_tests, markers_and_attached_metrics)
 /// @brief Verify chunk arena pool recycling when event volume exceeds single 64KB chunk.
 TEST(profiler_tests, chunk_arena_pool_recycling)
 {
-    // 1. Setup session
+    // Setup session
     auto session = tempest::profiler::profiler_session{};
 
-    // 2. Act: Record enough zones to exceed a single 64KB chunk (e.g., 2,000 zones)
+    // Act: Record enough zones to exceed a single 64KB chunk (e.g., 2,000 zones)
     constexpr auto event_count = size_t{2000};
     for (auto i = size_t{0}; i < event_count; ++i)
     {
@@ -313,10 +313,10 @@ TEST(profiler_tests, chunk_arena_pool_recycling)
 /// @brief Verify zero-overhead compile-time disabled traits.
 TEST(profiler_tests, compile_time_and_runtime_disabled_traits)
 {
-    // 1. Setup session
+    // Setup session
     auto session = tempest::profiler::profiler_session{false}; // Runtime disabled
 
-    // 2. Act: Use disabled_scoped_zone and runtime-disabled session
+    // Act: Use disabled_scoped_zone and runtime-disabled session
     static_assert(sizeof(tempest::profiler::disabled_scoped_zone) == 1,
                   "disabled_scoped_zone must be empty struct size");
 
@@ -335,7 +335,7 @@ TEST(profiler_tests, compile_time_and_runtime_disabled_traits)
     tempest::profiler::emit_marker(session, "DisabledMarker");
     tempest::profiler::emit_metric(session, "DisabledMetric", 789.0, tempest::profiler::metric_unit::raw);
 
-    // 3. Assert: No chunks or zones recorded
+    // Assert: No chunks or zones recorded
     auto chunks = session.drain_completed_chunks();
     auto total_events = size_t{0};
     for (const auto& chunk : chunks)
@@ -353,7 +353,7 @@ TEST(profiler_tests, compile_time_and_runtime_disabled_traits)
 /// reference distributions.
 TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
 {
-    // 1. Setup: Create exact reference distribution (101 samples: 0, 10, 20, ..., 1000 ns)
+    // Setup: Create exact reference distribution (101 samples: 0, 10, 20, ..., 1000 ns)
     auto zones_odd = tempest::vector<tempest::profiler::zone_record>{};
     zones_odd.reserve(101);
     for (auto i = uint64_t{0}; i <= 100; ++i)
@@ -366,11 +366,11 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
         });
     }
 
-    // 2. Act: Compute statistics for odd distribution
+    // Act: Compute statistics for odd distribution
     const auto stats_odd = tempest::profiler::compute_zone_statistics(
         tempest::span<const tempest::profiler::zone_record>{zones_odd.data(), zones_odd.size()});
 
-    // 3. Assert: Verify exact percentiles and moments
+    // Assert: Verify exact percentiles and moments
     ASSERT_EQ(stats_odd.zone_name, "OddDistribution");
     ASSERT_EQ(stats_odd.count, 101U);
     ASSERT_DOUBLE_EQ(stats_odd.min_ns, 0.0);
@@ -383,7 +383,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     // Population variance for 0, 10, ..., 1000 is 100 * (100 * 102 / 12) = 85,000 -> StdDev = sqrt(85000)
     ASSERT_NEAR(stats_odd.std_deviation_ns, ::sqrt(85000.0), 1e-6);
 
-    // 4. Setup & Act: Even distribution (4 samples: 100, 200, 300, 400 ns)
+    // Setup & Act: Even distribution (4 samples: 100, 200, 300, 400 ns)
     auto zones_even = tempest::vector<tempest::profiler::zone_record>{};
     zones_even.push_back(tempest::profiler::zone_record{.start_ns = 0, .end_ns = 100, .name = "EvenDistribution"});
     zones_even.push_back(tempest::profiler::zone_record{.start_ns = 0, .end_ns = 200, .name = "EvenDistribution"});
@@ -393,7 +393,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     const auto stats_even = tempest::profiler::compute_zone_statistics(
         tempest::span<const tempest::profiler::zone_record>{zones_even.data(), zones_even.size()});
 
-    // 5. Assert: Verify even distribution interpolation
+    // Assert: Verify even distribution interpolation
     ASSERT_EQ(stats_even.count, 4U);
     ASSERT_DOUBLE_EQ(stats_even.min_ns, 100.0);
     ASSERT_DOUBLE_EQ(stats_even.max_ns, 400.0);
@@ -404,7 +404,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     ASSERT_DOUBLE_EQ(stats_even.p99_ns, 397.0);
     ASSERT_NEAR(stats_even.std_deviation_ns, ::sqrt(12500.0), 1e-6);
 
-    // 6. Assert: Empty and single-element distributions
+    // Assert: Empty and single-element distributions
     const auto stats_empty = tempest::profiler::compute_zone_statistics({});
     ASSERT_EQ(stats_empty.count, 0U);
     ASSERT_DOUBLE_EQ(stats_empty.mean_ns, 0.0);
@@ -420,7 +420,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     ASSERT_DOUBLE_EQ(stats_single.p50_ns, 42.0);
     ASSERT_DOUBLE_EQ(stats_single.std_deviation_ns, 0.0);
 
-    // 7. Verify rolling averages
+    // Verify rolling averages
     auto values = tempest::vector<double>{};
     values.push_back(10.0);
     values.push_back(20.0);
@@ -437,7 +437,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     ASSERT_DOUBLE_EQ(rolling[3], 30.0);
     ASSERT_DOUBLE_EQ(rolling[4], 40.0);
 
-    // 8. Verify compute_all_zone_statistics across a capture
+    // Verify compute_all_zone_statistics across a capture
     auto capture = tempest::profiler::capture_session_data{};
     auto track1 = tempest::profiler::track_data{.track_id = 1, .name = "Track1"};
     track1.zones.push_back(tempest::profiler::zone_record{.start_ns = 0, .end_ns = 100, .name = "Update"});
@@ -469,7 +469,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
 /// and metrics.
 TEST(profiler_tests, lossless_roundtrip_binary_serialization)
 {
-    // 1. Setup: Build high-volume capture session with 50,000+ zones, markers, and metric streams
+    // Setup: Build high-volume capture session with 50,000+ zones, markers, and metric streams
     auto capture = tempest::profiler::capture_session_data{
         .start_time_ns = 1000000,
         .end_time_ns = 999999999,
@@ -564,7 +564,7 @@ TEST(profiler_tests, lossless_roundtrip_binary_serialization)
     }
     capture.metrics.push_back(tempest::move(vram_stream));
 
-    // 2. Act: Serialize to compressed binary buffer and save to file
+    // Act: Serialize to compressed binary buffer and save to file
     const auto binary_buffer = tempest::profiler::serialize_binary_to_buffer(capture);
     ASSERT_FALSE(binary_buffer.empty());
 
@@ -581,7 +581,7 @@ TEST(profiler_tests, lossless_roundtrip_binary_serialization)
     const auto loaded_from_file = tempest::profiler::load_binary_capture(file_path);
     ASSERT_TRUE(loaded_from_file.has_value());
 
-    // 3. Assert: Verify 100% bitwise & structural round-trip fidelity
+    // Assert: Verify 100% bitwise & structural round-trip fidelity
     const auto& roundtrip = loaded_from_file.value();
     ASSERT_EQ(roundtrip.start_time_ns, capture.start_time_ns);
     ASSERT_EQ(roundtrip.end_time_ns, capture.end_time_ns);
@@ -645,7 +645,7 @@ TEST(profiler_tests, lossless_roundtrip_binary_serialization)
 /// PID/TID/timestamps.
 TEST(profiler_tests, json_chrome_trace_export_and_json_validation)
 {
-    // 1. Setup: Create capture data with CPU track, GPU track, attached metrics, and counters
+    // Setup: Create capture data with CPU track, GPU track, attached metrics, and counters
     auto capture = tempest::profiler::capture_session_data{};
 
     auto track_cpu = tempest::profiler::track_data{
@@ -694,7 +694,7 @@ TEST(profiler_tests, json_chrome_trace_export_and_json_validation)
     });
     capture.metrics.push_back(tempest::move(metric_st));
 
-    // 2. Act: Export JSON string and write to file
+    // Act: Export JSON string and write to file
     const auto json_str = tempest::profiler::export_chrome_trace_json_string(capture);
     ASSERT_FALSE(json_str.empty());
 
@@ -702,7 +702,7 @@ TEST(profiler_tests, json_chrome_trace_export_and_json_validation)
     const auto export_res = tempest::profiler::export_chrome_trace_json(capture, json_file);
     ASSERT_TRUE(export_res.has_value());
 
-    // 3. Assert: Validate JSON schema with tempest::json
+    // Assert: Validate JSON schema with tempest::json
     auto alloc = tempest::system_allocator{};
     auto doc_res = tempest::json_document::from_string(json_str, alloc);
     ASSERT_TRUE(doc_res.has_value());
@@ -772,7 +772,7 @@ TEST(profiler_tests, json_chrome_trace_export_and_json_validation)
 /// @brief Verify truncated and corrupted binary files gracefully return capture_error without crashes.
 TEST(profiler_tests, corrupted_and_truncated_binary_error_handling)
 {
-    // 1. Setup: Create valid capture and serialize to binary
+    // Setup: Create valid capture and serialize to binary
     auto capture = tempest::profiler::capture_session_data{};
     auto track = tempest::profiler::track_data{.track_id = 1, .name = "TestTrack"};
     track.zones.push_back(tempest::profiler::zone_record{.start_ns = 100, .end_ns = 200, .name = "Zone1"});
@@ -781,14 +781,14 @@ TEST(profiler_tests, corrupted_and_truncated_binary_error_handling)
     auto valid_buf = tempest::profiler::serialize_binary_to_buffer(capture);
     ASSERT_FALSE(valid_buf.empty());
 
-    // 2. Act & Assert: Header truncated (less than header size)
+    // Act & Assert: Header truncated (less than header size)
     auto truncated_hdr = tempest::vector<tempest::byte>{valid_buf.begin(), valid_buf.begin() + 10};
     auto res_trunc_hdr = tempest::profiler::deserialize_binary_from_buffer(
         tempest::span<const tempest::byte>{truncated_hdr.data(), truncated_hdr.size()});
     ASSERT_FALSE(res_trunc_hdr.has_value());
     ASSERT_EQ(res_trunc_hdr.error(), tempest::profiler::capture_error::corrupted_data);
 
-    // 3. Act & Assert: Invalid magic bytes
+    // Act & Assert: Invalid magic bytes
     auto invalid_magic_buf = valid_buf;
     invalid_magic_buf[0] = static_cast<tempest::byte>('X');
     auto res_magic = tempest::profiler::deserialize_binary_from_buffer(
@@ -796,7 +796,7 @@ TEST(profiler_tests, corrupted_and_truncated_binary_error_handling)
     ASSERT_FALSE(res_magic.has_value());
     ASSERT_EQ(res_magic.error(), tempest::profiler::capture_error::invalid_magic);
 
-    // 4. Act & Assert: Unsupported version major
+    // Act & Assert: Unsupported version major
     auto invalid_ver_buf = valid_buf;
     invalid_ver_buf[4] = static_cast<tempest::byte>(99); // version_major low byte
     auto res_ver = tempest::profiler::deserialize_binary_from_buffer(
@@ -804,14 +804,14 @@ TEST(profiler_tests, corrupted_and_truncated_binary_error_handling)
     ASSERT_FALSE(res_ver.has_value());
     ASSERT_EQ(res_ver.error(), tempest::profiler::capture_error::unsupported_version);
 
-    // 5. Act & Assert: Truncated payload
+    // Act & Assert: Truncated payload
     auto truncated_payload = tempest::vector<tempest::byte>{valid_buf.begin(), valid_buf.begin() + 28};
     auto res_trunc_payload = tempest::profiler::deserialize_binary_from_buffer(
         tempest::span<const tempest::byte>{truncated_payload.data(), truncated_payload.size()});
     ASSERT_FALSE(res_trunc_payload.has_value());
     ASSERT_EQ(res_trunc_payload.error(), tempest::profiler::capture_error::corrupted_data);
 
-    // 6. Act & Assert: Corrupted compressed stream
+    // Act & Assert: Corrupted compressed stream
     auto corrupted_payload = valid_buf;
     for (auto i = size_t{28}; i < corrupted_payload.size(); ++i)
     {
@@ -822,7 +822,7 @@ TEST(profiler_tests, corrupted_and_truncated_binary_error_handling)
     ASSERT_FALSE(res_decomp.has_value());
     ASSERT_EQ(res_decomp.error(), tempest::profiler::capture_error::decompression_failed);
 
-    // 7. Act & Assert: Non-existent file load
+    // Act & Assert: Non-existent file load
     auto res_io = tempest::profiler::load_binary_capture("non_existent_file_path_12345.tprof");
     ASSERT_FALSE(res_io.has_value());
     ASSERT_EQ(res_io.error(), tempest::profiler::capture_error::io_error);
@@ -982,19 +982,19 @@ namespace
 /// @brief Verify socket lifecycle, port binding, and auto-increment when port 8080 is occupied.
 TEST(profiler_tests, socket_lifecycle_and_port_auto_increment)
 {
-    // 1. Setup: Create profiler session and web server instances
+    // Setup: Create profiler session and web server instances
     auto session = tempest::profiler::profiler_session{};
     auto config1 = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8080, .max_port_attempts = 10};
     auto server1 = tempest::profiler::web_server{session, config1};
 
-    // 2. Act: Start server 1 on port 8080
+    // Act: Start server 1 on port 8080
     server1.start();
     ASSERT_TRUE(server1.is_running());
     const auto port1 = server1.get_bound_port();
     ASSERT_EQ(port1, 8080U);
     ASSERT_EQ(server1.get_server_url(), "http://127.0.0.1:8080");
 
-    // 3. Act & Assert: Start server 2 with same preferred port 8080 (should auto-increment to 8081)
+    // Act & Assert: Start server 2 with same preferred port 8080 (should auto-increment to 8081)
     auto config2 = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8080, .max_port_attempts = 10};
     auto server2 = tempest::profiler::web_server{session, config2};
     server2.start();
@@ -1003,7 +1003,7 @@ TEST(profiler_tests, socket_lifecycle_and_port_auto_increment)
     ASSERT_EQ(port2, 8081U);
     ASSERT_EQ(server2.get_server_url(), "http://127.0.0.1:8081");
 
-    // 4. Act & Assert: Gracefully stop both servers
+    // Act & Assert: Gracefully stop both servers
     server1.stop();
     ASSERT_FALSE(server1.is_running());
     ASSERT_EQ(server1.get_bound_port(), 0U);
@@ -1017,7 +1017,7 @@ TEST(profiler_tests, socket_lifecycle_and_port_auto_increment)
 /// MIME types.
 TEST(profiler_tests, http_get_request_handling)
 {
-    // 1. Setup: Start web server on dynamic port
+    // Setup: Start web server on dynamic port
     auto session = tempest::profiler::profiler_session{};
     auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8082, .max_port_attempts = 10};
     auto server = tempest::profiler::web_server{session, config};
@@ -1025,7 +1025,7 @@ TEST(profiler_tests, http_get_request_handling)
     ASSERT_TRUE(server.is_running());
     const auto port = server.get_bound_port();
 
-    // 2. Act & Assert: HTTP GET / (index.html)
+    // Act & Assert: HTTP GET / (index.html)
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
@@ -1039,7 +1039,7 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(tempest::contains(response, "id=\"timeline-canvas\""));
     }
 
-    // 3. Act & Assert: HTTP GET /index.html
+    // Act & Assert: HTTP GET /index.html
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
@@ -1051,7 +1051,7 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(tempest::contains(response, "<!DOCTYPE html>"));
     }
 
-    // 4. Act & Assert: HTTP GET /app.js
+    // Act & Assert: HTTP GET /app.js
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
@@ -1066,7 +1066,7 @@ TEST(profiler_tests, http_get_request_handling)
         EXPECT_GT(response.size(), 65536U);
     }
 
-    // 5. Act & Assert: HTTP GET /styles.css
+    // Act & Assert: HTTP GET /styles.css
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
@@ -1079,7 +1079,7 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(tempest::contains(response, ".timeline-section"));
     }
 
-    // 6. Act & Assert: HTTP GET /status
+    // Act & Assert: HTTP GET /status
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
@@ -1091,7 +1091,7 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(tempest::contains(response, "\"status\":\"ok\""));
     }
 
-    // 7. Act & Assert: HTTP GET /unknown_path (404)
+    // Act & Assert: HTTP GET /unknown_path (404)
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
@@ -1108,21 +1108,21 @@ TEST(profiler_tests, http_get_request_handling)
 /// @brief Verify RFC-6455 WebSocket handshake Sec-WebSocket-Accept key computation against RFC test vectors.
 TEST(profiler_tests, rfc6455_websocket_handshake_key_computation)
 {
-    // 1. Setup: Test vector from RFC-6455 Section 1.3
+    // Setup: Test vector from RFC-6455 Section 1.3
     const auto* const client_key1 = "dGhlIHNhbXBsZSBub25jZQ==";
     const auto* const expected_accept1 = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
 
-    // 2. Act & Assert: Primary RFC test vector
+    // Act & Assert: Primary RFC test vector
     const auto actual_accept1 = tempest::profiler::compute_websocket_accept_key(client_key1);
     ASSERT_EQ(actual_accept1, expected_accept1);
 
-    // 3. Act & Assert: Additional valid nonce key test vector
+    // Act & Assert: Additional valid nonce key test vector
     const auto* const client_key2 = "x3JJHMbDL1EzLkh9GBhXDw==";
     const auto* const expected_accept2 = "HSmrc0sMlYUkAGmm5OPpG2HaGWk=";
     const auto actual_accept2 = tempest::profiler::compute_websocket_accept_key(client_key2);
     ASSERT_EQ(actual_accept2, expected_accept2);
 
-    // 4. Act & Assert: Nonce key with leading/trailing whitespace
+    // Act & Assert: Nonce key with leading/trailing whitespace
     const auto* const client_key3 = "  dGhlIHNhbXBsZSBub25jZQ== \r\n";
     const auto actual_accept3 = tempest::profiler::compute_websocket_accept_key(client_key3);
     ASSERT_EQ(actual_accept3, expected_accept1);
@@ -1131,7 +1131,7 @@ TEST(profiler_tests, rfc6455_websocket_handshake_key_computation)
 /// @brief Verify WebSocket binary and text frame encoding and decoding.
 TEST(profiler_tests, websocket_frame_encoding_and_decoding)
 {
-    // 1. Setup: Test short text frame (len <= 125)
+    // Setup: Test short text frame (len <= 125)
     const auto text_sample = tempest::string{"Hello, Tempest Profiler RFC-6455!"};
     auto text_bytes = tempest::vector<tempest::byte>{};
     for (auto c : text_sample)
@@ -1139,7 +1139,7 @@ TEST(profiler_tests, websocket_frame_encoding_and_decoding)
         text_bytes.push_back(static_cast<tempest::byte>(c));
     }
 
-    // 2. Act: Encode server text frame and decode
+    // Act: Encode server text frame and decode
     auto encoded_text = tempest::profiler::encode_websocket_frame(
         tempest::profiler::ws_opcode::text, tempest::span<const tempest::byte>{text_bytes.data(), text_bytes.size()});
     ASSERT_GE(encoded_text.size(), 2U + text_bytes.size());
@@ -1155,7 +1155,7 @@ TEST(profiler_tests, websocket_frame_encoding_and_decoding)
         ASSERT_EQ(decoded_text->payload[i], text_bytes[i]);
     }
 
-    // 3. Act & Assert: Medium binary frame (126 <= len <= 65535)
+    // Act & Assert: Medium binary frame (126 <= len <= 65535)
     auto medium_binary = tempest::vector<tempest::byte>(1024);
     for (auto i = size_t{0}; i < medium_binary.size(); ++i)
     {
@@ -1174,7 +1174,7 @@ TEST(profiler_tests, websocket_frame_encoding_and_decoding)
     ASSERT_EQ(decoded_medium->payload.size(), 1024U);
     ASSERT_EQ(decoded_medium->payload[500], medium_binary[500]);
 
-    // 4. Act & Assert: Masked client-to-server text frame
+    // Act & Assert: Masked client-to-server text frame
     auto client_masked_frame = tempest::profiler::encode_websocket_client_frame(
         tempest::profiler::ws_opcode::text, tempest::span<const tempest::byte>{text_bytes.data(), text_bytes.size()},
         0x37FA213D);
@@ -1191,7 +1191,7 @@ TEST(profiler_tests, websocket_frame_encoding_and_decoding)
         ASSERT_EQ(decoded_client_frame->payload[i], text_bytes[i]);
     }
 
-    // 5. Act & Assert: Incomplete / truncated frame error handling
+    // Act & Assert: Incomplete / truncated frame error handling
     auto truncated = tempest::vector<tempest::byte>{client_masked_frame.begin(), client_masked_frame.begin() + 4};
     auto decoded_trunc = tempest::profiler::decode_websocket_frame(
         tempest::span<const tempest::byte>{truncated.data(), truncated.size()});
@@ -1202,7 +1202,7 @@ TEST(profiler_tests, websocket_frame_encoding_and_decoding)
 /// @brief Verify telemetry streaming packet generation and bidirectional command dispatch.
 TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
 {
-    // 1. Setup: Start web server and record some profiler session events
+    // Setup: Start web server and record some profiler session events
     auto session = tempest::profiler::profiler_session{true};
     {
         [[maybe_unused]] const auto z1 = tempest::profiler::scoped_zone{session, "EngineInit"};
@@ -1216,7 +1216,7 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
     ASSERT_TRUE(server.is_running());
     const auto port = server.get_bound_port();
 
-    // 2. Act: Connect client and perform WebSocket handshake
+    // Act: Connect client and perform WebSocket handshake
     auto client = test_tcp_client{};
     ASSERT_TRUE(client.connect_to("127.0.0.1", port));
 
@@ -1236,7 +1236,7 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
     tempest::this_thread::yield();
     ASSERT_EQ(server.connected_client_count(), 1U);
 
-    // 3. Act & Assert: Command "start_capture"
+    // Act & Assert: Command "start_capture"
     {
         const auto cmd = tempest::string{R"({"command":"start_capture"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
@@ -1261,7 +1261,7 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
         ASSERT_TRUE(session.is_enabled());
     }
 
-    // 4. Act & Assert: Command "query_stats"
+    // Act & Assert: Command "query_stats"
     {
         const auto cmd = tempest::string{R"({"command":"query_stats"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
@@ -1285,7 +1285,7 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
         ASSERT_TRUE(tempest::contains(resp_str, "EngineInit"));
     }
 
-    // 5. Act & Assert: Telemetry packet serialization & server broadcast
+    // Act & Assert: Telemetry packet serialization & server broadcast
     {
         auto t_frame = tempest::profiler::telemetry_frame{};
         t_frame.frame_index = 42;
@@ -1319,7 +1319,7 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
         ASSERT_TRUE(tempest::contains(bc_str, "\"frame_index\":42"));
     }
 
-    // 6. Act & Assert: Command "stop_capture"
+    // Act & Assert: Command "stop_capture"
     {
         const auto cmd = tempest::string{R"({"command":"stop_capture"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
@@ -1344,7 +1344,7 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
         ASSERT_FALSE(session.is_enabled());
     }
 
-    // 7. Act & Assert: Graceful connection close
+    // Act & Assert: Graceful connection close
     {
         auto close_frame = tempest::profiler::encode_websocket_client_frame(tempest::profiler::ws_opcode::close, {});
         ASSERT_TRUE(client.send_all(close_frame.data(), close_frame.size()));
@@ -1357,7 +1357,7 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
 /// @brief Verify WebSocket frame decoder rejects malicious allocation bombs and integer overflows.
 TEST(profiler_tests, websocket_frame_overflow_and_allocation_dos_protection)
 {
-    // 1. Setup: Construct an oversized/overflow payload frame header (length = 0xFFFFFFFF)
+    // Setup: Construct an oversized/overflow payload frame header (length = 0xFFFFFFFF)
     auto malicious_frame = tempest::vector<tempest::byte>{};
     malicious_frame.push_back(static_cast<tempest::byte>(0x81)); // FIN | text
     malicious_frame.push_back(static_cast<tempest::byte>(127));  // 64-bit extended length
@@ -1367,11 +1367,11 @@ TEST(profiler_tests, websocket_frame_overflow_and_allocation_dos_protection)
         malicious_frame.push_back(static_cast<tempest::byte>(0xFF));
     }
 
-    // 2. Act: Decode frame
+    // Act: Decode frame
     const auto result = tempest::profiler::decode_websocket_frame(
         tempest::span<const tempest::byte>{malicious_frame.data(), malicious_frame.size()});
 
-    // 3. Assert: Must return payload_too_large or incomplete_frame without throwing bad_alloc or crashing
+    // Assert: Must return payload_too_large or incomplete_frame without throwing bad_alloc or crashing
     ASSERT_FALSE(result.has_value());
     EXPECT_TRUE(result.error() == tempest::profiler::ws_error::payload_too_large ||
                 result.error() == tempest::profiler::ws_error::incomplete_frame);
@@ -1380,7 +1380,7 @@ TEST(profiler_tests, websocket_frame_overflow_and_allocation_dos_protection)
 /// @brief Verify HTTP GET requests with query strings cleanly serve assets.
 TEST(profiler_tests, http_request_query_string_stripping)
 {
-    // 1. Setup: Start web server
+    // Setup: Start web server
     auto session = tempest::profiler::profiler_session{false};
     auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8086, .max_port_attempts = 10};
     auto server = tempest::profiler::web_server{session, config};
@@ -1388,7 +1388,7 @@ TEST(profiler_tests, http_request_query_string_stripping)
     ASSERT_TRUE(server.is_running());
     const auto port = server.get_bound_port();
 
-    // 2. Act & Assert: Request /index.html?token=test1234
+    // Act & Assert: Request /index.html?token=test1234
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
@@ -1400,7 +1400,7 @@ TEST(profiler_tests, http_request_query_string_stripping)
         EXPECT_TRUE(tempest::contains(resp, "Tempest Engine Profiler"));
     }
 
-    // 3. Act & Assert: Request /?v=1
+    // Act & Assert: Request /?v=1
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
@@ -1418,7 +1418,7 @@ TEST(profiler_tests, http_request_query_string_stripping)
 /// deadlock.
 TEST(profiler_tests, multiple_concurrent_websocket_clients_broadcast)
 {
-    // 1. Setup: Start web server
+    // Setup: Start web server
     auto session = tempest::profiler::profiler_session{true};
     auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8088, .max_port_attempts = 10};
     auto server = tempest::profiler::web_server{session, config};
@@ -1426,7 +1426,7 @@ TEST(profiler_tests, multiple_concurrent_websocket_clients_broadcast)
     ASSERT_TRUE(server.is_running());
     const auto port = server.get_bound_port();
 
-    // 2. Act: Connect 3 concurrent WebSocket clients
+    // Act: Connect 3 concurrent WebSocket clients
     auto client1 = test_tcp_client{};
     auto client2 = test_tcp_client{};
     auto client3 = test_tcp_client{};
@@ -1457,12 +1457,12 @@ TEST(profiler_tests, multiple_concurrent_websocket_clients_broadcast)
     tempest::this_thread::yield();
     EXPECT_EQ(server.connected_client_count(), 3U);
 
-    // 3. Act: Broadcast telemetry frame to all 3 clients
+    // Act: Broadcast telemetry frame to all 3 clients
     auto t_frame = tempest::profiler::telemetry_frame{};
     t_frame.frame_index = 100;
     server.broadcast_telemetry(t_frame);
 
-    // 4. Assert: All 3 clients receive the broadcast frame
+    // Assert: All 3 clients receive the broadcast frame
     const auto r1 = client1.receive_all(500);
     const auto r2 = client2.receive_all(500);
     const auto r3 = client3.receive_all(500);
@@ -1500,7 +1500,7 @@ TEST(profiler_tests, multiple_concurrent_websocket_clients_broadcast)
 /// gpu_tracks.
 TEST(profiler_tests, gpu_track_classification_and_telemetry_routing)
 {
-    // 1. Setup: Create event chunks representing GPU queues and CPU threads
+    // Setup: Create event chunks representing GPU queues and CPU threads
     auto chunks = tempest::vector<tempest::unique_ptr<tempest::profiler::event_chunk>>{};
 
     // Graphics queue: bit 31 set, index 0 -> track_id = 0x8000'0001ULL
@@ -1570,12 +1570,12 @@ TEST(profiler_tests, gpu_track_classification_and_telemetry_routing)
     });
     chunks.push_back(tempest::move(chunk_linux_cpu));
 
-    // 2. Act: Create capture session data from chunks
+    // Act: Create capture session data from chunks
     const auto chunk_span =
         tempest::span<const tempest::unique_ptr<tempest::profiler::event_chunk>>{chunks.data(), chunks.size()};
     const auto capture = tempest::profiler::create_capture_from_chunks(chunk_span);
 
-    // 3. Assert: Verify track classification and naming in capture session data
+    // Assert: Verify track classification and naming in capture session data
     ASSERT_EQ(capture.tracks.size(), 6U);
 
     // GPU: Graphics
@@ -1608,7 +1608,7 @@ TEST(profiler_tests, gpu_track_classification_and_telemetry_routing)
     EXPECT_EQ(capture.tracks[5].type, tempest::profiler::track_type::cpu_thread);
     EXPECT_EQ(capture.tracks[5].name, "Thread 140735340876340");
 
-    // 4. Act & Assert: Convert to telemetry frame and verify segregation
+    // Act & Assert: Convert to telemetry frame and verify segregation
     const auto telemetry = tempest::profiler::create_telemetry_frame_from_capture(1, capture);
     EXPECT_EQ(telemetry.gpu_tracks.size(), 4U);
     EXPECT_EQ(telemetry.cpu_tracks.size(), 2U);
@@ -1625,16 +1625,16 @@ TEST(profiler_tests, gpu_track_classification_and_telemetry_routing)
 /// @brief Verify GPU track IDs remain strictly within JavaScript safe integer range (53 bits, < 2^53).
 TEST(profiler_tests, gpu_track_id_js_safe_integer_range)
 {
-    // 1. Setup: Define maximum safe integer in IEEE-754 double precision (2^53 - 1)
+    // Setup: Define maximum safe integer in IEEE-754 double precision (2^53 - 1)
     constexpr auto js_max_safe_integer = uint64_t{(1ULL << 53) - 1};
 
-    // 2. Act: Generate GPU queue track IDs for standard and high index queues
+    // Act: Generate GPU queue track IDs for standard and high index queues
     const auto gfx_track_id = uint64_t{0x8000'0000ULL | 1ULL};
     const auto compute_track_id = uint64_t{0x8000'0000ULL | 2ULL};
     const auto transfer_track_id = uint64_t{0x8000'0000ULL | 3ULL};
     const auto max_queue_track_id = uint64_t{0x8000'0000ULL | 0x7FFF'FFFFULL};
 
-    // 3. Assert: All GPU track IDs are well within the JS safe integer limit
+    // Assert: All GPU track IDs are well within the JS safe integer limit
     EXPECT_LT(gfx_track_id, js_max_safe_integer);
     EXPECT_LT(compute_track_id, js_max_safe_integer);
     EXPECT_LT(transfer_track_id, js_max_safe_integer);
@@ -1666,11 +1666,11 @@ TEST(profiler_tests, gpu_track_id_js_safe_integer_range)
 /// @brief Verify drained chunks are recycled into the session pool without new heap allocations.
 TEST(profiler_tests, chunk_recycling_via_create_capture_from_session)
 {
-    // 1. Setup profiler session and verify empty initial pool
+    // Setup profiler session and verify empty initial pool
     auto session = tempest::profiler::profiler_session{true};
     EXPECT_EQ(session.get_chunk_pool().pool_size(), 0U);
 
-    // 2. Act: Record multiple zones exceeding a chunk, then create capture from session
+    // Act: Record multiple zones exceeding a chunk, then create capture from session
     constexpr auto event_count = size_t{2000};
     for (auto i = size_t{0}; i < event_count; ++i)
     {
@@ -1679,7 +1679,7 @@ TEST(profiler_tests, chunk_recycling_via_create_capture_from_session)
 
     const auto capture = tempest::profiler::create_capture_from_session(session);
 
-    // 3. Assert: Capture contains all events and drained chunks were recycled into pool
+    // Assert: Capture contains all events and drained chunks were recycled into pool
     auto total_zones = size_t{0};
     for (const auto& tr : capture.tracks)
     {
@@ -1688,7 +1688,7 @@ TEST(profiler_tests, chunk_recycling_via_create_capture_from_session)
     EXPECT_EQ(total_zones, event_count);
     EXPECT_GT(session.get_chunk_pool().pool_size(), 0U);
 
-    // 4. Act: Record second frame and capture again, verifying pool reuse
+    // Act: Record second frame and capture again, verifying pool reuse
     const auto pool_size_before = session.get_chunk_pool().pool_size();
     for (auto i = size_t{0}; i < event_count; ++i)
     {
@@ -1705,7 +1705,7 @@ TEST(profiler_tests, chunk_recycling_via_create_capture_from_session)
 /// @brief Verify non-blocking socket broadcasts handle multiple clients gracefully without stalling.
 TEST(profiler_tests, nonblocking_socket_broadcast_handling)
 {
-    // 1. Setup: Start web server
+    // Setup: Start web server
     auto session = tempest::profiler::profiler_session{true};
     auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8092, .max_port_attempts = 10};
     auto server = tempest::profiler::web_server{session, config};
@@ -1713,7 +1713,7 @@ TEST(profiler_tests, nonblocking_socket_broadcast_handling)
     ASSERT_TRUE(server.is_running());
     const auto port = server.get_bound_port();
 
-    // 2. Act: Connect a WebSocket client
+    // Act: Connect a WebSocket client
     auto client = test_tcp_client{};
     ASSERT_TRUE(client.connect_to("127.0.0.1", port));
 
@@ -1731,7 +1731,7 @@ TEST(profiler_tests, nonblocking_socket_broadcast_handling)
     tempest::this_thread::yield();
     EXPECT_EQ(server.connected_client_count(), 1U);
 
-    // 3. Act: Issue multiple non-blocking broadcasts in rapid succession
+    // Act: Issue multiple non-blocking broadcasts in rapid succession
     for (auto i = uint64_t{0}; i < 10; ++i)
     {
         auto t_frame = tempest::profiler::telemetry_frame{};
@@ -1739,7 +1739,7 @@ TEST(profiler_tests, nonblocking_socket_broadcast_handling)
         server.broadcast_telemetry(t_frame);
     }
 
-    // 4. Assert: Client is still connected and can receive frames without server stalling
+    // Assert: Client is still connected and can receive frames without server stalling
     EXPECT_EQ(server.connected_client_count(), 1U);
     const auto bc_data = client.receive_all(500);
     EXPECT_FALSE(bc_data.empty());
@@ -1750,7 +1750,7 @@ TEST(profiler_tests, nonblocking_socket_broadcast_handling)
 /// @brief Verify large multi-kilobyte telemetry frames transmit completely without truncation.
 TEST(profiler_tests, large_payload_nonblocking_send_all)
 {
-    // 1. Setup: Start web server
+    // Setup: Start web server
     auto session = tempest::profiler::profiler_session{true};
     auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8093, .max_port_attempts = 10};
     auto server = tempest::profiler::web_server{session, config};
@@ -1758,7 +1758,7 @@ TEST(profiler_tests, large_payload_nonblocking_send_all)
     ASSERT_TRUE(server.is_running());
     const auto port = server.get_bound_port();
 
-    // 2. Connect client
+    // Connect client
     auto client = test_tcp_client{};
     ASSERT_TRUE(client.connect_to("127.0.0.1", port));
 
@@ -1773,11 +1773,11 @@ TEST(profiler_tests, large_payload_nonblocking_send_all)
     const auto resp = client.receive_all(500);
     ASSERT_TRUE(tempest::contains(resp, "HTTP/1.1 101"));
 
-    // 3. Act: Broadcast a 128KB large payload
+    // Act: Broadcast a 128KB large payload
     auto large_text = tempest::string(128 * 1024, 'A');
     server.broadcast_text(tempest::string_view{large_text.data(), large_text.size()});
 
-    // 4. Assert: Client receives the complete WebSocket payload without truncation
+    // Assert: Client receives the complete WebSocket payload without truncation
     const auto bc_data = client.receive_all(1000);
     EXPECT_GT(bc_data.size(), 128 * 1024U);
 
@@ -1788,7 +1788,7 @@ TEST(profiler_tests, large_payload_nonblocking_send_all)
 /// serialization.
 TEST(profiler_tests, gpu_track_zone_metrics_telemetry_serialization)
 {
-    // 1. Setup: Create profiler session and record GPU track chunk with pipeline stats
+    // Setup: Create profiler session and record GPU track chunk with pipeline stats
     auto session = tempest::profiler::profiler_session{true};
     const auto gpu_track_id = 0x8000'0001ULL; // Graphics Queue Track
     session.register_track(gpu_track_id, "GPU: Graphics");
@@ -1846,22 +1846,22 @@ TEST(profiler_tests, gpu_track_zone_metrics_telemetry_serialization)
     ASSERT_TRUE(chunk->add_zone(z));
     session.push_completed_chunk(tempest::move(chunk));
 
-    // 2. Act: Extract capture session and build telemetry frame
+    // Act: Extract capture session and build telemetry frame
     const auto capture = tempest::profiler::create_capture_from_session(session);
     const auto telemetry = tempest::profiler::create_telemetry_frame_from_capture(42, capture);
 
-    // 3. Assert: Verify GPU track structure and zone metrics preservation
+    // Assert: Verify GPU track structure and zone metrics preservation
     ASSERT_EQ(telemetry.gpu_tracks.size(), 1U);
     ASSERT_EQ(telemetry.gpu_tracks[0].zones.size(), 1U);
     const auto& t_zone = telemetry.gpu_tracks[0].zones[0];
     EXPECT_EQ(t_zone.name, "PBROpaquePass");
     EXPECT_EQ(t_zone.metrics.size(), 7U);
 
-    // 4. Act: Serialize telemetry frame to JSON
+    // Act: Serialize telemetry frame to JSON
     const auto json_str = tempest::profiler::serialize_telemetry_frame_json(telemetry);
     const auto json_std = tempest::string(json_str.data(), json_str.size());
 
-    // 5. Assert: JSON payload contains GPU track zones with all pipeline metrics
+    // Assert: JSON payload contains GPU track zones with all pipeline metrics
     EXPECT_TRUE(tempest::contains(json_std, "\"gpu_tracks\":["));
     EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"PBROpaquePass\""));
     EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Input Assembly Vertices\",\"value\":1200.000"));
@@ -1880,7 +1880,7 @@ TEST(profiler_tests, gpu_track_zone_metrics_telemetry_serialization)
 /// @brief Verifies calculation of exclusive (self) timing for nested zone hierarchies and sibling zones.
 TEST(profiler_tests, zone_exclusive_duration_calculation)
 {
-    // 1. Setup: Construct nested zone records
+    // Setup: Construct nested zone records
     // Hierarchy:
     // RootZone (1000 - 3000 = 2000ns total, depth 0)
     //   ├── ChildA (1000 - 1800 = 800ns total, depth 1)
@@ -1912,11 +1912,11 @@ TEST(profiler_tests, zone_exclusive_duration_calculation)
         .name = "ChildB",
     });
 
-    // 2. Act: Compute exclusive durations
+    // Act: Compute exclusive durations
     const auto z_span = tempest::span<const tempest::profiler::zone_record>{zones.data(), zones.size()};
     const auto result = tempest::profiler::compute_exclusive_durations(z_span);
 
-    // 3. Assert: Verify each zone's exclusive time
+    // Assert: Verify each zone's exclusive time
     ASSERT_EQ(result.size(), 4U);
 
     // RootZone: Total = 2000ns, direct children (ChildA 800ns + ChildB 600ns = 1400ns) -> Exclusive = 600ns
@@ -1943,7 +1943,7 @@ TEST(profiler_tests, zone_exclusive_duration_calculation)
 /// @brief Verifies detection and filtering of GPU queue submit envelopes from hot zones.
 TEST(profiler_tests, gpu_submit_envelope_detection_and_hot_zone_filtering)
 {
-    // 1. Setup: Verify submit name detection helper
+    // Setup: Verify submit name detection helper
     EXPECT_TRUE(tempest::profiler::is_gpu_submit_zone_name("Graphics Submit"));
     EXPECT_TRUE(tempest::profiler::is_gpu_submit_zone_name("Async Compute Submit"));
     EXPECT_TRUE(tempest::profiler::is_gpu_submit_zone_name("Async Transfer Submit"));
@@ -1953,7 +1953,7 @@ TEST(profiler_tests, gpu_submit_envelope_detection_and_hot_zone_filtering)
     EXPECT_FALSE(tempest::profiler::is_gpu_submit_zone_name("ShadowPass"));
     EXPECT_FALSE(tempest::profiler::is_gpu_submit_zone_name("BloomDownsample"));
 
-    // 2. Setup: Build mock GPU telemetry track with a top-level submit envelope and child passes
+    // Setup: Build mock GPU telemetry track with a top-level submit envelope and child passes
     auto tracks = tempest::vector<tempest::profiler::telemetry_track>{};
     auto gtrack = tempest::profiler::telemetry_track{
         .track_id = 0x8000'0001ULL,
@@ -1984,11 +1984,11 @@ TEST(profiler_tests, gpu_submit_envelope_detection_and_hot_zone_filtering)
     });
     tracks.push_back(tempest::move(gtrack));
 
-    // 3. Act: Extract hot zones with GPU submit filtering enabled
+    // Act: Extract hot zones with GPU submit filtering enabled
     const auto hot_zones = tempest::profiler::extract_hot_zones(
         tempest::span<const tempest::profiler::telemetry_track>{tracks.data(), tracks.size()}, true, 5);
 
-    // 4. Assert: Submit envelope is omitted, passes are ranked by exclusive duration
+    // Assert: Submit envelope is omitted, passes are ranked by exclusive duration
     ASSERT_EQ(hot_zones.size(), 2U);
     EXPECT_EQ(hot_zones[0].name, "ForwardLightingPass");
     EXPECT_NEAR(hot_zones[0].exclusive_duration_ms, 3.0, 1e-4);
@@ -1999,7 +1999,7 @@ TEST(profiler_tests, gpu_submit_envelope_detection_and_hot_zone_filtering)
 /// @brief Verifies frame_stats_accumulator rolling average computation and window sliding across N frames.
 TEST(profiler_tests, frame_stats_accumulator_rolling_averages_and_wrap)
 {
-    // 1. Setup: Create accumulator with capacity N = 4 frames
+    // Setup: Create accumulator with capacity N = 4 frames
     auto acc = tempest::profiler::frame_stats_accumulator{4};
     EXPECT_EQ(acc.window_capacity(), 4U);
     EXPECT_EQ(acc.sample_count(), 0U);
@@ -2010,7 +2010,7 @@ TEST(profiler_tests, frame_stats_accumulator_rolling_averages_and_wrap)
 
     auto empty_frame = tempest::profiler::telemetry_frame{};
 
-    // 2. Act & Assert: Push 1st frame (FPS=60, Frame=16.6ms, CPU=5.0ms, GPU=4.0ms)
+    // Act & Assert: Push 1st frame (FPS=60, Frame=16.6ms, CPU=5.0ms, GPU=4.0ms)
     acc.record_frame(60.0F, 16.6F, 5.0F, 4.0F, empty_frame);
     EXPECT_EQ(acc.sample_count(), 1U);
     EXPECT_NEAR(acc.get_rolling_fps(), 60.0F, 1e-3);
@@ -2018,7 +2018,7 @@ TEST(profiler_tests, frame_stats_accumulator_rolling_averages_and_wrap)
     EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 5.0F, 1e-3);
     EXPECT_NEAR(acc.get_rolling_gpu_time_ms(), 4.0F, 1e-3);
 
-    // 3. Act & Assert: Push 2nd frame (FPS=30, Frame=33.3ms, CPU=15.0ms, GPU=12.0ms)
+    // Act & Assert: Push 2nd frame (FPS=30, Frame=33.3ms, CPU=15.0ms, GPU=12.0ms)
     acc.record_frame(30.0F, 33.3F, 15.0F, 12.0F, empty_frame);
     EXPECT_EQ(acc.sample_count(), 2U);
     EXPECT_NEAR(acc.get_rolling_fps(), 45.0F, 1e-3);            // (60 + 30) / 2
@@ -2033,13 +2033,13 @@ TEST(profiler_tests, frame_stats_accumulator_rolling_averages_and_wrap)
     // Mean CPU over [5, 15, 6, 6] = 32 / 4 = 8.0ms
     EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 8.0F, 1e-3);
 
-    // 4. Act & Assert: Push 5th frame to trigger wrap-around (evicts 1st frame with CPU=5.0)
+    // Act & Assert: Push 5th frame to trigger wrap-around (evicts 1st frame with CPU=5.0)
     // New window: [15, 6, 6, 20] -> Sum = 47 / 4 = 11.75ms
     acc.record_frame(50.0F, 20.0F, 20.0F, 10.0F, empty_frame);
     EXPECT_EQ(acc.sample_count(), 4U);
     EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 11.75F, 1e-3);
 
-    // 5. Act & Assert: Reset clears history
+    // Act & Assert: Reset clears history
     acc.reset();
     EXPECT_EQ(acc.sample_count(), 0U);
     EXPECT_FLOAT_EQ(acc.get_rolling_cpu_time_ms(), 0.0F);
@@ -2048,7 +2048,7 @@ TEST(profiler_tests, frame_stats_accumulator_rolling_averages_and_wrap)
 /// @brief Verifies rolling hot zone aggregation and exclusive time averaging over multiple frames.
 TEST(profiler_tests, frame_stats_accumulator_rolling_hot_zones)
 {
-    // 1. Setup: Create accumulator with capacity 2 frames
+    // Setup: Create accumulator with capacity 2 frames
     auto acc = tempest::profiler::frame_stats_accumulator{2};
 
     // Frame 1: CPU zone "Physics" (2ms), "Render" (4ms, exclusive 3ms with child 1ms)
@@ -2099,14 +2099,14 @@ TEST(profiler_tests, frame_stats_accumulator_rolling_hot_zones)
     });
     frame2.cpu_tracks.push_back(tempest::move(track2));
 
-    // 2. Act: Record both frames
+    // Act: Record both frames
     acc.record_frame(60.0F, 16.6F, 6.0F, 0.0F, frame1);
     acc.record_frame(60.0F, 16.6F, 5.0F, 0.0F, frame2);
 
-    // 3. Act: Query rolling top CPU hot zones
+    // Act: Query rolling top CPU hot zones
     const auto top_cpu = acc.get_top_cpu_hot_zones(5);
 
-    // 4. Assert:
+    // Assert:
     // "Physics": frame1=2ms, frame2=4ms -> avg = 3.0ms
     // "Render": frame1=3ms exclusive, frame2=0ms -> avg = 1.5ms
     // "RenderChild": frame1=1ms exclusive, frame2=0ms -> avg = 0.5ms
@@ -2121,21 +2121,21 @@ TEST(profiler_tests, frame_stats_accumulator_rolling_hot_zones)
 /// @brief Verifies retrospective GPU metrics and hot zone attribution to past recording frames in frame_stats_accumulator.
 TEST(profiler_tests, frame_stats_accumulator_retrospective_gpu_attribution)
 {
-    // 1. Setup: Create accumulator with capacity 4 frames
+    // Setup: Create accumulator with capacity 4 frames
     auto acc = tempest::profiler::frame_stats_accumulator{4};
 
     auto frame1 = tempest::profiler::telemetry_frame{.frame_index = 1};
     auto frame2 = tempest::profiler::telemetry_frame{.frame_index = 2};
     auto frame3 = tempest::profiler::telemetry_frame{.frame_index = 3};
 
-    // 2. Act: Record Frame 1 and Frame 2 with CPU metrics only (GPU work in flight)
+    // Act: Record Frame 1 and Frame 2 with CPU metrics only (GPU work in flight)
     acc.record_frame(60.0F, 16.6F, 4.0F, 0.0F, frame1);
     acc.record_frame(60.0F, 16.6F, 5.0F, 0.0F, frame2);
 
     // Initial rolling GPU time should be 0 since no frames have completed GPU measurements yet
     EXPECT_FLOAT_EQ(acc.get_rolling_gpu_time_ms(), 0.0F);
 
-    // 3. Act: Frame 3 is submitted; queries for Frame 1 are harvested
+    // Act: Frame 3 is submitted; queries for Frame 1 are harvested
     acc.record_frame(60.0F, 16.6F, 6.0F, 0.0F, frame3);
 
     auto gpu_tracks_frame1 = tempest::vector<tempest::profiler::telemetry_track>{};
@@ -2165,10 +2165,10 @@ TEST(profiler_tests, frame_stats_accumulator_retrospective_gpu_attribution)
         1, 5.5F, tempest::span<const tempest::profiler::telemetry_track>{gpu_tracks_frame1.data(), gpu_tracks_frame1.size()});
     EXPECT_TRUE(updated);
 
-    // 4. Assert: Rolling GPU average is computed only over measured frames (5.5ms) without in-flight 0ms bias
+    // Assert: Rolling GPU average is computed only over measured frames (5.5ms) without in-flight 0ms bias
     EXPECT_NEAR(acc.get_rolling_gpu_time_ms(), 5.5F, 1e-3);
 
-    // 5. Assert: Top GPU hot zones correctly attribute Frame 1's passes
+    // Assert: Top GPU hot zones correctly attribute Frame 1's passes
     const auto top_gpu = acc.get_top_gpu_hot_zones(5);
     ASSERT_GE(top_gpu.size(), 2U);
     EXPECT_EQ(top_gpu[0].name, "GBufferPass");
@@ -2176,7 +2176,7 @@ TEST(profiler_tests, frame_stats_accumulator_retrospective_gpu_attribution)
     EXPECT_EQ(top_gpu[1].name, "ShadowPass");
     EXPECT_NEAR(top_gpu[1].exclusive_duration_ms, 2.0, 1e-3);
 
-    // 6. Act & Assert: Attempting to update a non-existent frame returns false
+    // Act & Assert: Attempting to update a non-existent frame returns false
     const auto update_missing = acc.update_gpu_stats(999, 10.0F, {});
     EXPECT_FALSE(update_missing);
 }
@@ -2185,7 +2185,7 @@ TEST(profiler_tests, frame_stats_accumulator_retrospective_gpu_attribution)
 /// and unmasked client frames.
 TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)
 {
-    // 1. Setup & Assert: Non-zero RSV bits (RSV1 = 0x40, RSV2 = 0x20, RSV3 = 0x10) must be rejected
+    // Setup & Assert: Non-zero RSV bits (RSV1 = 0x40, RSV2 = 0x20, RSV3 = 0x10) must be rejected
     {
         auto rsv_frame = tempest::vector<tempest::byte>{};
         rsv_frame.push_back(static_cast<tempest::byte>(0xC1)); // FIN | RSV1 | text opcode
@@ -2196,7 +2196,7 @@ TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)
         EXPECT_EQ(res.error(), tempest::profiler::ws_error::invalid_frame);
     }
 
-    // 2. Setup & Assert: Undefined reserved opcodes (e.g. 0x3, 0xB) must be rejected
+    // Setup & Assert: Undefined reserved opcodes (e.g. 0x3, 0xB) must be rejected
     {
         auto invalid_opcode_frame = tempest::vector<tempest::byte>{};
         invalid_opcode_frame.push_back(static_cast<tempest::byte>(0x83)); // FIN | reserved opcode 3
@@ -2207,7 +2207,7 @@ TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)
         EXPECT_EQ(res.error(), tempest::profiler::ws_error::invalid_frame);
     }
 
-    // 3. Setup & Assert: Fragmented control frames (FIN = 0) must be rejected per RFC 6455 Section 5.5
+    // Setup & Assert: Fragmented control frames (FIN = 0) must be rejected per RFC 6455 Section 5.5
     {
         auto frag_ping = tempest::vector<tempest::byte>{};
         frag_ping.push_back(static_cast<tempest::byte>(0x09)); // FIN=0 | ping opcode
@@ -2218,7 +2218,7 @@ TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)
         EXPECT_EQ(res.error(), tempest::profiler::ws_error::invalid_frame);
     }
 
-    // 4. Setup & Assert: Control frames with payload > 125 bytes must be rejected per RFC 6455 Section 5.5
+    // Setup & Assert: Control frames with payload > 125 bytes must be rejected per RFC 6455 Section 5.5
     {
         auto large_ping = tempest::vector<tempest::byte>{};
         large_ping.push_back(static_cast<tempest::byte>(0x89)); // FIN | ping opcode
@@ -2231,7 +2231,7 @@ TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)
         EXPECT_EQ(res.error(), tempest::profiler::ws_error::invalid_frame);
     }
 
-    // 5. Setup & Assert: Server must drop connection on receiving unmasked client frame per RFC 6455 Section 5.1
+    // Setup & Assert: Server must drop connection on receiving unmasked client frame per RFC 6455 Section 5.1
     {
         auto session = tempest::profiler::profiler_session{false};
         auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8092, .max_port_attempts = 10};
@@ -2281,7 +2281,7 @@ TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)
 /// @brief Verify WebSocket control commands use exact matching rather than naive substring matching.
 TEST(profiler_tests, websocket_control_command_exact_matching_and_unknown_handling)
 {
-    // 1. Setup: Start web server
+    // Setup: Start web server
     auto session = tempest::profiler::profiler_session{true};
     auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8094, .max_port_attempts = 10};
     auto server = tempest::profiler::web_server{session, config};
@@ -2302,7 +2302,7 @@ TEST(profiler_tests, websocket_control_command_exact_matching_and_unknown_handli
     const auto resp = client.receive_all(500);
     ASSERT_TRUE(tempest::contains(resp, "HTTP/1.1 101"));
 
-    // 2. Act & Assert: Send "stop_capture" with extra metadata mentioning "start_capture"
+    // Act & Assert: Send "stop_capture" with extra metadata mentioning "start_capture"
     {
         const auto cmd = tempest::string{R"({"command":"stop_capture","note":"do not start_capture"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
@@ -2325,7 +2325,7 @@ TEST(profiler_tests, websocket_control_command_exact_matching_and_unknown_handli
         EXPECT_FALSE(session.is_enabled());
     }
 
-    // 3. Act & Assert: Send unknown command "restart_capture" (containing "start_capture" as substring)
+    // Act & Assert: Send unknown command "restart_capture" (containing "start_capture" as substring)
     {
         const auto cmd = tempest::string{R"({"command":"restart_capture"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
@@ -2360,18 +2360,18 @@ TEST(profiler_tests, websocket_control_command_exact_matching_and_unknown_handli
 ///        with proper coroutine IDs, slice indices, and suspend reasons.
 TEST(profiler_tests, coroutine_slice_tracking)
 {
-    // 1. Setup: Create enabled profiler session
+    // Setup: Create enabled profiler session
     auto session = tempest::profiler::profiler_session{true};
     auto& ctx = session.get_or_register_thread();
 
-    // 2. Act: Record two consecutive slices for a coroutine
+    // Act: Record two consecutive slices for a coroutine
     ctx.begin_coroutine_slice(101, 0, "TestTask");
     ctx.end_coroutine_slice(tempest::profiler::suspend_reason::yield);
 
     ctx.begin_coroutine_slice(101, 1, "TestTask");
     ctx.end_coroutine_slice(tempest::profiler::suspend_reason::completed);
 
-    // 3. Assert: Drain chunks and verify slice records
+    // Assert: Drain chunks and verify slice records
     auto chunks = session.drain_completed_chunks();
     ASSERT_FALSE(chunks.empty());
 
@@ -2400,16 +2400,16 @@ TEST(profiler_tests, coroutine_slice_tracking)
 ///        persisting even when end_coroutine_slice is called with none.
 TEST(profiler_tests, suspend_reason_tagging)
 {
-    // 1. Setup: Create enabled profiler session
+    // Setup: Create enabled profiler session
     auto session = tempest::profiler::profiler_session{true};
     auto& ctx = session.get_or_register_thread();
 
-    // 2. Act: Begin slice, tag mutex contention, and complete slice
+    // Act: Begin slice, tag mutex contention, and complete slice
     ctx.begin_coroutine_slice(202, 0, "ContendedTask");
     ctx.tag_current_slice_suspend_reason(tempest::profiler::suspend_reason::mutex_contention);
     ctx.end_coroutine_slice();
 
-    // 3. Assert: Verify recorded slice has mutex_contention suspend reason
+    // Assert: Verify recorded slice has mutex_contention suspend reason
     auto chunks = session.drain_completed_chunks();
     ASSERT_FALSE(chunks.empty());
 
@@ -2425,18 +2425,18 @@ TEST(profiler_tests, suspend_reason_tagging)
 ///        the active coroutine ID automatically.
 TEST(profiler_tests, nested_zone_coroutine_id_inheritance)
 {
-    // 1. Setup: Create enabled profiler session
+    // Setup: Create enabled profiler session
     auto session = tempest::profiler::profiler_session{true};
     auto& ctx = session.get_or_register_thread();
 
-    // 2. Act: Begin slice, open child scoped_zone, and finish
+    // Act: Begin slice, open child scoped_zone, and finish
     ctx.begin_coroutine_slice(303, 0, "CoroOuter");
     {
         [[maybe_unused]] const auto inner = tempest::profiler::scoped_zone{session, "InnerCompute"};
     }
     ctx.end_coroutine_slice(tempest::profiler::suspend_reason::completed);
 
-    // 3. Assert: Verify both inner and outer zones inherit coroutine_id 303
+    // Assert: Verify both inner and outer zones inherit coroutine_id 303
     auto chunks = session.drain_completed_chunks();
     ASSERT_FALSE(chunks.empty());
 
@@ -2459,7 +2459,7 @@ TEST(profiler_tests, nested_zone_coroutine_id_inheritance)
 ///        with exact fidelity across serialize and deserialize cycles.
 TEST(profiler_tests, binary_serialization_roundtrip_v1_1)
 {
-    // 1. Setup: Populate capture_session_data with coroutine slice metadata
+    // Setup: Populate capture_session_data with coroutine slice metadata
     auto capture = tempest::profiler::capture_session_data{
         .start_time_ns = 1000,
         .end_time_ns = 5000,
@@ -2503,14 +2503,14 @@ TEST(profiler_tests, binary_serialization_roundtrip_v1_1)
 
     capture.tracks.push_back(tempest::move(track));
 
-    // 2. Act: Serialize to binary buffer and deserialize back
+    // Act: Serialize to binary buffer and deserialize back
     const auto buffer = tempest::profiler::serialize_binary_to_buffer(capture);
     ASSERT_FALSE(buffer.empty());
 
     const auto roundtrip = tempest::profiler::deserialize_binary_from_buffer(
         tempest::span<const tempest::byte>{buffer.data(), buffer.size()});
 
-    // 3. Assert: Verify coroutine slice fields are preserved
+    // Assert: Verify coroutine slice fields are preserved
     ASSERT_TRUE(roundtrip.has_value());
     ASSERT_EQ(roundtrip->tracks.size(), 1U);
     ASSERT_EQ(roundtrip->tracks[0].zones.size(), 2U);
@@ -2531,7 +2531,7 @@ TEST(profiler_tests, binary_serialization_roundtrip_v1_1)
 /// @brief Verify that Chrome Trace JSON export includes coroutine_id, slice_index, and suspend_reason in event args.
 TEST(profiler_tests, json_serialization_coroutine_args)
 {
-    // 1. Setup: Populate capture_session_data with coroutine metadata
+    // Setup: Populate capture_session_data with coroutine metadata
     auto capture = tempest::profiler::capture_session_data{
         .start_time_ns = 1000,
         .end_time_ns = 5000,
@@ -2562,10 +2562,10 @@ TEST(profiler_tests, json_serialization_coroutine_args)
 
     capture.tracks.push_back(tempest::move(track));
 
-    // 2. Act: Export Chrome trace JSON string
+    // Act: Export Chrome trace JSON string
     const auto json_str = tempest::profiler::export_chrome_trace_json_string(capture);
 
-    // 3. Assert: Check for serialized coroutine fields
+    // Assert: Check for serialized coroutine fields
     EXPECT_TRUE(tempest::contains(json_str, "\"coroutine_id\": 505"));
     EXPECT_TRUE(tempest::contains(json_str, "\"slice_index\": 2"));
     EXPECT_TRUE(tempest::contains(json_str, "\"suspend_reason\": \"event_wait\""));
@@ -2576,7 +2576,7 @@ TEST(profiler_tests, json_serialization_coroutine_args)
 /// @brief Verify that binary trace format v1.2 preserves coroutine provenance (spawn and await IDs) across serialization roundtrips.
 TEST(profiler_tests, binary_serialization_roundtrip_v1_2_coroutine_provenance)
 {
-    // 1. Setup: Construct capture session data with coroutine spawn & await provenance
+    // Setup: Construct capture session data with coroutine spawn & await provenance
     auto capture = tempest::profiler::capture_session_data{
         .start_time_ns = 100,
         .end_time_ns = 5000,
@@ -2611,14 +2611,14 @@ TEST(profiler_tests, binary_serialization_roundtrip_v1_2_coroutine_provenance)
 
     capture.tracks.push_back(tempest::move(track));
 
-    // 2. Act: Export binary capture and deserialize back
+    // Act: Export binary capture and deserialize back
     const auto buffer = tempest::profiler::serialize_binary_to_buffer(capture);
     ASSERT_FALSE(buffer.empty());
 
     const auto roundtrip = tempest::profiler::deserialize_binary_from_buffer(
         tempest::span<const tempest::byte>{buffer.data(), buffer.size()});
 
-    // 3. Assert: Verify coroutine provenance fields are accurately preserved
+    // Assert: Verify coroutine provenance fields are accurately preserved
     ASSERT_TRUE(roundtrip.has_value());
     ASSERT_EQ(roundtrip->tracks.size(), 1U);
     ASSERT_EQ(roundtrip->tracks[0].zones.size(), 1U);
@@ -2636,7 +2636,7 @@ TEST(profiler_tests, binary_serialization_roundtrip_v1_2_coroutine_provenance)
 /// @brief Verify that telemetry frames and telemetry JSON contain coroutine provenance (spawn and await tracking).
 TEST(profiler_tests, telemetry_frame_coroutine_provenance_json_serialization)
 {
-    // 1. Setup: Populate capture with coroutine provenance metadata
+    // Setup: Populate capture with coroutine provenance metadata
     auto capture = tempest::profiler::capture_session_data{
         .start_time_ns = 1000,
         .end_time_ns = 4000,
@@ -2671,7 +2671,7 @@ TEST(profiler_tests, telemetry_frame_coroutine_provenance_json_serialization)
 
     capture.tracks.push_back(tempest::move(track));
 
-    // 2. Act: Convert to telemetry frame and serialize to JSON
+    // Act: Convert to telemetry frame and serialize to JSON
     const auto telemetry = tempest::profiler::create_telemetry_frame_from_capture(1, capture);
     ASSERT_EQ(telemetry.cpu_tracks.size(), 1U);
     ASSERT_EQ(telemetry.cpu_tracks[0].zones.size(), 1U);
@@ -2686,7 +2686,7 @@ TEST(profiler_tests, telemetry_frame_coroutine_provenance_json_serialization)
 
     const auto json_str = tempest::profiler::serialize_telemetry_frame_json(telemetry);
 
-    // 3. Assert: JSON contains all coroutine provenance fields
+    // Assert: JSON contains all coroutine provenance fields
     EXPECT_TRUE(tempest::contains(json_str, "\"coroutine_id\":303"));
     EXPECT_TRUE(tempest::contains(json_str, "\"slice_index\":1"));
     EXPECT_TRUE(tempest::contains(json_str, "\"suspend_reason\":\"completed\""));
@@ -2705,7 +2705,7 @@ TEST(profiler_tests, telemetry_frame_coroutine_provenance_json_serialization)
 ///        and populate thread and coroutine provenance.
 TEST(profiler_tests, scheduler_coroutine_provenance_and_naming_audit)
 {
-    // 1. Setup: Create logger, profiler session enabled, and job system
+    // Setup: Create logger, profiler session enabled, and job system
     auto logger = tempest::logger{};
     auto session = tempest::profiler::profiler_session{};
     session.set_enabled(true);
@@ -2715,7 +2715,7 @@ TEST(profiler_tests, scheduler_coroutine_provenance_and_naming_audit)
         .efficiency_worker_count = 0,
     }};
 
-    // 2. Act: Run async, parallel_for, when_all, and task_graph through job_system
+    // Act: Run async, parallel_for, when_all, and task_graph through job_system
     auto ran_async = false;
     [[maybe_unused]] auto async_job = js.async("AuditAsyncWorker", [&]() {
         ran_async = true;
@@ -2769,7 +2769,7 @@ TEST(profiler_tests, scheduler_coroutine_provenance_and_naming_audit)
     EXPECT_TRUE(graph_node_ran.load(tempest::memory_order::acquire));
     EXPECT_TRUE(master_job.is_ready());
 
-    // 3. Assert: Drain completed chunks and audit all recorded zones
+    // Assert: Drain completed chunks and audit all recorded zones
     auto chunks = session.drain_completed_chunks();
     ASSERT_FALSE(chunks.empty());
 

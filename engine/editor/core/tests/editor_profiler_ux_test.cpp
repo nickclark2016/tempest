@@ -88,13 +88,13 @@ namespace tempest::editor::tests
     /// binds to a valid port in range [8080, 8090], and cleanly stops on destruction.
     TEST(editor_profiler_ux_test, web_server_lifecycle_in_editor_engine_context)
     {
-        // 1. Setup: Create editor engine context
+        // Setup: Create editor engine context
         auto engine_ctx = editor_engine_context{};
 
-        // 2. Act: Query web server state
+        // Act: Query web server state
         const auto* server = engine_ctx.get_web_server();
 
-        // 3. Assert: Verify server is running on a valid port
+        // Assert: Verify server is running on a valid port
         ASSERT_NE(server, nullptr);
         EXPECT_TRUE(server->is_running());
         const auto bound_port = server->get_bound_port();
@@ -108,17 +108,17 @@ namespace tempest::editor::tests
     /// @brief Verifies that telemetry frame creation aggregates CPU/GPU durations and non-blocking broadcasts.
     TEST(editor_profiler_ux_test, telemetry_frame_collection_and_durations)
     {
-        // 1. Setup: Create editor engine context
+        // Setup: Create editor engine context
         auto engine_ctx = editor_engine_context{};
 
-        // 2. Act: Record mock zones into profiler session
+        // Act: Record mock zones into profiler session
         {
             [[maybe_unused]] const auto z1 =
                 profiler::scoped_zone{engine_ctx.get_profiler_session(), "editor::test_zone"};
         }
         engine_ctx.collect_and_broadcast_telemetry();
 
-        // 3. Assert: Verify telemetry frame is non-empty and frame index increments
+        // Assert: Verify telemetry frame is non-empty and frame index increments
         EXPECT_GT(engine_ctx.get_frame_index(), 0U);
         const auto& frame = engine_ctx.get_last_telemetry_frame();
         EXPECT_EQ(frame.frame_index, engine_ctx.get_frame_index());
@@ -127,11 +127,11 @@ namespace tempest::editor::tests
     /// @brief Verifies profiler recording start/stop state management and binary capture export.
     TEST(editor_profiler_ux_test, recording_lifecycle_and_state)
     {
-        // 1. Setup: Create editor engine context
+        // Setup: Create editor engine context
         auto engine_ctx = editor_engine_context{};
         EXPECT_FALSE(engine_ctx.is_recording());
 
-        // 2. Act: Start recording
+        // Act: Start recording
         engine_ctx.set_recording(true);
         EXPECT_TRUE(engine_ctx.is_recording());
 
@@ -141,11 +141,11 @@ namespace tempest::editor::tests
                 profiler::scoped_zone{engine_ctx.get_profiler_session(), "editor::record_test"};
         }
 
-        // 3. Act: Stop recording (exports capture)
+        // Act: Stop recording (exports capture)
         engine_ctx.set_recording(false);
         EXPECT_FALSE(engine_ctx.is_recording());
 
-        // 4. Act: Toggle recording
+        // Act: Toggle recording
         EXPECT_TRUE(engine_ctx.toggle_recording());
         EXPECT_TRUE(engine_ctx.is_recording());
         EXPECT_FALSE(engine_ctx.toggle_recording());
@@ -156,17 +156,17 @@ namespace tempest::editor::tests
     /// synchronization.
     TEST(editor_profiler_ux_test, live_stream_and_gpu_stats_toggles)
     {
-        // 1. Setup: Create editor engine context
+        // Setup: Create editor engine context
         auto engine_ctx = editor_engine_context{};
 
-        // 2. Act & Assert: Live stream toggle
+        // Act & Assert: Live stream toggle
         EXPECT_TRUE(engine_ctx.is_live_stream_enabled());
         engine_ctx.set_live_stream_enabled(false);
         EXPECT_FALSE(engine_ctx.is_live_stream_enabled());
         engine_ctx.set_live_stream_enabled(true);
         EXPECT_TRUE(engine_ctx.is_live_stream_enabled());
 
-        // 3. Act & Assert: GPU stats toggle and renderer synchronization
+        // Act & Assert: GPU stats toggle and renderer synchronization
         EXPECT_TRUE(engine_ctx.is_gpu_stats_enabled());
         EXPECT_EQ(engine_ctx.get_renderer().get_pipeline_statistics(), render_system::all_pipeline_statistics);
 
@@ -187,7 +187,7 @@ namespace tempest::editor::tests
     /// and full status bar telemetry pill rendering in ImGui.
     TEST(editor_profiler_ux_test, editor_context_profiler_ux_rendering)
     {
-        // 1. Setup: Initialize test environment and UI context
+        // Setup: Initialize test environment and UI context
         auto env = create_test_env();
         ASSERT_NE(env.dev, nullptr);
         ASSERT_TRUE(env.win.is_valid());
@@ -217,12 +217,12 @@ namespace tempest::editor::tests
             }
             engine_ctx.collect_and_broadcast_telemetry();
 
-            // 2. Act: Render frame containing MainMenuBar and Status Bar with Telemetry Pill
+            // Act: Render frame containing MainMenuBar and Status Bar with Telemetry Pill
             ui_ctx.begin_ui_commands();
             EXPECT_NO_THROW(ed_ctx.draw());
             ui_ctx.finish_ui_commands();
 
-            // 3. Assert: Verify clean execution and valid frame telemetry
+            // Assert: Verify clean execution and valid frame telemetry
             EXPECT_GT(engine_ctx.get_frame_index(), 0U);
         }
 
@@ -232,7 +232,7 @@ namespace tempest::editor::tests
     /// @brief Verifies global shortcut key event processing for recording and bookmark triggers.
     TEST(editor_profiler_ux_test, global_shortcuts_event_processing)
     {
-        // 1. Setup: Initialize test environment and UI context
+        // Setup: Initialize test environment and UI context
         auto env = create_test_env();
         ASSERT_NE(env.dev, nullptr);
         ASSERT_TRUE(env.win.is_valid());
@@ -261,7 +261,7 @@ namespace tempest::editor::tests
             ui_ctx.finish_ui_commands();
             EXPECT_FALSE(engine_ctx.is_recording());
 
-            // 2. Act: Simulate F8 key press to toggle recording
+            // Act: Simulate F8 key press to toggle recording
             auto& io = ImGui::GetIO();
             io.AddKeyEvent(ImGuiKey_F8, true);
 
@@ -269,10 +269,10 @@ namespace tempest::editor::tests
             ed_ctx.draw();
             ui_ctx.finish_ui_commands();
 
-            // 3. Assert: Recording state is toggled to true
+            // Assert: Recording state is toggled to true
             EXPECT_TRUE(engine_ctx.is_recording());
 
-            // 4. Act: Release F8 and press again to toggle recording off
+            // Act: Release F8 and press again to toggle recording off
             io.AddKeyEvent(ImGuiKey_F8, false);
             ui_ctx.begin_ui_commands();
             ed_ctx.draw();
@@ -283,10 +283,10 @@ namespace tempest::editor::tests
             ed_ctx.draw();
             ui_ctx.finish_ui_commands();
 
-            // 5. Assert: Recording state is toggled back to false
+            // Assert: Recording state is toggled back to false
             EXPECT_FALSE(engine_ctx.is_recording());
 
-            // 6. Act: Simulate F9 key press to insert marker
+            // Act: Simulate F9 key press to insert marker
             io.AddKeyEvent(ImGuiKey_F8, false);
             io.AddKeyEvent(ImGuiKey_F9, true);
 
@@ -301,7 +301,7 @@ namespace tempest::editor::tests
     /// @brief Verifies rolling statistics accumulation in editor_engine_context and filtering of GPU queue submits.
     TEST(editor_profiler_ux_test, editor_rolling_statistics_and_hot_zones)
     {
-        // 1. Setup: Create editor engine context
+        // Setup: Create editor engine context
         auto engine_ctx = editor_engine_context{};
 
         // Setup GPU track with submit envelope and passes
@@ -339,10 +339,10 @@ namespace tempest::editor::tests
             engine_ctx.get_profiler_session().push_completed_chunk(tempest::move(chunk));
         }
 
-        // 2. Act: Collect telemetry for frame 1
+        // Act: Collect telemetry for frame 1
         engine_ctx.collect_and_broadcast_telemetry();
 
-        // 3. Assert: Verify rolling stats and hot zones
+        // Assert: Verify rolling stats and hot zones
         EXPECT_EQ(engine_ctx.get_frame_index(), 1U);
         EXPECT_GT(engine_ctx.get_rolling_fps(), 0.0F);
         EXPECT_GT(engine_ctx.get_rolling_frame_time_ms(), 0.0F);

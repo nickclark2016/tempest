@@ -32,7 +32,7 @@ namespace tempest::network
 
     auto ack_tracker::process_incoming_header(const packet_header& header, chrono::steady_clock::time_point now) -> void
     {
-        // 1. Process remote sequence and update sliding ACK bitfield
+        // Process remote sequence and update sliding ACK bitfield
         if (!_has_remote_sequence)
         {
             _remote_sequence = header.sequence_id;
@@ -65,7 +65,7 @@ namespace tempest::network
             }
         }
 
-        // 2. Process incoming ACKs for sent packets
+        // Process incoming ACKs for sent packets
         if (header.ack_sequence_id != 0U)
         {
             auto acknowledge_packet = [this, now](uint32_t acked_sequence, bool update_rtt) {
@@ -104,7 +104,7 @@ namespace tempest::network
                 }
             }
 
-            // 3. Compute packet loss rate over decided sent history
+            // Compute packet loss rate over decided sent history
             auto total_decided_packets = 0U;
             auto total_lost_packets = 0U;
 
@@ -134,8 +134,8 @@ namespace tempest::network
                 else
                 {
                     // A packet is decided as lost if it was never acked and:
-                    // 1. It has fallen behind the sliding bitfield (cannot be acknowledged in future ACKs), OR
-                    // 2. Its elapsed transit time exceeds the RTT-adaptive timeout threshold.
+                    // It has fallen behind the sliding bitfield (cannot be acknowledged in future ACKs), OR
+                    // Its elapsed transit time exceeds the RTT-adaptive timeout threshold.
                     // Packets still within the bitfield window and transit timeout are considered in-flight/jittered.
                     const auto elapsed_us =
                         chrono::duration_cast<chrono::microseconds>(now - record.send_time).count();

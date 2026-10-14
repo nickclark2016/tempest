@@ -48,7 +48,7 @@ namespace
 /// across a disk save and load round-trip.
 TEST(project_workspace_tests, project_file_round_trip)
 {
-    // 1. Setup: Construct a comprehensive project workspace configuration
+    // Setup: Construct a comprehensive project workspace configuration
     const auto temp_dir = tempest::filesystem::path("tempest_test_project_roundtrip");
     tempest::filesystem::create_directories(temp_dir);
 
@@ -78,7 +78,7 @@ TEST(project_workspace_tests, project_file_round_trip)
     original_workspace.settings.custom_settings.insert({"target_platform", "vulkan"});
     original_workspace.settings.custom_settings.insert({"mip_filter", "kaiser"});
 
-    // 2. Act: Save workspace to .tproject file and reload it
+    // Act: Save workspace to .tproject file and reload it
     const auto save_result = original_workspace.save_to_file(project_file_path);
     ASSERT_TRUE(save_result);
 
@@ -86,7 +86,7 @@ TEST(project_workspace_tests, project_file_round_trip)
     const auto load_result = loaded_workspace.load_from_file(project_file_path);
     ASSERT_TRUE(load_result);
 
-    // 3. Assert: All fields match original values exactly
+    // Assert: All fields match original values exactly
     EXPECT_EQ(loaded_workspace.name, original_workspace.name);
     EXPECT_EQ(loaded_workspace.root_directory, original_workspace.root_directory);
     ASSERT_EQ(loaded_workspace.mounts.size(), original_workspace.mounts.size());
@@ -99,7 +99,7 @@ TEST(project_workspace_tests, project_file_round_trip)
     EXPECT_EQ(loaded_workspace.settings.custom_settings, original_workspace.settings.custom_settings);
     EXPECT_EQ(loaded_workspace, original_workspace);
 
-    // 4. Teardown: Clean up temporary test files
+    // Teardown: Clean up temporary test files
     tempest::filesystem::remove_all(temp_dir);
 }
 
@@ -112,7 +112,7 @@ TEST(project_workspace_tests, project_file_round_trip)
 /// import settings, and sub-assets map bit-for-bit.
 TEST(project_workspace_tests, sidecar_meta_round_trip)
 {
-    // 1. Setup: Construct sidecar metadata with mock importer settings and sub-assets
+    // Setup: Construct sidecar metadata with mock importer settings and sub-assets
     const auto temp_dir = tempest::filesystem::path("tempest_test_sidecar_roundtrip");
     tempest::filesystem::create_directories(temp_dir);
 
@@ -139,7 +139,7 @@ TEST(project_workspace_tests, sidecar_meta_round_trip)
     original_meta.sub_asset_types.insert({"mesh/0", type_mesh});
     original_meta.sub_asset_types.insert({"material/base", type_mat});
 
-    // 2. Act: Save sidecar meta to disk and load it back
+    // Act: Save sidecar meta to disk and load it back
     const auto save_result = original_meta.save_to_file(meta_file_path);
     ASSERT_TRUE(save_result);
 
@@ -147,7 +147,7 @@ TEST(project_workspace_tests, sidecar_meta_round_trip)
     ASSERT_TRUE(loaded_meta_opt.has_value());
     const auto& loaded_meta = *loaded_meta_opt;
 
-    // 3. Assert: All fields match
+    // Assert: All fields match
     EXPECT_EQ(loaded_meta.source_guid, original_meta.source_guid);
     EXPECT_EQ(loaded_meta.importer, original_meta.importer);
     EXPECT_EQ(loaded_meta.importer_version, original_meta.importer_version);
@@ -160,7 +160,7 @@ TEST(project_workspace_tests, sidecar_meta_round_trip)
     EXPECT_EQ(loaded_meta.sub_asset_types.find("material/base")->second, type_mat);
     EXPECT_EQ(loaded_meta, original_meta);
 
-    // 4. Teardown: Clean up temporary test files
+    // Teardown: Clean up temporary test files
     tempest::filesystem::remove_all(temp_dir);
 }
 
@@ -173,7 +173,7 @@ TEST(project_workspace_tests, sidecar_meta_round_trip)
 /// newly introduced sub-assets.
 TEST(project_workspace_tests, reimport_preserves_subasset_guids)
 {
-    // 1. Setup: Prepare workspace with mock model asset
+    // Setup: Prepare workspace with mock model asset
     const auto temp_dir = tempest::filesystem::path("tempest_test_reimport");
     const auto assets_dir = temp_dir / "assets";
     tempest::filesystem::create_directories(assets_dir);
@@ -202,7 +202,7 @@ TEST(project_workspace_tests, reimport_preserves_subasset_guids)
     const auto type_mesh = tempest::assets::asset_type_id::of<mock_mesh_asset>();
     const auto type_mat = tempest::assets::asset_type_id::of<mock_material_asset>();
 
-    // 2. Act (Step 1): First import producing mesh/0 and material/0
+    // Act (Step 1): First import producing mesh/0 and material/0
     const auto mesh0_guid_first = database.resolve_sub_asset_guid(canonical_source_key, "mesh/0", type_mesh);
     const auto mat0_guid_first = database.resolve_sub_asset_guid(canonical_source_key, "material/0", type_mat);
 
@@ -210,14 +210,14 @@ TEST(project_workspace_tests, reimport_preserves_subasset_guids)
     EXPECT_NE(mat0_guid_first, tempest::guid{});
     EXPECT_NE(mesh0_guid_first, mat0_guid_first);
 
-    // 3. Act (Step 2): Modify source asset on disk and re-import, producing mesh/0, material/0, and mesh/1
+    // Act (Step 2): Modify source asset on disk and re-import, producing mesh/0, material/0, and mesh/1
     write_test_file(source_disk_path, "modified_mesh_data_with_additional_lod_mesh_v2");
 
     const auto mesh0_guid_second = database.resolve_sub_asset_guid(canonical_source_key, "mesh/0", type_mesh);
     const auto mat0_guid_second = database.resolve_sub_asset_guid(canonical_source_key, "material/0", type_mat);
     const auto mesh1_guid_second = database.resolve_sub_asset_guid(canonical_source_key, "mesh/1", type_mesh);
 
-    // 4. Assert: Existing sub-assets retain their committed GUIDs bit-for-bit
+    // Assert: Existing sub-assets retain their committed GUIDs bit-for-bit
     EXPECT_EQ(mesh0_guid_second, mesh0_guid_first);
     EXPECT_EQ(mat0_guid_second, mat0_guid_first);
 
@@ -225,11 +225,11 @@ TEST(project_workspace_tests, reimport_preserves_subasset_guids)
     EXPECT_NE(mesh1_guid_second, mesh0_guid_first);
     EXPECT_NE(mesh1_guid_second, mat0_guid_first);
 
-    // 5. Act (Step 3): Re-importing a third time returns identical GUID for mesh/1
+    // Act (Step 3): Re-importing a third time returns identical GUID for mesh/1
     const auto mesh1_guid_third = database.resolve_sub_asset_guid(canonical_source_key, "mesh/1", type_mesh);
     EXPECT_EQ(mesh1_guid_third, mesh1_guid_second);
 
-    // 6. Teardown: Clean up test files
+    // Teardown: Clean up test files
     tempest::filesystem::remove_all(temp_dir);
 }
 
@@ -242,7 +242,7 @@ TEST(project_workspace_tests, reimport_preserves_subasset_guids)
 /// reproducing every sub-asset GUID, type hash, and source ID bit-for-bit.
 TEST(project_workspace_tests, cache_rebuild_preserves_guids)
 {
-    // 1. Setup: Prepare workspace with mock assets and committed .tmeta sidecars
+    // Setup: Prepare workspace with mock assets and committed .tmeta sidecars
     const auto temp_dir = tempest::filesystem::path("tempest_test_cache_rebuild");
     const auto assets_dir = temp_dir / "assets";
     tempest::filesystem::create_directories(assets_dir);
@@ -300,7 +300,7 @@ TEST(project_workspace_tests, cache_rebuild_preserves_guids)
     type_reg.register_type<mock_material_asset>(nullptr, nullptr);
     type_reg.register_type<mock_texture_asset>(nullptr, nullptr);
 
-    // 2. Act (Step 1): Initial build creates cache
+    // Act (Step 1): Initial build creates cache
     auto initial_db = tempest::assets::asset_database{&type_reg};
     const auto initial_rebuild_res = initial_db.rebuild_from_workspace(workspace);
     ASSERT_TRUE(initial_rebuild_res);
@@ -324,17 +324,17 @@ TEST(project_workspace_tests, cache_rebuild_preserves_guids)
     EXPECT_EQ(initial_tex->type, type_tex);
     EXPECT_EQ(initial_tex->source_id, expected_tex_source_guid);
 
-    // 3. Act (Step 2): Delete .cache/assets.tassetdb
+    // Act (Step 2): Delete .cache/assets.tassetdb
     const auto remove_cache_res = tempest::filesystem::remove(tempest::filesystem::path(cache_db_path));
     ASSERT_TRUE(remove_cache_res);
     ASSERT_FALSE(tempest::filesystem::exists(tempest::filesystem::path(cache_db_path)));
 
-    // 4. Act (Step 3): Rebuild database from workspace from scratch
+    // Act (Step 3): Rebuild database from workspace from scratch
     auto rebuilt_db = tempest::assets::asset_database{&type_reg};
     const auto rebuilt_res = rebuilt_db.rebuild_from_workspace(workspace);
     ASSERT_TRUE(rebuilt_res);
 
-    // 5. Assert: Every sub-asset GUID and type hash matches initial database bit-for-bit
+    // Assert: Every sub-asset GUID and type hash matches initial database bit-for-bit
     const auto* rebuilt_mesh = rebuilt_db.find_by_guid(expected_mesh_guid);
     ASSERT_NE(rebuilt_mesh, nullptr);
     EXPECT_EQ(rebuilt_mesh->id, expected_mesh_guid);
@@ -356,6 +356,6 @@ TEST(project_workspace_tests, cache_rebuild_preserves_guids)
     // Check that cache file was recreated
     EXPECT_TRUE(tempest::filesystem::exists(tempest::filesystem::path(cache_db_path)));
 
-    // 6. Teardown: Clean up test files
+    // Teardown: Clean up test files
     tempest::filesystem::remove_all(temp_dir);
 }

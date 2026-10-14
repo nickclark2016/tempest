@@ -20,10 +20,10 @@ namespace tempest::job::tests
     ///        exact slab classes and that frames > 2048B fall back to heap allocation.
     TEST(allocator_test, size_class_routing)
     {
-        // 1. Setup
+        // Setup
         auto alloc = job_allocator{};
 
-        // 2. Act
+        // Act
         auto* p0 = alloc.allocate(48);   // Class 0: <= 64B
         auto* p1 = alloc.allocate(96);   // Class 1: <= 128B
         auto* p2 = alloc.allocate(192);  // Class 2: <= 256B
@@ -42,7 +42,7 @@ namespace tempest::job::tests
         job_allocator::deallocate(p5, 1536);
         job_allocator::deallocate(p_heap, 3000);
 
-        // 3. Assert
+        // Assert
         for (size_t i = 0; i < slab_class_count; ++i)
         {
             EXPECT_EQ(telem.allocations_per_class[i], 1u) << "Class " << i << " did not record exactly 1 allocation";
@@ -62,12 +62,12 @@ namespace tempest::job::tests
     ///        achieves 100% slot recycling without committing additional slab chunks.
     TEST(allocator_test, zero_growth_recycling)
     {
-        // 1. Setup
+        // Setup
         auto alloc = job_allocator{};
         constexpr size_t batch_count = 1000;
         constexpr size_t slot_size = 128; // Class 1
 
-        // Phase 1: Allocate initial batch
+        // Allocate initial batch
         auto pointers = vector<void*>{};
         pointers.reserve(batch_count);
         for (size_t i = 0; i < batch_count; ++i)
@@ -82,7 +82,7 @@ namespace tempest::job::tests
         }
         pointers.clear();
 
-        // 2. Act: Snapshot committed chunks and allocate second batch
+        // Act: Snapshot committed chunks and allocate second batch
         const auto initial_chunks = alloc.get_telemetry().committed_slab_chunks;
 
         for (size_t i = 0; i < batch_count; ++i)
@@ -97,7 +97,7 @@ namespace tempest::job::tests
             job_allocator::deallocate(ptr, slot_size);
         }
 
-        // 3. Assert
+        // Assert
         EXPECT_GT(initial_chunks, 0u);
         EXPECT_EQ(second_batch_chunks, initial_chunks) << "Slab chunks increased despite 100% recycling";
         EXPECT_EQ(alloc.get_telemetry().active_live_frames, 0);
@@ -111,7 +111,7 @@ namespace tempest::job::tests
     ///        MPSC queue and drain cleanly back into local free lists.
     TEST(allocator_test, cross_thread_remote_free_steady_state)
     {
-        // 1. Setup
+        // Setup
         auto alloc_a = job_allocator{};
         constexpr size_t count = 500;
         constexpr size_t slot_size = 256;
@@ -123,7 +123,7 @@ namespace tempest::job::tests
             pointers.push_back(alloc_a.allocate(slot_size));
         }
 
-        // 2. Act: Free pointers on Thread B
+        // Act: Free pointers on Thread B
         auto thread_b = tempest::thread([&pointers]() {
             for (auto* ptr : pointers)
             {
@@ -135,7 +135,7 @@ namespace tempest::job::tests
         // Thread A drains remote free queue
         alloc_a.drain_remote_frees();
 
-        // 3. Assert
+        // Assert
         const auto telem = alloc_a.get_telemetry();
         EXPECT_EQ(telem.active_live_frames, 0);
 
@@ -196,10 +196,10 @@ namespace tempest::job::tests
     ///        while coroutines without an allocator gracefully fall back to heap.
     TEST(allocator_test, argument_forwarded_coroutine_allocation)
     {
-        // 1. Setup
+        // Setup
         auto alloc = job_allocator{};
 
-        // 2. Act & Assert: Coroutine with job_allocator& parameter
+        // Act & Assert: Coroutine with job_allocator& parameter
         {
             const auto telem_before = alloc.get_telemetry();
             auto t = coro_with_allocator(alloc, 21);
@@ -227,7 +227,7 @@ namespace tempest::job::tests
             EXPECT_EQ(telem_after_free.active_live_frames, telem_before.active_live_frames);
         }
 
-        // 3. Act & Assert: Coroutine without allocator parameters (pure heap fallback)
+        // Act & Assert: Coroutine without allocator parameters (pure heap fallback)
         {
             const auto telem_before = alloc.get_telemetry();
             auto t = coro_heap_fallback(100);
@@ -243,7 +243,7 @@ namespace tempest::job::tests
             t = {};
         }
 
-        // 4. Act & Assert: Profiler metrics tracking (frame_bytes and is_heap)
+        // Act & Assert: Profiler metrics tracking (frame_bytes and is_heap)
         {
             auto prof = profiler::profiler_session{true};
 
@@ -286,7 +286,7 @@ namespace tempest::job::tests
     ///        allocation to slabs via concept-based argument introspection without TLS.
     TEST(allocator_test, context_forwarded_coroutine_allocation)
     {
-        // 1. Setup
+        // Setup
         auto log = logger{};
         auto prof = profiler::profiler_session{false};
         auto config = job_system_config{
@@ -303,7 +303,7 @@ namespace tempest::job::tests
             .core_type = core_class::performance,
         };
 
-        // 2. Act: Coroutine with job_context parameter
+        // Act: Coroutine with job_context parameter
         const auto telem_before = alloc.get_telemetry();
         auto t = coro_with_context(ctx, 40);
         const auto telem_after_alloc = alloc.get_telemetry();
@@ -326,7 +326,7 @@ namespace tempest::job::tests
         EXPECT_TRUE(t.handle().done());
         EXPECT_EQ(t.handle().promise().result.value(), 50);
 
-        // 3. Assert: Drain and ensure active live frames return to baseline
+        // Assert: Drain and ensure active live frames return to baseline
         t = {};
         alloc.drain_remote_frees();
         const auto telem_after_free = alloc.get_telemetry();
@@ -337,11 +337,11 @@ namespace tempest::job::tests
     ///        route frame allocation to slabs via member argument introspection without TLS.
     TEST(allocator_test, member_function_coroutine_allocation)
     {
-        // 1. Setup
+        // Setup
         auto alloc = job_allocator{};
         auto provider = dummy_allocator_provider{alloc};
 
-        // 2. Act: Member coroutine invocation passing *this to promise new
+        // Act: Member coroutine invocation passing *this to promise new
         const auto telem_before = alloc.get_telemetry();
         auto t = provider.member_coro(10);
         const auto telem_after_alloc = alloc.get_telemetry();
@@ -364,7 +364,7 @@ namespace tempest::job::tests
         EXPECT_TRUE(t.handle().done());
         EXPECT_EQ(t.handle().promise().result.value(), 30);
 
-        // 3. Assert: Drain and ensure active live frames return to baseline
+        // Assert: Drain and ensure active live frames return to baseline
         t = {};
         alloc.drain_remote_frees();
         const auto telem_after_free = alloc.get_telemetry();
