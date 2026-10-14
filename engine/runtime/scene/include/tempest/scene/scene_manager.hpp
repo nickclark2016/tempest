@@ -151,6 +151,7 @@ namespace tempest::scene
 
         [[nodiscard]] auto is_valid(scene_handle handle) const noexcept -> bool;
         [[nodiscard]] auto get_scene_count() const noexcept -> size_t;
+        [[nodiscard]] auto get_loaded_scenes() const -> vector<scene_handle>;
         [[nodiscard]] auto get_root_entities(scene_handle handle) const -> optional<span<const ecs::entity>>;
         auto add_root_entity(scene_handle handle, ecs::entity ent) -> bool;
         auto remove_root_entity(scene_handle handle, ecs::entity ent) -> bool;

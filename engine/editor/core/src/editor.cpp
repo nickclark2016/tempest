@@ -12,7 +12,7 @@
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/windows/engine_component_view_providers.hpp>
-#include <tempest/windows/scene_hierarchy_window.hpp>
+#include <tempest/windows/hierarchy_window.hpp>
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -42,8 +42,8 @@ namespace tempest::editor
         class create_empty_entity_menu final : public menu_item
         {
           public:
-            create_empty_entity_menu(engine_context& ctx, scene_hierarchy_window& scene_hierarchy)
-                : menu_item("Entities", "Create Empty"), _ctx{&ctx}, _hierarchy{&scene_hierarchy}
+            create_empty_entity_menu(engine_context& ctx, hierarchy_window& hierarchy)
+                : menu_item("Entities", "Create Empty"), _ctx{&ctx}, _hierarchy{&hierarchy}
             {
             }
 
@@ -56,7 +56,7 @@ namespace tempest::editor
 
           private:
             engine_context* _ctx;
-            scene_hierarchy_window* _hierarchy;
+            hierarchy_window* _hierarchy;
         };
 
         class web_profiler_menu_item final : public menu_item
@@ -257,7 +257,7 @@ namespace tempest::editor
     editor_context::editor_context(editor_engine_context& ctx, window_handle win, ui_context& ui_ctx)
         : _engine_ctx{&ctx}, _win{win}, _ui_ctx{&ui_ctx},
           _entity_view(register_window(make_unique<entity_view_window>(ctx.get_entities()))),
-          _scene_hierarchy_view(register_window(make_unique<scene_hierarchy_window>(ctx.get_entities()))),
+          _hierarchy_view(register_window(make_unique<hierarchy_window>(ctx.get_entities(), &ctx.get_scene_manager(), &_selection))),
           _viewport_view(register_window(make_unique<viewport_window>(ctx))),
           _log_view(register_window(make_unique<log_view_window>(ctx.get_log_store())))
     {
@@ -267,7 +267,7 @@ namespace tempest::editor
         register_engine_component_view_providers(*this);
 
         register_on_paint_callback([&, this](engine_context& engine_ctx) -> void {
-            _entity_view->target = _scene_hierarchy_view->selected_entity;
+            _entity_view->target = _hierarchy_view->selected_entity;
 
             // Sync aspect ratio to editor camera
             const auto current_aspect = _viewport_view->aspect_ratio();
@@ -296,7 +296,7 @@ namespace tempest::editor
         });
 
         register_menu_item(make_unique<exit_menu_item>(ctx));
-        register_menu_item(make_unique<create_empty_entity_menu>(ctx, *_scene_hierarchy_view));
+        register_menu_item(make_unique<create_empty_entity_menu>(ctx, *_hierarchy_view));
         register_menu_item(make_unique<web_profiler_menu_item>(ctx));
         register_menu_item(make_unique<live_stream_menu_item>(ctx));
         register_menu_item(make_unique<gpu_stats_menu_item>(ctx));

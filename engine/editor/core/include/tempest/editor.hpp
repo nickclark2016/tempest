@@ -16,7 +16,7 @@
 #include <tempest/windows/editor_window.hpp>
 #include <tempest/windows/entity_view_window.hpp>
 #include <tempest/windows/log_view_window.hpp>
-#include <tempest/windows/scene_hierarchy_window.hpp>
+#include <tempest/windows/hierarchy_window.hpp>
 #include <tempest/windows/viewport_window.hpp>
 
 namespace tempest::editor
@@ -93,12 +93,17 @@ namespace tempest::editor
         window_handle _win;
         ui_context* _ui_ctx;
 
+        static constexpr entity_view_window* default_entity_view = nullptr;
+        static constexpr hierarchy_window* default_hierarchy_view = nullptr;
+        static constexpr viewport_window* default_viewport_view = nullptr;
+        static constexpr log_view_window* default_log_view = nullptr;
+
         editor_selection _selection;
         vector<unique_ptr<editor_window>> _windows;
-        entity_view_window* _entity_view = nullptr;
-        scene_hierarchy_window* _scene_hierarchy_view = nullptr;
-        viewport_window* _viewport_view = nullptr;
-        log_view_window* _log_view = nullptr;
+        entity_view_window* _entity_view = default_entity_view;
+        hierarchy_window* _hierarchy_view = default_hierarchy_view;
+        viewport_window* _viewport_view = default_viewport_view;
+        log_view_window* _log_view = default_log_view;
 
         class menu_hierarchy
         {

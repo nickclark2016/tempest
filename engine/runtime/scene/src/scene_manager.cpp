@@ -56,6 +56,23 @@ namespace tempest::scene
         return _occupied_count;
     }
 
+    auto scene_manager::get_loaded_scenes() const -> vector<scene_handle>
+    {
+        auto result = vector<scene_handle>{};
+        result.reserve(_occupied_count);
+        for (auto slot_index = 0U; slot_index < static_cast<uint32_t>(_scenes.size()); ++slot_index)
+        {
+            if (_scenes[slot_index].occupied)
+            {
+                result.push_back(scene_handle{
+                    .index = slot_index,
+                    .generation = _scenes[slot_index].generation,
+                });
+            }
+        }
+        return result;
+    }
+
     auto scene_manager::get_root_entities(scene_handle handle) const -> optional<span<const ecs::entity>>
     {
         if (!is_valid(handle))

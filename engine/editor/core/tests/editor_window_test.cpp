@@ -10,6 +10,7 @@
 #include <tempest/memory.hpp>
 #include <tempest/render_system/camera_system.hpp>
 #include <tempest/render_system/render_components.hpp>
+#include <tempest/scene/scene_manager.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/transform_history_component.hpp>
 #include <tempest/ui.hpp>
@@ -17,7 +18,7 @@
 #include <tempest/window_manager.hpp>
 #include <tempest/windows/engine_component_view_providers.hpp>
 #include <tempest/windows/entity_view_window.hpp>
-#include <tempest/windows/scene_hierarchy_window.hpp>
+#include <tempest/windows/hierarchy_window.hpp>
 #include <tempest/windows/viewport_window.hpp>
 
 #include <imgui.h>
@@ -207,7 +208,9 @@ namespace tempest::editor::tests
         env.win_mgr.destroy_window(env.win);
     }
 
-    TEST(editor_window_test, scene_hierarchy_window_properties_and_draw)
+    /// @brief Verifies hierarchy_window docking defaults, name, and clean draw execution
+    /// with scenes, dynamic entities, and editor_selection attached.
+    TEST(editor_window_test, hierarchy_window_properties_and_draw)
     {
         auto env = create_test_env();
         ASSERT_NE(env.dev, nullptr);
@@ -220,39 +223,25 @@ namespace tempest::editor::tests
             auto events = event::event_registry{};
             auto types = ecs::component_type_registry{};
             auto reg = ecs::archetype_registry{events, types};
+            auto scene_mgr = scene::scene_manager{reg};
+            auto selection = editor_selection{};
+            selection.attach_event_registry(events);
 
-            auto root1 = reg.create();
-            reg.name(root1, "Root Entity 1");
+            const auto scene_opt = scene_mgr.load_from_string_sync(
+                R"({"schema_version":1,"generator":"test","entities":[]})", "Test Scene");
+            ASSERT_TRUE(scene_opt.has_value());
+            const auto scene = *scene_opt;
 
-            auto root2 = reg.create();
-            reg.name(root2, "Root Entity 2");
+            const auto root1 = scene_mgr.create_entity(scene, "Root Entity 1");
+            const auto child1 = scene_mgr.create_entity(scene, "Child Entity 1");
+            reg.reparent(child1, root1);
 
-            auto child1 = reg.create();
-            reg.name(child1, "Child Entity 1");
+            const auto dyn1 = reg.create();
+            reg.name(dyn1, "Dynamic Entity 1");
 
-            auto child2 = reg.create();
-            reg.name(child2, "Child Entity 2");
-
-            // Link child1 and child2 to root1
-            reg.assign(root1, ecs::relationship_component<ecs::entity>{
-                                  .parent = ecs::tombstone,
-                                  .next_sibling = ecs::tombstone,
-                                  .first_child = child1,
-                              });
-            reg.assign(child1, ecs::relationship_component<ecs::entity>{
-                                   .parent = root1,
-                                   .next_sibling = child2,
-                                   .first_child = ecs::tombstone,
-                               });
-            reg.assign(child2, ecs::relationship_component<ecs::entity>{
-                                   .parent = root1,
-                                   .next_sibling = ecs::tombstone,
-                                   .first_child = ecs::tombstone,
-                               });
-
-            auto hierarchy = scene_hierarchy_window{reg};
+            auto hierarchy = hierarchy_window{reg, &scene_mgr, &selection};
             EXPECT_EQ(hierarchy.desired_initial_dock(), editor_window::dock_location::left);
-            EXPECT_EQ(hierarchy.window_name(), "Scene Hierarchy");
+            EXPECT_EQ(hierarchy.window_name(), "Hierarchy");
             EXPECT_TRUE(hierarchy.selected_entity == ecs::null);
 
             ui_ctx.begin_ui_commands();
@@ -437,13 +426,13 @@ namespace tempest::editor::tests
     TEST(editor_window_test, editor_context_selection_service_integration)
     {
         auto engine_ctx = editor_engine_context{};
-        auto desc = window_desc{
+        const auto desc = window_desc{
             .width = 1280,
             .height = 720,
             .title = "Editor Selection Test",
         };
 
-        auto reg_info = engine_ctx.register_window(desc);
+        const auto reg_info = engine_ctx.register_window(desc);
         ASSERT_TRUE(reg_info.handle.is_valid());
 
         auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
@@ -515,7 +504,7 @@ namespace tempest::editor::tests
         engine_ctx.set_simulation_state(simulation_state::play);
 
         // Act: register fixed update that moves the entity, and request close after ticks run
-        bool fixed_updated = false;
+        auto fixed_updated = false;
         engine_ctx.register_on_fixed_update_callback([&](engine_context& ctx, chrono::duration<double> dt) {
             fixed_updated = true;
             auto& entities = ctx.get_entities();
@@ -524,7 +513,7 @@ namespace tempest::editor::tests
             });
         });
 
-        int frame_count = 0;
+        auto frame_count = 0;
         engine_ctx.register_on_editor_update_callback([&](engine_context& ctx) {
             ++frame_count;
             if (frame_count >= 3 && fixed_updated)
