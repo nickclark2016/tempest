@@ -26,7 +26,7 @@ namespace tempest::editor
     class TEMPEST_EDITOR_API editor_engine_context final : public standalone_engine_context
     {
       public:
-        editor_engine_context();
+        explicit editor_engine_context(const engine_config& config = {});
         ~editor_engine_context() override;
 
         editor_engine_context(const editor_engine_context&) = delete;

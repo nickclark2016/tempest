@@ -122,19 +122,20 @@ namespace tempest::editor
 
 namespace tempest::editor
 {
-    editor_engine_context::editor_engine_context()
+    editor_engine_context::editor_engine_context(const engine_config& config)
+        : standalone_engine_context(config)
     {
         _log_sink.attach(get_logger());
         get_assets().set_logger(&get_logger());
 
         _profiler_session.set_thread_name("Main Thread");
-        auto config = profiler::web_server_config{
+        auto server_config = profiler::web_server_config{
             .host = "127.0.0.1",
             .port = 8080,
             .max_port_attempts = 10,
             .enable_live_stream = true,
         };
-        _web_server = make_unique<profiler::web_server>(_profiler_session, tempest::move(config));
+        _web_server = make_unique<profiler::web_server>(_profiler_session, tempest::move(server_config));
         _web_server->start();
 
         if (_renderer)

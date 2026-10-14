@@ -329,7 +329,7 @@ namespace tempest::editor::tests
     TEST(log_view_window_test, editor_engine_context_log_integration)
     {
         // Setup: Create editor_engine_context
-        auto ctx = editor_engine_context{};
+        auto ctx = editor_engine_context{engine_config{.headless = true}};
 
         // Act: Log through engine logger
         ctx.get_logger().info("Engine started");

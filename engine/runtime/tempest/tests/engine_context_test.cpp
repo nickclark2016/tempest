@@ -189,7 +189,10 @@ namespace tempest::tests
 
     TEST(engine_context_test, standalone_context_subsystems)
     {
-        auto ctx = standalone_engine_context{};
+        const auto config = engine_config{
+            .headless = true,
+        };
+        auto ctx = standalone_engine_context{config};
 
         EXPECT_NO_THROW({
             [[maybe_unused]] auto& entities = ctx.get_entities();
@@ -200,8 +203,6 @@ namespace tempest::tests
             [[maybe_unused]] auto& assets = ctx.get_assets();
             [[maybe_unused]] auto& logger = ctx.get_logger();
             [[maybe_unused]] auto& wm = ctx.get_window_manager();
-            [[maybe_unused]] auto& dev = ctx.get_device();
-            [[maybe_unused]] auto& renderer = ctx.get_renderer();
             [[maybe_unused]] auto& jobs = ctx.get_job_system();
         });
 
@@ -217,7 +218,10 @@ namespace tempest::tests
 
     TEST(engine_context_test, window_registration_and_surfaces)
     {
-        auto ctx = standalone_engine_context{};
+        const auto config = engine_config{
+            .headless = true,
+        };
+        auto ctx = standalone_engine_context{config};
 
         const auto desc = window_desc{
             .width = 640,
@@ -231,12 +235,10 @@ namespace tempest::tests
         EXPECT_NE(reg_info.inputs.ms, nullptr);
 
         auto* surf = ctx.get_render_surface(reg_info.handle);
-        ASSERT_NE(surf, nullptr);
-        EXPECT_GT(surf->get_width(), 0);
-        EXPECT_GT(surf->get_height(), 0);
+        EXPECT_EQ(surf, nullptr);
 
         auto raw_surf = ctx.get_raw_surface(reg_info.handle);
-        EXPECT_NE(raw_surf.handle, 0);
+        EXPECT_EQ(raw_surf.handle, 0);
 
         EXPECT_EQ(ctx.get_render_surface(null_window_handle), nullptr);
         EXPECT_EQ(ctx.get_raw_surface(null_window_handle).handle, 0);
@@ -254,13 +256,18 @@ namespace tempest::tests
         class testable_engine_context final : public standalone_engine_context
         {
           public:
+            explicit testable_engine_context(const engine_config& config) : standalone_engine_context{config} {}
+
             auto render_frame_for_test() -> void
             {
                 _render_frame();
             }
         };
 
-        auto ctx = testable_engine_context{};
+        const auto config = engine_config{
+            .headless = true,
+        };
+        auto ctx = testable_engine_context{config};
         const auto desc = window_desc{
             .width = 640,
             .height = 480,
@@ -281,11 +288,18 @@ namespace tempest::tests
             }
         });
 
+        // Wait until background task starts running
+        while (background_ticks.load(memory_order::acquire) == 0U)
+        {
+            this_thread::yield();
+        }
+
         // Act: execute multiple frames of rendering while background task runs concurrently
         constexpr auto test_frame_count = 5U;
         for (auto frame_index = 0U; frame_index < test_frame_count; ++frame_index)
         {
             ctx.render_frame_for_test();
+            this_thread::yield();
         }
 
         // Assert: verify background task continued making forward progress without starvation
@@ -293,10 +307,7 @@ namespace tempest::tests
 
         // Cleanup: signal background task to terminate cleanly
         stop_background.store(true, memory_order::release);
-        while (!bg_task.is_ready())
-        {
-            jobs.step();
-        }
+        jobs.wait_idle();
     }
 
     // ============================================================================

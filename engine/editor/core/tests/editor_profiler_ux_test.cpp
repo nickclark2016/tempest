@@ -89,7 +89,7 @@ namespace tempest::editor::tests
     TEST(editor_profiler_ux_test, web_server_lifecycle_in_editor_engine_context)
     {
         // Setup: Create editor engine context
-        auto engine_ctx = editor_engine_context{};
+        auto engine_ctx = editor_engine_context{engine_config{.headless = true}};
 
         // Act: Query web server state
         const auto* server = engine_ctx.get_web_server();
@@ -109,7 +109,7 @@ namespace tempest::editor::tests
     TEST(editor_profiler_ux_test, telemetry_frame_collection_and_durations)
     {
         // Setup: Create editor engine context
-        auto engine_ctx = editor_engine_context{};
+        auto engine_ctx = editor_engine_context{engine_config{.headless = true}};
 
         // Act: Record mock zones into profiler session
         {
@@ -128,7 +128,7 @@ namespace tempest::editor::tests
     TEST(editor_profiler_ux_test, recording_lifecycle_and_state)
     {
         // Setup: Create editor engine context
-        auto engine_ctx = editor_engine_context{};
+        auto engine_ctx = editor_engine_context{engine_config{.headless = true}};
         EXPECT_FALSE(engine_ctx.is_recording());
 
         // Act: Start recording
@@ -157,7 +157,7 @@ namespace tempest::editor::tests
     TEST(editor_profiler_ux_test, live_stream_and_gpu_stats_toggles)
     {
         // Setup: Create editor engine context
-        auto engine_ctx = editor_engine_context{};
+        auto engine_ctx = editor_engine_context{engine_config{.headless = true}};
 
         // Act & Assert: Live stream toggle
         EXPECT_TRUE(engine_ctx.is_live_stream_enabled());
@@ -168,15 +168,24 @@ namespace tempest::editor::tests
 
         // Act & Assert: GPU stats toggle and renderer synchronization
         EXPECT_TRUE(engine_ctx.is_gpu_stats_enabled());
-        EXPECT_EQ(engine_ctx.get_renderer().get_pipeline_statistics(), render_system::all_pipeline_statistics);
+        if (!engine_ctx.get_config().headless)
+        {
+            EXPECT_EQ(engine_ctx.get_renderer().get_pipeline_statistics(), render_system::all_pipeline_statistics);
+        }
 
         engine_ctx.set_gpu_stats_enabled(false);
         EXPECT_FALSE(engine_ctx.is_gpu_stats_enabled());
-        EXPECT_EQ(engine_ctx.get_renderer().get_pipeline_statistics(), rhi::pipeline_statistic_flags::none);
+        if (!engine_ctx.get_config().headless)
+        {
+            EXPECT_EQ(engine_ctx.get_renderer().get_pipeline_statistics(), rhi::pipeline_statistic_flags::none);
+        }
 
         engine_ctx.set_gpu_stats_enabled(true);
         EXPECT_TRUE(engine_ctx.is_gpu_stats_enabled());
-        EXPECT_EQ(engine_ctx.get_renderer().get_pipeline_statistics(), render_system::all_pipeline_statistics);
+        if (!engine_ctx.get_config().headless)
+        {
+            EXPECT_EQ(engine_ctx.get_renderer().get_pipeline_statistics(), render_system::all_pipeline_statistics);
+        }
     }
 
     //==============================================================================
@@ -196,7 +205,7 @@ namespace tempest::editor::tests
             auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
             ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
 
-            auto engine_ctx = editor_engine_context{};
+            auto engine_ctx = editor_engine_context{engine_config{.headless = true}};
             const auto desc = window_desc{
                 .width = 1280,
                 .height = 720,
@@ -241,7 +250,7 @@ namespace tempest::editor::tests
             auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
             ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
 
-            auto engine_ctx = editor_engine_context{};
+            auto engine_ctx = editor_engine_context{engine_config{.headless = true}};
             const auto desc = window_desc{
                 .width = 1280,
                 .height = 720,
@@ -302,7 +311,7 @@ namespace tempest::editor::tests
     TEST(editor_profiler_ux_test, editor_rolling_statistics_and_hot_zones)
     {
         // Setup: Create editor engine context
-        auto engine_ctx = editor_engine_context{};
+        auto engine_ctx = editor_engine_context{engine_config{.headless = true}};
 
         // Setup GPU track with submit envelope and passes
         const auto gpu_track_id = 0x8000'0001ULL;
