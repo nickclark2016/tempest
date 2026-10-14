@@ -33,6 +33,8 @@ namespace tempest::scene
         string error_message;
     };
 
+    class prefab_cache;
+
     /// @brief Serialization and deserialization codec for Tempest scene documents (.tscene).
     class TEMPEST_API scene_codec
     {
@@ -43,14 +45,12 @@ namespace tempest::scene
         /// @param unrecognized_data Side-table of unknown components/fields to reinject.
         /// @param options Formatting and serialization configuration options.
         /// @return Serialized JSON string representation of the scene.
-        static auto serialize(ecs::basic_archetype_registry& registry,
-                              span<const ecs::entity> root_entities,
+        static auto serialize(ecs::basic_archetype_registry& registry, span<const ecs::entity> root_entities,
                               const scene_unrecognized_data& unrecognized_data = {},
                               const scene_serialize_options& options = {}) -> string;
 
         /// @brief Overload accepting a vector of root entities.
-        static auto serialize(ecs::basic_archetype_registry& registry,
-                              const vector<ecs::entity>& root_entities,
+        static auto serialize(ecs::basic_archetype_registry& registry, const vector<ecs::entity>& root_entities,
                               const scene_unrecognized_data& unrecognized_data = {},
                               const scene_serialize_options& options = {}) -> string
         {
@@ -62,10 +62,10 @@ namespace tempest::scene
         /// @param registry Archetype registry into which entities and components are instantiated.
         /// @param scene Generational scene handle to associate with instantiated entities.
         /// @param json_content Raw JSON content string of the scene document.
+        /// @param cache Optional prefab template cache for instantiating prefab blocks.
         /// @return Result containing roots, all instantiated entities, unrecognized data, and status.
-        static auto deserialize(ecs::basic_archetype_registry& registry,
-                                scene_handle scene,
-                                string_view json_content) -> scene_deserialize_result;
+        static auto deserialize(ecs::basic_archetype_registry& registry, scene_handle scene, string_view json_content,
+                                const prefab_cache* cache = nullptr) -> scene_deserialize_result;
     };
 } // namespace tempest::scene
 

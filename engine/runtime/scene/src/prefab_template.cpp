@@ -2,8 +2,11 @@
 
 #include <tempest/algorithm.hpp>
 #include <tempest/archetype.hpp>
+#include <tempest/scene/prefab_instance_component.hpp>
 #include <tempest/scene/scene_entity_component.hpp>
 #include <tempest/utility.hpp>
+
+#include "scene_codec_detail.hpp"
 
 namespace tempest::scene
 {
@@ -124,6 +127,12 @@ namespace tempest::scene
             all_entities.push_back(ent);
             entity_to_index.insert({ent, idx});
 
+            // If this child is an instantiated nested prefab, do not flatten its internal hierarchy
+            if (ent != root && registry.has<prefab_instance_component>(ent))
+            {
+                return;
+            }
+
             const auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(ent);
             if (rel != nullptr && rel->first_child != ecs::tombstone)
             {
@@ -141,21 +150,27 @@ namespace tempest::scene
         auto records = vector<prefab_entity_record>{};
         records.reserve(all_entities.size());
 
+        auto entity_local_ids = vector<entity_local_id>{};
+        entity_local_ids.reserve(all_entities.size());
+        for (auto index = size_t{0}; index < all_entities.size(); ++index)
+        {
+            const auto ent = all_entities[index];
+            const auto* sec = registry.try_get<scene_entity_component>(ent);
+            if (sec != nullptr && sec->local_id.is_valid())
+            {
+                entity_local_ids.push_back(sec->local_id);
+            }
+            else
+            {
+                entity_local_ids.push_back(entity_local_id{static_cast<uint64_t>(index + 1)});
+            }
+        }
+
         for (auto index = size_t{0}; index < all_entities.size(); ++index)
         {
             const auto ent = all_entities[index];
             auto rec = prefab_entity_record{};
-
-            // Local ID
-            const auto* sec = registry.try_get<scene_entity_component>(ent);
-            if (sec != nullptr && sec->local_id.is_valid())
-            {
-                rec.local_id = sec->local_id;
-            }
-            else
-            {
-                rec.local_id = entity_local_id{static_cast<uint64_t>(index + 1)};
-            }
+            rec.local_id = entity_local_ids[index];
 
             // Name
             const auto name_opt = registry.name(ent);
@@ -182,6 +197,19 @@ namespace tempest::scene
                 }
             }
 
+            // Nested prefab instance descriptor
+            if (ent != root)
+            {
+                const auto* inst_comp = registry.try_get<prefab_instance_component>(ent);
+                if (inst_comp != nullptr)
+                {
+                    rec.nested_instance = nested_prefab_descriptor{
+                        .prefab_guid = inst_comp->prefab_guid,
+                        .instance_local_id = inst_comp->instance_local_id,
+                    };
+                }
+            }
+
             // Components
             const auto comp_types = ecs::raw_registry_access::get_component_types(registry, ent);
             for (const auto& info : comp_types)
@@ -202,6 +230,27 @@ namespace tempest::scene
                 comp.type_info = persistent_info;
                 comp.data.resize(info.size, byte{0});
                 tempest::memcpy(comp.data.data(), raw_ptr, info.size);
+
+                // Remap entity_ref fields from runtime ecs::entity to entity_local_id
+                for (const auto& field : info.descriptor->fields)
+                {
+                    if (field.kind == ecs::field_kind::entity_ref)
+                    {
+                        const auto target_ent = detail::get_field_val<ecs::entity>(field, raw_ptr);
+                        const auto iter = entity_to_index.find(target_ent);
+                        if (iter != entity_to_index.end() && iter->second < entity_local_ids.size())
+                        {
+                            const auto target_local_id = entity_local_ids[iter->second];
+                            detail::set_field_val(field, comp.data.data(),
+                                                  static_cast<ecs::entity>(target_local_id.value));
+                        }
+                        else
+                        {
+                            detail::set_field_val(field, comp.data.data(), ecs::tombstone);
+                        }
+                    }
+                }
+
                 rec.components.push_back(tempest::move(comp));
             }
 

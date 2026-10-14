@@ -55,6 +55,24 @@ namespace tempest::ecs
             .should_duplicate = is_duplicatable_v<T>,
             .descriptor = nullopt,
             .is_serializable = is_serializable_v<T>,
+            .construct =
+                [](void* ptr) {
+                    if constexpr (is_default_constructible_v<T>)
+                    {
+                        [[maybe_unused]] const auto* constructed = tempest::construct_at(static_cast<T*>(ptr));
+                    }
+                    else
+                    {
+                        tempest::memset(ptr, 0, sizeof(T));
+                    }
+                },
+            .destruct =
+                [](void* ptr) {
+                    if constexpr (is_destructible_v<T>)
+                    {
+                        tempest::destroy_at(static_cast<T*>(ptr));
+                    }
+                },
         };
     }
 

@@ -1,5 +1,7 @@
 #include <tempest/scene/scene_codec.hpp>
 
+#include "scene_codec_detail.hpp"
+
 #include <tempest/algorithm.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/guid.hpp>
@@ -7,6 +9,10 @@
 #include <tempest/memory.hpp>
 #include <tempest/random.hpp>
 #include <tempest/relationship_component.hpp>
+#include <tempest/scene/prefab_cache.hpp>
+#include <tempest/scene/prefab_instance_component.hpp>
+#include <tempest/scene/prefab_instantiator.hpp>
+#include <tempest/scene/prefab_overrides.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/type_traits.hpp>
@@ -17,501 +23,7 @@ namespace tempest::scene
 {
     namespace
     {
-        auto generate_random_local_id() -> entity_local_id
-        {
-            auto device = random_device{};
-            auto val = (static_cast<uint64_t>(device()) << 32) | static_cast<uint64_t>(device());
-            auto local_id = entity_local_id{val};
-            while (!local_id.is_valid())
-            {
-                val = (static_cast<uint64_t>(device()) << 32) | static_cast<uint64_t>(device());
-                local_id = entity_local_id{val};
-            }
-            return local_id;
-        }
-
-        template <typename T>
-        requires is_trivially_copyable_v<T>
-        auto get_field_val(const ecs::field_descriptor& field, const void* component_ptr) -> T
-        {
-            alignas(alignof(T)) byte storage[sizeof(T)];
-            if (field.get != nullptr)
-            {
-                field.get(component_ptr, storage);
-            }
-            else if (field.offset != ecs::field_descriptor::no_offset)
-            {
-                tempest::memcpy(storage, static_cast<const byte*>(component_ptr) + field.offset, sizeof(T));
-            }
-            auto result = T{};
-            tempest::memcpy(&result, storage, sizeof(T));
-            return result;
-        }
-
-        template <typename T>
-        requires is_trivially_copyable_v<T>
-        void set_field_val(const ecs::field_descriptor& field, void* component_ptr, const T& value)
-        {
-            if (field.set != nullptr)
-            {
-                field.set(component_ptr, &value);
-            }
-            else if (field.offset != ecs::field_descriptor::no_offset)
-            {
-                tempest::memcpy(static_cast<byte*>(component_ptr) + field.offset, &value, sizeof(T));
-            }
-        }
-
-        void serialize_field(const ecs::field_descriptor& field, const void* comp_ptr,
-                             json_object_mut& target_obj, const ecs::basic_archetype_registry& registry)
-        {
-            using ecs::field_kind;
-
-            switch (field.kind)
-            {
-                case field_kind::boolean:
-                {
-                    const auto value = get_field_val<bool>(field, comp_ptr);
-                    target_obj.set(field.name, value);
-                    break;
-                }
-                case field_kind::int32:
-                {
-                    const auto value = get_field_val<int32_t>(field, comp_ptr);
-                    target_obj.set(field.name, value);
-                    break;
-                }
-                case field_kind::uint32:
-                {
-                    const auto value = get_field_val<uint32_t>(field, comp_ptr);
-                    target_obj.set(field.name, value);
-                    break;
-                }
-                case field_kind::int64:
-                {
-                    const auto value = get_field_val<int64_t>(field, comp_ptr);
-                    target_obj.set(field.name, value);
-                    break;
-                }
-                case field_kind::uint64:
-                {
-                    const auto value = get_field_val<uint64_t>(field, comp_ptr);
-                    target_obj.set(field.name, value);
-                    break;
-                }
-                case field_kind::float32:
-                {
-                    const auto value = get_field_val<float>(field, comp_ptr);
-                    target_obj.set(field.name, value);
-                    break;
-                }
-                case field_kind::float64:
-                {
-                    const auto value = get_field_val<double>(field, comp_ptr);
-                    target_obj.set(field.name, value);
-                    break;
-                }
-                case field_kind::vec2:
-                {
-                    const auto value = get_field_val<math::vec2<float>>(field, comp_ptr);
-                    auto arr = target_obj.create_child_array(field.name);
-                    arr.push_back(value.x);
-                    arr.push_back(value.y);
-                    break;
-                }
-                case field_kind::vec3:
-                case field_kind::color3:
-                {
-                    const auto value = get_field_val<math::vec3<float>>(field, comp_ptr);
-                    auto arr = target_obj.create_child_array(field.name);
-                    arr.push_back(value.x);
-                    arr.push_back(value.y);
-                    arr.push_back(value.z);
-                    break;
-                }
-                case field_kind::vec4:
-                case field_kind::color4:
-                {
-                    const auto value = get_field_val<math::vec4<float>>(field, comp_ptr);
-                    auto arr = target_obj.create_child_array(field.name);
-                    arr.push_back(value.x);
-                    arr.push_back(value.y);
-                    arr.push_back(value.z);
-                    arr.push_back(value.w);
-                    break;
-                }
-                case field_kind::quat:
-                {
-                    const auto value = get_field_val<math::quat<float>>(field, comp_ptr);
-                    auto arr = target_obj.create_child_array(field.name);
-                    arr.push_back(value.x);
-                    arr.push_back(value.y);
-                    arr.push_back(value.z);
-                    arr.push_back(value.w);
-                    break;
-                }
-                case field_kind::guid:
-                {
-                    const auto value = get_field_val<guid>(field, comp_ptr);
-                    target_obj.set(field.name, tempest::to_string(value));
-                    break;
-                }
-                case field_kind::enumeration:
-                {
-                    auto enum_val = int64_t{0};
-                    if (field.size == 1)
-                    {
-                        enum_val = static_cast<int64_t>(get_field_val<int8_t>(field, comp_ptr));
-                    }
-                    else if (field.size == 2)
-                    {
-                        enum_val = static_cast<int64_t>(get_field_val<int16_t>(field, comp_ptr));
-                    }
-                    else if (field.size == 4)
-                    {
-                        enum_val = static_cast<int64_t>(get_field_val<int32_t>(field, comp_ptr));
-                    }
-                    else
-                    {
-                        enum_val = get_field_val<int64_t>(field, comp_ptr);
-                    }
-
-                    auto found_name = false;
-                    for (const auto& entry : field.enum_entries)
-                    {
-                        if (entry.value == enum_val)
-                        {
-                            target_obj.set(field.name, entry.name);
-                            found_name = true;
-                            break;
-                        }
-                    }
-                    if (!found_name)
-                    {
-                        target_obj.set(field.name, enum_val);
-                    }
-                    break;
-                }
-                case field_kind::entity_ref:
-                {
-                    const auto ref_entity = get_field_val<ecs::entity>(field, comp_ptr);
-                    if (ref_entity == ecs::tombstone || ref_entity == ecs::null || !registry.is_valid(ref_entity))
-                    {
-                        target_obj.set_null(field.name);
-                    }
-                    else
-                    {
-                        const auto* scene_comp = registry.try_get<scene_entity_component>(ref_entity);
-                        if (scene_comp != nullptr && scene_comp->local_id.is_valid())
-                        {
-                            target_obj.set(field.name, to_hex_string(scene_comp->local_id));
-                        }
-                        else
-                        {
-                            target_obj.set_null(field.name);
-                        }
-                    }
-                    break;
-                }
-                case field_kind::asset_ref:
-                {
-                    if (field.size == sizeof(guid))
-                    {
-                        const auto value = get_field_val<guid>(field, comp_ptr);
-                        target_obj.set(field.name, tempest::to_string(value));
-                    }
-                    else
-                    {
-                        const auto value = get_field_val<uint64_t>(field, comp_ptr);
-                        target_obj.set(field.name, value);
-                    }
-                    break;
-                }
-                case field_kind::fixed_string:
-                {
-                    const auto* str_ptr = static_cast<const char*>(comp_ptr) + field.offset;
-                    target_obj.set(field.name, string_view{str_ptr});
-                    break;
-                }
-            }
-        }
-
-        void deserialize_field(const ecs::field_descriptor& field, json_value field_val, void* comp_ptr)
-        {
-            using ecs::field_kind;
-
-            switch (field.kind)
-            {
-                case field_kind::boolean:
-                {
-                    if (field_val.is_bool())
-                    {
-                        set_field_val(field, comp_ptr, field_val.as_bool().value());
-                    }
-                    break;
-                }
-                case field_kind::int32:
-                {
-                    if (field_val.is_int() || field_val.is_number())
-                    {
-                        set_field_val(field, comp_ptr, static_cast<int32_t>(field_val.as_int64().value()));
-                    }
-                    break;
-                }
-                case field_kind::uint32:
-                {
-                    if (field_val.is_uint() || field_val.is_number())
-                    {
-                        set_field_val(field, comp_ptr, static_cast<uint32_t>(field_val.as_uint64().value()));
-                    }
-                    break;
-                }
-                case field_kind::int64:
-                {
-                    if (field_val.is_int() || field_val.is_number())
-                    {
-                        set_field_val(field, comp_ptr, field_val.as_int64().value());
-                    }
-                    break;
-                }
-                case field_kind::uint64:
-                {
-                    if (field_val.is_uint() || field_val.is_number())
-                    {
-                        set_field_val(field, comp_ptr, field_val.as_uint64().value());
-                    }
-                    break;
-                }
-                case field_kind::float32:
-                {
-                    if (field_val.is_real() || field_val.is_number())
-                    {
-                        set_field_val(field, comp_ptr, field_val.as_float().value());
-                    }
-                    break;
-                }
-                case field_kind::float64:
-                {
-                    if (field_val.is_real() || field_val.is_number())
-                    {
-                        set_field_val(field, comp_ptr, field_val.as_double().value());
-                    }
-                    break;
-                }
-                case field_kind::vec2:
-                {
-                    if (field_val.is_array())
-                    {
-                        const auto arr = field_val.as_array().value();
-                        if (arr.size() >= 2)
-                        {
-                            const auto val = math::vec2<float>{
-                                arr[0].as_float().value(),
-                                arr[1].as_float().value(),
-                            };
-                            set_field_val(field, comp_ptr, val);
-                        }
-                    }
-                    break;
-                }
-                case field_kind::vec3:
-                case field_kind::color3:
-                {
-                    if (field_val.is_array())
-                    {
-                        const auto arr = field_val.as_array().value();
-                        if (arr.size() >= 3)
-                        {
-                            const auto val = math::vec3<float>{
-                                arr[0].as_float().value(),
-                                arr[1].as_float().value(),
-                                arr[2].as_float().value(),
-                            };
-                            set_field_val(field, comp_ptr, val);
-                        }
-                    }
-                    break;
-                }
-                case field_kind::vec4:
-                case field_kind::color4:
-                {
-                    if (field_val.is_array())
-                    {
-                        const auto arr = field_val.as_array().value();
-                        if (arr.size() >= 4)
-                        {
-                            const auto val = math::vec4<float>{
-                                arr[0].as_float().value(),
-                                arr[1].as_float().value(),
-                                arr[2].as_float().value(),
-                                arr[3].as_float().value(),
-                            };
-                            set_field_val(field, comp_ptr, val);
-                        }
-                    }
-                    break;
-                }
-                case field_kind::quat:
-                {
-                    if (field_val.is_array())
-                    {
-                        const auto arr = field_val.as_array().value();
-                        if (arr.size() >= 4)
-                        {
-                            const auto val = math::quat<float>{
-                                arr[0].as_float().value(),
-                                arr[1].as_float().value(),
-                                arr[2].as_float().value(),
-                                arr[3].as_float().value(),
-                            };
-                            set_field_val(field, comp_ptr, val);
-                        }
-                    }
-                    break;
-                }
-                case field_kind::guid:
-                {
-                    if (field_val.is_string())
-                    {
-                        const auto parsed = parse_guid(field_val.as_string().value());
-                        if (parsed.has_value())
-                        {
-                            set_field_val(field, comp_ptr, *parsed);
-                        }
-                    }
-                    break;
-                }
-                case field_kind::enumeration:
-                {
-                    auto enum_val = int64_t{0};
-                    auto valid = false;
-                    if (field_val.is_string())
-                    {
-                        const auto str = field_val.as_string().value();
-                        for (const auto& entry : field.enum_entries)
-                        {
-                            if (entry.name == str)
-                            {
-                                enum_val = entry.value;
-                                valid = true;
-                                break;
-                            }
-                        }
-                    }
-                    else if (field_val.is_int() || field_val.is_number())
-                    {
-                        enum_val = field_val.as_int64().value();
-                        valid = true;
-                    }
-
-                    if (valid)
-                    {
-                        if (field.size == 1)
-                        {
-                            const auto val8 = static_cast<int8_t>(enum_val);
-                            set_field_val(field, comp_ptr, val8);
-                        }
-                        else if (field.size == 2)
-                        {
-                            const auto val16 = static_cast<int16_t>(enum_val);
-                            set_field_val(field, comp_ptr, val16);
-                        }
-                        else if (field.size == 4)
-                        {
-                            const auto val32 = static_cast<int32_t>(enum_val);
-                            set_field_val(field, comp_ptr, val32);
-                        }
-                        else
-                        {
-                            set_field_val(field, comp_ptr, enum_val);
-                        }
-                    }
-                    break;
-                }
-                case field_kind::entity_ref:
-                {
-                    if (field_val.is_string())
-                    {
-                        const auto parsed = parse_hex_string(field_val.as_string().value());
-                        if (parsed.has_value())
-                        {
-                            set_field_val(field, comp_ptr, static_cast<ecs::entity>(*parsed));
-                        }
-                        else
-                        {
-                            set_field_val(field, comp_ptr, ecs::tombstone);
-                        }
-                    }
-                    else
-                    {
-                        set_field_val(field, comp_ptr, ecs::tombstone);
-                    }
-                    break;
-                }
-                case field_kind::asset_ref:
-                {
-                    if (field.size == sizeof(guid) && field_val.is_string())
-                    {
-                        const auto parsed = parse_guid(field_val.as_string().value());
-                        if (parsed.has_value())
-                        {
-                            set_field_val(field, comp_ptr, *parsed);
-                        }
-                    }
-                    else if (field_val.is_uint() || field_val.is_number())
-                    {
-                        const auto val = field_val.as_uint64().value();
-                        set_field_val(field, comp_ptr, val);
-                    }
-                    break;
-                }
-                case field_kind::fixed_string:
-                {
-                    if (field_val.is_string())
-                    {
-                        const auto str = field_val.as_string().value();
-                        auto* dst = static_cast<char*>(comp_ptr) + field.offset;
-                        const auto max_len = field.size > 0 ? field.size - 1 : 0;
-                        const auto copy_len = str.size() < max_len ? str.size() : max_len;
-                        tempest::memcpy(dst, str.data(), copy_len);
-                        dst[copy_len] = '\0';
-                    }
-                    break;
-                }
-            }
-        }
-
-        const ecs::component_type_info* find_component_type_info(const ecs::component_type_registry& type_reg,
-                                                                 string_view comp_name)
-        {
-            const auto* info = type_reg.type_info(comp_name);
-            if (info != nullptr)
-            {
-                return info;
-            }
-
-            for (size_t i = 0; i < type_reg.size(); ++i)
-            {
-                const auto& cand = type_reg.type_info(static_cast<uint32_t>(i));
-                const auto cand_name = cand.name;
-                if (cand_name == comp_name)
-                {
-                    return &cand;
-                }
-                if (cand_name.size() > comp_name.size() + 2)
-                {
-                    if (tempest::ends_with(cand_name, comp_name))
-                    {
-                        const auto prefix_len = cand_name.size() - comp_name.size();
-                        if (cand_name[prefix_len - 1] == ':' && cand_name[prefix_len - 2] == ':')
-                        {
-                            return &cand;
-                        }
-                    }
-                }
-            }
-            return nullptr;
-        }
+        using namespace detail;
 
         void ensure_entity_local_ids_recursive(ecs::basic_archetype_registry& registry,
                                                ecs::entity entity,
@@ -570,6 +82,91 @@ namespace tempest::scene
                 entity_obj.set("name", *name_opt);
             }
 
+            const auto* prefab_comp = registry.try_get<prefab_instance_component>(entity);
+            if (prefab_comp != nullptr)
+            {
+                auto prefab_obj = entity_obj.create_child_object("prefab");
+                prefab_obj.set("guid", tempest::to_string(prefab_comp->prefab_guid));
+                prefab_obj.set("instance_id", to_hex_string(prefab_comp->instance_local_id));
+
+                auto overrides_arr = prefab_obj.create_child_array("overrides");
+                for (const auto& ov : prefab_comp->overrides.field_overrides)
+                {
+                    auto ov_obj = overrides_arr.create_child_object();
+                    auto target_arr = ov_obj.create_child_array("target");
+                    for (const auto target_id : ov.target)
+                    {
+                        target_arr.push_back(to_hex_string(target_id));
+                    }
+                    ov_obj.set("component", ov.component_name);
+                    ov_obj.set("field", ov.field_name);
+
+                    const auto* type_info = find_component_type_info(registry.type_registry(), ov.component_name);
+                    if (type_info != nullptr && type_info->descriptor.has_value())
+                    {
+                        const auto* field_desc = type_info->descriptor->find_field(ov.field_name);
+                        if (field_desc != nullptr && !ov.value_bytes.empty())
+                        {
+                            serialize_raw_field_value_to_key(*field_desc, ov.value_bytes.data(), ov_obj, "value", &registry);
+                        }
+                        else
+                        {
+                            ov_obj.set_null("value");
+                        }
+                    }
+                    else
+                    {
+                        ov_obj.set_null("value");
+                    }
+                }
+
+                auto added_arr = prefab_obj.create_child_array("added_components");
+                for (const auto& ac : prefab_comp->overrides.added_components)
+                {
+                    auto ac_obj = added_arr.create_child_object();
+                    auto target_arr = ac_obj.create_child_array("target");
+                    for (const auto target_id : ac.target)
+                    {
+                        target_arr.push_back(to_hex_string(target_id));
+                    }
+                    if (ac.component.type_info != nullptr)
+                    {
+                        const auto& type_info = *ac.component.type_info;
+                        ac_obj.set("component", type_info.name);
+                        if (type_info.descriptor.has_value())
+                        {
+                            auto props_obj = ac_obj.create_child_object("properties");
+                            for (const auto& field : type_info.descriptor->fields)
+                            {
+                                if ((field.flags & ecs::field_flags::transient) != ecs::field_flags::none)
+                                {
+                                    continue;
+                                }
+                                serialize_field(field, ac.component.data.data(), props_obj, registry);
+                            }
+                        }
+                    }
+                }
+
+                auto removed_arr = prefab_obj.create_child_array("removed_components");
+                for (const auto& rc : prefab_comp->overrides.removed_components)
+                {
+                    auto rc_obj = removed_arr.create_child_object();
+                    auto target_arr = rc_obj.create_child_array("target");
+                    for (const auto target_id : rc.target)
+                    {
+                        target_arr.push_back(to_hex_string(target_id));
+                    }
+                    rc_obj.set("component", rc.component_name);
+                }
+
+                auto added_children_arr = prefab_obj.create_child_array("added_children");
+                for (const auto child_id : prefab_comp->overrides.added_children)
+                {
+                    added_children_arr.push_back(to_hex_string(child_id));
+                }
+            }
+
             auto comp_map_obj = entity_obj.create_child_object("components");
 
             const entity_unrecognized_data* entity_unrec = nullptr;
@@ -581,7 +178,7 @@ namespace tempest::scene
 
             struct component_to_serialize
             {
-                string name;
+                string_view name;
                 const ecs::component_type_info* type_info{nullptr};
                 const unknown_component* unrec_comp{nullptr};
             };
@@ -595,14 +192,18 @@ namespace tempest::scene
                 {
                     continue;
                 }
+                if (prefab_comp != nullptr && !detail::is_transform_component(info.name))
+                {
+                    continue;
+                }
                 comps_to_serialize.push_back({
-                    .name = string{info.name},
+                    .name = info.name,
                     .type_info = &info,
                     .unrec_comp = nullptr,
                 });
             }
 
-            if (entity_unrec != nullptr)
+            if (entity_unrec != nullptr && prefab_comp == nullptr)
             {
                 for (const auto& unrec_comp : entity_unrec->unknown_components)
                 {
@@ -658,7 +259,8 @@ namespace tempest::scene
                                         match = true;
                                     }
                                 }
-                                else if (unrec_sv.size() > info.name.size() + 2 && tempest::ends_with(unrec_sv, info.name))
+                                else if (unrec_sv.size() > info.name.size() + 2 &&
+                                         tempest::ends_with(unrec_sv, info.name))
                                 {
                                     const auto prefix_len = unrec_sv.size() - info.name.size();
                                     if (unrec_sv[prefix_len - 1] == ':' && unrec_sv[prefix_len - 2] == ':')
@@ -683,17 +285,55 @@ namespace tempest::scene
                 }
             }
 
-            const auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(entity);
-            if (rel != nullptr && rel->first_child != ecs::tombstone && rel->first_child != ecs::null &&
-                registry.is_valid(rel->first_child))
-            {
-                auto children_arr = entity_obj.create_child_array("children");
+            auto serializable_children = vector<ecs::entity>{};
+            auto collect_children = [&](auto& self, ecs::entity curr) -> void {
+                const auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(curr);
+                if (rel == nullptr || rel->first_child == ecs::tombstone || rel->first_child == ecs::null ||
+                    !registry.is_valid(rel->first_child))
+                {
+                    return;
+                }
                 auto child = rel->first_child;
                 while (child != ecs::tombstone && child != ecs::null && registry.is_valid(child))
                 {
-                    serialize_entity_recursive(registry, child, children_arr, unrecognized_data);
+                    const auto* member_comp = registry.try_get<prefab_member_component>(child);
+                    const auto* child_scene_comp = registry.try_get<scene_entity_component>(child);
+                    const auto child_local_id = child_scene_comp ? child_scene_comp->local_id : entity_local_id{};
+
+                    auto is_instance_added = false;
+                    if (prefab_comp != nullptr)
+                    {
+                        for (const auto added_id : prefab_comp->overrides.added_children)
+                        {
+                            if (added_id == child_local_id)
+                            {
+                                is_instance_added = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (member_comp == nullptr || is_instance_added)
+                    {
+                        serializable_children.push_back(child);
+                    }
+                    else if (prefab_comp != nullptr)
+                    {
+                        self(self, child);
+                    }
+
                     const auto* child_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(child);
                     child = child_rel ? child_rel->next_sibling : ecs::tombstone;
+                }
+            };
+            collect_children(collect_children, entity);
+
+            if (!serializable_children.empty())
+            {
+                auto children_arr = entity_obj.create_child_array("children");
+                for (const auto ser_child : serializable_children)
+                {
+                    serialize_entity_recursive(registry, ser_child, children_arr, unrecognized_data);
                 }
             }
         }
@@ -716,6 +356,12 @@ namespace tempest::scene
         auto entities_arr = root_obj.create_child_array("entities");
         for (const auto root : root_entities)
         {
+            const auto* member = registry.try_get<prefab_member_component>(root);
+            const auto* instance = registry.try_get<prefab_instance_component>(root);
+            if (member != nullptr && instance == nullptr)
+            {
+                continue;
+            }
             serialize_entity_recursive(registry, root, entities_arr, unrecognized_data);
         }
 
@@ -725,7 +371,8 @@ namespace tempest::scene
 
     auto scene_codec::deserialize(ecs::basic_archetype_registry& registry,
                                   scene_handle scene,
-                                  string_view json_content) -> scene_deserialize_result
+                                  string_view json_content,
+                                  const prefab_cache* cache) -> scene_deserialize_result
     {
         auto alloc = system_allocator{};
         auto doc_res = json_document::from_string(json_content, alloc);
@@ -792,6 +439,90 @@ namespace tempest::scene
         auto result = scene_deserialize_result{};
         auto local_to_entity = flat_unordered_map<uint64_t, ecs::entity>{};
 
+        auto deserialize_components_onto = [&](ecs::entity target_ent, entity_local_id ent_local_id,
+                                               json_value comp_map_val, bool only_transform = false) {
+            if (!comp_map_val.is_object())
+            {
+                return;
+            }
+            const auto comp_map_res = comp_map_val.as_object();
+            if (!comp_map_res.has_value())
+            {
+                return;
+            }
+            for (const auto& member : *comp_map_res)
+            {
+                const auto comp_name = member.key;
+                const auto comp_val = member.value;
+
+                if (only_transform && !detail::is_transform_component(comp_name))
+                {
+                    continue;
+                }
+
+                const auto* type_info = find_component_type_info(registry.type_registry(), comp_name);
+                if (only_transform && type_info != nullptr && !detail::is_transform_component(type_info->name))
+                {
+                    continue;
+                }
+
+                if (type_info != nullptr && type_info->descriptor.has_value())
+                {
+                    auto* comp_ptr =
+                        ecs::raw_registry_access::get_component_raw(registry, target_ent, type_info->index);
+                    if (comp_ptr == nullptr)
+                    {
+                        comp_ptr = ecs::raw_registry_access::assign_raw(registry, target_ent, *type_info);
+                        for (const auto& field : type_info->descriptor->fields)
+                        {
+                            if (field.kind == ecs::field_kind::entity_ref)
+                            {
+                                detail::set_field_val(field, comp_ptr, ecs::tombstone);
+                            }
+                        }
+                    }
+                    const auto& desc = *type_info->descriptor;
+
+                    if (comp_val.is_object())
+                    {
+                        const auto fields_obj_res = comp_val.as_object();
+                        if (fields_obj_res.has_value())
+                        {
+                            for (const auto& field_member : *fields_obj_res)
+                            {
+                                const auto field_name = field_member.key;
+                                const auto field_v = field_member.value;
+
+                                const auto* field_desc = desc.find_field(field_name);
+                                if (field_desc != nullptr)
+                                {
+                                    deserialize_field(*field_desc, field_v, comp_ptr);
+                                }
+                                else
+                                {
+                                    const auto field_json = json_writer::to_string(field_v);
+                                    result.unrecognized_data.entities[ent_local_id.value]
+                                        .unknown_fields[string{comp_name}]
+                                        .push_back({
+                                            .field_name = string{field_name},
+                                            .json_payload = field_json,
+                                        });
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    const auto comp_json = json_writer::to_string(comp_val);
+                    result.unrecognized_data.entities[ent_local_id.value].unknown_components.push_back({
+                        .name = string{comp_name},
+                        .json_payload = comp_json,
+                    });
+                }
+            }
+        };
+
         auto deserialize_entity = [&](auto& self, json_value entity_val, ecs::entity parent_entity) -> void {
             if (!entity_val.is_object())
             {
@@ -813,13 +544,374 @@ namespace tempest::scene
                 local_id = generate_random_local_id();
             }
 
+            const auto name_val = entity_val["name"];
+            const auto prefab_val = entity_val["prefab"];
+
+            if (prefab_val.is_object())
+            {
+                const auto prefab_obj_res = prefab_val.as_object();
+                if (prefab_obj_res.has_value())
+                {
+                    const auto prefab_obj = *prefab_obj_res;
+                    auto prefab_guid = guid{};
+                    const auto guid_val = prefab_obj["guid"];
+                    if (guid_val.is_string())
+                    {
+                        const auto parsed = parse_guid(guid_val.as_string().value());
+                        if (parsed.has_value())
+                        {
+                            prefab_guid = *parsed;
+                        }
+                    }
+
+                    auto instance_id = local_id;
+                    const auto instance_id_val = prefab_obj["instance_id"];
+                    if (instance_id_val.is_string())
+                    {
+                        const auto parsed = parse_local_id(instance_id_val.as_string().value());
+                        if (parsed.has_value() && parsed->is_valid())
+                        {
+                            instance_id = *parsed;
+                        }
+                    }
+
+                    auto overrides = prefab_overrides{};
+
+                    const auto overrides_val = prefab_obj["overrides"];
+                    if (overrides_val.is_array())
+                    {
+                        const auto ov_arr_res = overrides_val.as_array();
+                        if (ov_arr_res.has_value())
+                        {
+                            for (const auto& ov_item : *ov_arr_res)
+                            {
+                                if (!ov_item.is_object())
+                                {
+                                    continue;
+                                }
+                                const auto ov_item_res = ov_item.as_object();
+                                if (!ov_item_res.has_value())
+                                {
+                                    continue;
+                                }
+                                const auto ov_o = *ov_item_res;
+
+                                auto target_path = id_path{};
+                                const auto target_v = ov_o["target"];
+                                const auto parsed_path = parse_id_path(target_v);
+                                if (parsed_path.has_value())
+                                {
+                                    target_path = *parsed_path;
+                                }
+
+                                auto comp_name = string{};
+                                const auto c_val = ov_o["component"];
+                                if (c_val.is_string())
+                                {
+                                    comp_name = string{c_val.as_string().value()};
+                                }
+
+                                auto f_name = string{};
+                                const auto f_val = ov_o["field"];
+                                if (f_val.is_string())
+                                {
+                                    f_name = string{f_val.as_string().value()};
+                                }
+
+                                const auto val_v = ov_o["value"];
+                                auto val_bytes = vector<byte>{};
+
+                                const auto* type_info =
+                                    find_component_type_info(registry.type_registry(), comp_name);
+                                if (type_info != nullptr && type_info->descriptor.has_value())
+                                {
+                                    const auto* field_desc = type_info->descriptor->find_field(f_name);
+                                    if (field_desc != nullptr)
+                                    {
+                                        val_bytes.resize(field_desc->size, byte{0});
+                                        deserialize_raw_field_value(*field_desc, val_v, val_bytes.data());
+                                    }
+                                }
+
+                                overrides.field_overrides.push_back(field_override{
+                                    .target = tempest::move(target_path),
+                                    .component_name = tempest::move(comp_name),
+                                    .field_name = tempest::move(f_name),
+                                    .value_bytes = tempest::move(val_bytes),
+                                });
+                            }
+                        }
+                    }
+
+                    const auto rem_val = prefab_obj["removed_components"];
+                    if (rem_val.is_array())
+                    {
+                        const auto rem_arr_res = rem_val.as_array();
+                        if (rem_arr_res.has_value())
+                        {
+                            for (const auto& rem_item : *rem_arr_res)
+                            {
+                                if (!rem_item.is_object())
+                                {
+                                    continue;
+                                }
+                                const auto rem_item_res = rem_item.as_object();
+                                if (!rem_item_res.has_value())
+                                {
+                                    continue;
+                                }
+                                const auto rem_o = *rem_item_res;
+
+                                auto target_path = id_path{};
+                                const auto target_v = rem_o["target"];
+                                const auto parsed_path = parse_id_path(target_v);
+                                if (parsed_path.has_value())
+                                {
+                                    target_path = *parsed_path;
+                                }
+
+                                auto comp_name = string{};
+                                const auto c_val = rem_o["component"];
+                                if (c_val.is_string())
+                                {
+                                    comp_name = string{c_val.as_string().value()};
+                                }
+
+                                overrides.removed_components.push_back(removed_component{
+                                    .target = tempest::move(target_path),
+                                    .component_name = tempest::move(comp_name),
+                                });
+                            }
+                        }
+                    }
+
+                    const auto add_val = prefab_obj["added_components"];
+                    if (add_val.is_array())
+                    {
+                        const auto add_arr_res = add_val.as_array();
+                        if (add_arr_res.has_value())
+                        {
+                            for (const auto& add_item : *add_arr_res)
+                            {
+                                if (!add_item.is_object())
+                                {
+                                    continue;
+                                }
+                                const auto add_item_res = add_item.as_object();
+                                if (!add_item_res.has_value())
+                                {
+                                    continue;
+                                }
+                                const auto add_o = *add_item_res;
+
+                                auto target_path = id_path{};
+                                const auto target_v = add_o["target"];
+                                const auto parsed_path = parse_id_path(target_v);
+                                if (parsed_path.has_value())
+                                {
+                                    target_path = *parsed_path;
+                                }
+
+                                auto comp_name = string{};
+                                const auto c_val = add_o["component"];
+                                if (c_val.is_string())
+                                {
+                                    comp_name = string{c_val.as_string().value()};
+                                }
+
+                                auto staged = staged_component{};
+                                const auto* type_info =
+                                    find_component_type_info(registry.type_registry(), comp_name);
+                                if (type_info != nullptr && type_info->descriptor.has_value())
+                                {
+                                    staged.type_info = type_info;
+                                    staged.data.resize(type_info->size, byte{0});
+                                    if (type_info->construct != nullptr)
+                                    {
+                                        type_info->construct(staged.data.data());
+                                    }
+                                    for (const auto& field : type_info->descriptor->fields)
+                                    {
+                                        if (field.kind == ecs::field_kind::entity_ref)
+                                        {
+                                            detail::set_field_val(field, staged.data.data(), ecs::tombstone);
+                                        }
+                                    }
+                                    const auto props_val = add_o["properties"];
+                                    if (props_val.is_object())
+                                    {
+                                        const auto props_obj = *props_val.as_object();
+                                        for (const auto& member : props_obj)
+                                        {
+                                            const auto* field_desc = type_info->descriptor->find_field(member.key);
+                                            if (field_desc != nullptr)
+                                            {
+                                                deserialize_field(*field_desc, member.value, staged.data.data());
+                                            }
+                                        }
+                                    }
+                                }
+
+                                overrides.added_components.push_back(added_component{
+                                    .target = tempest::move(target_path),
+                                    .component = tempest::move(staged),
+                                });
+                            }
+                        }
+                    }
+
+                    const auto child_ids_val = prefab_obj["added_children"];
+                    if (child_ids_val.is_array())
+                    {
+                        const auto arr_res = child_ids_val.as_array();
+                        if (arr_res.has_value())
+                        {
+                            for (const auto& id_item : *arr_res)
+                            {
+                                if (id_item.is_string())
+                                {
+                                    const auto parsed = parse_local_id(id_item.as_string().value());
+                                    if (parsed.has_value() && parsed->is_valid())
+                                    {
+                                        overrides.added_children.push_back(*parsed);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (cache != nullptr && cache->has_template(prefab_guid))
+                    {
+                        auto inst_res = prefab_instantiator::instantiate(prefab_guid, *cache, registry, overrides,
+                                                                         instance_id);
+                        if (inst_res.has_value())
+                        {
+                            const auto root_ent = inst_res->root_entity;
+                            if (name_val.is_string())
+                            {
+                                registry.name(root_ent, name_val.as_string().value());
+                            }
+
+                            registry.assign_or_replace(root_ent, scene_entity_component{
+                                                                     .scene = scene,
+                                                                     .local_id = local_id,
+                                                                 });
+
+                            for (const auto ent : inst_res->all_entities)
+                            {
+                                if (ent != root_ent)
+                                {
+                                    if (!registry.has<scene_entity_component>(ent))
+                                    {
+                                        const auto* member = registry.try_get<prefab_member_component>(ent);
+                                        const auto derived_val =
+                                            (member && member->template_local_id.is_valid())
+                                                ? static_cast<uint64_t>(tempest::hash_combine(
+                                                      local_id.value, member->template_local_id.value))
+                                                : generate_random_local_id().value;
+                                        const auto member_local_id =
+                                            entity_local_id{derived_val == 0 ? 1 : derived_val};
+                                        registry.assign(ent, scene_entity_component{
+                                                                 .scene = scene,
+                                                                 .local_id = member_local_id,
+                                                             });
+                                        local_to_entity[member_local_id.value] = ent;
+                                    }
+                                    else
+                                    {
+                                        const auto* sc = registry.try_get<scene_entity_component>(ent);
+                                        if (sc && sc->local_id.is_valid())
+                                        {
+                                            local_to_entity[sc->local_id.value] = ent;
+                                        }
+                                    }
+                                }
+                                result.all_entities.push_back(ent);
+                            }
+
+                            local_to_entity[local_id.value] = root_ent;
+
+                            if (parent_entity != ecs::tombstone)
+                            {
+                                registry.reparent(root_ent, parent_entity);
+                            }
+                            else
+                            {
+                                result.root_entities.push_back(root_ent);
+                            }
+
+                            deserialize_components_onto(root_ent, local_id, entity_val["components"],
+                                                        /*only_transform=*/true);
+
+                            const auto children_val = entity_val["children"];
+                            if (children_val.is_array())
+                            {
+                                const auto children_arr_res = children_val.as_array();
+                                if (children_arr_res.has_value())
+                                {
+                                    for (const auto& child_item : *children_arr_res)
+                                    {
+                                        self(self, child_item, root_ent);
+                                    }
+                                }
+                            }
+                            return;
+                        }
+                    }
+
+                    // Fallback when cache == nullptr or template not found
+                    const auto entity = registry.create();
+                    registry.assign(entity, scene_entity_component{
+                                                .scene = scene,
+                                                .local_id = local_id,
+                                            });
+                    registry.assign(entity, prefab_instance_component{
+                                                .prefab_guid = prefab_guid,
+                                                .instance_local_id = instance_id,
+                                                .overrides = tempest::move(overrides),
+                                            });
+                    if (name_val.is_string())
+                    {
+                        registry.name(entity, name_val.as_string().value());
+                    }
+
+                    local_to_entity[local_id.value] = entity;
+                    result.all_entities.push_back(entity);
+
+                    if (parent_entity != ecs::tombstone)
+                    {
+                        registry.reparent(entity, parent_entity);
+                    }
+                    else
+                    {
+                        result.root_entities.push_back(entity);
+                    }
+
+                    deserialize_components_onto(entity, local_id, entity_val["components"]);
+
+                    const auto children_val = entity_val["children"];
+                    if (children_val.is_array())
+                    {
+                        const auto children_arr_res = children_val.as_array();
+                        if (children_arr_res.has_value())
+                        {
+                            for (const auto& child_item : *children_arr_res)
+                            {
+                                self(self, child_item, entity);
+                            }
+                        }
+                    }
+                    return;
+                }
+            }
+
+            // Normal entity without prefab block
             const auto entity = registry.create();
             registry.assign(entity, scene_entity_component{
                                         .scene = scene,
                                         .local_id = local_id,
                                     });
 
-            const auto name_val = entity_val["name"];
             if (name_val.is_string())
             {
                 registry.name(entity, name_val.as_string().value());
@@ -837,63 +929,7 @@ namespace tempest::scene
                 result.root_entities.push_back(entity);
             }
 
-            const auto comp_map_val = entity_val["components"];
-            if (comp_map_val.is_object())
-            {
-                const auto comp_map_res = comp_map_val.as_object();
-                if (comp_map_res.has_value())
-                {
-                    for (const auto& member : *comp_map_res)
-                    {
-                        const auto comp_name = member.key;
-                        const auto comp_val = member.value;
-
-                        const auto* type_info = find_component_type_info(registry.type_registry(), comp_name);
-                        if (type_info != nullptr && type_info->descriptor.has_value())
-                        {
-                            auto* comp_ptr = ecs::raw_registry_access::assign_raw(registry, entity, *type_info);
-                            const auto& desc = *type_info->descriptor;
-
-                            if (comp_val.is_object())
-                            {
-                                const auto fields_obj_res = comp_val.as_object();
-                                if (fields_obj_res.has_value())
-                                {
-                                    for (const auto& field_member : *fields_obj_res)
-                                    {
-                                        const auto field_name = field_member.key;
-                                        const auto field_v = field_member.value;
-
-                                        const auto* field_desc = desc.find_field(field_name);
-                                        if (field_desc != nullptr)
-                                        {
-                                            deserialize_field(*field_desc, field_v, comp_ptr);
-                                        }
-                                        else
-                                        {
-                                            const auto field_json = json_writer::to_string(field_v);
-                                            result.unrecognized_data.entities[local_id.value]
-                                                .unknown_fields[string{comp_name}]
-                                                .push_back({
-                                                    .field_name = string{field_name},
-                                                    .json_payload = field_json,
-                                                });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        else
-                        {
-                            const auto comp_json = json_writer::to_string(comp_val);
-                            result.unrecognized_data.entities[local_id.value].unknown_components.push_back({
-                                .name = string{comp_name},
-                                .json_payload = comp_json,
-                            });
-                        }
-                    }
-                }
-            }
+            deserialize_components_onto(entity, local_id, entity_val["components"]);
 
             const auto children_val = entity_val["children"];
             if (children_val.is_array())

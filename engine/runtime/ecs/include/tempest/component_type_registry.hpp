@@ -7,6 +7,7 @@
 #include <tempest/bit.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/int.hpp>
+#include <tempest/memory.hpp>
 #include <tempest/meta.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/reflection.hpp>
@@ -53,6 +54,8 @@ namespace tempest::ecs
         bool should_duplicate = default_should_duplicate;
         optional<type_descriptor> descriptor;
         bool is_serializable = default_is_serializable;
+        void (*construct)(void* storage) = nullptr;
+        void (*destruct)(void* storage) = nullptr;
     };
 
     class TEMPEST_API component_type_registry
@@ -121,6 +124,25 @@ namespace tempest::ecs
                 .should_duplicate = should_dup,
                 .descriptor = tempest::move(desc),
                 .is_serializable = serializable,
+                .construct =
+                    [](void* ptr) {
+                        if constexpr (is_default_constructible_v<component_type>)
+                        {
+                            [[maybe_unused]] const auto* constructed =
+                                tempest::construct_at(static_cast<component_type*>(ptr));
+                        }
+                        else
+                        {
+                            tempest::memset(ptr, 0, sizeof(component_type));
+                        }
+                    },
+                .destruct =
+                    [](void* ptr) {
+                        if constexpr (is_destructible_v<component_type>)
+                        {
+                            tempest::destroy_at(static_cast<component_type*>(ptr));
+                        }
+                    },
             };
 
             _register_type_info(tempest::move(info));

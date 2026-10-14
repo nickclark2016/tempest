@@ -1227,6 +1227,10 @@ namespace tempest::ecs
         {
             tempest::memcpy(new_component_ptr, src_data, type_info.size);
         }
+        else if (type_info.construct != nullptr)
+        {
+            type_info.construct(new_component_ptr);
+        }
         else
         {
             tempest::memset(new_component_ptr, 0, type_info.size);

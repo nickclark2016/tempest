@@ -2,11 +2,15 @@
 #define tempest_scene_prefab_overrides_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/expected.hpp>
 #include <tempest/format.hpp>
 #include <tempest/inplace_vector.hpp>
 #include <tempest/int.hpp>
+#include <tempest/json.hpp>
+#include <tempest/scene/prefab_codec.hpp>
 #include <tempest/scene/scene_staging.hpp>
 #include <tempest/scene/scene_types.hpp>
+#include <tempest/span.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/vector.hpp>
@@ -36,6 +40,122 @@ namespace tempest::scene
                 result += '/';
             }
             result += to_hex_string(path[segment_index]);
+        }
+        return result;
+    }
+
+    /// @brief Parses an id_path from a JSON value (either an array of hex strings or a slash-separated string).
+    inline auto parse_id_path(json_value val) -> expected<id_path, prefab_codec_error>;
+
+    /// @brief Parses an id_path from a string_view (slash-separated hex IDs or JSON array representation).
+    inline auto parse_id_path(string_view str) -> expected<id_path, prefab_codec_error>
+    {
+        if (str.empty())
+        {
+            return id_path{};
+        }
+
+        if (str.front() == '[')
+        {
+            auto alloc = system_allocator{};
+            auto doc = json_document::from_string(str, alloc);
+            if (!doc.has_value())
+            {
+                return unexpected(prefab_codec_error::invalid_entity_record);
+            }
+            return parse_id_path(doc->root());
+        }
+
+        auto count = size_t{1};
+        for (const auto character : str)
+        {
+            if (character == '/')
+            {
+                ++count;
+            }
+        }
+        if (count > max_id_path_depth)
+        {
+            return unexpected(prefab_codec_error::depth_exceeded);
+        }
+
+        auto result = id_path{};
+        auto start = size_t{0};
+        for (auto index = size_t{0}; index <= str.size(); ++index)
+        {
+            if (index == str.size() || str[index] == '/')
+            {
+                if (index == start)
+                {
+                    return unexpected(prefab_codec_error::invalid_entity_record);
+                }
+                const auto segment = string_view{str.data() + start, index - start};
+                const auto parsed = parse_local_id(segment);
+                if (!parsed.has_value() || !parsed->is_valid())
+                {
+                    return unexpected(prefab_codec_error::invalid_entity_record);
+                }
+                result.push_back(*parsed);
+                start = index + 1;
+            }
+        }
+        return result;
+    }
+
+    /// @brief Parses an id_path from a json_value.
+    inline auto parse_id_path(json_value val) -> expected<id_path, prefab_codec_error>
+    {
+        if (val.is_string())
+        {
+            return parse_id_path(val.as_string().value());
+        }
+        if (val.is_array())
+        {
+            const auto arr_res = val.as_array();
+            if (!arr_res.has_value())
+            {
+                return unexpected(prefab_codec_error::invalid_entity_record);
+            }
+            const auto arr = *arr_res;
+            if (arr.size() > max_id_path_depth)
+            {
+                return unexpected(prefab_codec_error::depth_exceeded);
+            }
+            auto result = id_path{};
+            for (const auto& item : arr)
+            {
+                if (!item.is_string())
+                {
+                    return unexpected(prefab_codec_error::invalid_entity_record);
+                }
+                const auto parsed = parse_local_id(item.as_string().value());
+                if (!parsed.has_value() || !parsed->is_valid())
+                {
+                    return unexpected(prefab_codec_error::invalid_entity_record);
+                }
+                result.push_back(*parsed);
+            }
+            return result;
+        }
+        return unexpected(prefab_codec_error::invalid_entity_record);
+    }
+
+    /// @brief Parses an id_path from a span of string_views.
+    inline auto parse_id_path(span<const string_view> segments) -> expected<id_path, prefab_codec_error>
+    {
+        if (segments.size() > max_id_path_depth)
+        {
+            return unexpected(prefab_codec_error::depth_exceeded);
+        }
+        auto result = id_path{};
+        for (const auto& segment : segments)
+        {
+            const auto parsed = parse_local_id(segment);
+            if (!parsed.has_value() || !parsed->is_valid())
+            {
+                return unexpected(prefab_codec_error::invalid_entity_record);
+            }
+            result.push_back(*parsed);
         }
         return result;
     }

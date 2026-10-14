@@ -15,6 +15,8 @@
 #include <tempest/string_view.hpp>
 #include <tempest/utility.hpp>
 
+#include "scene_codec_detail.hpp"
+
 namespace tempest::scene
 {
     namespace
@@ -78,8 +80,7 @@ namespace tempest::scene
         auto find_descendant_by_local_id(const ecs::archetype_registry& registry, ecs::entity parent_entity,
                                          entity_local_id target_id) -> ecs::entity
         {
-            const auto* parent_relationship =
-                registry.try_get<ecs::relationship_component<ecs::entity>>(parent_entity);
+            const auto* parent_relationship = registry.try_get<ecs::relationship_component<ecs::entity>>(parent_entity);
             if (parent_relationship == nullptr || parent_relationship->first_child == ecs::tombstone)
             {
                 return ecs::tombstone;
@@ -245,6 +246,7 @@ namespace tempest::scene
             auto is_component_removed = [&](size_t record_index, string_view component_name) -> bool {
                 const auto is_root = (record_index == root_record_index);
                 const auto local_id = records[record_index].local_id;
+                const auto root_local_id = records[root_record_index].local_id;
 
                 for (const auto& removed_item : overrides.removed_components)
                 {
@@ -260,6 +262,11 @@ namespace tempest::scene
                     else
                     {
                         if (removed_item.target.size() == 1 && removed_item.target[0] == local_id)
+                        {
+                            target_matches = true;
+                        }
+                        else if (removed_item.target.size() == 2 && removed_item.target[0] == root_local_id &&
+                                 removed_item.target[1] == local_id)
                         {
                             target_matches = true;
                         }
@@ -369,13 +376,6 @@ namespace tempest::scene
                     return unexpected(prefab_error::cyclic_nesting);
                 }
 
-                const auto nested_tmpl_opt = cache->find_template(nested_desc.prefab_guid);
-                if (!nested_tmpl_opt.has_value())
-                {
-                    cleanup_on_error(all_entities);
-                    return unexpected(prefab_error::template_not_found);
-                }
-
                 // Collect overrides targeting this nested instance
                 auto nested_overrides = prefab_overrides{};
                 for (const auto& field_override_item : overrides.field_overrides)
@@ -394,10 +394,6 @@ namespace tempest::scene
                         auto stripped = removed_item;
                         stripped.target.erase(stripped.target.begin());
                         nested_overrides.removed_components.push_back(tempest::move(stripped));
-                    }
-                    else if (removed_item.target.size() == 1 && (tmpl.find_record(removed_item.target[0]) == nullptr))
-                    {
-                        nested_overrides.removed_components.push_back(removed_item);
                     }
                 }
                 for (const auto& added_item : overrides.added_components)
@@ -429,25 +425,35 @@ namespace tempest::scene
                 }
                 next_stack.push_back(nested_desc.prefab_guid);
 
-                auto nested_result = instantiate_impl(*nested_tmpl_opt, registry, nested_overrides, cache,
-                                                      nested_desc.prefab_guid, nested_desc.instance_local_id,
-                                                      next_stack);
-                if (!nested_result.has_value())
+                auto nested_result = optional<expected<prefab_instance_result, prefab_error>>{};
+                const auto nested_found =
+                    cache->with_template(nested_desc.prefab_guid, [&](const prefab_template& nested_tmpl) {
+                        nested_result =
+                            instantiate_impl(nested_tmpl, registry, nested_overrides, cache, nested_desc.prefab_guid,
+                                             nested_desc.instance_local_id, next_stack);
+                    });
+                if (!nested_found || !nested_result.has_value())
                 {
                     cleanup_on_error(all_entities);
-                    return unexpected(nested_result.error());
+                    return unexpected(prefab_error::template_not_found);
+                }
+                if (!nested_result->has_value())
+                {
+                    cleanup_on_error(all_entities);
+                    return unexpected(nested_result->error());
                 }
 
+                const auto& nested_inst = nested_result->value();
+
                 // Attach nested root entity under record's entity
-                ecs::create_parent_child_relationship(registry, all_entities[record_index],
-                                                      nested_result->root_entity);
+                ecs::create_parent_child_relationship(registry, all_entities[record_index], nested_inst.root_entity);
 
                 // Merge nested entities into all_entities and local_to_entity
-                for (const auto nested_ent : nested_result->all_entities)
+                for (const auto nested_ent : nested_inst.all_entities)
                 {
                     all_entities.push_back(nested_ent);
                 }
-                for (const auto& [nested_id, nested_ent] : nested_result->local_to_entity)
+                for (const auto& [nested_id, nested_ent] : nested_inst.local_to_entity)
                 {
                     local_to_entity.insert({nested_id, nested_ent});
                 }
@@ -465,7 +471,53 @@ namespace tempest::scene
                 return false;
             };
 
-            // 9. Apply field overrides
+            // 9. Apply added components (before field overrides so field overrides can target added components)
+            for (const auto& added_item : overrides.added_components)
+            {
+                if (!added_item.target.empty() && is_nested_host_local_id(added_item.target.front()))
+                {
+                    continue;
+                }
+
+                const auto target_entity =
+                    find_entity_by_id_path(registry, root_entity, added_item.target, local_to_entity);
+                if (target_entity == ecs::tombstone || !registry.is_valid(target_entity))
+                {
+                    cleanup_on_error(all_entities);
+                    return unexpected(prefab_error::component_not_found);
+                }
+
+                if (added_item.component.type_info == nullptr)
+                {
+                    cleanup_on_error(all_entities);
+                    return unexpected(prefab_error::component_not_found);
+                }
+
+                const auto* type_info_ptr = added_item.component.type_info;
+                auto* component_data_ptr = ecs::raw_registry_access::assign_raw(
+                    registry, target_entity, *type_info_ptr,
+                    added_item.component.data.empty() ? nullptr : added_item.component.data.data());
+
+                if (component_data_ptr == nullptr)
+                {
+                    cleanup_on_error(all_entities);
+                    return unexpected(prefab_error::component_not_found);
+                }
+
+                if (type_info_ptr->descriptor.has_value() && type_info_ptr->descriptor->post_load != nullptr)
+                {
+                    type_info_ptr->descriptor->post_load(component_data_ptr);
+                }
+            }
+
+            // 10. Apply field overrides
+            struct post_load_target
+            {
+                void* component_data{nullptr};
+                void (*post_load_fn)(void*){nullptr};
+            };
+            auto modified_components = vector<post_load_target>{};
+
             for (const auto& override_item : overrides.field_overrides)
             {
                 // If override was delegated to a nested instance, it was already applied recursively
@@ -543,50 +595,70 @@ namespace tempest::scene
 
                 if (type_info_ptr->descriptor->post_load != nullptr)
                 {
-                    type_info_ptr->descriptor->post_load(component_data_ptr);
+                    auto already_recorded = false;
+                    for (const auto& item : modified_components)
+                    {
+                        if (item.component_data == component_data_ptr)
+                        {
+                            already_recorded = true;
+                            break;
+                        }
+                    }
+                    if (!already_recorded)
+                    {
+                        modified_components.push_back({
+                            .component_data = component_data_ptr,
+                            .post_load_fn = type_info_ptr->descriptor->post_load,
+                        });
+                    }
                 }
             }
 
-            // 10. Apply added components
-            for (const auto& added_item : overrides.added_components)
+            // Post-load callbacks executed once per modified component
+            for (const auto& item : modified_components)
             {
-                if (!added_item.target.empty() && is_nested_host_local_id(added_item.target.front()))
-                {
-                    continue;
-                }
+                item.post_load_fn(item.component_data);
+            }
 
-                const auto target_entity =
-                    find_entity_by_id_path(registry, root_entity, added_item.target, local_to_entity);
-                if (target_entity == ecs::tombstone || !registry.is_valid(target_entity))
+            // 11. Remap entity_ref fields from template local IDs to runtime ecs::entity
+            for (const auto ent : all_entities)
+            {
+                const auto types = ecs::raw_registry_access::get_component_types(registry, ent);
+                for (const auto& t_info : types)
                 {
-                    cleanup_on_error(all_entities);
-                    return unexpected(prefab_error::component_not_found);
-                }
-
-                if (added_item.component.type_info == nullptr)
-                {
-                    cleanup_on_error(all_entities);
-                    return unexpected(prefab_error::component_not_found);
-                }
-
-                const auto* type_info_ptr = added_item.component.type_info;
-                auto* component_data_ptr = ecs::raw_registry_access::assign_raw(
-                    registry, target_entity, *type_info_ptr,
-                    added_item.component.data.empty() ? nullptr : added_item.component.data.data());
-
-                if (component_data_ptr == nullptr)
-                {
-                    cleanup_on_error(all_entities);
-                    return unexpected(prefab_error::component_not_found);
-                }
-
-                if (type_info_ptr->descriptor.has_value() && type_info_ptr->descriptor->post_load != nullptr)
-                {
-                    type_info_ptr->descriptor->post_load(component_data_ptr);
+                    if (t_info.descriptor.has_value())
+                    {
+                        auto* comp_ptr = ecs::raw_registry_access::get_component_raw(registry, ent, t_info.index);
+                        if (comp_ptr == nullptr)
+                        {
+                            continue;
+                        }
+                        for (const auto& field : t_info.descriptor->fields)
+                        {
+                            if (field.kind == ecs::field_kind::entity_ref)
+                            {
+                                const auto ref_val = detail::get_field_val<uint64_t>(field, comp_ptr);
+                                if (ref_val != static_cast<uint64_t>(ecs::tombstone) &&
+                                    ref_val != static_cast<uint64_t>(ecs::null) && ref_val != 0)
+                                {
+                                    const auto iter = local_to_entity.find(ref_val);
+                                    if (iter != local_to_entity.end())
+                                    {
+                                        detail::set_field_val(field, comp_ptr, iter->second);
+                                    }
+                                    else
+                                    {
+                                        const auto tomb = ecs::entity{ecs::tombstone};
+                                        detail::set_field_val(field, comp_ptr, tomb);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            // 11. Return successful result
+            // 12. Return successful result
             auto result = prefab_instance_result{};
             result.root_entity = root_entity;
             result.all_entities = tempest::move(all_entities);
@@ -615,11 +687,14 @@ namespace tempest::scene
                                           entity_local_id instance_local_id)
         -> expected<prefab_instance_result, prefab_error>
     {
-        const auto tmpl_opt = cache.find_template(prefab_guid);
-        if (!tmpl_opt.has_value())
+        auto result = optional<expected<prefab_instance_result, prefab_error>>{};
+        const auto found = cache.with_template(prefab_guid, [&](const prefab_template& tmpl) {
+            result = instantiate(tmpl, registry, overrides, &cache, prefab_guid, instance_local_id);
+        });
+        if (!found || !result.has_value())
         {
             return unexpected(prefab_error::template_not_found);
         }
-        return instantiate(*tmpl_opt, registry, overrides, &cache, prefab_guid, instance_local_id);
+        return tempest::move(*result);
     }
 } // namespace tempest::scene
