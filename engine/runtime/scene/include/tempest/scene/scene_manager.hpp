@@ -152,8 +152,12 @@ namespace tempest::scene
         [[nodiscard]] auto is_valid(scene_handle handle) const noexcept -> bool;
         [[nodiscard]] auto get_scene_count() const noexcept -> size_t;
         [[nodiscard]] auto get_root_entities(scene_handle handle) const -> optional<span<const ecs::entity>>;
+        auto add_root_entity(scene_handle handle, ecs::entity ent) -> bool;
+        auto remove_root_entity(scene_handle handle, ecs::entity ent) -> bool;
         [[nodiscard]] auto get_scene_path(scene_handle handle) const -> optional<string_view>;
         [[nodiscard]] auto get_scene_name(scene_handle handle) const -> optional<string_view>;
+        [[nodiscard]] auto get_unrecognized_data(scene_handle handle) const -> const scene_unrecognized_data*;
+        auto get_unrecognized_data(scene_handle handle) -> scene_unrecognized_data*;
 
         auto set_active_scene(scene_handle handle) -> bool;
         [[nodiscard]] auto get_active_scene() const noexcept -> scene_handle;

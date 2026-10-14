@@ -144,6 +144,7 @@ namespace tempest::ecs
         };
 
         _trampoline[_first_free_element].index = static_cast<uint32_t>(_element_count);
+        _look_back_table[_element_count] = index;
 
         _first_free_element = next_index;
 
@@ -207,18 +208,15 @@ namespace tempest::ecs
         auto index_to_erase = trampoline.index;
         auto index_to_move = _element_count - 1;
 
-        // If the index to erase is the same as the index to move, just destroy
-        // Else, move the target element to the index of the erased element, update the lookback
         if (index_to_erase != index_to_move)
-        {
-        }
-        else
         {
             for (auto& s : _storage)
             {
                 s.copy(index_to_erase, index_to_move);
             }
-            _look_back_table[index_to_erase] = key.index;
+            const auto moved_key_index = _look_back_table[index_to_move];
+            _trampoline[moved_key_index].index = static_cast<uint32_t>(index_to_erase);
+            _look_back_table[index_to_erase] = moved_key_index;
         }
 
         --_element_count;

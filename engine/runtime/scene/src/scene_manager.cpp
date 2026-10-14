@@ -24,8 +24,7 @@ namespace tempest::scene
         }
     } // namespace
 
-    scene_manager::scene_manager(ecs::archetype_registry& registry)
-        : scene_manager(registry, nullptr, nullptr)
+    scene_manager::scene_manager(ecs::archetype_registry& registry) : scene_manager(registry, nullptr, nullptr)
     {
     }
 
@@ -66,6 +65,54 @@ namespace tempest::scene
         const auto& slot = _scenes[handle.index];
         return optional<span<const ecs::entity>>{
             span<const ecs::entity>{slot.root_entities.data(), slot.root_entities.size()}};
+    }
+
+    auto scene_manager::add_root_entity(scene_handle handle, ecs::entity ent) -> bool
+    {
+        if (!is_valid(handle))
+        {
+            return false;
+        }
+        auto& roots = _scenes[handle.index].root_entities;
+        if (tempest::find(roots.begin(), roots.end(), ent) == roots.end())
+        {
+            roots.push_back(ent);
+        }
+        return true;
+    }
+
+    auto scene_manager::remove_root_entity(scene_handle handle, ecs::entity ent) -> bool
+    {
+        if (!is_valid(handle))
+        {
+            return false;
+        }
+        auto& roots = _scenes[handle.index].root_entities;
+        auto* const iter = tempest::find(roots.begin(), roots.end(), ent);
+        if (iter != roots.end())
+        {
+            roots.erase(iter);
+            return true;
+        }
+        return false;
+    }
+
+    auto scene_manager::get_unrecognized_data(scene_handle handle) const -> const scene_unrecognized_data*
+    {
+        if (!is_valid(handle))
+        {
+            return nullptr;
+        }
+        return &_scenes[handle.index].unrecognized_data;
+    }
+
+    auto scene_manager::get_unrecognized_data(scene_handle handle) -> scene_unrecognized_data*
+    {
+        if (!is_valid(handle))
+        {
+            return nullptr;
+        }
+        return &_scenes[handle.index].unrecognized_data;
     }
 
     auto scene_manager::get_scene_path(scene_handle handle) const -> optional<string_view>
@@ -225,8 +272,7 @@ namespace tempest::scene
     }
 
     auto scene_manager::load_from_string_sync(string_view json_content, string_view scene_name,
-                                              const scene_load_options& options)
-        -> expected<scene_handle, scene_error>
+                                              const scene_load_options& options) -> expected<scene_handle, scene_error>
     {
         if (options.mode == scene_load_mode::single && options.clear_first)
         {
@@ -381,8 +427,7 @@ namespace tempest::scene
             return unexpected(str_res.error());
         }
 
-        const auto byte_span =
-            span<const byte>{reinterpret_cast<const byte*>(str_res->data()), str_res->size()};
+        const auto byte_span = span<const byte>{reinterpret_cast<const byte*>(str_res->data()), str_res->size()};
 
         const auto write_res = write_file_from_bytes(path, byte_span);
         if (!write_res.has_value())

@@ -294,15 +294,63 @@ namespace tempest::editor
             return current_entity;
         }
 
+        auto root_entity = static_cast<ecs::entity>(ecs::tombstone);
         for (const auto [self, dyn] : registry.with<ecs::self_component, dynamic_entity_id_component>())
         {
             if (dyn.local_id == addr.id_path[0])
             {
-                return self.entity;
+                root_entity = self.entity;
+                break;
             }
         }
 
-        return ecs::tombstone;
+        if (root_entity == ecs::tombstone)
+        {
+            for (const auto [self, sec] : registry.with<ecs::self_component, scene::scene_entity_component>())
+            {
+                if (sec.local_id == addr.id_path[0])
+                {
+                    root_entity = self.entity;
+                    break;
+                }
+            }
+        }
+
+        if (root_entity == ecs::tombstone)
+        {
+            for (const auto [self, pic] : registry.with<ecs::self_component, scene::prefab_instance_component>())
+            {
+                if (pic.instance_local_id == addr.id_path[0])
+                {
+                    root_entity = self.entity;
+                    break;
+                }
+            }
+        }
+
+        if (root_entity == ecs::tombstone || !registry.is_valid(root_entity))
+        {
+            return ecs::tombstone;
+        }
+
+        if (addr.id_path.size() == 1)
+        {
+            return root_entity;
+        }
+
+        auto current_entity = root_entity;
+        for (auto seg_idx = size_t{1}; seg_idx < addr.id_path.size(); ++seg_idx)
+        {
+            const auto target_id = addr.id_path[seg_idx];
+            const auto next_entity = find_descendant_by_local_id(registry, current_entity, target_id);
+            if (next_entity == ecs::tombstone)
+            {
+                return ecs::tombstone;
+            }
+            current_entity = next_entity;
+        }
+
+        return current_entity;
     }
 
     compound_command::compound_command(string_view label) : _label{label}

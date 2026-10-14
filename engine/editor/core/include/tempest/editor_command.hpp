@@ -24,6 +24,11 @@
 #    define TEMPEST_EDITOR_API
 #endif
 
+namespace tempest
+{
+    class logger;
+}
+
 namespace tempest::editor
 {
     /// @brief Serializable and persistent addressing token identifying an entity across sessions and undo/redo operations.
@@ -53,11 +58,13 @@ namespace tempest::editor
     {
         static constexpr scene::prefab_cache* default_prefab_cache = nullptr;
         static constexpr event::event_registry* default_events = nullptr;
+        static constexpr logger* default_logger = nullptr;
 
         non_null<ecs::archetype_registry> registry;
         non_null<scene::scene_manager> scene_manager;
         scene::prefab_cache* prefab_cache = default_prefab_cache;
         event::event_registry* events = default_events;
+        logger* log = default_logger;
     };
 
     /// @brief Abstract transactional command executing and reverting scene or entity mutations.
