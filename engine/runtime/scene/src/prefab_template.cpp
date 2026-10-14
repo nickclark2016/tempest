@@ -150,19 +150,39 @@ namespace tempest::scene
         auto records = vector<prefab_entity_record>{};
         records.reserve(all_entities.size());
 
+        auto max_existing_id = uint64_t{0};
+        for (const auto ent : all_entities)
+        {
+            const auto* member = registry.try_get<prefab_member_component>(ent);
+            const auto* sec = registry.try_get<scene_entity_component>(ent);
+            if (member != nullptr && member->template_local_id.is_valid())
+            {
+                max_existing_id = tempest::max(max_existing_id, member->template_local_id.value);
+            }
+            else if (sec != nullptr && sec->local_id.is_valid())
+            {
+                max_existing_id = tempest::max(max_existing_id, sec->local_id.value);
+            }
+        }
+
         auto entity_local_ids = vector<entity_local_id>{};
         entity_local_ids.reserve(all_entities.size());
-        for (auto index = size_t{0}; index < all_entities.size(); ++index)
+        auto next_generated_id = max_existing_id + 1;
+        for (const auto ent : all_entities)
         {
-            const auto ent = all_entities[index];
+            const auto* member = registry.try_get<prefab_member_component>(ent);
             const auto* sec = registry.try_get<scene_entity_component>(ent);
-            if (sec != nullptr && sec->local_id.is_valid())
+            if (member != nullptr && member->template_local_id.is_valid())
+            {
+                entity_local_ids.push_back(member->template_local_id);
+            }
+            else if (sec != nullptr && sec->local_id.is_valid())
             {
                 entity_local_ids.push_back(sec->local_id);
             }
             else
             {
-                entity_local_ids.push_back(entity_local_id{static_cast<uint64_t>(index + 1)});
+                entity_local_ids.push_back(entity_local_id{next_generated_id++});
             }
         }
 
@@ -215,6 +235,11 @@ namespace tempest::scene
             for (const auto& info : comp_types)
             {
                 if (!info.is_serializable || !info.descriptor.has_value())
+                {
+                    continue;
+                }
+
+                if (ent == root && detail::is_transform_component(info.name))
                 {
                     continue;
                 }

@@ -973,6 +973,7 @@ namespace tempest::ecs
         auto _assign_raw(entity_type entity, const component_type_info& type_info, const void* src_data = nullptr)
             -> void*;
         auto _assign_raw(entity_type entity, uint32_t type_index, const void* src_data = nullptr) -> void*;
+        auto _remove_raw(entity_type entity, uint32_t type_index) -> bool;
     };
 
     /// @brief Friended system-level accessor for type-erased component manipulation.
@@ -1023,6 +1024,13 @@ namespace tempest::ecs
                                const void* src_data = nullptr) -> void*
         {
             return registry._assign_raw(entity, type_index, src_data);
+        }
+
+        static auto remove_raw(basic_archetype_registry& registry,
+                               basic_archetype_registry::entity_type entity,
+                               uint32_t type_index) -> bool
+        {
+            return registry._remove_raw(entity, type_index);
         }
     };
 
