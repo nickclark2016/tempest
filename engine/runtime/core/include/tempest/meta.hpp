@@ -420,19 +420,6 @@ namespace tempest::core
             return result;
         }
 
-        constexpr auto fnv1a_64(string_view text) noexcept -> uint64_t
-        {
-            constexpr uint64_t fnv_offset_basis = 14695981039346656037ull;
-            constexpr uint64_t fnv_prime = 1099511628211ull;
-
-            auto hash_value = fnv_offset_basis;
-            for (const auto character : text)
-            {
-                hash_value = (hash_value ^ static_cast<uint64_t>(static_cast<unsigned char>(character))) * fnv_prime;
-            }
-            return hash_value;
-        }
-
         template <typename T>
         struct normalized_name_holder
         {
@@ -441,7 +428,7 @@ namespace tempest::core
 
             static constexpr auto storage = detail::normalize_type_string(detail::raw_type_name<T>());
             static constexpr string_view value = storage.view();
-            static constexpr uint64_t hash = detail::fnv1a_64(storage.view());
+            static constexpr uint64_t hash = tempest::fnv1a64(storage.view());
         };
     } // namespace detail
 

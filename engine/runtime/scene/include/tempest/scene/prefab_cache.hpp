@@ -9,6 +9,11 @@
 #include <tempest/optional.hpp>
 #include <tempest/scene/prefab_template.hpp>
 
+namespace tempest::ecs
+{
+    class basic_archetype_registry;
+}
+
 namespace tempest::scene
 {
     /// @brief Thread-safe cache storing immutable prefab templates indexed by GUID.
@@ -43,6 +48,9 @@ namespace tempest::scene
 
         [[nodiscard]] auto template_count() const -> size_t;
         auto clear() -> void;
+
+        /// @brief In-place updates all active instances of a prefab in the registry to match the cached template.
+        auto propagate_updates(ecs::basic_archetype_registry& registry, const guid& prefab_guid) const -> size_t;
 
       private:
         mutable shared_mutex _mutex;

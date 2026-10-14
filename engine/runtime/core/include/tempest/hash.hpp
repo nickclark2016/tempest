@@ -79,40 +79,37 @@ namespace tempest
             return u64_hash(v);
         }
 
+        inline constexpr uint32_t fnv_offset32 = 2166136261U;
+        inline constexpr uint32_t fnv_prime32 = 16777619U;
+        inline constexpr uint64_t fnv_offset64 = 14695981039346656037ULL;
+        inline constexpr uint64_t fnv_prime64 = 1099511628211ULL;
+
         template <typename T>
-        inline auto fnv1a32(const T* data, size_t sz) noexcept -> uint32_t
+        constexpr auto fnv1a32(const T* data, size_t sz, uint32_t initial_hash = fnv_offset32) noexcept -> uint32_t
         {
-            constexpr uint32_t fnv_offset = 2166136261U;
-            constexpr uint32_t fnv_prime = 16777619U;
-
-            uint32_t hash = fnv_offset;
-            for (size_t i = 0; i < sz; ++i)
+            auto hash = initial_hash;
+            for (auto i = size_t{0}; i < sz; ++i)
             {
-                hash = hash ^ static_cast<uint32_t>(data[i]);
-                hash = hash * fnv_prime;
+                hash ^= static_cast<uint32_t>(static_cast<unsigned char>(data[i]));
+                hash *= fnv_prime32;
             }
-
             return hash;
         }
 
         template <typename T>
-        inline auto fnv1a64(const T* data, size_t sz) noexcept -> uint64_t
+        constexpr auto fnv1a64(const T* data, size_t sz, uint64_t initial_hash = fnv_offset64) noexcept -> uint64_t
         {
-            constexpr uint64_t fnv_offset = 14695981039346656037ULL;
-            constexpr uint64_t fnv_prime = 1099511628211ULL;
-
-            uint64_t hash = fnv_offset;
-            for (size_t i = 0; i < sz; ++i)
+            auto hash = initial_hash;
+            for (auto i = size_t{0}; i < sz; ++i)
             {
-                hash = hash ^ static_cast<uint64_t>(data[i]);
-                hash = hash * fnv_prime;
+                hash ^= static_cast<uint64_t>(static_cast<unsigned char>(data[i]));
+                hash *= fnv_prime64;
             }
-
             return hash;
         }
 
         template <typename T>
-        inline auto fnv1a_auto(const T* data, size_t sz) noexcept -> size_t
+        constexpr auto fnv1a_auto(const T* data, size_t sz) noexcept -> size_t
         {
             if constexpr (sizeof(size_t) == 4)
             {
@@ -124,6 +121,18 @@ namespace tempest
             }
         }
     } // namespace detail
+
+    template <typename T>
+    constexpr auto fnv1a32(const T* data, size_t sz, uint32_t initial_hash = detail::fnv_offset32) noexcept -> uint32_t
+    {
+        return detail::fnv1a32(data, sz, initial_hash);
+    }
+
+    template <typename T>
+    constexpr auto fnv1a64(const T* data, size_t sz, uint64_t initial_hash = detail::fnv_offset64) noexcept -> uint64_t
+    {
+        return detail::fnv1a64(data, sz, initial_hash);
+    }
 
     /// @brief Templated hash function.
     /// @tparam T type of the key to hash.

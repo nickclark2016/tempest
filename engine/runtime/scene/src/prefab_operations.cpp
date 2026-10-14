@@ -613,7 +613,7 @@ namespace tempest::scene
             return unexpected(prefab_operation_error::template_not_found);
         }
 
-        // 1. Commit any pending overrides to live entities
+        // Commit any pending overrides to live entities
         for (const auto& added : root_instance.overrides.added_components)
         {
             const auto target_ent = resolve_target_entity(registry, root_entity, added.target);
@@ -687,14 +687,14 @@ namespace tempest::scene
             }
         }
 
-        // 2. Build updated template from live entity hierarchy
+        // Build updated template from live entity hierarchy
         auto updated_tmpl = prefab_template::from_entity(registry, root_entity);
         if (updated_tmpl.is_empty())
         {
             return unexpected(prefab_operation_error::invalid_entity);
         }
 
-        // 3. Write to disk if path is provided (before updating cache, ensuring atomicity)
+        // Write to disk if path is provided (before updating cache, ensuring atomicity)
         if (!file_path.empty())
         {
             const auto json_str = prefab_codec::serialize(updated_tmpl, prefab_guid);
@@ -711,11 +711,11 @@ namespace tempest::scene
             }
         }
 
-        // 4. Update cache
+        // Update cache
         cache.unregister_template(prefab_guid);
         cache.register_template(prefab_guid, updated_tmpl);
 
-        // 5. Assign prefab_member_component to any newly added entities in the immediate hierarchy
+        // Assign prefab_member_component to any newly added entities in the immediate hierarchy
         const auto all_entities = collect_immediate_hierarchy(registry, root_entity);
         const auto records = updated_tmpl.get_records();
         for (auto index = size_t{0}; index < all_entities.size() && index < records.size(); ++index)
@@ -725,7 +725,7 @@ namespace tempest::scene
                                                             });
         }
 
-        // 6. Clear overrides
+        // Clear overrides
         auto updated_inst = prefab_instance_component{
             .prefab_guid = prefab_guid,
             .instance_local_id = root_instance.instance_local_id,
@@ -831,5 +831,601 @@ namespace tempest::scene
         }
 
         return {};
+    }
+
+    namespace
+    {
+        auto find_prefab_instance_roots(ecs::basic_archetype_registry& registry, const guid& prefab_guid)
+            -> vector<ecs::entity>
+        {
+            auto roots = vector<ecs::entity>{};
+            registry.each([&](const ecs::self_component& self, const prefab_instance_component& inst) {
+                if (inst.prefab_guid == prefab_guid)
+                {
+                    roots.push_back(self.entity);
+                }
+            });
+            return roots;
+        }
+
+        auto collect_instance_hierarchy(ecs::basic_archetype_registry& registry,
+                                        ecs::entity root_entity,
+                                        entity_local_id root_template_local_id,
+                                        flat_unordered_map<uint64_t, ecs::entity>& out_members,
+                                        vector<ecs::entity>& out_added_children) -> void
+        {
+            auto traverse = [&](auto& self, ecs::entity current_entity) -> void {
+                const auto* member_comp = registry.try_get<prefab_member_component>(current_entity);
+                if (member_comp != nullptr && member_comp->template_local_id.is_valid())
+                {
+                    out_members[member_comp->template_local_id.value] = current_entity;
+                }
+                else if (current_entity != root_entity)
+                {
+                    out_added_children.push_back(current_entity);
+                }
+
+                if (current_entity != root_entity && registry.has<prefab_instance_component>(current_entity))
+                {
+                    return;
+                }
+
+                const auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(current_entity);
+                if (rel != nullptr && rel->first_child != ecs::tombstone)
+                {
+                    auto child = rel->first_child;
+                    while (child != ecs::tombstone && registry.is_valid(child))
+                    {
+                        self(self, child);
+                        const auto* child_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(child);
+                        child = (child_rel != nullptr) ? child_rel->next_sibling : ecs::tombstone;
+                    }
+                }
+            };
+
+            traverse(traverse, root_entity);
+
+            if (out_members.find(root_template_local_id.value) == out_members.end())
+            {
+                out_members[root_template_local_id.value] = root_entity;
+                registry.assign_or_replace(root_entity, prefab_member_component{
+                                                            .template_local_id = root_template_local_id,
+                                                        });
+            }
+        }
+
+        auto destroy_removed_template_members(ecs::basic_archetype_registry& registry,
+                                              ecs::entity root_entity,
+                                              flat_unordered_map<uint64_t, ecs::entity>& existing_members,
+                                              const flat_unordered_map<uint64_t, size_t>& records_by_local_id) -> void
+        {
+            auto entities_to_destroy = vector<ecs::entity>{};
+            for (const auto& [local_id_val, member_ent] : existing_members)
+            {
+                if (member_ent != root_entity && records_by_local_id.find(local_id_val) == records_by_local_id.end())
+                {
+                    entities_to_destroy.push_back(member_ent);
+                }
+            }
+
+            for (const auto dead_ent : entities_to_destroy)
+            {
+                const auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(dead_ent);
+                if (rel != nullptr && rel->first_child != ecs::tombstone)
+                {
+                    auto curr_child = rel->first_child;
+                    while (curr_child != ecs::tombstone && registry.is_valid(curr_child))
+                    {
+                        const auto* child_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(curr_child);
+                        const auto next_child = (child_rel != nullptr) ? child_rel->next_sibling : ecs::tombstone;
+
+                        auto is_child_dead = false;
+                        for (const auto candidate_dead : entities_to_destroy)
+                        {
+                            if (candidate_dead == curr_child)
+                            {
+                                is_child_dead = true;
+                                break;
+                            }
+                        }
+                        if (!is_child_dead)
+                        {
+                            registry.unlink(curr_child);
+                            ecs::create_parent_child_relationship(registry, root_entity, curr_child);
+                        }
+                        curr_child = next_child;
+                    }
+                }
+                registry.destroy(dead_ent);
+            }
+
+            for (auto iter = existing_members.begin(); iter != existing_members.end();)
+            {
+                if (!registry.is_valid(iter->second))
+                {
+                    iter = existing_members.erase(iter);
+                }
+                else
+                {
+                    ++iter;
+                }
+            }
+        }
+
+        auto spawn_missing_template_members(ecs::basic_archetype_registry& registry,
+                                            flat_unordered_map<uint64_t, ecs::entity>& existing_members,
+                                            span<const prefab_entity_record> records) -> void
+        {
+            for (const auto& rec : records)
+            {
+                if (existing_members.find(rec.local_id.value) == existing_members.end())
+                {
+                    const auto new_ent = registry.create();
+                    if (!rec.name.empty())
+                    {
+                        registry.name(new_ent, rec.name);
+                    }
+                    registry.assign(new_ent, prefab_member_component{
+                                                 .template_local_id = rec.local_id,
+                                             });
+                    existing_members[rec.local_id.value] = new_ent;
+                }
+            }
+        }
+
+        auto is_target_entity_matched(const id_path& target, entity_local_id local_id, bool is_root) -> bool
+        {
+            if (is_root)
+            {
+                return target.empty() || (target.size() == 1 && target[0] == local_id);
+            }
+            return !target.empty() && target.back() == local_id;
+        }
+
+        auto is_component_removed(const prefab_overrides& overrides,
+                                  entity_local_id local_id,
+                                  bool is_root,
+                                  string_view component_name) -> bool
+        {
+            for (const auto& removed_item : overrides.removed_components)
+            {
+                if (is_target_entity_matched(removed_item.target, local_id, is_root) &&
+                    detail::component_name_matches(component_name, removed_item.component_name))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        auto find_field_override(const prefab_overrides& overrides,
+                                 entity_local_id local_id,
+                                 bool is_root,
+                                 string_view component_name,
+                                 string_view field_name) -> const field_override*
+        {
+            for (const auto& f_override : overrides.field_overrides)
+            {
+                if (is_target_entity_matched(f_override.target, local_id, is_root) &&
+                    detail::component_name_matches(component_name, f_override.component_name) &&
+                    f_override.field_name == field_name)
+                {
+                    return &f_override;
+                }
+            }
+            return nullptr;
+        }
+
+        auto prune_removed_or_stale_components(ecs::basic_archetype_registry& registry,
+                                               ecs::entity target_entity,
+                                               const prefab_entity_record& rec,
+                                               bool is_root,
+                                               const prefab_overrides& overrides) -> void
+        {
+            const auto current_types = ecs::raw_registry_access::get_component_types(registry, target_entity);
+            for (const auto& cur_info : current_types)
+            {
+                if (!cur_info.is_serializable)
+                {
+                    continue;
+                }
+                if (is_root && detail::is_transform_component(cur_info.name))
+                {
+                    continue;
+                }
+
+                if (is_component_removed(overrides, rec.local_id, is_root, cur_info.name))
+                {
+                    ecs::raw_registry_access::remove_raw(registry, target_entity, cur_info.index);
+                    continue;
+                }
+
+                auto exists_in_template = false;
+                for (const auto& template_comp : rec.components)
+                {
+                    if (template_comp.type_info != nullptr &&
+                        detail::component_name_matches(template_comp.type_info->name, cur_info.name))
+                    {
+                        exists_in_template = true;
+                        break;
+                    }
+                }
+
+                if (!exists_in_template)
+                {
+                    auto is_explicitly_added = false;
+                    for (const auto& added : overrides.added_components)
+                    {
+                        if (is_target_entity_matched(added.target, rec.local_id, is_root) &&
+                            added.component.type_info != nullptr &&
+                            detail::component_name_matches(added.component.type_info->name, cur_info.name))
+                        {
+                            is_explicitly_added = true;
+                            break;
+                        }
+                    }
+
+                    if (!is_explicitly_added)
+                    {
+                        ecs::raw_registry_access::remove_raw(registry, target_entity, cur_info.index);
+                    }
+                }
+            }
+        }
+
+        auto apply_field_updates_to_component(void* comp_ptr,
+                                              const staged_component& staged_comp,
+                                              entity_local_id local_id,
+                                              bool is_root,
+                                              const prefab_overrides& overrides,
+                                              bool is_new_assignment) -> void
+        {
+            if (comp_ptr == nullptr || !staged_comp.type_info->descriptor.has_value())
+            {
+                return;
+            }
+
+            for (const auto& field : staged_comp.type_info->descriptor->fields)
+            {
+                const auto* f_override =
+                    find_field_override(overrides, local_id, is_root, staged_comp.type_info->name, field.name);
+
+                if (f_override != nullptr && !f_override->value_bytes.empty())
+                {
+                    if (field.set != nullptr)
+                    {
+                        field.set(comp_ptr, f_override->value_bytes.data());
+                    }
+                    else if (field.offset != ecs::field_descriptor::no_offset)
+                    {
+                        tempest::memcpy(static_cast<byte*>(comp_ptr) + field.offset, f_override->value_bytes.data(),
+                                        tempest::min(f_override->value_bytes.size(), field.size));
+                    }
+                }
+                else if (!is_new_assignment)
+                {
+                    if (field.set != nullptr)
+                    {
+                        if (field.offset != ecs::field_descriptor::no_offset &&
+                            field.offset + field.size <= staged_comp.data.size())
+                        {
+                            field.set(comp_ptr, staged_comp.data.data() + field.offset);
+                        }
+                        else if (field.get != nullptr)
+                        {
+                            alignas(alignof(max_align_t)) auto temp_buf = array<byte, 256>{};
+                            if (field.size <= temp_buf.size())
+                            {
+                                field.get(staged_comp.data.data(), temp_buf.data());
+                                field.set(comp_ptr, temp_buf.data());
+                            }
+                        }
+                    }
+                    else if (field.offset != ecs::field_descriptor::no_offset &&
+                             field.offset + field.size <= staged_comp.data.size())
+                    {
+                        tempest::memcpy(static_cast<byte*>(comp_ptr) + field.offset,
+                                        staged_comp.data.data() + field.offset, field.size);
+                    }
+                }
+            }
+
+            if (staged_comp.type_info->descriptor->post_load != nullptr)
+            {
+                staged_comp.type_info->descriptor->post_load(comp_ptr);
+            }
+        }
+
+        auto apply_template_components(ecs::basic_archetype_registry& registry,
+                                       ecs::entity target_entity,
+                                       const prefab_entity_record& rec,
+                                       bool is_root,
+                                       const prefab_overrides& overrides) -> void
+        {
+            for (const auto& staged_comp : rec.components)
+            {
+                if (staged_comp.type_info == nullptr)
+                {
+                    continue;
+                }
+
+                if (is_root && detail::is_transform_component(staged_comp.type_info->name))
+                {
+                    continue;
+                }
+
+                if (is_component_removed(overrides, rec.local_id, is_root, staged_comp.type_info->name))
+                {
+                    continue;
+                }
+
+                if (!ecs::raw_registry_access::has(registry, target_entity, staged_comp.type_info->index))
+                {
+                    auto* comp_ptr = ecs::raw_registry_access::assign_raw(
+                        registry, target_entity, *staged_comp.type_info,
+                        staged_comp.data.empty() ? nullptr : staged_comp.data.data());
+
+                    apply_field_updates_to_component(comp_ptr, staged_comp, rec.local_id, is_root, overrides, true);
+                }
+                else
+                {
+                    auto* comp_ptr = ecs::raw_registry_access::get_component_raw(
+                        registry, target_entity, staged_comp.type_info->index);
+
+                    apply_field_updates_to_component(comp_ptr, staged_comp, rec.local_id, is_root, overrides, false);
+                }
+            }
+
+            for (const auto& added : overrides.added_components)
+            {
+                if (is_target_entity_matched(added.target, rec.local_id, is_root) &&
+                    added.component.type_info != nullptr &&
+                    !ecs::raw_registry_access::has(registry, target_entity, added.component.type_info->index))
+                {
+                    auto* comp_ptr = ecs::raw_registry_access::assign_raw(
+                        registry, target_entity, *added.component.type_info,
+                        added.component.data.empty() ? nullptr : added.component.data.data());
+
+                    if (comp_ptr != nullptr && added.component.type_info->descriptor.has_value() &&
+                        added.component.type_info->descriptor->post_load != nullptr)
+                    {
+                        added.component.type_info->descriptor->post_load(comp_ptr);
+                    }
+                }
+            }
+        }
+
+        auto synchronize_all_member_components(ecs::basic_archetype_registry& registry,
+                                               ecs::entity root_entity,
+                                               const flat_unordered_map<uint64_t, ecs::entity>& existing_members,
+                                               span<const prefab_entity_record> records,
+                                               const prefab_overrides& overrides) -> void
+        {
+            for (const auto& rec : records)
+            {
+                const auto target_entity_it = existing_members.find(rec.local_id.value);
+                if (target_entity_it == existing_members.end() || !registry.is_valid(target_entity_it->second))
+                {
+                    continue;
+                }
+
+                const auto target_entity = target_entity_it->second;
+                const auto is_root = (target_entity == root_entity);
+
+                if (!rec.name.empty())
+                {
+                    registry.name(target_entity, rec.name);
+                }
+
+                if (!is_root && registry.has<prefab_instance_component>(target_entity))
+                {
+                    continue;
+                }
+
+                prune_removed_or_stale_components(registry, target_entity, rec, is_root, overrides);
+                apply_template_components(registry, target_entity, rec, is_root, overrides);
+            }
+        }
+
+        auto reconstruct_template_hierarchy(ecs::basic_archetype_registry& registry,
+                                            const flat_unordered_map<uint64_t, ecs::entity>& existing_members,
+                                            span<const prefab_entity_record> records) -> void
+        {
+            for (const auto& rec : records)
+            {
+                const auto target_entity_it = existing_members.find(rec.local_id.value);
+                if (target_entity_it == existing_members.end() || !registry.is_valid(target_entity_it->second))
+                {
+                    continue;
+                }
+                const auto target_entity = target_entity_it->second;
+
+                if (!rec.parent_index.has_value())
+                {
+                    continue;
+                }
+
+                const auto parent_idx = *rec.parent_index;
+                if (parent_idx >= records.size())
+                {
+                    continue;
+                }
+
+                const auto parent_local_id = records[parent_idx].local_id;
+                const auto parent_ent_it = existing_members.find(parent_local_id.value);
+                if (parent_ent_it == existing_members.end() || !registry.is_valid(parent_ent_it->second))
+                {
+                    continue;
+                }
+
+                const auto parent_ent = parent_ent_it->second;
+                const auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(target_entity);
+                if (rel == nullptr || rel->parent != parent_ent)
+                {
+                    if (rel != nullptr && rel->parent != ecs::tombstone)
+                    {
+                        registry.unlink(target_entity);
+                    }
+                    ecs::create_parent_child_relationship(registry, parent_ent, target_entity);
+                }
+            }
+        }
+
+        auto reanchor_instance_added_children(ecs::basic_archetype_registry& registry,
+                                              ecs::entity root_entity,
+                                              span<const ecs::entity> instance_added_children) -> void
+        {
+            for (const auto child_ent : instance_added_children)
+            {
+                if (!registry.is_valid(child_ent))
+                {
+                    continue;
+                }
+
+                const auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(child_ent);
+                if (rel == nullptr || rel->parent == ecs::tombstone || !registry.is_valid(rel->parent))
+                {
+                    if (rel != nullptr && rel->parent != ecs::tombstone)
+                    {
+                        registry.unlink(child_ent);
+                    }
+                    ecs::create_parent_child_relationship(registry, root_entity, child_ent);
+                }
+            }
+        }
+
+        auto remap_entity_references(ecs::basic_archetype_registry& registry,
+                                     const flat_unordered_map<uint64_t, ecs::entity>& existing_members) -> void
+        {
+            for (const auto& [local_id_val, member_ent] : existing_members)
+            {
+                if (!registry.is_valid(member_ent))
+                {
+                    continue;
+                }
+
+                const auto types = ecs::raw_registry_access::get_component_types(registry, member_ent);
+                for (const auto& t_info : types)
+                {
+                    if (!t_info.descriptor.has_value())
+                    {
+                        continue;
+                    }
+
+                    auto* comp_ptr = ecs::raw_registry_access::get_component_raw(registry, member_ent, t_info.index);
+                    if (comp_ptr == nullptr)
+                    {
+                        continue;
+                    }
+
+                    for (const auto& field : t_info.descriptor->fields)
+                    {
+                        if (field.kind != ecs::field_kind::entity_ref)
+                        {
+                            continue;
+                        }
+
+                        const auto ref_val = detail::get_field_val<uint64_t>(field, comp_ptr);
+                        if (ref_val != static_cast<uint64_t>(ecs::tombstone) &&
+                            ref_val != static_cast<uint64_t>(ecs::null) && ref_val != 0)
+                        {
+                            const auto iter = existing_members.find(ref_val);
+                            if (iter != existing_members.end() && registry.is_valid(iter->second))
+                            {
+                                detail::set_field_val(field, comp_ptr, iter->second);
+                            }
+                            else
+                            {
+                                detail::set_field_val(field, comp_ptr, ecs::entity{ecs::tombstone});
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        auto propagate_single_instance(ecs::basic_archetype_registry& registry,
+                                       ecs::entity root_entity,
+                                       const guid& prefab_guid,
+                                       span<const prefab_entity_record> records,
+                                       entity_local_id root_template_local_id) -> bool
+        {
+            if (!registry.is_valid(root_entity))
+            {
+                return false;
+            }
+
+            const auto* inst_comp_ptr = registry.try_get<prefab_instance_component>(root_entity);
+            if (inst_comp_ptr == nullptr || inst_comp_ptr->prefab_guid != prefab_guid)
+            {
+                return false;
+            }
+
+            const auto current_overrides = inst_comp_ptr->overrides;
+            const auto current_instance_local_id = inst_comp_ptr->instance_local_id;
+
+            auto existing_members = flat_unordered_map<uint64_t, ecs::entity>{};
+            auto instance_added_children = vector<ecs::entity>{};
+            collect_instance_hierarchy(registry, root_entity, root_template_local_id, existing_members,
+                                       instance_added_children);
+
+            auto records_by_local_id = flat_unordered_map<uint64_t, size_t>{};
+            for (auto record_index = size_t{0}; record_index < records.size(); ++record_index)
+            {
+                records_by_local_id[records[record_index].local_id.value] = record_index;
+            }
+
+            destroy_removed_template_members(registry, root_entity, existing_members, records_by_local_id);
+            spawn_missing_template_members(registry, existing_members, records);
+            synchronize_all_member_components(registry, root_entity, existing_members, records, current_overrides);
+            reconstruct_template_hierarchy(registry, existing_members, records);
+            reanchor_instance_added_children(registry, root_entity, instance_added_children);
+            remap_entity_references(registry, existing_members);
+
+            registry.assign_or_replace(root_entity, prefab_instance_component{
+                                                        .prefab_guid = prefab_guid,
+                                                        .instance_local_id = current_instance_local_id,
+                                                        .overrides = current_overrides,
+                                                    });
+            return true;
+        }
+    } // namespace
+
+    auto prefab_operations::propagate_template_updates(ecs::basic_archetype_registry& registry,
+                                                       const guid& prefab_guid,
+                                                       const prefab_cache& cache) -> size_t
+    {
+        const auto tmpl_opt = cache.find_template(prefab_guid);
+        if (!tmpl_opt.has_value() || tmpl_opt->is_empty())
+        {
+            return 0;
+        }
+
+        const auto& tmpl = *tmpl_opt;
+        const auto root_indices = tmpl.get_root_indices();
+        if (root_indices.empty())
+        {
+            return 0;
+        }
+
+        const auto target_instance_roots = find_prefab_instance_roots(registry, prefab_guid);
+        if (target_instance_roots.empty())
+        {
+            return 0;
+        }
+
+        const auto records = tmpl.get_records();
+        const auto root_template_local_id = records[root_indices.front()].local_id;
+
+        auto instances_updated_count = size_t{0};
+        for (const auto root_entity : target_instance_roots)
+        {
+            if (propagate_single_instance(registry, root_entity, prefab_guid, records, root_template_local_id))
+            {
+                ++instances_updated_count;
+            }
+        }
+
+        return instances_updated_count;
     }
 } // namespace tempest::scene

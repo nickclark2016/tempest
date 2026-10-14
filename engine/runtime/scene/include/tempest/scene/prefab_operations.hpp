@@ -73,6 +73,13 @@ namespace tempest::scene
         /// @brief Unpacks a prefab instance and all nested prefab instances throughout the entire hierarchy.
         static auto unpack_completely(ecs::basic_archetype_registry& registry, ecs::entity root_entity)
             -> expected<void, prefab_operation_error>;
+
+        /// @brief In-place updates all active instances of a prefab in the registry to match the latest template in cache.
+        /// Preserves live entity handles bit-identically for surviving member IDs, in-place updates non-overridden fields,
+        /// preserves active field/added/removed overrides, instantiates newly added members, destroys removed members,
+        /// and re-anchors instance-added children.
+        static auto propagate_template_updates(ecs::basic_archetype_registry& registry, const guid& prefab_guid,
+                                               const prefab_cache& cache) -> size_t;
     };
 } // namespace tempest::scene
 

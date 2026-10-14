@@ -220,10 +220,10 @@ TEST(tempest_meta, test_normalized_keyword_substring_identifiers)
 TEST(tempest_meta, test_normalized_type_hash)
 {
     // 1. Setup: Calculate runtime FNV-1a hashes of the expected normalized strings.
-    const auto expected_foo_hash = tempest::core::detail::fnv1a_64("Foo");
-    const auto expected_bar_hash = tempest::core::detail::fnv1a_64("Bar");
+    const auto expected_foo_hash = tempest::fnv1a64("Foo");
+    const auto expected_bar_hash = tempest::fnv1a64("Bar");
     const auto expected_rel_hash =
-        tempest::core::detail::fnv1a_64("test_relationship_component<test_entity>");
+        tempest::fnv1a64("test_relationship_component<test_entity>");
 
     // 2. Act: Retrieve compile-time normalized_type_hash_v values.
     const auto foo_hash = tempest::core::normalized_type_hash_v<Foo>;

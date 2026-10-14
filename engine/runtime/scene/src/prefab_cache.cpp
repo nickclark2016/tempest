@@ -1,5 +1,7 @@
 #include <tempest/scene/prefab_cache.hpp>
 
+#include <tempest/scene/prefab_operations.hpp>
+
 namespace tempest::scene
 {
     auto prefab_cache::register_template(const guid& tid, prefab_template tmpl) -> bool
@@ -53,5 +55,11 @@ namespace tempest::scene
     {
         auto lock = unique_lock{_mutex};
         _templates.clear();
+    }
+
+    auto prefab_cache::propagate_updates(ecs::basic_archetype_registry& registry, const guid& prefab_guid) const
+        -> size_t
+    {
+        return prefab_operations::propagate_template_updates(registry, prefab_guid, *this);
     }
 } // namespace tempest::scene

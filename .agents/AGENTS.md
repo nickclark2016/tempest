@@ -45,6 +45,10 @@ Deep-dive specifications, post-mortem rationales, and extended code recipes are 
 - **Explicit Ownership Semantics (Strict Prohibition of `shared_ptr`)**: Never use `std::shared_ptr` or `tempest::shared_ptr` anywhere in the codebase. Shared ownership obscures object lifetime boundaries, introduces atomic ref-counting overhead, and complicates deterministic destruction. Use explicit unique ownership (`tempest::unique_ptr` / `tempest::make_unique`), RAII scope management, non-owning raw pointers/references with well-defined parent-child lifetimes, or generational indices (`ecs::entity`). Never suggest or introduce `shared_ptr` as a solution when analyzing memory issues, proposing fixes, or refactoring.
 - **Strict Prohibition of `thread_local` and Global Variables**: Never introduce `thread_local`, global variables, or static mutable state anywhere in engine runtime libraries. Confine worker state via worker-indexed state structures (e.g. `worker_state` via `find_current_worker()` or `job_context`). Sockets, pools, and singletons must maintain clear RAII lifecycles tied to engine or system instances.
 
+### 5. Commenting Guidelines & Strict Prohibition of Numbered Comments
+- **Strict Prohibition of Numbered / Ordered Comments**: Never use numbered comments (e.g. `// 1. ...`, `// 2. ...`, `// Step 1: ...`) anywhere in code, algorithms, or tests. Numbered comments are brittle—refactoring, reordering, or inserting logic breaks the sequence, creates spurious diff churn, and couples comments to transient execution order without adding value.
+- **Clarify Non-Obvious Intent & Invariants, Not Trivial Mechanics**: Comments should explain non-obvious design rationales, edge cases, preconditions, postconditions, and tricky invariants—never restate trivial code operations (e.g. do not write `// Assign names` right above `assign_names()`). Let clean code and expressive naming be self-documenting.
+
 ---
 
 ## Subsystem Invariant Anchors
@@ -106,7 +110,7 @@ When delegating work to subagents or executing multi-component milestones:
 ### 4. Test Case & Section Documentation
 Whenever adding or updating test cases:
 - Add descriptive documentation comments (e.g. `/// @brief ...`) above every test function detailing the exact behavior, invariant, or edge case under test.
-- Use clear inline comments and numbered steps (`// 1. Setup ...`, `// 2. Act ...`, `// 3. Assert ...`) to demarcate test sections and expectations.
+- Demarcate test phases with clear descriptive comments (`// Setup ...`, `// Act ...`, `// Assert ...`) without arbitrary numbering.
 - Group related test cases within files using structured section banners.
 
 ### 5. ThreadSanitizer (TSan) for Concurrency Changes

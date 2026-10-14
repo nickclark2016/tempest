@@ -539,6 +539,32 @@ namespace tempest
         return basic_string_view<CharT, Traits>(sv.begin() + pos, count);
     }
 
+    [[nodiscard]] constexpr auto fnv1a64(string_view sv,
+                                         uint64_t initial_hash = detail::fnv_offset64) noexcept -> uint64_t
+    {
+        return detail::fnv1a64(sv.data(), sv.size(), initial_hash);
+    }
+
+    [[nodiscard]] constexpr auto fnv1a32(string_view sv,
+                                         uint32_t initial_hash = detail::fnv_offset32) noexcept -> uint32_t
+    {
+        return detail::fnv1a32(sv.data(), sv.size(), initial_hash);
+    }
+
+    template <typename CharT, typename Traits>
+    [[nodiscard]] constexpr auto fnv1a64(basic_string_view<CharT, Traits> sv,
+                                         uint64_t initial_hash = detail::fnv_offset64) noexcept -> uint64_t
+    {
+        return detail::fnv1a64(sv.data(), sv.size() * sizeof(CharT), initial_hash);
+    }
+
+    template <typename CharT, typename Traits>
+    [[nodiscard]] constexpr auto fnv1a32(basic_string_view<CharT, Traits> sv,
+                                         uint32_t initial_hash = detail::fnv_offset32) noexcept -> uint32_t
+    {
+        return detail::fnv1a32(sv.data(), sv.size() * sizeof(CharT), initial_hash);
+    }
+
     template <typename CharT, typename Traits>
     struct hash<basic_string_view<CharT, Traits>>
     {
