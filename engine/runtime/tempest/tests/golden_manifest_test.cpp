@@ -6,7 +6,9 @@
 
 #include <tempest/archetype.hpp>
 #include <tempest/material.hpp>
+#include <tempest/physics/box_collider_component.hpp>
 #include <tempest/physics/character_controller_component.hpp>
+#include <tempest/physics/rigid_body_component.hpp>
 #include <tempest/physics/velocity_component.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/render_system/render_components.hpp>
@@ -130,6 +132,8 @@ TEST(golden_manifest_test, schema_hash_deterministic_across_registration_order)
 
     // Setup: manually registered in reversed order.
     auto reverse_registry = tempest::ecs::component_type_registry{};
+    reverse_registry.register_type<tempest::physics::box_collider_component>();
+    reverse_registry.register_type<tempest::physics::rigid_body_component>();
     reverse_registry.register_type<tempest::physics::character_controller_component>();
     reverse_registry.register_type<tempest::physics::velocity_component>();
     reverse_registry.register_type<tempest::render_system::shadow_caster_component>();

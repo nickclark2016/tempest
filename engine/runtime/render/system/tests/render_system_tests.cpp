@@ -6360,5 +6360,203 @@ namespace tempest::render_system::tests
 
         dev->wait_idle();
     }
+
+    // =========================================================================
+    // Material Safety & Renderable Pruning Tests
+    // =========================================================================
+
+    /// @brief Verifies that clearing the material GUID to an empty/null GUID skips rendering commands
+    /// while preserving the entity in the persistent tracked renderables registry.
+    TEST(render_system_tests, renderer_cleared_material_guid_skips_rendering)
+    {
+        // Setup: Device, ECS registry, and renderer with one entity having mesh and valid opaque material
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        const auto mesh_id = meshes.register_mesh(create_test_mesh());
+
+        auto mat_opaque = core::material{};
+        mat_opaque.set_string(core::material::alpha_mode_name, "OPAQUE");
+        const auto mat_opaque_id = materials.register_material(tempest::move(mat_opaque));
+
+        auto entity = registry.create();
+        registry.assign(entity, core::mesh_component{.mesh_id = mesh_id});
+        registry.assign(entity, core::material_component{.material_id = mat_opaque_id});
+        registry.assign(entity, ecs::transform_component{});
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            rend->prepare_frame(1280, 720);
+            EXPECT_EQ(rend->get_tracked_renderable_count(), 1U);
+            EXPECT_EQ(rend->get_active_draw_count(), 1U);
+            EXPECT_EQ(rend->get_opaque_draw_count(), 1U);
+
+            // Act: Clear material GUID to null GUID
+            registry.replace(entity, core::material_component{.material_id = guid{}});
+            rend->prepare_frame(1280, 720);
+
+            // Assert: Draw counts are 0, but entity remains tracked in persistent registry
+            EXPECT_EQ(rend->get_tracked_renderable_count(), 1U);
+            EXPECT_EQ(rend->get_active_draw_count(), 0U);
+            EXPECT_EQ(rend->get_opaque_draw_count(), 0U);
+        }
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that restoring a valid material GUID after clearing it safely resumes draw command
+    /// generation and rendering without losing the entity from tracked renderables.
+    TEST(render_system_tests, renderer_material_restoration_resumes_rendering)
+    {
+        // Setup: Device, ECS registry, and renderer with one entity having mesh and valid opaque material
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        const auto mesh_id = meshes.register_mesh(create_test_mesh());
+
+        auto mat_opaque = core::material{};
+        mat_opaque.set_string(core::material::alpha_mode_name, "OPAQUE");
+        const auto mat_opaque_id = materials.register_material(tempest::move(mat_opaque));
+
+        auto entity = registry.create();
+        registry.assign(entity, core::mesh_component{.mesh_id = mesh_id});
+        registry.assign(entity, core::material_component{.material_id = mat_opaque_id});
+        registry.assign(entity, ecs::transform_component{});
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            rend->prepare_frame(1280, 720);
+            EXPECT_EQ(rend->get_tracked_renderable_count(), 1U);
+            EXPECT_EQ(rend->get_active_draw_count(), 1U);
+
+            // Act: Clear material GUID to null GUID
+            registry.replace(entity, core::material_component{.material_id = guid{}});
+            rend->prepare_frame(1280, 720);
+
+            // Assert: Active draw count drops to 0, entity remains tracked
+            EXPECT_EQ(rend->get_tracked_renderable_count(), 1U);
+            EXPECT_EQ(rend->get_active_draw_count(), 0U);
+
+            // Act: Restore valid material GUID
+            registry.replace(entity, core::material_component{.material_id = mat_opaque_id});
+            rend->prepare_frame(1280, 720);
+
+            // Assert: Active draw count is restored to 1
+            EXPECT_EQ(rend->get_tracked_renderable_count(), 1U);
+            EXPECT_EQ(rend->get_active_draw_count(), 1U);
+            EXPECT_EQ(rend->get_opaque_draw_count(), 1U);
+        }
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that an entity with a mesh_component but NO material_component is safely tracked
+    /// without emitting draw commands or causing null pointer dereferences/crashes.
+    TEST(render_system_tests, renderer_missing_material_component_skips_rendering)
+    {
+        // Setup: Device, ECS registry, and renderer with an entity having only mesh and transform components
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        const auto mesh_id = meshes.register_mesh(create_test_mesh());
+
+        auto entity = registry.create();
+        registry.assign(entity, core::mesh_component{.mesh_id = mesh_id});
+        registry.assign(entity, ecs::transform_component{});
+        // Intentionally omit core::material_component
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // Act: Prepare frame
+            rend->prepare_frame(1280, 720);
+
+            // Assert: Entity is tracked in persistent registry but zero draws are emitted
+            EXPECT_EQ(rend->get_tracked_renderable_count(), 1U);
+            EXPECT_EQ(rend->get_active_draw_count(), 0U);
+            EXPECT_EQ(rend->get_opaque_draw_count(), 0U);
+            EXPECT_EQ(rend->get_alpha_masked_draw_count(), 0U);
+            EXPECT_EQ(rend->get_transparent_draw_count(), 0U);
+        }
+
+        dev->wait_idle();
+    }
 } // namespace tempest::render_system::tests
 

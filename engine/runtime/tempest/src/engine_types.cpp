@@ -2,7 +2,9 @@
 
 #include <tempest/archetype.hpp>
 #include <tempest/material.hpp>
+#include <tempest/physics/box_collider_component.hpp>
 #include <tempest/physics/character_controller_component.hpp>
+#include <tempest/physics/rigid_body_component.hpp>
 #include <tempest/physics/velocity_component.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/render_system/render_components.hpp>
@@ -26,5 +28,7 @@ namespace tempest
         types.register_type<render_system::shadow_caster_component>();
         types.register_type<physics::velocity_component>();
         types.register_type<physics::character_controller_component>();
+        types.register_type<physics::rigid_body_component>();
+        types.register_type<physics::box_collider_component>();
     }
 } // namespace tempest

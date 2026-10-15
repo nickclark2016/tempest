@@ -221,7 +221,9 @@ namespace tempest::render_system
           _cluster_bounds_target{other._cluster_bounds_target}, _light_bitmask_target{other._light_bitmask_target},
           _directional_shadow_allocator{tempest::move(other._directional_shadow_allocator)},
           _punctual_shadow_allocator{tempest::move(other._punctual_shadow_allocator)},
-          _tracked_entities{tempest::move(other._tracked_entities)}, _active_draw_count{other._active_draw_count},
+          _tracked_entities{tempest::move(other._tracked_entities)},
+          _active_renderables{tempest::move(other._active_renderables)},
+          _active_draw_count{other._active_draw_count},
           _opaque_draw_count{other._opaque_draw_count}, _opaque_draw_offset{other._opaque_draw_offset},
           _alpha_masked_draw_count{other._alpha_masked_draw_count},
           _alpha_masked_draw_offset{other._alpha_masked_draw_offset},
@@ -251,128 +253,131 @@ namespace tempest::render_system
 
     auto renderer::operator=(renderer&& other) noexcept -> renderer&
     {
-        if (this != &other)
+        if (this == &other)
         {
-            _unsubscribe_events();
-            if (_device != nullptr)
-            {
-                for (auto& surf : _surfaces)
-                {
-                    for (auto sem : surf.acquire_semaphores)
-                    {
-                        _device->destroy_semaphore(sem);
-                    }
-                    surf.acquire_semaphores.clear();
-
-                    for (auto sem : surf.render_semaphores)
-                    {
-                        _device->destroy_semaphore(sem);
-                    }
-                    surf.render_semaphores.clear();
-
-                    if (surf.render_surface)
-                    {
-                        _device->destroy_render_surface(tempest::move(surf.render_surface));
-                    }
-                }
-                _surfaces.clear();
-
-                for (auto& slot : _flight_slots)
-                {
-                    if (slot.timeline_sem.handle != 0)
-                    {
-                        _device->destroy_semaphore(slot.timeline_sem);
-                        slot.timeline_sem = {};
-                    }
-                }
-                clear_retired_textures();
-                if (_directional_shadow_atlas_descriptor.index != render_graph::invalid_descriptor_index)
-                {
-                    _device->free_descriptor(rhi::descriptor_type::sampled_image, _directional_shadow_atlas_descriptor);
-                    _directional_shadow_atlas_descriptor = {};
-                }
-                if (_directional_shadow_atlas_view.handle != 0)
-                {
-                    _device->destroy_texture_view(_directional_shadow_atlas_view);
-                    _directional_shadow_atlas_view = {};
-                }
-                if (_directional_shadow_atlas_texture.handle != 0)
-                {
-                    _device->destroy_texture(_directional_shadow_atlas_texture);
-                    _directional_shadow_atlas_texture = {};
-                }
-                _directional_shadow_atlas_width = 0;
-                _directional_shadow_atlas_height = 0;
-                _graph.get_allocator().release_all(*_device);
-            }
-
-            other._unsubscribe_events();
-
-            _device = other._device;
-            _log = other._log;
-            _cfg = other._cfg;
-            _inputs = other._inputs;
-            _owned_camera_system = tempest::move(other._owned_camera_system);
-            _camera_system = other._camera_system;
-            _frames_in_flight = other._frames_in_flight;
-            _frame_index = other._frame_index;
-            _flight_slots = tempest::move(other._flight_slots);
-            _frame_begun = other._frame_begun;
-            _surfaces = tempest::move(other._surfaces);
-            _active_surface_window = other._active_surface_window;
-            _pool = tempest::move(other._pool);
-            _shaders = tempest::move(other._shaders);
-            _graph = tempest::move(other._graph);
-            _directional_shadow_atlas_texture = other._directional_shadow_atlas_texture;
-            _directional_shadow_atlas_view = other._directional_shadow_atlas_view;
-            _directional_shadow_atlas_descriptor = other._directional_shadow_atlas_descriptor;
-            _directional_shadow_atlas_width = other._directional_shadow_atlas_width;
-            _directional_shadow_atlas_height = other._directional_shadow_atlas_height;
-            other._directional_shadow_atlas_texture = {};
-            other._directional_shadow_atlas_view = {};
-            other._directional_shadow_atlas_descriptor = {};
-            other._directional_shadow_atlas_width = 0;
-            other._directional_shadow_atlas_height = 0;
-            _retired_textures = tempest::move(other._retired_textures);
-            _directional_shadow_atlas_target = other._directional_shadow_atlas_target;
-            _punctual_shadow_atlas_target = other._punctual_shadow_atlas_target;
-            _hdr_color_target = other._hdr_color_target;
-            _depth_target = other._depth_target;
-            _ssao_target = other._ssao_target;
-            _ssao_blurred_target = other._ssao_blurred_target;
-            _moments_target = other._moments_target;
-            _zeroth_moment_target = other._zeroth_moment_target;
-            _transparency_accum_target = other._transparency_accum_target;
-            _tonemapped_color_target = other._tonemapped_color_target;
-            _cluster_bounds_target = other._cluster_bounds_target;
-            _light_bitmask_target = other._light_bitmask_target;
-            _directional_shadow_allocator = tempest::move(other._directional_shadow_allocator);
-            _punctual_shadow_allocator = tempest::move(other._punctual_shadow_allocator);
-            _tracked_entities = tempest::move(other._tracked_entities);
-            _active_draw_count = other._active_draw_count;
-            _opaque_draw_count = other._opaque_draw_count;
-            _opaque_draw_offset = other._opaque_draw_offset;
-            _alpha_masked_draw_count = other._alpha_masked_draw_count;
-            _alpha_masked_draw_offset = other._alpha_masked_draw_offset;
-            _transparent_draw_count = other._transparent_draw_count;
-            _transparent_draw_offset = other._transparent_draw_offset;
-            _shadow_debug_mode = other._shadow_debug_mode;
-            _pipeline_statistics = other._pipeline_statistics;
-            _renderable_indices = tempest::move(other._renderable_indices);
-            _renderables_dirty_count = other._renderables_dirty_count;
-            _point_light_indices = tempest::move(other._point_light_indices);
-            _point_light_entities = tempest::move(other._point_light_entities);
-            _cached_lights = tempest::move(other._cached_lights);
-            _lights_dirty_count = other._lights_dirty_count;
-            _lights_reconciled = tempest::exchange(other._lights_reconciled, default_lights_reconciled);
-            _events = other._events;
-
-            other._device = nullptr;
-            other._camera_system = nullptr;
-            other._events = nullptr;
-
-            _subscribe_events();
+            return *this;
         }
+
+        _unsubscribe_events();
+        if (_device != nullptr)
+        {
+            for (auto& surf : _surfaces)
+            {
+                for (auto sem : surf.acquire_semaphores)
+                {
+                    _device->destroy_semaphore(sem);
+                }
+                surf.acquire_semaphores.clear();
+
+                for (auto sem : surf.render_semaphores)
+                {
+                    _device->destroy_semaphore(sem);
+                }
+                surf.render_semaphores.clear();
+
+                if (surf.render_surface)
+                {
+                    _device->destroy_render_surface(tempest::move(surf.render_surface));
+                }
+            }
+            _surfaces.clear();
+
+            for (auto& slot : _flight_slots)
+            {
+                if (slot.timeline_sem.handle != 0)
+                {
+                    _device->destroy_semaphore(slot.timeline_sem);
+                    slot.timeline_sem = {};
+                }
+            }
+            clear_retired_textures();
+            if (_directional_shadow_atlas_descriptor.index != render_graph::invalid_descriptor_index)
+            {
+                _device->free_descriptor(rhi::descriptor_type::sampled_image, _directional_shadow_atlas_descriptor);
+                _directional_shadow_atlas_descriptor = {};
+            }
+            if (_directional_shadow_atlas_view.handle != 0)
+            {
+                _device->destroy_texture_view(_directional_shadow_atlas_view);
+                _directional_shadow_atlas_view = {};
+            }
+            if (_directional_shadow_atlas_texture.handle != 0)
+            {
+                _device->destroy_texture(_directional_shadow_atlas_texture);
+                _directional_shadow_atlas_texture = {};
+            }
+            _directional_shadow_atlas_width = 0;
+            _directional_shadow_atlas_height = 0;
+            _graph.get_allocator().release_all(*_device);
+        }
+
+        other._unsubscribe_events();
+
+        _device = other._device;
+        _log = other._log;
+        _cfg = other._cfg;
+        _inputs = other._inputs;
+        _owned_camera_system = tempest::move(other._owned_camera_system);
+        _camera_system = other._camera_system;
+        _frames_in_flight = other._frames_in_flight;
+        _frame_index = other._frame_index;
+        _flight_slots = tempest::move(other._flight_slots);
+        _frame_begun = other._frame_begun;
+        _surfaces = tempest::move(other._surfaces);
+        _active_surface_window = other._active_surface_window;
+        _pool = tempest::move(other._pool);
+        _shaders = tempest::move(other._shaders);
+        _graph = tempest::move(other._graph);
+        _directional_shadow_atlas_texture = other._directional_shadow_atlas_texture;
+        _directional_shadow_atlas_view = other._directional_shadow_atlas_view;
+        _directional_shadow_atlas_descriptor = other._directional_shadow_atlas_descriptor;
+        _directional_shadow_atlas_width = other._directional_shadow_atlas_width;
+        _directional_shadow_atlas_height = other._directional_shadow_atlas_height;
+        other._directional_shadow_atlas_texture = {};
+        other._directional_shadow_atlas_view = {};
+        other._directional_shadow_atlas_descriptor = {};
+        other._directional_shadow_atlas_width = 0;
+        other._directional_shadow_atlas_height = 0;
+        _retired_textures = tempest::move(other._retired_textures);
+        _directional_shadow_atlas_target = other._directional_shadow_atlas_target;
+        _punctual_shadow_atlas_target = other._punctual_shadow_atlas_target;
+        _hdr_color_target = other._hdr_color_target;
+        _depth_target = other._depth_target;
+        _ssao_target = other._ssao_target;
+        _ssao_blurred_target = other._ssao_blurred_target;
+        _moments_target = other._moments_target;
+        _zeroth_moment_target = other._zeroth_moment_target;
+        _transparency_accum_target = other._transparency_accum_target;
+        _tonemapped_color_target = other._tonemapped_color_target;
+        _cluster_bounds_target = other._cluster_bounds_target;
+        _light_bitmask_target = other._light_bitmask_target;
+        _directional_shadow_allocator = tempest::move(other._directional_shadow_allocator);
+        _punctual_shadow_allocator = tempest::move(other._punctual_shadow_allocator);
+        _tracked_entities = tempest::move(other._tracked_entities);
+        _active_renderables = tempest::move(other._active_renderables);
+        _active_draw_count = other._active_draw_count;
+        _opaque_draw_count = other._opaque_draw_count;
+        _opaque_draw_offset = other._opaque_draw_offset;
+        _alpha_masked_draw_count = other._alpha_masked_draw_count;
+        _alpha_masked_draw_offset = other._alpha_masked_draw_offset;
+        _transparent_draw_count = other._transparent_draw_count;
+        _transparent_draw_offset = other._transparent_draw_offset;
+        _shadow_debug_mode = other._shadow_debug_mode;
+        _pipeline_statistics = other._pipeline_statistics;
+        _renderable_indices = tempest::move(other._renderable_indices);
+        _renderables_dirty_count = other._renderables_dirty_count;
+        _point_light_indices = tempest::move(other._point_light_indices);
+        _point_light_entities = tempest::move(other._point_light_entities);
+        _cached_lights = tempest::move(other._cached_lights);
+        _lights_dirty_count = other._lights_dirty_count;
+        _lights_reconciled = tempest::exchange(other._lights_reconciled, default_lights_reconciled);
+        _events = other._events;
+
+        other._device = nullptr;
+        other._camera_system = nullptr;
+        other._events = nullptr;
+
+        _subscribe_events();
         return *this;
     }
 
@@ -464,18 +469,8 @@ namespace tempest::render_system
 
         for (const auto entity : _tracked_entities)
         {
-            auto mesh_id = guid{};
-            auto mat_id = guid{};
-
-            if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
-            {
-                mesh_id = mc->mesh_id;
-                if (const auto* matc = _inputs.entity_registry->try_get<core::material_component>(entity))
-                {
-                    mat_id = matc->material_id;
-                }
-            }
-            else
+            const auto* mesh_comp = _inputs.entity_registry->try_get<core::mesh_component>(entity);
+            if (mesh_comp == nullptr)
             {
                 continue;
             }
@@ -485,12 +480,26 @@ namespace tempest::render_system
                 continue;
             }
 
+            const auto mesh_id = mesh_comp->mesh_id;
             if (!_pool.get_mesh_layout(mesh_id).has_value())
             {
                 continue;
             }
 
-            const auto mat_type = _pool.get_material_type(mat_id).value_or(material_type::opaque);
+            const auto* material_comp = _inputs.entity_registry->try_get<core::material_component>(entity);
+            if (material_comp == nullptr)
+            {
+                continue;
+            }
+
+            const auto mat_id = material_comp->material_id;
+            const auto mat_type_opt = _pool.get_material_type(mat_id);
+            if (!mat_type_opt.has_value())
+            {
+                continue;
+            }
+
+            const auto mat_type = *mat_type_opt;
             if (mat_type == material_type::blend || mat_type == material_type::transmissive)
             {
                 transparent_entities.push_back(entity);
@@ -505,50 +514,44 @@ namespace tempest::render_system
             }
         }
 
-        _tracked_entities.clear();
-        _tracked_entities.reserve(opaque_entities.size() + alpha_masked_entities.size() + transparent_entities.size());
-        _tracked_entities.insert(_tracked_entities.end(), opaque_entities.begin(), opaque_entities.end());
-        _tracked_entities.insert(_tracked_entities.end(), alpha_masked_entities.begin(), alpha_masked_entities.end());
-        _tracked_entities.insert(_tracked_entities.end(), transparent_entities.begin(), transparent_entities.end());
-
-        _renderable_indices.clear();
-        for (size_t i = 0; i < _tracked_entities.size(); ++i)
-        {
-            _renderable_indices[_tracked_entities[i]] = i;
-        }
+        _active_renderables.clear();
+        _active_renderables.reserve(opaque_entities.size() + alpha_masked_entities.size() + transparent_entities.size());
+        _active_renderables.insert(_active_renderables.end(), opaque_entities.begin(), opaque_entities.end());
+        _active_renderables.insert(_active_renderables.end(), alpha_masked_entities.begin(), alpha_masked_entities.end());
+        _active_renderables.insert(_active_renderables.end(), transparent_entities.begin(), transparent_entities.end());
 
         // Build dynamic Instance Indices and Indirect Draw Commands
         auto instances = vector<uint32_t>{};
-        instances.reserve(_tracked_entities.size());
+        instances.reserve(_active_renderables.size());
         auto commands = vector<indexed_indirect_command>{};
-        commands.reserve(_tracked_entities.size());
+        commands.reserve(_active_renderables.size());
 
-        for (const auto entity : _tracked_entities)
+        for (const auto entity : _active_renderables)
         {
             auto mesh_id = guid{};
-            if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
+            if (const auto* mesh_comp = _inputs.entity_registry->try_get<core::mesh_component>(entity))
             {
-                mesh_id = mc->mesh_id;
+                mesh_id = mesh_comp->mesh_id;
             }
 
-            const auto ml_opt = _pool.get_mesh_layout(mesh_id);
-            if (!ml_opt)
+            const auto layout_opt = _pool.get_mesh_layout(mesh_id);
+            if (!layout_opt)
             {
                 continue;
             }
-            const auto& ml = *ml_opt;
+            const auto& mesh_layout = *layout_opt;
 
-            const auto idx = static_cast<uint32_t>(instances.size());
-            instances.push_back(idx);
+            const auto instance_index = static_cast<uint32_t>(instances.size());
+            instances.push_back(instance_index);
 
-            auto cmd = indexed_indirect_command{
-                .index_count = ml.index_count,
+            auto command = indexed_indirect_command{
+                .index_count = mesh_layout.index_count,
                 .instance_count = 1,
-                .first_index = (ml.mesh_start_offset + ml.index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+                .first_index = (mesh_layout.mesh_start_offset + mesh_layout.index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
                 .vertex_offset = 0,
-                .first_instance = idx,
+                .first_instance = instance_index,
             };
-            commands.push_back(cmd);
+            commands.push_back(command);
         }
 
         _opaque_draw_count = static_cast<uint32_t>(opaque_entities.size());
@@ -986,22 +989,22 @@ namespace tempest::render_system
         }
 
         // Automatically update dynamic object transforms from entity registry
-        if ((_inputs.entity_registry != nullptr) && !_tracked_entities.empty())
+        if ((_inputs.entity_registry != nullptr) && !_active_renderables.empty())
         {
             auto objects = vector<object_payload>{};
-            objects.reserve(_tracked_entities.size());
+            objects.reserve(_active_renderables.size());
 
-            for (const auto entity : _tracked_entities)
+            for (const auto entity : _active_renderables)
             {
                 auto mesh_id = guid{};
                 auto mat_id = guid{};
 
-                if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
+                if (const auto* mesh_comp = _inputs.entity_registry->try_get<core::mesh_component>(entity))
                 {
-                    mesh_id = mc->mesh_id;
-                    if (const auto* matc = _inputs.entity_registry->try_get<core::material_component>(entity))
+                    mesh_id = mesh_comp->mesh_id;
+                    if (const auto* material_comp = _inputs.entity_registry->try_get<core::material_component>(entity))
                     {
-                        mat_id = matc->material_id;
+                        mat_id = material_comp->material_id;
                     }
                 }
                 else
@@ -1009,8 +1012,8 @@ namespace tempest::render_system
                     continue;
                 }
 
-                const auto* t = _inputs.entity_registry->try_get<ecs::transform_component>(entity);
-                if (t == nullptr)
+                const auto* transform_comp = _inputs.entity_registry->try_get<ecs::transform_component>(entity);
+                if (transform_comp == nullptr)
                 {
                     continue;
                 }

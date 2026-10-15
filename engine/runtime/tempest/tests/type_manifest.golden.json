@@ -1,5 +1,5 @@
 {
-  "schema_hash": "0x18b60c25f0c8e7e4",
+  "schema_hash": "0x4335495c3e61ebe1",
   "types": [
     {
       "name": "tempest::core::material_component",
@@ -94,6 +94,30 @@
       "fields": []
     },
     {
+      "name": "tempest::physics::box_collider_component",
+      "size": 32,
+      "alignment": 16,
+      "version": 1,
+      "is_serializable": true,
+      "is_authorable": true,
+      "fields": [
+        {
+          "name": "half_extents",
+          "kind": "vec3",
+          "flags": 0,
+          "offset": 0,
+          "size": 16
+        },
+        {
+          "name": "offset",
+          "kind": "vec3",
+          "flags": 0,
+          "offset": 16,
+          "size": 16
+        }
+      ]
+    },
+    {
       "name": "tempest::physics::character_controller_component",
       "size": 80,
       "alignment": 16,
@@ -176,6 +200,37 @@
           "kind": "float32",
           "flags": 0,
           "offset": 40,
+          "size": 4
+        }
+      ]
+    },
+    {
+      "name": "tempest::physics::rigid_body_component",
+      "size": 12,
+      "alignment": 4,
+      "version": 1,
+      "is_serializable": true,
+      "is_authorable": true,
+      "fields": [
+        {
+          "name": "motion",
+          "kind": "enumeration",
+          "flags": 0,
+          "offset": 0,
+          "size": 1
+        },
+        {
+          "name": "layer",
+          "kind": "enumeration",
+          "flags": 0,
+          "offset": 1,
+          "size": 1
+        },
+        {
+          "name": "mass",
+          "kind": "float32",
+          "flags": 0,
+          "offset": 4,
           "size": 4
         }
       ]

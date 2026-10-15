@@ -172,6 +172,11 @@ namespace tempest::render_system
             return _tracked_entities.size();
         }
 
+        [[nodiscard]] auto get_active_renderable_count() const noexcept -> size_t
+        {
+            return _active_renderables.size();
+        }
+
         [[nodiscard]] auto get_device() noexcept -> rhi::device&
         {
             return *_device;
@@ -410,6 +415,7 @@ namespace tempest::render_system
         shelf_allocator _directional_shadow_allocator{};
         shelf_allocator _punctual_shadow_allocator{};
         vector<ecs::entity> _tracked_entities{};
+        vector<ecs::entity> _active_renderables{};
         uint32_t _active_draw_count{0};
         uint32_t _opaque_draw_count{0};
         uint32_t _opaque_draw_offset{0};

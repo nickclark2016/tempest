@@ -7,10 +7,12 @@
 #include <tempest/job/task.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/math_utils.hpp>
+#include <tempest/physics/box_collider_component.hpp>
 #include <tempest/physics/character_controller_component.hpp>
 #include <tempest/physics/character_controller_system.hpp>
 #include <tempest/physics/character_movement_intent.hpp>
 #include <tempest/physics/physics_world.hpp>
+#include <tempest/physics/rigid_body_component.hpp>
 #include <tempest/physics/velocity_component.hpp>
 #include <tempest/profiler/session.hpp>
 #include <tempest/string_view.hpp>
@@ -347,6 +349,107 @@ namespace tempest::physics::tests
         system->destroy_body(step_body);
         system->remove_body(floor_body);
         system->destroy_body(floor_body);
+    }
+
+    // =========================================================================
+    // SECTION: Physics Component Reflection & Defaults
+    // =========================================================================
+
+    /// @brief Verifies rigid_body_component default field values match expected
+    /// engine and physics engine invariants.
+    TEST(physics_component_tests, rigid_body_component_defaults)
+    {
+        // Setup: instantiate default rigid body component.
+        const auto body = rigid_body_component{};
+
+        // Assert: default field values.
+        EXPECT_EQ(body.motion, jolt::shim::motion_type::static_motion);
+        EXPECT_EQ(body.layer, jolt::shim::object_layer::non_moving);
+        EXPECT_EQ(body.mass, 0.0F);
+        EXPECT_EQ(body.id, jolt::shim::invalid_body_id);
+    }
+
+    /// @brief Verifies rigid_body_component reflection metadata including version,
+    /// field names, types, flags, and enum entries.
+    TEST(physics_component_tests, rigid_body_component_reflection)
+    {
+        // Setup: construct type descriptor via reflection describe.
+        auto builder = tempest::ecs::type_builder<rigid_body_component>{"rigid_body_component"};
+        tempest::ecs::reflect<rigid_body_component>::describe(builder);
+
+        // Act: build the type descriptor.
+        const auto descriptor = builder.build();
+
+        // Assert: type descriptor properties.
+        EXPECT_EQ(descriptor.version, 1U);
+        EXPECT_EQ(descriptor.fields.size(), 3U);
+
+        const auto* motion_field = descriptor.find_field("motion");
+        ASSERT_NE(motion_field, nullptr);
+        EXPECT_EQ(motion_field->kind, tempest::ecs::field_kind::enumeration);
+        EXPECT_EQ(motion_field->flags, tempest::ecs::field_flags::none);
+        EXPECT_EQ(motion_field->size, sizeof(jolt::shim::motion_type));
+        EXPECT_EQ(motion_field->enum_entries.size(), 3U);
+
+        const auto* layer_field = descriptor.find_field("layer");
+        ASSERT_NE(layer_field, nullptr);
+        EXPECT_EQ(layer_field->kind, tempest::ecs::field_kind::enumeration);
+        EXPECT_EQ(layer_field->flags, tempest::ecs::field_flags::none);
+        EXPECT_EQ(layer_field->size, sizeof(jolt::shim::object_layer));
+        EXPECT_EQ(layer_field->enum_entries.size(), 2U);
+
+        const auto* mass_field = descriptor.find_field("mass");
+        ASSERT_NE(mass_field, nullptr);
+        EXPECT_EQ(mass_field->kind, tempest::ecs::field_kind::float32);
+        EXPECT_EQ(mass_field->flags, tempest::ecs::field_flags::none);
+        EXPECT_EQ(mass_field->size, sizeof(float));
+
+        // Assert: unreflected runtime ID field is not exposed.
+        EXPECT_EQ(descriptor.find_field("id"), nullptr);
+    }
+
+    /// @brief Verifies box_collider_component default field values match expected
+    /// unit cube dimensions and zero center offset.
+    TEST(physics_component_tests, box_collider_component_defaults)
+    {
+        // Setup: instantiate default box collider component.
+        const auto box = box_collider_component{};
+
+        // Assert: default half extents (0.5m on all axes) and offset (0.0m on all axes).
+        EXPECT_FLOAT_EQ(box.half_extents.x, 0.5F);
+        EXPECT_FLOAT_EQ(box.half_extents.y, 0.5F);
+        EXPECT_FLOAT_EQ(box.half_extents.z, 0.5F);
+        EXPECT_FLOAT_EQ(box.offset.x, 0.0F);
+        EXPECT_FLOAT_EQ(box.offset.y, 0.0F);
+        EXPECT_FLOAT_EQ(box.offset.z, 0.0F);
+    }
+
+    /// @brief Verifies box_collider_component reflection metadata including version,
+    /// field names, types, and flags.
+    TEST(physics_component_tests, box_collider_component_reflection)
+    {
+        // Setup: construct type descriptor via reflection describe.
+        auto builder = tempest::ecs::type_builder<box_collider_component>{"box_collider_component"};
+        tempest::ecs::reflect<box_collider_component>::describe(builder);
+
+        // Act: build the type descriptor.
+        const auto descriptor = builder.build();
+
+        // Assert: type descriptor properties.
+        EXPECT_EQ(descriptor.version, 1U);
+        EXPECT_EQ(descriptor.fields.size(), 2U);
+
+        const auto* half_extents_field = descriptor.find_field("half_extents");
+        ASSERT_NE(half_extents_field, nullptr);
+        EXPECT_EQ(half_extents_field->kind, tempest::ecs::field_kind::vec3);
+        EXPECT_EQ(half_extents_field->flags, tempest::ecs::field_flags::none);
+        EXPECT_EQ(half_extents_field->size, sizeof(math::vec3<float>));
+
+        const auto* offset_field = descriptor.find_field("offset");
+        ASSERT_NE(offset_field, nullptr);
+        EXPECT_EQ(offset_field->kind, tempest::ecs::field_kind::vec3);
+        EXPECT_EQ(offset_field->flags, tempest::ecs::field_flags::none);
+        EXPECT_EQ(offset_field->size, sizeof(math::vec3<float>));
     }
 } // namespace tempest::physics::tests
 
