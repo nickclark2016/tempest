@@ -29,8 +29,10 @@ namespace tempest::ecs
         static void describe(type_builder<physics::velocity_component>& builder)
         {
             builder.version(1)
-                .field<&physics::velocity_component::linear>("linear", field_flags::read_only)
-                .field<&physics::velocity_component::angular>("angular", field_flags::read_only);
+                .field<&physics::velocity_component::linear>("linear", field_flags::read_only,
+                    field_ui_hints{.display_name = "Linear Velocity"})
+                .field<&physics::velocity_component::angular>("angular", field_flags::read_only,
+                    field_ui_hints{.display_name = "Angular Velocity"});
         }
     };
 } // namespace tempest::ecs

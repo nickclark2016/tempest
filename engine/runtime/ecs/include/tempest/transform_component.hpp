@@ -93,9 +93,12 @@ namespace tempest::ecs
         static void describe(type_builder<transform_component>& builder)
         {
             builder.version(1)
-                .field<&transform_component::_position>("position")
-                .field<&transform_component::_rotation>("rotation")
-                .field<&transform_component::_scale>("scale")
+                .field<&transform_component::_position>("position", field_flags::none,
+                    field_ui_hints{.display_name = "Position"})
+                .field<&transform_component::_rotation>("rotation", field_flags::none,
+                    field_ui_hints{.display_name = "Rotation"})
+                .field<&transform_component::_scale>("scale", field_flags::none,
+                    field_ui_hints{.display_name = "Scale"})
                 .post_load([](transform_component& transform) {
                     transform._build_transform();
                 });

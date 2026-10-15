@@ -67,6 +67,58 @@ namespace tempest::editor
         }
     } // namespace
 
+    auto prettify_field_name(string_view raw_name, ecs::field_kind kind) -> string
+    {
+        if (raw_name.empty())
+        {
+            return {};
+        }
+
+        auto effective_name = raw_name;
+        if (kind == ecs::field_kind::asset_ref && effective_name.size() > 3 &&
+            tempest::ends_with(effective_name, "_id"))
+        {
+            effective_name = string_view{effective_name.data(), effective_name.size() - 3};
+        }
+
+        auto result = string{};
+        auto capitalize_next = true;
+        auto pending_space = false;
+
+        for (const auto character : effective_name)
+        {
+            if (character == '_')
+            {
+                if (!result.empty())
+                {
+                    pending_space = true;
+                }
+                capitalize_next = true;
+            }
+            else
+            {
+                if (pending_space)
+                {
+                    result.push_back(' ');
+                    pending_space = false;
+                }
+
+                if (capitalize_next && character >= 'a' && character <= 'z')
+                {
+                    result.push_back(static_cast<char>(character - 'a' + 'A'));
+                    capitalize_next = false;
+                }
+                else
+                {
+                    result.push_back(character);
+                    capitalize_next = false;
+                }
+            }
+        }
+
+        return result;
+    }
+
     auto property_grid::draw_component(property_grid_context& ctx, const ecs::type_descriptor& desc,
                                        void* component_ptr) -> bool
     {
@@ -130,7 +182,8 @@ namespace tempest::editor
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35F, 0.75F, 1.0F, 1.0F));
         }
 
-        const auto display_name = field.hints.display_name.empty() ? field.name : field.hints.display_name;
+        const auto display_name = !field.hints.display_name.empty() ? string{field.hints.display_name}
+                                                                     : prettify_field_name(field.name, field.kind);
         char label_buf[256]{};
         format_to_buffer(label_buf, "{}##{}_{}", display_name, component_name, field.name);
 

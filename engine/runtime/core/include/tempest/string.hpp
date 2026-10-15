@@ -1411,8 +1411,7 @@ namespace tempest
         if (_is_small())
         {
             auto ss_size = _small_string_size();
-            _storage.small.data[ss_size - 1] = value_type();
-            _storage.small.data[small_string_capacity - 1] = static_cast<value_type>(ss_size - 1);
+            _emplace_remaining_small_capacity(ss_size - 1);
         }
         else
         {

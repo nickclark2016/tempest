@@ -9,6 +9,7 @@
 #include <tempest/editor_command.hpp>
 #include <tempest/reflection.hpp>
 #include <tempest/scene/prefab_instance_component.hpp>
+#include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
 
 #ifndef TEMPEST_EDITOR_API
@@ -24,6 +25,11 @@ namespace tempest::assets
 
 namespace tempest::editor
 {
+    /// @brief Formats a raw snake_case field identifier into a user-friendly Title Case display name.
+    /// Strips trailing '_id' suffixes for asset references (e.g. "mesh_id" -> "Mesh").
+    [[nodiscard]] TEMPEST_EDITOR_API auto prettify_field_name(string_view raw_name,
+                                                              ecs::field_kind kind = ecs::field_kind::boolean) -> string;
+
     /// @brief Evaluation context passed to property_grid when rendering reflected properties.
     struct TEMPEST_EDITOR_API property_grid_context
     {

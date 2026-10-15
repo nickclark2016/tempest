@@ -80,17 +80,28 @@ namespace tempest::ecs
         static void describe(type_builder<physics::character_controller_component>& builder)
         {
             builder.version(1)
-                .field<&physics::character_controller_component::character_height>("character_height")
-                .field<&physics::character_controller_component::character_radius>("character_radius")
-                .field<&physics::character_controller_component::mass>("mass")
-                .field<&physics::character_controller_component::max_slope_angle>("max_slope_angle")
-                .field<&physics::character_controller_component::max_strength>("max_strength")
-                .field<&physics::character_controller_component::walk_speed>("walk_speed")
-                .field<&physics::character_controller_component::run_speed>("run_speed")
-                .field<&physics::character_controller_component::jump_height>("jump_height")
-                .field<&physics::character_controller_component::acceleration_rate>("acceleration_rate")
-                .field<&physics::character_controller_component::stick_to_floor_step_down>("stick_to_floor_step_down")
-                .field<&physics::character_controller_component::walk_stairs_step_up>("walk_stairs_step_up");
+                .field<&physics::character_controller_component::character_height>("character_height", field_flags::none,
+                    field_ui_hints{.display_name = "Character Height"})
+                .field<&physics::character_controller_component::character_radius>("character_radius", field_flags::none,
+                    field_ui_hints{.display_name = "Character Radius"})
+                .field<&physics::character_controller_component::mass>("mass", field_flags::none,
+                    field_ui_hints{.display_name = "Mass"})
+                .field<&physics::character_controller_component::max_slope_angle>("max_slope_angle", field_flags::none,
+                    field_ui_hints{.display_name = "Max Slope Angle"})
+                .field<&physics::character_controller_component::max_strength>("max_strength", field_flags::none,
+                    field_ui_hints{.display_name = "Max Strength"})
+                .field<&physics::character_controller_component::walk_speed>("walk_speed", field_flags::none,
+                    field_ui_hints{.display_name = "Walk Speed"})
+                .field<&physics::character_controller_component::run_speed>("run_speed", field_flags::none,
+                    field_ui_hints{.display_name = "Run Speed"})
+                .field<&physics::character_controller_component::jump_height>("jump_height", field_flags::none,
+                    field_ui_hints{.display_name = "Jump Height"})
+                .field<&physics::character_controller_component::acceleration_rate>("acceleration_rate", field_flags::none,
+                    field_ui_hints{.display_name = "Acceleration Rate"})
+                .field<&physics::character_controller_component::stick_to_floor_step_down>("stick_to_floor_step_down", field_flags::none,
+                    field_ui_hints{.display_name = "Stick To Floor Step Down"})
+                .field<&physics::character_controller_component::walk_stairs_step_up>("walk_stairs_step_up", field_flags::none,
+                    field_ui_hints{.display_name = "Walk Stairs Step Up"});
         }
     };
 } // namespace tempest::ecs

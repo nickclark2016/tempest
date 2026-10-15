@@ -204,20 +204,23 @@ namespace tempest::ecs
         {
             builder.version(1)
                 .field<&render_system::camera_component::aspect_ratio>("aspect_ratio", field_flags::none,
-                    field_ui_hints{.min_value = 0.01, .max_value = 100.0, .drag_speed = 0.05F})
+                    field_ui_hints{.min_value = 0.01, .max_value = 100.0, .drag_speed = 0.05F, .display_name = "Aspect Ratio"})
                 .field<&render_system::camera_component::vertical_fov>("vertical_fov", field_flags::none,
-                    field_ui_hints{.min_value = 0.01, .max_value = 3.14, .drag_speed = 0.01F})
+                    field_ui_hints{.min_value = 0.01, .max_value = 3.14, .drag_speed = 0.01F, .display_name = "Vertical FOV"})
                 .field<&render_system::camera_component::near_plane>("near_plane", field_flags::none,
-                    field_ui_hints{.min_value = 0.001, .max_value = 1000.0, .drag_speed = 0.05F})
+                    field_ui_hints{.min_value = 0.001, .max_value = 1000.0, .drag_speed = 0.05F, .display_name = "Near Plane"})
                 .field<&render_system::camera_component::far_plane>("far_plane", field_flags::none,
-                    field_ui_hints{.min_value = 0.1, .max_value = 100000.0, .drag_speed = 1.0F})
-                .field<&render_system::camera_component::target>("target", camera_target_entries)
-                .asset_ref<assets::render_target_asset, &render_system::camera_component::render_texture_id>("render_texture_id")
+                    field_ui_hints{.min_value = 0.1, .max_value = 100000.0, .drag_speed = 1.0F, .display_name = "Far Plane"})
+                .field<&render_system::camera_component::target>("target", camera_target_entries, field_flags::none,
+                    field_ui_hints{.display_name = "Target"})
+                .asset_ref<assets::render_target_asset, &render_system::camera_component::render_texture_id>(
+                    "render_texture_id", field_flags::none, field_ui_hints{.display_name = "Render Target"})
                 .visible_when([](const void* component_ptr) -> bool {
                     const auto& camera_component = *static_cast<const render_system::camera_component*>(component_ptr);
                     return camera_component.target == render_system::camera_target_type::render_texture;
                 })
-                .field<&render_system::camera_component::is_active>("is_active");
+                .field<&render_system::camera_component::is_active>("is_active", field_flags::none,
+                    field_ui_hints{.display_name = "Active"});
         }
     };
 
@@ -228,9 +231,9 @@ namespace tempest::ecs
         {
             builder.version(1)
                 .field<&render_system::directional_light_component::color>("color", field_flags::none,
-                    field_ui_hints{.widget = ui_widget_type::color_picker})
+                    field_ui_hints{.widget = ui_widget_type::color_picker, .display_name = "Color"})
                 .field<&render_system::directional_light_component::intensity>("intensity", field_flags::none,
-                    field_ui_hints{.min_value = 0.0, .max_value = 100000.0, .drag_speed = 0.5F});
+                    field_ui_hints{.min_value = 0.0, .max_value = 100000.0, .drag_speed = 0.5F, .display_name = "Intensity"});
         }
     };
 
@@ -241,11 +244,11 @@ namespace tempest::ecs
         {
             builder.version(1)
                 .field<&render_system::point_light_component::color>("color", field_flags::none,
-                    field_ui_hints{.widget = ui_widget_type::color_picker})
+                    field_ui_hints{.widget = ui_widget_type::color_picker, .display_name = "Color"})
                 .field<&render_system::point_light_component::intensity>("intensity", field_flags::none,
-                    field_ui_hints{.min_value = 0.0, .max_value = 100000.0, .drag_speed = 0.5F})
+                    field_ui_hints{.min_value = 0.0, .max_value = 100000.0, .drag_speed = 0.5F, .display_name = "Intensity"})
                 .field<&render_system::point_light_component::range>("range", field_flags::none,
-                    field_ui_hints{.min_value = 0.1, .max_value = 10000.0, .drag_speed = 0.5F});
+                    field_ui_hints{.min_value = 0.1, .max_value = 10000.0, .drag_speed = 0.5F, .display_name = "Range"});
         }
     };
 
@@ -263,19 +266,22 @@ namespace tempest::ecs
         static void describe(type_builder<render_system::shadow_caster_component>& builder)
         {
             builder.version(1)
-                .field<&render_system::shadow_caster_component::resolution>("resolution")
+                .field<&render_system::shadow_caster_component::resolution>("resolution", field_flags::none,
+                    field_ui_hints{.display_name = "Resolution"})
                 .field<&render_system::shadow_caster_component::num_cascades>("num_cascades", field_flags::none,
-                    field_ui_hints{.min_value = static_cast<uint64_t>(1), .max_value = static_cast<uint64_t>(4), .drag_speed = 1.0F})
+                    field_ui_hints{.min_value = static_cast<uint64_t>(1), .max_value = static_cast<uint64_t>(4), .drag_speed = 1.0F, .display_name = "Cascades"})
                 .field<&render_system::shadow_caster_component::split_lambda>("split_lambda", field_flags::none,
-                    field_ui_hints{.min_value = 0.0, .max_value = 1.0, .drag_speed = 0.01F})
+                    field_ui_hints{.min_value = 0.0, .max_value = 1.0, .drag_speed = 0.01F, .display_name = "Cascade Split Lambda"})
                 .field<&render_system::shadow_caster_component::max_shadow_distance>("max_shadow_distance", field_flags::none,
-                    field_ui_hints{.min_value = 1.0, .max_value = 5000.0, .drag_speed = 1.0F})
+                    field_ui_hints{.min_value = 1.0, .max_value = 5000.0, .drag_speed = 1.0F, .display_name = "Max Shadow Distance"})
                 .field<&render_system::shadow_caster_component::normal_bias>("normal_bias", field_flags::none,
-                    field_ui_hints{.min_value = 0.0, .max_value = 1.0, .drag_speed = 0.001F})
+                    field_ui_hints{.min_value = 0.0, .max_value = 1.0, .drag_speed = 0.001F, .display_name = "Normal Bias"})
                 .field<&render_system::shadow_caster_component::depth_bias>("depth_bias", field_flags::none,
-                    field_ui_hints{.min_value = 0.0, .max_value = 1.0, .drag_speed = 0.001F})
-                .field<&render_system::shadow_caster_component::priority>("priority")
-                .field<&render_system::shadow_caster_component::debug_mode>("debug_mode", shadow_debug_entries);
+                    field_ui_hints{.min_value = 0.0, .max_value = 1.0, .drag_speed = 0.001F, .display_name = "Depth Bias"})
+                .field<&render_system::shadow_caster_component::priority>("priority", field_flags::none,
+                    field_ui_hints{.display_name = "Priority"})
+                .field<&render_system::shadow_caster_component::debug_mode>("debug_mode", shadow_debug_entries, field_flags::none,
+                    field_ui_hints{.display_name = "Debug Mode"});
         }
     };
 
@@ -285,7 +291,8 @@ namespace tempest::ecs
         static void describe(type_builder<core::mesh_component>& builder)
         {
             builder.version(1)
-                .asset_ref<core::mesh, &core::mesh_component::mesh_id>("mesh_id");
+                .asset_ref<core::mesh, &core::mesh_component::mesh_id>("mesh_id", field_flags::none,
+                    field_ui_hints{.display_name = "Mesh"});
         }
     };
 
@@ -295,7 +302,8 @@ namespace tempest::ecs
         static void describe(type_builder<core::material_component>& builder)
         {
             builder.version(1)
-                .asset_ref<core::material, &core::material_component::material_id>("material_id");
+                .asset_ref<core::material, &core::material_component::material_id>("material_id", field_flags::none,
+                    field_ui_hints{.display_name = "Material"});
         }
     };
 } // namespace tempest::ecs
