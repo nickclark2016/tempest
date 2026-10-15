@@ -4,8 +4,10 @@
 #include <tempest/event.hpp>
 #include <tempest/files.hpp>
 #include <tempest/filesystem.hpp>
+#include <tempest/format.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/material.hpp>
+#include <tempest/render_target_asset.hpp>
 #include <tempest/serial.hpp>
 #include <tempest/texture.hpp>
 #include <tempest/utility.hpp>
@@ -818,6 +820,91 @@ namespace tempest::assets
             }
         }
         return nullptr;
+    }
+
+    auto asset_database::get_assets_by_type(asset_type_id type, bool include_transient) const -> vector<asset_lookup_info>
+    {
+        auto results = vector<asset_lookup_info>{};
+
+        for (const auto& entry : _assets)
+        {
+            if (!include_transient && entry->is_transient)
+            {
+                continue;
+            }
+
+            if (type != asset_type_id{})
+            {
+                auto matches = (entry->type == type);
+                if (!matches && type == asset_type_id::of<core::texture>() && entry->type == asset_type_id::of<render_target_asset>())
+                {
+                    matches = true;
+                }
+
+                if (!matches)
+                {
+                    continue;
+                }
+            }
+
+            auto display_name = string{};
+            const auto* source = find_source_by_id(entry->source_id);
+            if (source != nullptr && !source->source_path.empty())
+            {
+                display_name = source->source_path;
+            }
+
+            const auto meta_opt = get_asset_metadata(entry->id);
+            if (meta_opt.has_value() && !meta_opt->path.empty())
+            {
+                display_name = meta_opt->path;
+            }
+
+            if (display_name.empty())
+            {
+                display_name = to_string(entry->id);
+            }
+
+            results.push_back(asset_lookup_info{
+                .id = entry->id,
+                .type = entry->type,
+                .display_name = tempest::move(display_name),
+            });
+        }
+
+        tempest::sort(results.begin(), results.end(), [](const asset_lookup_info& lhs, const asset_lookup_info& rhs) {
+            return lhs.display_name < rhs.display_name;
+        });
+
+        return results;
+    }
+
+    auto asset_database::get_asset_display_name(const guid& id) const -> string
+    {
+        if (id == guid{})
+        {
+            return "<None>";
+        }
+
+        const auto* entry = find_by_guid(id);
+        if (entry == nullptr)
+        {
+            return format("Missing ({})", to_string(id));
+        }
+
+        const auto* source = find_source_by_id(entry->source_id);
+        if (source != nullptr && !source->source_path.empty())
+        {
+            return source->source_path;
+        }
+
+        const auto meta_opt = get_asset_metadata(id);
+        if (meta_opt.has_value() && !meta_opt->path.empty())
+        {
+            return meta_opt->path;
+        }
+
+        return to_string(id);
     }
 
     auto asset_database::mount_root(string_view root_path, int32_t priority, string_view alias) -> void

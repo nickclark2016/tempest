@@ -8,6 +8,7 @@
 #include <tempest/limits.hpp>
 #include <tempest/mat4.hpp>
 #include <tempest/material.hpp>
+#include <tempest/render_target_asset.hpp>
 #include <tempest/vec2.hpp>
 #include <tempest/vec3.hpp>
 #include <tempest/vec4.hpp>
@@ -211,7 +212,11 @@ namespace tempest::ecs
                 .field<&render_system::camera_component::far_plane>("far_plane", field_flags::none,
                     field_ui_hints{.min_value = 0.1, .max_value = 100000.0, .drag_speed = 1.0F})
                 .field<&render_system::camera_component::target>("target", camera_target_entries)
-                .field<&render_system::camera_component::render_texture_id>("render_texture_id")
+                .asset_ref<assets::render_target_asset, &render_system::camera_component::render_texture_id>("render_texture_id")
+                .visible_when([](const void* component_ptr) -> bool {
+                    const auto& camera_component = *static_cast<const render_system::camera_component*>(component_ptr);
+                    return camera_component.target == render_system::camera_target_type::render_texture;
+                })
                 .field<&render_system::camera_component::is_active>("is_active");
         }
     };
@@ -280,7 +285,7 @@ namespace tempest::ecs
         static void describe(type_builder<core::mesh_component>& builder)
         {
             builder.version(1)
-                .field<&core::mesh_component::mesh_id>("mesh_id");
+                .asset_ref<core::mesh, &core::mesh_component::mesh_id>("mesh_id");
         }
     };
 
@@ -290,7 +295,7 @@ namespace tempest::ecs
         static void describe(type_builder<core::material_component>& builder)
         {
             builder.version(1)
-                .field<&core::material_component::material_id>("material_id");
+                .asset_ref<core::material, &core::material_component::material_id>("material_id");
         }
     };
 } // namespace tempest::ecs

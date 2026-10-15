@@ -7,6 +7,9 @@
 #include "importers/exr_importer.hpp"
 #include "importers/glb_importer.hpp"
 #include "importers/gltf_importer.hpp"
+#include "importers/render_target_importer.hpp"
+
+#include <tempest/render_target_asset.hpp>
 
 namespace tempest::assets
 {
@@ -94,11 +97,38 @@ namespace tempest::assets
                     out.insert(out.end(), data.begin(), data.end());
                     return true;
                 });
+
+            type_reg->register_type<render_target_asset>(
+                [texture_reg](span<const byte> blob, const guid& asset_id, asset_database&) -> bool {
+                    const auto json_str = string_view{reinterpret_cast<const char*>(blob.data()), blob.size()};
+                    const auto target_opt = render_target_asset::load_from_string(json_str);
+                    if (!target_opt.has_value())
+                    {
+                        return false;
+                    }
+                    if (texture_reg != nullptr)
+                    {
+                        auto tex = target_opt->to_core_texture();
+                        const auto tex_id = target_opt->get_texture_id(asset_id);
+                        return texture_reg->register_texture_with_id(tex_id, tempest::move(tex));
+                    }
+                    return true;
+                },
+                [](const guid& asset_id, const asset_database& db, vector<byte>& out) -> bool {
+                    const auto blob = db.get_blob(asset_id);
+                    if (blob.empty())
+                    {
+                        return false;
+                    }
+                    out.insert(out.end(), blob.begin(), blob.end());
+                    return true;
+                });
         }
 
         database.register_importer(make_unique<gltf_importer>(mesh_reg, texture_reg, material_reg), ".gltf");
         database.register_importer(make_unique<glb_importer>(mesh_reg, texture_reg, material_reg), ".glb");
         database.register_importer(make_unique<exr_importer>(texture_reg), ".exr");
+        database.register_importer(make_unique<render_target_importer>(texture_reg), ".trendertarget");
     }
 
     auto mount_default_shader_roots(asset_database& database) -> void

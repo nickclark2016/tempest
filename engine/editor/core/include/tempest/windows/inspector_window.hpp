@@ -73,6 +73,7 @@ namespace tempest::editor
         auto _draw_add_component_button(ecs::entity ent, const entity_address& addr, command_context& cmd_ctx) -> void;
 
         ImGuiTextFilter _component_search_filter;
+        ImGuiTextFilter _asset_search_filter;
         vector<ecs::component_type_info> _cached_comp_types;
         unique_ptr<scene::scene_manager> _owned_scene_mgr;
         ecs::entity _last_inspected_entity = default_last_inspected_entity;

@@ -57,10 +57,17 @@ namespace tempest::core
 
     struct TEMPEST_API sampler_state
     {
-        magnify_texture_filter mag_filter = magnify_texture_filter::linear;
-        minify_texture_filter min_filter = minify_texture_filter::linear;
-        texture_wrap_mode wrap_s = texture_wrap_mode::repeat;
-        texture_wrap_mode wrap_t = texture_wrap_mode::repeat;
+        static constexpr magnify_texture_filter default_mag_filter = magnify_texture_filter::linear;
+        static constexpr minify_texture_filter default_min_filter = minify_texture_filter::linear;
+        static constexpr texture_wrap_mode default_wrap_s = texture_wrap_mode::repeat;
+        static constexpr texture_wrap_mode default_wrap_t = texture_wrap_mode::repeat;
+
+        magnify_texture_filter mag_filter = default_mag_filter;
+        minify_texture_filter min_filter = default_min_filter;
+        texture_wrap_mode wrap_s = default_wrap_s;
+        texture_wrap_mode wrap_t = default_wrap_t;
+
+        auto operator==(const sampler_state& rhs) const noexcept -> bool = default;
     };
 
     struct TEMPEST_API texture

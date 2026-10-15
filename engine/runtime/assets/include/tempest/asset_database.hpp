@@ -110,6 +110,13 @@ namespace tempest::assets
         function<bool(string_view relative_path, bool is_directory)> predicate;
     };
 
+    struct TEMPEST_API asset_lookup_info
+    {
+        guid id = {};
+        asset_type_id type = {};
+        string display_name = {};
+    };
+
     class TEMPEST_API asset_database
     {
       public:
@@ -118,6 +125,10 @@ namespace tempest::assets
             string path;
             flat_unordered_map<string, string> metadata;
         };
+
+        static constexpr bool default_include_transient = false;
+        [[nodiscard]] auto get_assets_by_type(asset_type_id type, bool include_transient = default_include_transient) const -> vector<asset_lookup_info>;
+        [[nodiscard]] auto get_asset_display_name(const guid& id) const -> string;
 
         explicit asset_database(asset_type_registry* type_reg = nullptr) noexcept;
 

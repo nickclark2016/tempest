@@ -383,6 +383,8 @@ namespace tempest::editor
                         .cmd_ctx = &cmd_ctx,
                         .prefab_instance = prefab_inst,
                         .prefab_target_path = prefab_target_path,
+                        .asset_db = scene_mgr != nullptr ? scene_mgr->get_asset_database() : nullptr,
+                        .search_filter = &_asset_search_filter,
                     };
                     property_grid::draw_component(grid_ctx, *comp_info.descriptor, comp_ptr);
                 }

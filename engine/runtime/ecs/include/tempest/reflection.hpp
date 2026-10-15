@@ -7,6 +7,7 @@
 #include <tempest/guid.hpp>
 #include <tempest/int.hpp>
 #include <tempest/invoke.hpp>
+#include <tempest/meta.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/quat.hpp>
 #include <tempest/span.hpp>
@@ -135,6 +136,7 @@ namespace tempest::ecs
         uint64_t asset_type_hash = default_asset_type_hash;
         span<const enum_entry> enum_entries;
         field_ui_hints hints;
+        bool (*is_visible)(const void* component_ptr) = nullptr;
         void (*get)(const void* component_ptr, void* out_value) = nullptr;
         void (*set)(void* component_ptr, const void* in_value) = nullptr;
     };
@@ -310,6 +312,7 @@ namespace tempest::ecs
                 .asset_type_hash = 0,
                 .enum_entries = {},
                 .hints = tempest::move(hints),
+                .is_visible = nullptr,
                 .get = getter,
                 .set = setter,
             });
@@ -357,6 +360,7 @@ namespace tempest::ecs
                 .asset_type_hash = 0,
                 .enum_entries = entries,
                 .hints = tempest::move(hints),
+                .is_visible = nullptr,
                 .get = getter,
                 .set = setter,
             });
@@ -389,6 +393,7 @@ namespace tempest::ecs
                 .asset_type_hash = 0,
                 .enum_entries = {},
                 .hints = tempest::move(hints),
+                .is_visible = nullptr,
                 .get = nullptr,
                 .set = nullptr,
             });
@@ -414,10 +419,81 @@ namespace tempest::ecs
                 .asset_type_hash = 0,
                 .enum_entries = entries,
                 .hints = tempest::move(hints),
+                .is_visible = nullptr,
                 .get = nullptr,
                 .set = nullptr,
             });
 
+            return *this;
+        }
+
+        template <auto MemberPtr>
+        auto asset_ref(string_view name, uint64_t asset_type_hash = 0, field_flags flags = field_flags::none,
+                       field_ui_hints hints = {}) -> type_builder&
+        {
+            using member_traits = detail::member_pointer_traits<decltype(MemberPtr)>;
+            using member_type = typename member_traits::member_type;
+            using class_type = typename member_traits::class_type;
+            static_assert(is_same_v<class_type, Class>, "Member pointer must belong to the reflected class");
+
+            alignas(alignof(Class)) auto storage = array<byte, sizeof(Class)>{};
+            const auto* dummy = reinterpret_cast<const Class*>(storage.data());
+            const auto offset = static_cast<size_t>(reinterpret_cast<const byte*>(&(dummy->*MemberPtr)) -
+                                                    reinterpret_cast<const byte*>(dummy));
+
+            auto getter = [](const void* component_ptr, void* out_value) -> void {
+                const auto* object_ptr = static_cast<const Class*>(component_ptr);
+                *static_cast<member_type*>(out_value) = object_ptr->*MemberPtr;
+            };
+
+            auto setter = [](void* component_ptr, const void* in_value) -> void {
+                auto* object_ptr = static_cast<Class*>(component_ptr);
+                object_ptr->*MemberPtr = *static_cast<const member_type*>(in_value);
+            };
+
+            _fields.push_back(field_descriptor{
+                .name = name,
+                .kind = field_kind::asset_ref,
+                .flags = flags,
+                .offset = offset,
+                .size = sizeof(member_type),
+                .asset_type_hash = asset_type_hash,
+                .enum_entries = {},
+                .hints = tempest::move(hints),
+                .is_visible = nullptr,
+                .get = getter,
+                .set = setter,
+            });
+
+            return *this;
+        }
+
+        template <typename AssetType, auto MemberPtr>
+        auto asset_ref(string_view name, field_flags flags = field_flags::none, field_ui_hints hints = {})
+            -> type_builder&
+        {
+            return asset_ref<MemberPtr>(name, normalized_type_hash_v<AssetType>, flags, tempest::move(hints));
+        }
+
+        auto visible_when(bool (*predicate)(const void*)) -> type_builder&
+        {
+            if (!_fields.empty())
+            {
+                _fields.back().is_visible = predicate;
+            }
+            return *this;
+        }
+
+        template <bool (*Predicate)(const Class&)>
+        auto visible_when() -> type_builder&
+        {
+            if (!_fields.empty())
+            {
+                _fields.back().is_visible = [](const void* component_ptr) -> bool {
+                    const auto* object_ptr = static_cast<const Class*>(component_ptr);
+                    return Predicate(*object_ptr);
+                };
+            }
             return *this;
         }
 
@@ -446,6 +522,7 @@ namespace tempest::ecs
                 .asset_type_hash = 0,
                 .enum_entries = {},
                 .hints = tempest::move(hints),
+                .is_visible = nullptr,
                 .get = getter_fn,
                 .set = setter_fn,
             });
@@ -487,6 +564,7 @@ namespace tempest::ecs
                 .asset_type_hash = 0,
                 .enum_entries = {},
                 .hints = tempest::move(hints),
+                .is_visible = nullptr,
                 .get = getter_fn,
                 .set = setter_fn,
             });

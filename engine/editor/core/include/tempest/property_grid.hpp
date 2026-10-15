@@ -15,6 +15,13 @@
 #    define TEMPEST_EDITOR_API
 #endif
 
+struct ImGuiTextFilter;
+
+namespace tempest::assets
+{
+    class asset_database;
+} // namespace tempest::assets
+
 namespace tempest::editor
 {
     /// @brief Evaluation context passed to property_grid when rendering reflected properties.
@@ -25,6 +32,8 @@ namespace tempest::editor
         static constexpr const scene::prefab_instance_component* default_prefab_instance = nullptr;
         static constexpr ecs::entity default_entity = ecs::tombstone;
         static constexpr scene::id_path default_id_path = {};
+        static constexpr assets::asset_database* default_asset_db = nullptr;
+        static constexpr ImGuiTextFilter* default_search_filter = nullptr;
 
         non_null<ecs::archetype_registry> registry;
         ecs::entity entity = default_entity;
@@ -33,6 +42,8 @@ namespace tempest::editor
         command_context* cmd_ctx = default_cmd_ctx;
         const scene::prefab_instance_component* prefab_instance = default_prefab_instance;
         scene::id_path prefab_target_path = default_id_path;
+        assets::asset_database* asset_db = default_asset_db;
+        ImGuiTextFilter* search_filter = default_search_filter;
     };
 
     /// @brief Generic reflection-driven property editor widget renderer.

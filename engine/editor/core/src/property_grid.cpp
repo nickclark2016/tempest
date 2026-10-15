@@ -1,6 +1,7 @@
 #include <tempest/property_grid.hpp>
 
 #include <tempest/algorithm.hpp>
+#include <tempest/asset_database.hpp>
 #include <tempest/format.hpp>
 #include <tempest/guid.hpp>
 #include <tempest/int.hpp>
@@ -78,6 +79,11 @@ namespace tempest::editor
         for (const auto& field : desc.fields)
         {
             if ((field.flags & ecs::field_flags::hidden) != ecs::field_flags::none)
+            {
+                continue;
+            }
+
+            if (field.is_visible != nullptr && !field.is_visible(component_ptr))
             {
                 continue;
             }
@@ -656,14 +662,120 @@ namespace tempest::editor
 
         case ecs::field_kind::guid:
         case ecs::field_kind::asset_ref: {
+            if (field.kind == ecs::field_kind::guid && field.asset_type_hash == 0)
+            {
+                auto id = guid{};
+                read_bytes(&id, sizeof(id));
+                const auto id_str = to_string(id);
+                char buf[64]{};
+                tempest::memcpy(buf, id_str.data(), tempest::min(id_str.size(), sizeof(buf) - 1));
+                buf[tempest::min(id_str.size(), sizeof(buf) - 1)] = '\0';
+
+                ImGui::InputText(label_buf, buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
+                break;
+            }
+
             auto id = guid{};
             read_bytes(&id, sizeof(id));
-            const auto id_str = to_string(id);
-            char buf[64]{};
-            tempest::memcpy(buf, id_str.data(), tempest::min(id_str.size(), sizeof(buf) - 1));
-            buf[tempest::min(id_str.size(), sizeof(buf) - 1)] = '\0';
 
-            ImGui::InputText(label_buf, buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
+            auto display_text = string{};
+            if (id == guid{})
+            {
+                display_text = "<None>";
+            }
+            else if (ctx.asset_db != nullptr)
+            {
+                display_text = ctx.asset_db->get_asset_display_name(id);
+            }
+            else
+            {
+                display_text = to_string(id);
+            }
+
+            char popup_id[128]{};
+            format_to_buffer(popup_id, "AssetPickerPopup##{}_{}", component_name, field.name);
+
+            ImGui::Text("%.*s", static_cast<int>(display_name.size()), display_name.data());
+            ImGui::SameLine();
+
+            char button_label[256]{};
+            format_to_buffer(button_label, "{}##btn_{}_{}", display_text, component_name, field.name);
+
+            if (ImGui::Button(button_label))
+            {
+                ImGui::OpenPopup(popup_id);
+            }
+
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const auto* payload = ImGui::AcceptDragDropPayload("TEMPEST_ASSET_PAYLOAD"))
+                {
+                    if (payload->DataSize >= sizeof(guid))
+                    {
+                        const auto dropped_guid = *static_cast<const guid*>(payload->Data);
+                        dispatch_change(&dropped_guid, sizeof(dropped_guid));
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            if (id != guid{})
+            {
+                ImGui::SameLine();
+                char clear_label[64]{};
+                format_to_buffer(clear_label, "X##clear_{}_{}", component_name, field.name);
+                if (ImGui::Button(clear_label))
+                {
+                    const auto null_guid = guid{};
+                    dispatch_change(&null_guid, sizeof(null_guid));
+                }
+            }
+
+            if (ImGui::BeginPopup(popup_id))
+            {
+                auto local_filter = ImGuiTextFilter{};
+                auto& filter = (ctx.search_filter != nullptr) ? *ctx.search_filter : local_filter;
+                if (ImGui::IsWindowAppearing())
+                {
+                    ImGui::SetKeyboardFocusHere();
+                    filter.Clear();
+                }
+
+                filter.Draw("##search_filter", -1.0F);
+
+                if (ImGui::Selectable("<None>", id == guid{}))
+                {
+                    const auto null_guid = guid{};
+                    dispatch_change(&null_guid, sizeof(null_guid));
+                    ImGui::CloseCurrentPopup();
+                }
+
+                if (ctx.asset_db != nullptr)
+                {
+                    const auto target_type = assets::asset_type_id::from_hash(field.asset_type_hash);
+                    const auto items = ctx.asset_db->get_assets_by_type(target_type, false);
+
+                    if (ImGui::BeginChild("##AssetScrollList", ImVec2(280.0F, 250.0F)))
+                    {
+                        for (const auto& item : items)
+                        {
+                            if (!filter.PassFilter(item.display_name.c_str()))
+                            {
+                                continue;
+                            }
+
+                            if (ImGui::Selectable(item.display_name.c_str(), item.id == id))
+                            {
+                                dispatch_change(&item.id, sizeof(item.id));
+                                ImGui::CloseCurrentPopup();
+                            }
+                        }
+                    }
+                    ImGui::EndChild();
+                }
+
+                ImGui::EndPopup();
+            }
             break;
         }
 
