@@ -366,6 +366,7 @@ namespace tempest::editor
         string _field_name;
         vector<byte> _new_value_bytes;
         vector<byte> _prev_value_bytes;
+        vector<byte> _prev_component_bytes;
         bool _captured_prev = default_captured;
 
         bool _is_in_prefab = default_is_in_prefab;

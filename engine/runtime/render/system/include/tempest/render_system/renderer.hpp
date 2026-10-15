@@ -441,6 +441,8 @@ namespace tempest::render_system
         vector<ecs::entity> _point_light_entities{};
         vector<light_payload> _cached_lights{};
         uint32_t _lights_dirty_count{0};
+        static constexpr bool default_lights_reconciled = false;
+        bool _lights_reconciled = default_lights_reconciled;
 
         event::subscription_handle<ecs::component_added_event<ecs::entity, point_light_component>>
             _point_light_added_sub{};

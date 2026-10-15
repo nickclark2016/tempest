@@ -16,6 +16,7 @@
 #include <tempest/scene/prefab_overrides.hpp>
 #include <tempest/scene/scene_entity_component.hpp>
 #include <tempest/scene/scene_manager.hpp>
+#include <tempest/render_system/render_components.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/transform_component.hpp>
@@ -67,12 +68,14 @@ namespace tempest_entity_cmd_test
         uint32_t test_comp_idx = 0;
         uint32_t test_sec_comp_idx = 0;
         uint32_t transform_comp_idx = 0;
+        uint32_t point_light_idx = 0;
 
         entity_commands_fixture()
         {
             test_comp_idx = type_reg.ensure<test_component>();
             test_sec_comp_idx = type_reg.ensure<test_secondary_component>();
             transform_comp_idx = type_reg.ensure<ecs::transform_component>();
+            point_light_idx = type_reg.ensure<render_system::point_light_component>();
             type_reg.ensure<scene::prefab_instance_component>();
             type_reg.ensure<scene::prefab_member_component>();
             type_reg.ensure<scene::scene_entity_component>();
@@ -81,6 +84,7 @@ namespace tempest_entity_cmd_test
             type_reg.add_alias("test_component", type_reg.type_info(test_comp_idx).name);
             type_reg.add_alias("test_secondary_component", type_reg.type_info(test_sec_comp_idx).name);
             type_reg.add_alias("transform_component", type_reg.type_info(transform_comp_idx).name);
+            type_reg.add_alias("point_light_component", type_reg.type_info(point_light_idx).name);
         }
     };
 } // namespace tempest_entity_cmd_test
@@ -842,3 +846,275 @@ TEST(entity_commands_test, map_unknown_component_undo_redo)
     ASSERT_NE(unrec_data->entities.find(local_id), unrec_data->entities.end());
     EXPECT_EQ(unrec_data->entities[local_id].unknown_components[0].name, "custom::legacy_data");
 }
+
+//==============================================================================
+// Event Propagation Tests
+//==============================================================================
+
+/// @brief Verifies that add_component_command emits component_added_event and revert emits component_removed_event.
+TEST(entity_commands_test, add_component_command_publishes_event)
+{
+    // Setup: Scene with an entity
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneEventAdd");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    auto create_cmd = create_entity_command{scene, "EntityWithEvent"};
+    create_cmd.apply(fix.ctx);
+    const auto addr = create_cmd.created_address();
+    const auto target_entity = resolve_entity_address(fix.registry, fix.scene_mgr, addr);
+    ASSERT_NE(target_entity, tombstone_entity);
+
+    auto added_event_count = size_t{0};
+    auto added_entity = tombstone_entity;
+    auto added_val = int32_t{0};
+    auto added_sub = fix.event_reg.dispatcher<ecs::component_added_event<ecs::entity, test_component>>().subscribe(
+        [&](const ecs::component_added_event<ecs::entity, test_component>& evt) {
+            ++added_event_count;
+            added_entity = evt.entity;
+            added_val = evt.component.val;
+        });
+
+    auto removed_event_count = size_t{0};
+    auto removed_entity = tombstone_entity;
+    auto removed_sub = fix.event_reg.dispatcher<ecs::component_removed_event<ecs::entity, test_component>>().subscribe(
+        [&](const ecs::component_removed_event<ecs::entity, test_component>& evt) {
+            ++removed_event_count;
+            removed_entity = evt.entity;
+        });
+
+    // Act: Apply add_component_command
+    auto add_cmd = add_component_command{addr, fix.test_comp_idx};
+    add_cmd.apply(fix.ctx);
+
+    // Assert: component_added_event published with valid entity and default values
+    EXPECT_EQ(added_event_count, 1U);
+    EXPECT_EQ(added_entity, target_entity);
+    EXPECT_EQ(added_val, test_component::default_val);
+    EXPECT_EQ(removed_event_count, 0U);
+
+    // Act: Revert add_component_command
+    add_cmd.revert(fix.ctx);
+
+    // Assert: component_removed_event published on revert
+    EXPECT_EQ(removed_event_count, 1U);
+    EXPECT_EQ(removed_entity, target_entity);
+}
+
+/// @brief Verifies that set_field_command emits component_replaced_event on both apply and revert.
+TEST(entity_commands_test, set_field_command_publishes_event)
+{
+    // Setup: Scene with an entity containing test_component
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneEventSet");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    auto create_cmd = create_entity_command{scene, "EntityFieldSet"};
+    create_cmd.apply(fix.ctx);
+    const auto addr = create_cmd.created_address();
+    const auto target_entity = resolve_entity_address(fix.registry, fix.scene_mgr, addr);
+    ASSERT_NE(target_entity, tombstone_entity);
+
+    auto add_cmd = add_component_command{addr, fix.test_comp_idx};
+    add_cmd.apply(fix.ctx);
+
+    auto replaced_event_count = size_t{0};
+    auto replaced_entity = tombstone_entity;
+    auto replaced_new_val = int32_t{0};
+    auto replaced_sub = fix.event_reg.dispatcher<ecs::component_replaced_event<ecs::entity, test_component>>().subscribe(
+        [&](const ecs::component_replaced_event<ecs::entity, test_component>& evt) {
+            ++replaced_event_count;
+            replaced_entity = evt.entity;
+            replaced_new_val = evt.new_component.val;
+        });
+
+    // Act: Apply set_field_command mutating val
+    const auto new_val = int32_t{42};
+    auto val_bytes = vector<byte>(sizeof(int32_t));
+    tempest::memcpy(val_bytes.data(), &new_val, sizeof(int32_t));
+    auto set_cmd = set_field_command{addr, "test_component", "val", tempest::move(val_bytes)};
+    set_cmd.apply(fix.ctx);
+
+    // Assert: component_replaced_event published with new value
+    EXPECT_EQ(replaced_event_count, 1U);
+    EXPECT_EQ(replaced_entity, target_entity);
+    EXPECT_EQ(replaced_new_val, 42);
+
+    // Act: Revert set_field_command
+    set_cmd.revert(fix.ctx);
+
+    // Assert: component_replaced_event published with restored default value
+    EXPECT_EQ(replaced_event_count, 2U);
+    EXPECT_EQ(replaced_entity, target_entity);
+    EXPECT_EQ(replaced_new_val, test_component::default_val);
+}
+
+/// @brief Verifies that remove_component_command emits component_removed_event and revert emits component_added_event.
+TEST(entity_commands_test, remove_component_command_publishes_event)
+{
+    // Setup: Scene with an entity containing test_component
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneEventRem");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    auto create_cmd = create_entity_command{scene, "EntityCompRem"};
+    create_cmd.apply(fix.ctx);
+    const auto addr = create_cmd.created_address();
+    const auto target_entity = resolve_entity_address(fix.registry, fix.scene_mgr, addr);
+    ASSERT_NE(target_entity, tombstone_entity);
+
+    auto add_cmd = add_component_command{addr, fix.test_comp_idx};
+    add_cmd.apply(fix.ctx);
+
+    // Mutate component field before removal to verify payload preserved on removal event
+    const auto new_val = int32_t{99};
+    auto val_bytes = vector<byte>(sizeof(int32_t));
+    tempest::memcpy(val_bytes.data(), &new_val, sizeof(int32_t));
+    auto set_cmd = set_field_command{addr, "test_component", "val", tempest::move(val_bytes)};
+    set_cmd.apply(fix.ctx);
+
+    auto removed_event_count = size_t{0};
+    auto removed_entity = tombstone_entity;
+    auto removed_val = int32_t{0};
+    auto removed_sub = fix.event_reg.dispatcher<ecs::component_removed_event<ecs::entity, test_component>>().subscribe(
+        [&](const ecs::component_removed_event<ecs::entity, test_component>& evt) {
+            ++removed_event_count;
+            removed_entity = evt.entity;
+            removed_val = evt.component.val;
+        });
+
+    auto added_event_count = size_t{0};
+    auto added_entity = tombstone_entity;
+    auto added_sub = fix.event_reg.dispatcher<ecs::component_added_event<ecs::entity, test_component>>().subscribe(
+        [&](const ecs::component_added_event<ecs::entity, test_component>& evt) {
+            ++added_event_count;
+            added_entity = evt.entity;
+        });
+
+    // Act: Apply remove_component_command
+    auto rem_cmd = remove_component_command{addr, fix.test_comp_idx};
+    rem_cmd.apply(fix.ctx);
+
+    // Assert: component_removed_event published with the entity and value before removal
+    EXPECT_EQ(removed_event_count, 1U);
+    EXPECT_EQ(removed_entity, target_entity);
+    EXPECT_EQ(removed_val, 99);
+    EXPECT_EQ(added_event_count, 0U);
+
+    // Act: Revert remove_component_command
+    rem_cmd.revert(fix.ctx);
+
+    // Assert: component_added_event published on revert
+    EXPECT_EQ(added_event_count, 1U);
+    EXPECT_EQ(added_entity, target_entity);
+}
+
+/// @brief Verifies that adding a point_light_component via add_component_command emits component_added_event,
+/// mutating color/intensity/range via set_field_command emits component_replaced_event,
+/// and remove_component_command emits component_removed_event and restore on revert emits component_added_event.
+TEST(entity_commands_test, point_light_command_lifecycle_events)
+{
+    // Setup: Initialize command fixture and scene with a point light entity
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "ScenePointLightCmdTest");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    auto create_cmd = create_entity_command{scene, "PointLightEntity"};
+    create_cmd.apply(fix.ctx);
+    const auto addr = create_cmd.created_address();
+    const auto target_entity = resolve_entity_address(fix.registry, fix.scene_mgr, addr);
+    ASSERT_NE(target_entity, tombstone_entity);
+
+    auto added_event_count = size_t{0};
+    auto added_entity = tombstone_entity;
+    auto added_sub =
+        fix.event_reg.dispatcher<ecs::component_added_event<ecs::entity, render_system::point_light_component>>().subscribe(
+            [&](const ecs::component_added_event<ecs::entity, render_system::point_light_component>& evt) {
+                ++added_event_count;
+                added_entity = evt.entity;
+            });
+
+    auto replaced_event_count = size_t{0};
+    auto replaced_entity = tombstone_entity;
+    render_system::point_light_component last_replaced_old{};
+    render_system::point_light_component last_replaced_new{};
+    auto replaced_sub =
+        fix.event_reg.dispatcher<ecs::component_replaced_event<ecs::entity, render_system::point_light_component>>().subscribe(
+            [&](const ecs::component_replaced_event<ecs::entity, render_system::point_light_component>& evt) {
+                ++replaced_event_count;
+                replaced_entity = evt.entity;
+                last_replaced_old = evt.old_component;
+                last_replaced_new = evt.new_component;
+            });
+
+    auto removed_event_count = size_t{0};
+    auto removed_entity = tombstone_entity;
+    auto removed_sub =
+        fix.event_reg.dispatcher<ecs::component_removed_event<ecs::entity, render_system::point_light_component>>().subscribe(
+            [&](const ecs::component_removed_event<ecs::entity, render_system::point_light_component>& evt) {
+                ++removed_event_count;
+                removed_entity = evt.entity;
+            });
+
+    // Act: Add point_light_component via add_component_command
+    auto add_cmd = add_component_command{addr, fix.point_light_idx};
+    add_cmd.apply(fix.ctx);
+
+    // Assert: component_added_event published
+    EXPECT_EQ(added_event_count, 1U);
+    EXPECT_EQ(added_entity, target_entity);
+
+    // Act: Mutate light color via set_field_command
+    const auto new_color = math::vec3<float>{0.2F, 0.4F, 0.8F};
+    auto color_bytes = vector<byte>(sizeof(new_color));
+    tempest::memcpy(color_bytes.data(), &new_color, sizeof(new_color));
+    auto set_color_cmd = set_field_command{addr, "point_light_component", "color", tempest::move(color_bytes)};
+    set_color_cmd.apply(fix.ctx);
+
+    // Assert: component_replaced_event published with updated color
+    EXPECT_EQ(replaced_event_count, 1U);
+    EXPECT_EQ(replaced_entity, target_entity);
+    EXPECT_FLOAT_EQ(last_replaced_old.color.x, 1.0F);
+    EXPECT_FLOAT_EQ(last_replaced_new.color.x, 0.2F);
+    EXPECT_FLOAT_EQ(last_replaced_new.color.y, 0.4F);
+    EXPECT_FLOAT_EQ(last_replaced_new.color.z, 0.8F);
+
+    // Act: Mutate intensity via set_field_command
+    const auto new_intensity = 25.0F;
+    auto int_bytes = vector<byte>(sizeof(new_intensity));
+    tempest::memcpy(int_bytes.data(), &new_intensity, sizeof(new_intensity));
+    auto set_int_cmd = set_field_command{addr, "point_light_component", "intensity", tempest::move(int_bytes)};
+    set_int_cmd.apply(fix.ctx);
+
+    // Assert: component_replaced_event published with updated intensity
+    EXPECT_EQ(replaced_event_count, 2U);
+    EXPECT_FLOAT_EQ(last_replaced_new.intensity, 25.0F);
+
+    // Act: Remove point_light_component via remove_component_command
+    auto rem_cmd = remove_component_command{addr, fix.point_light_idx};
+    rem_cmd.apply(fix.ctx);
+
+    // Assert: component_removed_event published and entity no longer has component
+    EXPECT_EQ(removed_event_count, 1U);
+    EXPECT_EQ(removed_entity, target_entity);
+    EXPECT_FALSE(fix.registry.has<render_system::point_light_component>(target_entity));
+
+    // Act: Revert remove_component_command
+    rem_cmd.revert(fix.ctx);
+
+    // Assert: component_added_event published on restore and component restored
+    EXPECT_EQ(added_event_count, 2U);
+    EXPECT_TRUE(fix.registry.has<render_system::point_light_component>(target_entity));
+    const auto& restored_pl = fix.registry.get<render_system::point_light_component>(target_entity);
+    EXPECT_FLOAT_EQ(restored_pl.intensity, 25.0F);
+}
+
+

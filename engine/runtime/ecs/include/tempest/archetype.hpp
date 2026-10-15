@@ -36,14 +36,15 @@ namespace tempest::ecs
         requires component<T>
     inline auto create_archetype_type_info() -> basic_archetype_type_info
     {
+        using component_type = remove_cvref_t<T>;
         const auto name = []() {
-            if constexpr (core::is_normalized_type_name_valid_v<remove_cvref_t<T>>)
+            if constexpr (core::is_normalized_type_name_valid_v<component_type>)
             {
-                return core::normalized_type_name<remove_cvref_t<T>>();
+                return core::normalized_type_name<component_type>();
             }
             else
             {
-                return core::get_type_name<remove_cvref_t<T>>();
+                return core::get_type_name<component_type>();
             }
         }();
 
@@ -73,6 +74,9 @@ namespace tempest::ecs
                         tempest::destroy_at(static_cast<T*>(ptr));
                     }
                 },
+            .publish_added = detail::make_component_publish_added<component_type>(),
+            .publish_replaced = detail::make_component_publish_replaced<component_type>(),
+            .publish_removed = detail::make_component_publish_removed<component_type>(),
         };
     }
 

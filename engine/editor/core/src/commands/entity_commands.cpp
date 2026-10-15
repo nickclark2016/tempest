@@ -1612,6 +1612,11 @@ namespace tempest::editor
             info.descriptor->post_load(comp_ptr);
         }
 
+        if (info.publish_replaced != nullptr)
+        {
+            info.publish_replaced(ctx.registry->event_registry(), ent, _saved_bytes.data(), comp_ptr);
+        }
+
         const auto root_ent = find_prefab_instance_root(*ctx.registry, ent);
         if (root_ent != ecs::tombstone)
         {
@@ -1649,11 +1654,21 @@ namespace tempest::editor
             auto* comp_ptr = ecs::raw_registry_access::get_component_raw(*ctx.registry, ent, _type_index);
             if (comp_ptr != nullptr)
             {
-                tempest::memcpy(comp_ptr, _saved_bytes.data(), _saved_bytes.size());
                 const auto& info = ctx.registry->type_registry().type_info(_type_index);
+                auto current_bytes = vector<byte>(info.size);
+                if (info.size > 0)
+                {
+                    tempest::memcpy(current_bytes.data(), comp_ptr, info.size);
+                }
+
+                tempest::memcpy(comp_ptr, _saved_bytes.data(), _saved_bytes.size());
                 if (info.descriptor.has_value() && info.descriptor->post_load != nullptr)
                 {
                     info.descriptor->post_load(comp_ptr);
+                }
+                if (info.publish_replaced != nullptr)
+                {
+                    info.publish_replaced(ctx.registry->event_registry(), ent, current_bytes.data(), comp_ptr);
                 }
             }
         }
@@ -1721,6 +1736,12 @@ namespace tempest::editor
             return;
         }
 
+        if (_prev_component_bytes.empty() && info.size > 0)
+        {
+            _prev_component_bytes.resize(info.size);
+            tempest::memcpy(_prev_component_bytes.data(), comp_ptr, info.size);
+        }
+
         if (!_captured_prev)
         {
             _prev_value_bytes.resize(field->size);
@@ -1749,6 +1770,11 @@ namespace tempest::editor
         if (info.descriptor->post_load != nullptr)
         {
             info.descriptor->post_load(comp_ptr);
+        }
+
+        if (info.publish_replaced != nullptr)
+        {
+            info.publish_replaced(ctx.registry->event_registry(), ent, _prev_component_bytes.data(), comp_ptr);
         }
 
         const auto root_ent = find_prefab_instance_root(*ctx.registry, ent);
@@ -1879,6 +1905,18 @@ namespace tempest::editor
             return;
         }
 
+        if (_prev_component_bytes.empty() && info.size > 0)
+        {
+            _prev_component_bytes.resize(info.size);
+            tempest::memcpy(_prev_component_bytes.data(), comp_ptr, info.size);
+        }
+
+        auto current_bytes = vector<byte>(info.size);
+        if (info.size > 0)
+        {
+            tempest::memcpy(current_bytes.data(), comp_ptr, info.size);
+        }
+
         if (field->set != nullptr)
         {
             field->set(comp_ptr, _prev_value_bytes.data());
@@ -1892,6 +1930,11 @@ namespace tempest::editor
         if (info.descriptor->post_load != nullptr)
         {
             info.descriptor->post_load(comp_ptr);
+        }
+
+        if (info.publish_replaced != nullptr)
+        {
+            info.publish_replaced(ctx.registry->event_registry(), ent, current_bytes.data(), comp_ptr);
         }
 
         if (_is_in_prefab)

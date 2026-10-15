@@ -5,6 +5,8 @@
 #include <tempest/array.hpp>
 #include <tempest/assert.hpp>
 #include <tempest/bit.hpp>
+#include <tempest/ecs_events.hpp>
+#include <tempest/event_registry.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
@@ -47,6 +49,11 @@ namespace tempest::ecs
         static constexpr bool default_should_duplicate = true;
         static constexpr bool default_is_serializable = true;
 
+        using publish_fn = void (*)(event::event_registry&, entity, const void*);
+        using publish_replaced_fn = void (*)(event::event_registry&, entity, const void* old_ptr, const void* new_ptr);
+        static constexpr publish_fn default_publish_fn = nullptr;
+        static constexpr publish_replaced_fn default_publish_replaced_fn = nullptr;
+
         string_view name;
         uint16_t size = default_size;
         uint16_t alignment = default_alignment;
@@ -56,7 +63,87 @@ namespace tempest::ecs
         bool is_serializable = default_is_serializable;
         void (*construct)(void* storage) = nullptr;
         void (*destruct)(void* storage) = nullptr;
+        publish_fn publish_added = default_publish_fn;
+        publish_replaced_fn publish_replaced = default_publish_replaced_fn;
+        publish_fn publish_removed = default_publish_fn;
     };
+
+    namespace detail
+    {
+        template <typename ComponentType>
+        inline auto make_component_publish_added() -> component_type_info::publish_fn
+        {
+            using component_type = remove_cvref_t<ComponentType>;
+            if constexpr (event::event_type<component_added_event<entity, component_type>> &&
+                          is_copy_constructible_v<component_type>)
+            {
+                return [](event::event_registry& events, entity target_entity, const void* component_ptr) {
+                    if (component_ptr != nullptr)
+                    {
+                        events.dispatcher<component_added_event<entity, component_type>>().publish({
+                            .entity = target_entity,
+                            .component = *static_cast<const component_type*>(component_ptr),
+                        });
+                    }
+                };
+            }
+            else
+            {
+                return nullptr;
+            }
+        }
+
+        template <typename ComponentType>
+        inline auto make_component_publish_replaced() -> component_type_info::publish_replaced_fn
+        {
+            using component_type = remove_cvref_t<ComponentType>;
+            if constexpr (event::event_type<component_replaced_event<entity, component_type>> &&
+                          is_copy_constructible_v<component_type>)
+            {
+                return [](event::event_registry& events, entity target_entity, const void* old_ptr,
+                          const void* new_ptr) {
+                    if (new_ptr != nullptr)
+                    {
+                        const auto& new_comp = *static_cast<const component_type*>(new_ptr);
+                        const auto& old_comp =
+                            (old_ptr != nullptr) ? *static_cast<const component_type*>(old_ptr) : new_comp;
+                        events.dispatcher<component_replaced_event<entity, component_type>>().publish({
+                            .entity = target_entity,
+                            .old_component = old_comp,
+                            .new_component = new_comp,
+                        });
+                    }
+                };
+            }
+            else
+            {
+                return nullptr;
+            }
+        }
+
+        template <typename ComponentType>
+        inline auto make_component_publish_removed() -> component_type_info::publish_fn
+        {
+            using component_type = remove_cvref_t<ComponentType>;
+            if constexpr (event::event_type<component_removed_event<entity, component_type>> &&
+                          is_copy_constructible_v<component_type>)
+            {
+                return [](event::event_registry& events, entity target_entity, const void* component_ptr) {
+                    if (component_ptr != nullptr)
+                    {
+                        events.dispatcher<component_removed_event<entity, component_type>>().publish({
+                            .entity = target_entity,
+                            .component = *static_cast<const component_type*>(component_ptr),
+                        });
+                    }
+                };
+            }
+            else
+            {
+                return nullptr;
+            }
+        }
+    } // namespace detail
 
     class TEMPEST_API component_type_registry
     {
@@ -143,6 +230,9 @@ namespace tempest::ecs
                             tempest::destroy_at(static_cast<component_type*>(ptr));
                         }
                     },
+                .publish_added = detail::make_component_publish_added<component_type>(),
+                .publish_replaced = detail::make_component_publish_replaced<component_type>(),
+                .publish_removed = detail::make_component_publish_removed<component_type>(),
             };
 
             _register_type_info(tempest::move(info));

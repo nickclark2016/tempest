@@ -233,6 +233,7 @@ namespace tempest::render_system
           _point_light_indices{tempest::move(other._point_light_indices)},
           _point_light_entities{tempest::move(other._point_light_entities)},
           _cached_lights{tempest::move(other._cached_lights)}, _lights_dirty_count{other._lights_dirty_count},
+          _lights_reconciled{tempest::exchange(other._lights_reconciled, default_lights_reconciled)},
           _retired_textures{tempest::move(other._retired_textures)}
     {
         other._unsubscribe_events();
@@ -363,6 +364,7 @@ namespace tempest::render_system
             _point_light_entities = tempest::move(other._point_light_entities);
             _cached_lights = tempest::move(other._cached_lights);
             _lights_dirty_count = other._lights_dirty_count;
+            _lights_reconciled = tempest::exchange(other._lights_reconciled, default_lights_reconciled);
             _events = other._events;
 
             other._device = nullptr;
@@ -1037,6 +1039,19 @@ namespace tempest::render_system
         }
 
         // Automatically update dynamic lights from entity registry
+        if (_point_light_entities.empty() && !_lights_reconciled && _inputs.entity_registry != nullptr)
+        {
+            auto has_point_lights = false;
+            _inputs.entity_registry->each([&has_point_lights](const ecs::self_component&, const point_light_component&) {
+                has_point_lights = true;
+            });
+            if (has_point_lights)
+            {
+                _init_lights_from_registry();
+            }
+            _lights_reconciled = true;
+        }
+
         auto needs_light_update = (_lights_dirty_count > 0);
         if (!needs_light_update && _inputs.entity_registry != nullptr && !_point_light_entities.empty())
         {
@@ -1047,7 +1062,7 @@ namespace tempest::render_system
             }
             else
             {
-                for (size_t i = 0; i < _point_light_entities.size(); ++i)
+                for (auto i = size_t{0}; i < _point_light_entities.size(); ++i)
                 {
                     const auto entity = _point_light_entities[i];
                     if (_inputs.entity_registry->try_get<ecs::transform_component>(entity) != nullptr)
@@ -1057,6 +1072,29 @@ namespace tempest::render_system
                         if (world_pos.x != _cached_lights[i].position_falloff.x ||
                             world_pos.y != _cached_lights[i].position_falloff.y ||
                             world_pos.z != _cached_lights[i].position_falloff.z)
+                        {
+                            needs_light_update = true;
+                            _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+                            break;
+                        }
+                    }
+                    else if (_cached_lights[i].position_falloff.x != 0.0F ||
+                             _cached_lights[i].position_falloff.y != 0.0F ||
+                             _cached_lights[i].position_falloff.z != 0.0F)
+                    {
+                        needs_light_update = true;
+                        _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+                        break;
+                    }
+
+                    const auto* const pl = _inputs.entity_registry->try_get<point_light_component>(entity);
+                    if (pl != nullptr)
+                    {
+                        if (pl->color.x != _cached_lights[i].color_intensity.x ||
+                            pl->color.y != _cached_lights[i].color_intensity.y ||
+                            pl->color.z != _cached_lights[i].color_intensity.z ||
+                            pl->intensity != _cached_lights[i].color_intensity.w ||
+                            pl->range != _cached_lights[i].position_falloff.w)
                         {
                             needs_light_update = true;
                             _lights_dirty_count = _cfg.pool_config.frames_in_flight;
@@ -1763,6 +1801,7 @@ namespace tempest::render_system
         _point_light_added_sub =
             _events->dispatcher<ecs::component_added_event<ecs::entity, point_light_component>>().subscribe(
                 [this](const ecs::component_added_event<ecs::entity, point_light_component>& evt) -> void {
+                    _lights_reconciled = false;
                     if (!_point_light_indices.contains(evt.entity))
                     {
                         const auto idx = _point_light_entities.size();

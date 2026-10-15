@@ -4461,6 +4461,266 @@ namespace tempest::render_system::tests
         dev->wait_idle();
     }
 
+    /// @brief Verifies that dynamic in-place changes to point light color, intensity, and range
+    /// are detected by prepare_frame without requiring explicit component replacement events.
+    TEST(render_system_tests, renderer_point_light_dynamic_property_change_detection)
+    {
+        // Setup: Initialize device, registry, and renderer with a point light
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+
+        auto light_ent = registry.create();
+        registry.assign(light_ent, point_light_component{
+                                       .color = {1.0F, 1.0F, 1.0F},
+                                       .intensity = 5.0F,
+                                       .range = 15.0F,
+                                   });
+        auto tx = ecs::transform_component{};
+        tx.position({0.0F, 1.0F, 2.0F});
+        registry.assign(light_ent, tx);
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            rend->prepare_frame(1280, 720);
+            auto cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 1U);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.x, 1.0F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.w, 5.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.w, 15.0F);
+
+            // Act: Mutate color in-place without triggering an event
+            const auto opt_idx = types.type_index<point_light_component>();
+            ASSERT_TRUE(opt_idx.has_value());
+            auto* pl_mutable = static_cast<point_light_component*>(
+                ecs::raw_registry_access::get_component_raw(registry, light_ent, *opt_idx));
+            ASSERT_NE(pl_mutable, nullptr);
+            pl_mutable->color = {0.3F, 0.6F, 0.9F};
+
+            // Assert: prepare_frame detects the color change and updates cached lights
+            rend->prepare_frame(1280, 720);
+            cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 1U);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.x, 0.3F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.y, 0.6F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.z, 0.9F);
+
+            // Act: Mutate intensity in-place
+            pl_mutable->intensity = 42.0F;
+
+            // Assert: prepare_frame detects intensity change
+            rend->prepare_frame(1280, 720);
+            cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 1U);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.w, 42.0F);
+
+            // Act: Mutate range in-place
+            pl_mutable->range = 77.0F;
+
+            // Assert: prepare_frame detects range change
+            rend->prepare_frame(1280, 720);
+            cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 1U);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.w, 77.0F);
+        }
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that adding, mutating, and removing point_light_component
+    /// dynamically updates the renderer's tracked lights and cached light buffer.
+    TEST(render_system_tests, renderer_point_light_ecs_event_integration)
+    {
+        // Setup: Initialize device, registry, and renderer attached to the registry
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            rend->prepare_frame(1280, 720);
+            EXPECT_EQ(rend->get_tracked_point_light_count(), 0U);
+            EXPECT_TRUE(rend->get_cached_lights().empty());
+
+            // Act: Add point_light_component via registry.assign (emits component_added_event)
+            auto light_ent = registry.create();
+            auto tx = ecs::transform_component{};
+            tx.position({2.0F, 3.0F, 4.0F});
+            registry.assign(light_ent, tx);
+
+            registry.assign(light_ent, point_light_component{
+                                           .color = {1.0F, 1.0F, 1.0F},
+                                           .intensity = 1.0F,
+                                           .range = 10.0F,
+                                       });
+
+            // Assert: Renderer discovers the light dynamically via component_added_event
+            EXPECT_EQ(rend->get_tracked_point_light_count(), 1U);
+
+            rend->prepare_frame(1280, 720);
+            auto cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 1U);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.x, 2.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.y, 3.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.z, 4.0F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.x, 1.0F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.y, 1.0F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.z, 1.0F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.w, 1.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.w, 10.0F);
+
+            // Act: Mutate light properties via assign_or_replace (emits component_replaced_event)
+            registry.assign_or_replace(light_ent, point_light_component{
+                                                      .color = {0.2F, 0.4F, 0.8F},
+                                                      .intensity = 25.0F,
+                                                      .range = 50.0F,
+                                                  });
+
+            // Assert: Cached light updated in renderer
+            rend->prepare_frame(1280, 720);
+            cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 1U);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.x, 0.2F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.y, 0.4F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.z, 0.8F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.w, 25.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.w, 50.0F);
+
+            // Act: Remove point_light_component (emits component_removed_event)
+            registry.remove<point_light_component>(light_ent);
+
+            // Assert: Renderer removes point light from tracking and cached lights
+            EXPECT_EQ(rend->get_tracked_point_light_count(), 0U);
+            rend->prepare_frame(1280, 720);
+            cached = rend->get_cached_lights();
+            EXPECT_TRUE(cached.empty());
+
+            // Act: Re-add point_light_component
+            registry.assign(light_ent, point_light_component{
+                                           .color = {0.2F, 0.4F, 0.8F},
+                                           .intensity = 25.0F,
+                                           .range = 50.0F,
+                                       });
+
+            // Assert: Point light restored and cached in renderer
+            EXPECT_EQ(rend->get_tracked_point_light_count(), 1U);
+            rend->prepare_frame(1280, 720);
+            cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 1U);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.w, 25.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.w, 50.0F);
+        }
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that renderer reconciles untracked point lights from the entity registry
+    /// when _point_light_entities is empty on frame preparation.
+    TEST(render_system_tests, renderer_point_light_fallback_reconciliation)
+    {
+        // Setup: Initialize device, empty registry, and renderer
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // Act: Add a point light to registry with publish_added detached so no event is fired
+            auto light_ent = registry.create();
+            auto tx = ecs::transform_component{};
+            tx.position({3.0F, 6.0F, 9.0F});
+            registry.assign(light_ent, tx);
+
+            const auto opt_idx = types.type_index<point_light_component>();
+            ASSERT_TRUE(opt_idx.has_value());
+            auto info_no_events = types.type_info(*opt_idx);
+            info_no_events.publish_added = nullptr;
+
+            auto light_data = point_light_component{
+                .color = {0.8F, 0.2F, 0.5F},
+                .intensity = 16.0F,
+                .range = 24.0F,
+            };
+            ecs::raw_registry_access::assign_raw(registry, light_ent, info_no_events, &light_data);
+
+            // Verify that no event was handled: renderer still tracks 0 lights before prepare_frame
+            EXPECT_EQ(rend->get_tracked_point_light_count(), 0U);
+
+            // Assert: prepare_frame reconciles the light and updates cached lights
+            rend->prepare_frame(1280, 720);
+            EXPECT_EQ(rend->get_tracked_point_light_count(), 1U);
+            const auto cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 1U);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.x, 0.8F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.y, 0.2F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.z, 0.5F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.w, 16.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.x, 3.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.y, 6.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.z, 9.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.w, 24.0F);
+        }
+
+        dev->wait_idle();
+    }
+
     TEST(render_system_tests, clustered_forward_opaque_point_lighting)
     {
         auto fixture = create_test_device();

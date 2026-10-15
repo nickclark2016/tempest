@@ -1,8 +1,9 @@
-#include "tempest/ecs_events.hpp"
+#include <tempest/ecs_events.hpp>
 #include <tempest/archetype.hpp>
 
 #include <tempest/algorithm.hpp>
 #include <tempest/flat_unordered_map.hpp>
+#include <tempest/inplace_vector.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/string.hpp>
 #include <tempest/utility.hpp>
@@ -1141,7 +1142,28 @@ namespace tempest::ecs
         {
             if (src_data != nullptr)
             {
+                static constexpr size_t stack_capture_limit = 256;
+                auto stack_old = inplace_vector<byte, stack_capture_limit>{};
+                auto heap_old = vector<byte>{};
+                const auto use_stack = (type_info.size <= stack_capture_limit);
+                if (use_stack)
+                {
+                    stack_old.resize(type_info.size);
+                    tempest::memcpy(stack_old.data(), existing, type_info.size);
+                }
+                else
+                {
+                    heap_old.resize(type_info.size);
+                    tempest::memcpy(heap_old.data(), existing, type_info.size);
+                }
+
                 tempest::memcpy(existing, src_data, type_info.size);
+
+                if (_event_registry != nullptr && type_info.publish_replaced != nullptr)
+                {
+                    const auto* const old_ptr = use_stack ? stack_old.data() : heap_old.data();
+                    type_info.publish_replaced(*_event_registry, entity, old_ptr, existing);
+                }
             }
             return existing;
         }
@@ -1249,6 +1271,11 @@ namespace tempest::ecs
             _entity_archetype_mapping[entity] = new_key;
         }
 
+        if (_event_registry != nullptr && type_info.publish_added != nullptr)
+        {
+            type_info.publish_added(*_event_registry, entity, new_component_ptr);
+        }
+
         return new_component_ptr;
     }
 
@@ -1282,10 +1309,30 @@ namespace tempest::ecs
         const auto comp_index = _index_of_component_in_archetype(key.archetype_index, type_index);
 
         const auto& t_info = _type_registry->type_info(type_index);
+        auto* removed_data = arch->element_at(key.archetype_key, comp_index);
+
+        static constexpr size_t stack_capture_limit = 256;
+        auto stack_bytes = inplace_vector<byte, stack_capture_limit>{};
+        auto heap_bytes = vector<byte>{};
+        const auto should_publish_removed =
+            (_event_registry != nullptr && t_info.publish_removed != nullptr && removed_data != nullptr);
+        if (should_publish_removed)
+        {
+            if (t_info.size <= stack_capture_limit)
+            {
+                stack_bytes.resize(t_info.size);
+                tempest::memcpy(stack_bytes.data(), removed_data, t_info.size);
+            }
+            else
+            {
+                heap_bytes.resize(t_info.size);
+                tempest::memcpy(heap_bytes.data(), removed_data, t_info.size);
+            }
+        }
+
         if (t_info.destruct != nullptr)
         {
-            auto* data = arch->element_at(key.archetype_key, comp_index);
-            t_info.destruct(data);
+            t_info.destruct(removed_data);
         }
 
         auto new_hash = hash;
@@ -1305,6 +1352,12 @@ namespace tempest::ecs
         {
             arch->erase(key.archetype_key);
             _entity_archetype_mapping.erase(entity);
+            if (should_publish_removed)
+            {
+                const auto* const bytes_ptr =
+                    (t_info.size <= stack_capture_limit) ? stack_bytes.data() : heap_bytes.data();
+                t_info.publish_removed(*_event_registry, entity, bytes_ptr);
+            }
             return true;
         }
 
@@ -1368,6 +1421,14 @@ namespace tempest::ecs
             .archetype_key = new_key,
             .archetype_index = new_archetype_index,
         };
+
+        if (should_publish_removed)
+        {
+            const auto* const bytes_ptr =
+                (t_info.size <= stack_capture_limit) ? stack_bytes.data() : heap_bytes.data();
+            t_info.publish_removed(*_event_registry, entity, bytes_ptr);
+        }
+
         return true;
     }
 } // namespace tempest::ecs
