@@ -25,6 +25,11 @@ namespace tempest::ecs
     struct is_duplicatable<tempest::scene::scene_inactive_tag> : false_type
     {
     };
+
+    template <>
+    struct is_authorable<tempest::scene::scene_inactive_tag> : false_type
+    {
+    };
 } // namespace tempest::ecs
 
 #endif // tempest_scene_scene_tags_hpp

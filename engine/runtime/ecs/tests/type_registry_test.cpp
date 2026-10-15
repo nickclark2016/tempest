@@ -1,6 +1,7 @@
 #include <tempest/component_type_registry.hpp>
 #include <tempest/archetype.hpp>
 #include <tempest/event_registry.hpp>
+#include <tempest/format.hpp>
 
 #include <gtest/gtest.h>
 
@@ -20,12 +21,6 @@ namespace
     struct component_gamma
     {
         uint64_t identifier{0};
-    };
-
-    template <size_t Index>
-    struct dummy_component
-    {
-        uint8_t payload{static_cast<uint8_t>(Index)};
     };
 } // namespace
 
@@ -140,46 +135,47 @@ TEST(component_type_registry_tests, alias_resolution)
 // Capacity and Bounds Tests
 // ============================================================================
 
-namespace
-{
-    template <size_t... Is>
-    void register_dummy_types_helper(tempest::ecs::component_type_registry& registry,
-                                     tempest::index_sequence<Is...> /*unused*/)
-    {
-        (registry.register_type<dummy_component<Is>>(), ...);
-    }
-
-    template <size_t Count>
-    void register_dummy_types(tempest::ecs::component_type_registry& registry)
-    {
-        register_dummy_types_helper(registry, tempest::make_index_sequence<Count>{});
-    }
-} // namespace
-
 /// @brief Verifies that registering up to max_component_types succeeds and that
 /// exceeding capacity triggers an assertion failure.
 TEST(component_type_registry_tests, max_capacity_hard_error)
 {
-    // Setup registry with max capacity constant.
+    // Setup: registry with max capacity constant
     auto registry = tempest::ecs::component_type_registry{};
     static constexpr auto max_types = tempest::ecs::component_type_registry::max_component_types;
 
-    // Act: register exactly 256 distinct component types.
-    register_dummy_types<max_types>(registry);
+    // Act: register exactly max_component_types distinct runtime component types
+    for (auto index = size_t{0}; index < max_types; ++index)
+    {
+        const auto registered_index = registry.register_type(tempest::ecs::component_type_info{
+            .name = tempest::format("dummy_component_{}", index),
+            .size = 1,
+            .alignment = 1,
+        });
+        EXPECT_EQ(registered_index, static_cast<uint32_t>(index));
+    }
 
-    // Assert: verify all 256 types registered.
+    // Assert: verify all 256 types registered
     ASSERT_EQ(registry.size(), max_types);
 
-    const auto first_dummy = registry.type_index<dummy_component<0>>();
-    const auto last_dummy = registry.type_index<dummy_component<max_types - 1>>();
+    const auto first_dummy = registry.type_index("dummy_component_0");
+    const auto last_dummy_name = tempest::format("dummy_component_{}", max_types - 1);
+    const auto last_dummy = registry.type_index(last_dummy_name);
     ASSERT_TRUE(first_dummy.has_value());
     ASSERT_TRUE(last_dummy.has_value());
     ASSERT_EQ(*first_dummy, 0U);
     ASSERT_EQ(*last_dummy, static_cast<uint32_t>(max_types - 1));
 
-    // Assert: registering the 257th type fails / asserts in debug builds.
+    // Assert: registering the 257th type triggers assertion failure in debug builds
 #ifndef NDEBUG
-    ASSERT_DEATH_IF_SUPPORTED({ registry.register_type<dummy_component<max_types>>(); }, ".*");
+    ASSERT_DEATH_IF_SUPPORTED(
+        {
+            registry.register_type(tempest::ecs::component_type_info{
+                .name = "dummy_component_overflow",
+                .size = 1,
+                .alignment = 1,
+            });
+        },
+        ".*");
 #endif
 }
 
@@ -266,12 +262,22 @@ namespace
     {
         uint32_t tag{0};
     };
+
+    struct non_authorable_manifest_component
+    {
+        uint32_t tag{0};
+    };
 } // namespace
 
 namespace tempest::ecs
 {
     template <>
     struct is_serializable<non_serializable_manifest_component> : false_type
+    {
+    };
+
+    template <>
+    struct is_authorable<non_authorable_manifest_component> : false_type
     {
     };
 
@@ -365,4 +371,45 @@ TEST(component_type_registry_tests, schema_hash_ignores_non_serializable_types)
     }
     EXPECT_TRUE(found_non_serializable);
 }
+
+/// @brief Verifies that is_authorable trait correctly sets component_type_info::is_authorable
+/// and propagates to exported type_manifest_entry.
+TEST(component_type_registry_tests, is_authorable_trait_and_manifest_propagation)
+{
+    // Setup: create type registry
+    auto registry = tempest::ecs::component_type_registry{};
+
+    // Act: register authorable and non-authorable types
+    const auto alpha_idx = registry.register_type<component_alpha>();
+    const auto non_auth_idx = registry.register_type<non_authorable_manifest_component>();
+
+    // Assert: trait checks
+    static_assert(tempest::ecs::is_authorable_v<component_alpha>);
+    static_assert(!tempest::ecs::is_authorable_v<non_authorable_manifest_component>);
+
+    // Assert: type info reflection in registry
+    const auto& alpha_info = registry.type_info(alpha_idx);
+    const auto& non_auth_info = registry.type_info(non_auth_idx);
+    EXPECT_TRUE(alpha_info.is_authorable);
+    EXPECT_FALSE(non_auth_info.is_authorable);
+
+    // Assert: manifest entries retain authorable classification
+    const auto manifest = registry.export_manifest();
+    auto verified_count = size_t{0};
+    for (const auto& entry : manifest.types)
+    {
+        if (entry.name == registry.type_info(alpha_idx).name)
+        {
+            EXPECT_TRUE(entry.is_authorable);
+            ++verified_count;
+        }
+        else if (entry.name == registry.type_info(non_auth_idx).name)
+        {
+            EXPECT_FALSE(entry.is_authorable);
+            ++verified_count;
+        }
+    }
+    EXPECT_EQ(verified_count, 2U);
+}
+
 

@@ -219,6 +219,7 @@ scoped.workspace('Tempest', function()
         'action:vs*'
     }, function()
         multiprocessorcompile 'On'
+        buildoptions { '/bigobj' }
     end)
 
     scoped.filter({

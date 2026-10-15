@@ -166,6 +166,7 @@ namespace tempest::ecs
                 .alignment = static_cast<size_t>(info.alignment),
                 .version = info.descriptor.has_value() ? info.descriptor->version : uint32_t{1},
                 .is_serializable = info.is_serializable,
+                .is_authorable = info.is_authorable,
                 .fields = {},
             };
 
@@ -205,11 +206,30 @@ namespace tempest::ecs
         return manifest;
     }
 
+    auto component_type_registry::register_type(component_type_info info) -> uint32_t
+    {
+        const auto resolved = resolve_alias(info.name);
+        const auto existing = type_index(resolved);
+        if (existing.has_value())
+        {
+            return *existing;
+        }
+
+        TEMPEST_ASSERT(_count < max_component_types);
+        const auto idx = static_cast<uint32_t>(_count);
+        info.index = idx;
+        info.name = resolved;
+        _register_type_info(tempest::move(info));
+        return idx;
+    }
+
     void component_type_registry::_register_type_info(component_type_info info)
     {
         TEMPEST_ASSERT(_count < max_component_types);
         const auto idx = info.index;
-        _name_to_index[string{info.name}] = idx;
+        _type_names[idx] = string{info.name};
+        info.name = string_view{_type_names[idx]};
+        _name_to_index[_type_names[idx]] = idx;
         _types[idx] = tempest::move(info);
         ++_count;
     }

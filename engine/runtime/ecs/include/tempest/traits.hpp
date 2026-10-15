@@ -219,6 +219,14 @@ namespace tempest::ecs
 
     template <typename T>
     inline constexpr bool is_serializable_v = is_serializable<T>::value;
+
+    template <typename T>
+    struct is_authorable : true_type
+    {
+    };
+
+    template <typename T>
+    inline constexpr bool is_authorable_v = is_authorable<T>::value;
 } // namespace tempest::ecs
 
 namespace tempest

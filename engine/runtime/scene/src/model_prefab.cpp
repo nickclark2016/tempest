@@ -151,7 +151,7 @@ namespace tempest::scene
 
             for (const auto& info : comp_types)
             {
-                if (!info.is_serializable || !info.descriptor.has_value())
+                if (!info.is_serializable || !info.is_authorable || !info.descriptor.has_value())
                 {
                     continue;
                 }

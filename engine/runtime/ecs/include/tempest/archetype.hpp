@@ -56,6 +56,7 @@ namespace tempest::ecs
             .should_duplicate = is_duplicatable_v<T>,
             .descriptor = nullopt,
             .is_serializable = is_serializable_v<T>,
+            .is_authorable = is_authorable_v<T>,
             .construct =
                 [](void* ptr) {
                     if constexpr (is_default_constructible_v<T>)
@@ -1050,6 +1051,11 @@ namespace tempest::ecs
 
     template <>
     struct is_serializable<self_component> : false_type
+    {
+    };
+
+    template <>
+    struct is_authorable<self_component> : false_type
     {
     };
 

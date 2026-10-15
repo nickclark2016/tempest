@@ -14,6 +14,7 @@
 #include <tempest/material.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/physics/velocity_component.hpp>
 #include <tempest/property_grid.hpp>
 #include <tempest/render_system/render_components.hpp>
 #include <tempest/scene/prefab_cache.hpp>
@@ -598,5 +599,87 @@ namespace tempest::editor::tests
         EXPECT_EQ(grid_ctx.cmd_ctx, nullptr);
         EXPECT_EQ(grid_ctx.prefab_instance, nullptr);
         EXPECT_TRUE(grid_ctx.registry->is_valid(ent));
+    }
+
+    /// @brief Verifies that inspector partitions components into Tag/Capability, Authored Data,
+    /// and Runtime Diagnostics, and filters non-authorable components from the Add Component list.
+    TEST(inspector_window_test, component_categorization_and_authorable_filtering)
+    {
+        // Setup: registry with engine types and custom tag component
+        struct sample_tag_component
+        {
+        };
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        tempest::register_engine_types(types);
+        const auto tag_idx = types.register_type<sample_tag_component>();
+
+        auto reg = ecs::archetype_registry{events, types};
+        const auto ent = reg.create();
+
+        // Assign tag (authorable, no fields), authored data (camera), and runtime (velocity)
+        reg.assign(ent, sample_tag_component{});
+        reg.assign(ent, render_system::camera_component{});
+        reg.assign(ent, physics::velocity_component{});
+
+        const auto comp_types = ecs::raw_registry_access::get_component_types(reg, ent);
+
+        // Partition according to inspector rules
+        auto tags = vector<ecs::component_type_info>{};
+        auto authored = vector<ecs::component_type_info>{};
+        auto runtime = vector<ecs::component_type_info>{};
+
+        for (const auto& comp_info : comp_types)
+        {
+            if (comp_info.name == "tempest::ecs::self_component" ||
+                tempest::starts_with(comp_info.name, "tempest::ecs::relationship_component") ||
+                comp_info.name == "tempest::scene::scene_entity_component" ||
+                comp_info.name == "tempest::editor::dynamic_entity_id_component" ||
+                comp_info.name == "tempest::scene::prefab_member_component" ||
+                comp_info.name == "tempest::scene::prefab_instance_component")
+            {
+                continue;
+            }
+
+            if (!comp_info.is_authorable)
+            {
+                runtime.push_back(comp_info);
+            }
+            else if (!comp_info.descriptor.has_value() || comp_info.descriptor->fields.empty())
+            {
+                tags.push_back(comp_info);
+            }
+            else
+            {
+                authored.push_back(comp_info);
+            }
+        }
+
+        // Assert: Tag partition contains sample_tag_component
+        ASSERT_EQ(tags.size(), 1U);
+        EXPECT_EQ(tags[0].index, tag_idx);
+
+        // Assert: Authored partition contains camera_component
+        ASSERT_EQ(authored.size(), 1U);
+        EXPECT_EQ(authored[0].name, "tempest::render_system::camera_component");
+
+        // Assert: Runtime partition contains velocity_component
+        ASSERT_EQ(runtime.size(), 1U);
+        EXPECT_EQ(runtime[0].name, "tempest::physics::velocity_component");
+
+        // Assert: velocity_component and transform_history_component are excluded from addable authorable list
+        auto authorable_addable_count = size_t{0};
+        for (uint32_t i = 0; i < types.size(); ++i)
+        {
+            const auto& c_info = types.type_info(i);
+            if (c_info.is_authorable && c_info.is_serializable)
+            {
+                EXPECT_NE(c_info.name, "tempest::physics::velocity_component");
+                EXPECT_NE(c_info.name, "tempest::ecs::transform_history_component");
+                ++authorable_addable_count;
+            }
+        }
+        EXPECT_GT(authorable_addable_count, 0U);
     }
 } // namespace tempest::editor::tests

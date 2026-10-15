@@ -20,6 +20,16 @@ namespace tempest::editor
 {
     namespace
     {
+        constexpr auto is_internal_component(string_view name) noexcept -> bool
+        {
+            return name == "tempest::ecs::self_component" ||
+                   tempest::starts_with(name, "tempest::ecs::relationship_component") ||
+                   name == "tempest::scene::scene_entity_component" ||
+                   name == "tempest::editor::dynamic_entity_id_component" ||
+                   name == "tempest::scene::prefab_member_component" ||
+                   name == "tempest::scene::prefab_instance_component";
+        }
+
         auto find_prefab_instance_root(const ecs::basic_archetype_registry& registry, ecs::entity ent) -> ecs::entity
         {
             auto curr = ent;
@@ -262,18 +272,110 @@ namespace tempest::editor
 
         _cached_comp_types = ecs::raw_registry_access::get_component_types(*entity_registry, ent);
 
+        auto tag_components = vector<ecs::component_type_info>{};
+        auto authored_components = vector<ecs::component_type_info>{};
+        auto runtime_components = vector<ecs::component_type_info>{};
+
         for (const auto& comp_info : _cached_comp_types)
         {
-            if (comp_info.name == "tempest::ecs::self_component" ||
-                tempest::starts_with(comp_info.name, "tempest::ecs::relationship_component") ||
-                comp_info.name == "tempest::scene::scene_entity_component" ||
-                comp_info.name == "tempest::editor::dynamic_entity_id_component" ||
-                comp_info.name == "tempest::scene::prefab_member_component" ||
-                comp_info.name == "tempest::scene::prefab_instance_component")
+            if (is_internal_component(comp_info.name))
             {
                 continue;
             }
 
+            if (!comp_info.is_authorable)
+            {
+                runtime_components.push_back(comp_info);
+            }
+            else if (!comp_info.descriptor.has_value() || comp_info.descriptor->fields.empty())
+            {
+                tag_components.push_back(comp_info);
+            }
+            else
+            {
+                authored_components.push_back(comp_info);
+            }
+        }
+
+        // Tags & Capabilities
+        if (!tag_components.empty())
+        {
+            ImGui::TextUnformatted("Tags & Capabilities");
+            ImGui::Spacing();
+
+            const auto window_visible_x2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+            const auto& style = ImGui::GetStyle();
+
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.0F);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0F, 3.0F));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2F, 0.25F, 0.3F, 1.0F));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28F, 0.35F, 0.42F, 1.0F));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18F, 0.22F, 0.26F, 1.0F));
+
+            for (auto tag_idx = size_t{0}; tag_idx < tag_components.size(); ++tag_idx)
+            {
+                const auto& comp_info = tag_components[tag_idx];
+                const auto display_title = get_display_component_name(comp_info.name);
+                char pill_label[256]{};
+                format_to_buffer(pill_label, "{}  x##tag_pill_{}", display_title, comp_info.index);
+
+                const auto button_size_x = ImGui::CalcTextSize(pill_label).x + style.FramePadding.x * 2.0F;
+
+                if (tag_idx > 0)
+                {
+                    const auto next_button_x2 = ImGui::GetItemRectMax().x + style.ItemSpacing.x + button_size_x;
+                    if (next_button_x2 < window_visible_x2)
+                    {
+                        ImGui::SameLine();
+                    }
+                }
+
+                auto should_remove = false;
+                if (ImGui::Button(pill_label))
+                {
+                    should_remove = true;
+                }
+
+                char menu_id[64]{};
+                format_to_buffer(menu_id, "##tag_menu_{}", comp_info.index);
+                if (ImGui::BeginPopupContextItem(menu_id))
+                {
+                    if (ImGui::MenuItem("Remove Tag"))
+                    {
+                        should_remove = true;
+                    }
+                    ImGui::EndPopup();
+                }
+
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Click 'x' or right-click to remove tag");
+                }
+
+                if (should_remove)
+                {
+                    if (history != nullptr)
+                    {
+                        history->execute(make_unique<remove_component_command>(addr, comp_info.index), cmd_ctx);
+                    }
+                    else
+                    {
+                        ecs::raw_registry_access::remove_raw(*entity_registry, ent, comp_info.index);
+                    }
+                }
+            }
+
+            ImGui::PopStyleColor(3);
+            ImGui::PopStyleVar(2);
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+        }
+
+        // Authored Data components
+        for (const auto& comp_info : authored_components)
+        {
             const auto display_title = get_display_component_name(comp_info.name);
             char header_id[256]{};
             format_to_buffer(header_id, "{}##card_{}", display_title, comp_info.index);
@@ -393,6 +495,57 @@ namespace tempest::editor
             ImGui::PopID();
             ImGui::Spacing();
         }
+
+        // Runtime Diagnostic components
+        if (!runtime_components.empty())
+        {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            if (ImGui::CollapsingHeader("Runtime State (Read-Only Diagnostics)", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                for (const auto& comp_info : runtime_components)
+                {
+                    const auto display_title = get_display_component_name(comp_info.name);
+                    char header_id[256]{};
+                    format_to_buffer(header_id, "{}##rt_card_{}", display_title, comp_info.index);
+
+                    ImGui::PushID(static_cast<int>(comp_info.index));
+                    const auto is_open =
+                        ImGui::CollapsingHeader(header_id, ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Framed);
+
+                    if (is_open)
+                    {
+                        auto* comp_ptr = ecs::raw_registry_access::get_component_raw(*entity_registry, ent, comp_info.index);
+                        if (comp_info.descriptor.has_value() && comp_ptr != nullptr && !comp_info.descriptor->fields.empty())
+                        {
+                            auto grid_ctx = property_grid_context{
+                                .registry = *entity_registry,
+                                .entity = ent,
+                                .address = addr,
+                                .history = nullptr,
+                                .cmd_ctx = &cmd_ctx,
+                                .prefab_instance = nullptr,
+                                .prefab_target_path = scene::id_path{},
+                                .asset_db = scene_mgr != nullptr ? scene_mgr->get_asset_database() : nullptr,
+                                .search_filter = &_asset_search_filter,
+                            };
+                            ImGui::BeginDisabled(true);
+                            property_grid::draw_component(grid_ctx, *comp_info.descriptor, comp_ptr);
+                            ImGui::EndDisabled();
+                        }
+                        else
+                        {
+                            ImGui::TextDisabled("No reflected runtime properties");
+                        }
+                    }
+
+                    ImGui::PopID();
+                    ImGui::Spacing();
+                }
+            }
+        }
     }
 
     auto inspector_window::_draw_unknown_components(ecs::entity ent, const entity_address& addr,
@@ -453,7 +606,11 @@ namespace tempest::editor
                     for (uint32_t t = 0; t < entity_registry->type_registry().size(); ++t)
                     {
                         const auto& t_info = entity_registry->type_registry().type_info(t);
-                        if (!t_info.is_serializable)
+                        if (!t_info.is_authorable || !t_info.is_serializable)
+                        {
+                            continue;
+                        }
+                        if (is_internal_component(t_info.name))
                         {
                             continue;
                         }
@@ -509,7 +666,7 @@ namespace tempest::editor
                 for (uint32_t i = 0; i < entity_registry->type_registry().size(); ++i)
                 {
                     const auto& c_info = entity_registry->type_registry().type_info(i);
-                    if (!c_info.is_serializable)
+                    if (!c_info.is_authorable || !c_info.is_serializable)
                     {
                         continue;
                     }
@@ -517,12 +674,7 @@ namespace tempest::editor
                     {
                         continue;
                     }
-                    if (c_info.name == "tempest::ecs::self_component" ||
-                        tempest::starts_with(c_info.name, "tempest::ecs::relationship_component") ||
-                        c_info.name == "tempest::scene::scene_entity_component" ||
-                        c_info.name == "tempest::editor::dynamic_entity_id_component" ||
-                        c_info.name == "tempest::scene::prefab_member_component" ||
-                        c_info.name == "tempest::scene::prefab_instance_component")
+                    if (is_internal_component(c_info.name))
                     {
                         continue;
                     }

@@ -30,12 +30,14 @@ namespace tempest::ecs
         static constexpr size_t default_alignment = 0;
         static constexpr uint32_t default_version = 1;
         static constexpr bool default_is_serializable = true;
+        static constexpr bool default_is_authorable = true;
 
         string name;
         size_t size = default_size;
         size_t alignment = default_alignment;
         uint32_t version = default_version;
         bool is_serializable = default_is_serializable;
+        bool is_authorable = default_is_authorable;
         vector<type_manifest_field> fields;
     };
 

@@ -48,6 +48,7 @@ namespace tempest::ecs
         static constexpr uint32_t default_index = 0;
         static constexpr bool default_should_duplicate = true;
         static constexpr bool default_is_serializable = true;
+        static constexpr bool default_is_authorable = true;
 
         using publish_fn = void (*)(event::event_registry&, entity, const void*);
         using publish_replaced_fn = void (*)(event::event_registry&, entity, const void* old_ptr, const void* new_ptr);
@@ -61,6 +62,7 @@ namespace tempest::ecs
         bool should_duplicate = default_should_duplicate;
         optional<type_descriptor> descriptor;
         bool is_serializable = default_is_serializable;
+        bool is_authorable = default_is_authorable;
         void (*construct)(void* storage) = nullptr;
         void (*destruct)(void* storage) = nullptr;
         publish_fn publish_added = default_publish_fn;
@@ -158,6 +160,8 @@ namespace tempest::ecs
         auto operator=(const component_type_registry&) -> component_type_registry& = delete;
         auto operator=(component_type_registry&&) noexcept -> component_type_registry& = default;
 
+        auto register_type(component_type_info info) -> uint32_t;
+
         template <typename T>
         auto register_type() -> uint32_t
         {
@@ -180,9 +184,6 @@ namespace tempest::ecs
                 return *existing;
             }
 
-            TEMPEST_ASSERT(_count < max_component_types);
-
-            const auto idx = static_cast<uint32_t>(_count);
             auto should_dup = true;
             if constexpr (requires { is_duplicatable_v<component_type>; })
             {
@@ -193,6 +194,12 @@ namespace tempest::ecs
             if constexpr (requires { is_serializable_v<component_type>; })
             {
                 serializable = is_serializable_v<component_type>;
+            }
+
+            auto authorable = true;
+            if constexpr (requires { is_authorable_v<component_type>; })
+            {
+                authorable = is_authorable_v<component_type>;
             }
 
             auto desc = optional<type_descriptor>{nullopt};
@@ -207,10 +214,11 @@ namespace tempest::ecs
                 .name = resolved,
                 .size = static_cast<uint16_t>(sizeof(component_type)),
                 .alignment = static_cast<uint16_t>(alignof(component_type)),
-                .index = idx,
+                .index = 0,
                 .should_duplicate = should_dup,
                 .descriptor = tempest::move(desc),
                 .is_serializable = serializable,
+                .is_authorable = authorable,
                 .construct =
                     [](void* ptr) {
                         if constexpr (is_default_constructible_v<component_type>)
@@ -235,8 +243,7 @@ namespace tempest::ecs
                 .publish_removed = detail::make_component_publish_removed<component_type>(),
             };
 
-            _register_type_info(tempest::move(info));
-            return idx;
+            return register_type(tempest::move(info));
         }
 
         template <reflected_component T>
@@ -317,6 +324,7 @@ namespace tempest::ecs
         void _register_type_info(component_type_info info);
 
         array<component_type_info, max_component_types> _types{};
+        array<string, max_component_types> _type_names{};
         flat_unordered_map<string, uint32_t> _name_to_index;
         flat_unordered_map<string, string> _aliases;
         size_t _count{0};

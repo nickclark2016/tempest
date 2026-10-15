@@ -38,6 +38,11 @@ namespace tempest::ecs
     struct is_serializable<transform_history_component> : false_type
     {
     };
+
+    template <>
+    struct is_authorable<transform_history_component> : false_type
+    {
+    };
 } // namespace tempest::ecs
 
 #endif // tempest_ecs_transform_history_component_hpp

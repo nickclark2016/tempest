@@ -29,6 +29,11 @@ namespace tempest::ecs
     struct is_duplicatable<tempest::editor::dynamic_entity_id_component> : false_type
     {
     };
+
+    template <>
+    struct is_authorable<tempest::editor::dynamic_entity_id_component> : false_type
+    {
+    };
 } // namespace tempest::ecs
 
 #endif // tempest_editor_core_dynamic_entity_id_component_hpp

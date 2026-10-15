@@ -3,6 +3,7 @@
 
 #include <tempest/int.hpp>
 #include <tempest/physics/shim/jolt_shim.hpp>
+#include <tempest/reflection.hpp>
 #include <tempest/traits.hpp>
 #include <tempest/vec3.hpp>
 
@@ -70,5 +71,28 @@ namespace tempest::physics
 
     static_assert(tempest::ecs::component<character_controller_component>);
 } // namespace tempest::physics
+
+namespace tempest::ecs
+{
+    template <>
+    struct reflect<physics::character_controller_component>
+    {
+        static void describe(type_builder<physics::character_controller_component>& builder)
+        {
+            builder.version(1)
+                .field<&physics::character_controller_component::character_height>("character_height")
+                .field<&physics::character_controller_component::character_radius>("character_radius")
+                .field<&physics::character_controller_component::mass>("mass")
+                .field<&physics::character_controller_component::max_slope_angle>("max_slope_angle")
+                .field<&physics::character_controller_component::max_strength>("max_strength")
+                .field<&physics::character_controller_component::walk_speed>("walk_speed")
+                .field<&physics::character_controller_component::run_speed>("run_speed")
+                .field<&physics::character_controller_component::jump_height>("jump_height")
+                .field<&physics::character_controller_component::acceleration_rate>("acceleration_rate")
+                .field<&physics::character_controller_component::stick_to_floor_step_down>("stick_to_floor_step_down")
+                .field<&physics::character_controller_component::walk_stairs_step_up>("walk_stairs_step_up");
+        }
+    };
+} // namespace tempest::ecs
 
 #endif // TEMPEST_PHYSICS_CHARACTER_CONTROLLER_COMPONENT_HPP

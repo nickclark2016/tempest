@@ -84,4 +84,12 @@ namespace tempest::physics
     }
 } // namespace tempest::physics
 
+namespace tempest::ecs
+{
+    template <>
+    struct is_authorable<physics::reconciliation_smoothing_component> : false_type
+    {
+    };
+} // namespace tempest::ecs
+
 #endif // TEMPEST_PHYSICS_CHARACTER_RECONCILIATION_HPP

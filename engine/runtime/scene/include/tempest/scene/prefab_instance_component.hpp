@@ -45,12 +45,22 @@ namespace tempest::ecs
     };
 
     template <>
+    struct is_authorable<tempest::scene::prefab_instance_component> : false_type
+    {
+    };
+
+    template <>
     struct is_serializable<tempest::scene::prefab_member_component> : false_type
     {
     };
 
     template <>
     struct is_duplicatable<tempest::scene::prefab_member_component> : false_type
+    {
+    };
+
+    template <>
+    struct is_authorable<tempest::scene::prefab_member_component> : false_type
     {
     };
 } // namespace tempest::ecs

@@ -1,5 +1,5 @@
 {
-  "schema_hash": "0x6143df6c723d0658",
+  "schema_hash": "0x18b60c25f0c8e7e4",
   "types": [
     {
       "name": "tempest::core::material_component",
@@ -7,6 +7,7 @@
       "alignment": 1,
       "version": 1,
       "is_serializable": true,
+      "is_authorable": true,
       "fields": [
         {
           "name": "material_id",
@@ -23,6 +24,7 @@
       "alignment": 1,
       "version": 1,
       "is_serializable": true,
+      "is_authorable": true,
       "fields": [
         {
           "name": "mesh_id",
@@ -39,6 +41,7 @@
       "alignment": 8,
       "version": 1,
       "is_serializable": false,
+      "is_authorable": false,
       "fields": []
     },
     {
@@ -47,6 +50,7 @@
       "alignment": 8,
       "version": 1,
       "is_serializable": false,
+      "is_authorable": false,
       "fields": []
     },
     {
@@ -55,6 +59,7 @@
       "alignment": 16,
       "version": 1,
       "is_serializable": true,
+      "is_authorable": true,
       "fields": [
         {
           "name": "position",
@@ -85,6 +90,7 @@
       "alignment": 16,
       "version": 1,
       "is_serializable": false,
+      "is_authorable": false,
       "fields": []
     },
     {
@@ -93,7 +99,86 @@
       "alignment": 16,
       "version": 1,
       "is_serializable": true,
-      "fields": []
+      "is_authorable": true,
+      "fields": [
+        {
+          "name": "character_height",
+          "kind": "float32",
+          "flags": 0,
+          "offset": 0,
+          "size": 4
+        },
+        {
+          "name": "character_radius",
+          "kind": "float32",
+          "flags": 0,
+          "offset": 4,
+          "size": 4
+        },
+        {
+          "name": "mass",
+          "kind": "float32",
+          "flags": 0,
+          "offset": 8,
+          "size": 4
+        },
+        {
+          "name": "max_slope_angle",
+          "kind": "float32",
+          "flags": 0,
+          "offset": 12,
+          "size": 4
+        },
+        {
+          "name": "max_strength",
+          "kind": "float32",
+          "flags": 0,
+          "offset": 16,
+          "size": 4
+        },
+        {
+          "name": "walk_speed",
+          "kind": "float32",
+          "flags": 0,
+          "offset": 20,
+          "size": 4
+        },
+        {
+          "name": "run_speed",
+          "kind": "float32",
+          "flags": 0,
+          "offset": 24,
+          "size": 4
+        },
+        {
+          "name": "jump_height",
+          "kind": "float32",
+          "flags": 0,
+          "offset": 28,
+          "size": 4
+        },
+        {
+          "name": "acceleration_rate",
+          "kind": "float32",
+          "flags": 0,
+          "offset": 32,
+          "size": 4
+        },
+        {
+          "name": "stick_to_floor_step_down",
+          "kind": "float32",
+          "flags": 0,
+          "offset": 36,
+          "size": 4
+        },
+        {
+          "name": "walk_stairs_step_up",
+          "kind": "float32",
+          "flags": 0,
+          "offset": 40,
+          "size": 4
+        }
+      ]
     },
     {
       "name": "tempest::physics::velocity_component",
@@ -101,7 +186,23 @@
       "alignment": 16,
       "version": 1,
       "is_serializable": true,
-      "fields": []
+      "is_authorable": false,
+      "fields": [
+        {
+          "name": "linear",
+          "kind": "vec3",
+          "flags": 2,
+          "offset": 0,
+          "size": 16
+        },
+        {
+          "name": "angular",
+          "kind": "vec3",
+          "flags": 2,
+          "offset": 16,
+          "size": 16
+        }
+      ]
     },
     {
       "name": "tempest::render_system::camera_component",
@@ -109,6 +210,7 @@
       "alignment": 4,
       "version": 1,
       "is_serializable": true,
+      "is_authorable": true,
       "fields": [
         {
           "name": "aspect_ratio",
@@ -167,6 +269,7 @@
       "alignment": 16,
       "version": 1,
       "is_serializable": true,
+      "is_authorable": true,
       "fields": [
         {
           "name": "color",
@@ -190,6 +293,7 @@
       "alignment": 16,
       "version": 1,
       "is_serializable": true,
+      "is_authorable": true,
       "fields": [
         {
           "name": "color",
@@ -220,6 +324,7 @@
       "alignment": 4,
       "version": 1,
       "is_serializable": true,
+      "is_authorable": true,
       "fields": [
         {
           "name": "resolution",

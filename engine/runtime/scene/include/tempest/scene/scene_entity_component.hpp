@@ -30,6 +30,11 @@ namespace tempest::ecs
     struct is_duplicatable<tempest::scene::scene_entity_component> : false_type
     {
     };
+
+    template <>
+    struct is_authorable<tempest::scene::scene_entity_component> : false_type
+    {
+    };
 } // namespace tempest::ecs
 
 #endif // tempest_scene_scene_entity_component_hpp

@@ -69,6 +69,7 @@ namespace tempest::ecs
             type_obj.set("alignment", static_cast<uint64_t>(entry.alignment));
             type_obj.set("version", entry.version);
             type_obj.set("is_serializable", entry.is_serializable);
+            type_obj.set("is_authorable", entry.is_authorable);
 
             auto fields_arr = type_obj.create_child_array("fields");
             for (const auto& field : entry.fields)

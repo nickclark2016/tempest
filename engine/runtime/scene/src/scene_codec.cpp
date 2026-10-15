@@ -188,7 +188,7 @@ namespace tempest::scene
             const auto comp_types = ecs::raw_registry_access::get_component_types(registry, entity);
             for (const auto& info : comp_types)
             {
-                if (!info.is_serializable || !info.descriptor.has_value())
+                if (!info.is_serializable || !info.is_authorable || !info.descriptor.has_value())
                 {
                     continue;
                 }

@@ -49,12 +49,24 @@ namespace tempest_test
     };
 
     static_assert(tempest::ecs::component<test_actor_component>);
+
+    struct test_runtime_component
+    {
+        float runtime_speed = 42.0F;
+    };
+
+    static_assert(tempest::ecs::component<test_runtime_component>);
 } // namespace tempest_test
 
 using namespace tempest_test;
 
 namespace tempest::ecs
 {
+    template <>
+    struct is_authorable<test_runtime_component> : false_type
+    {
+    };
+
     template <>
     struct reflect<test_link_component>
     {
@@ -63,6 +75,15 @@ namespace tempest::ecs
             builder.version(1)
                 .field<&test_link_component::target>("target")
                 .field<&test_link_component::tag>("tag");
+        }
+    };
+
+    template <>
+    struct reflect<test_runtime_component>
+    {
+        static void describe(type_builder<test_runtime_component>& builder)
+        {
+            builder.version(1).field<&test_runtime_component::runtime_speed>("runtime_speed");
         }
     };
 
@@ -101,10 +122,12 @@ namespace
             const auto link_idx = type_reg.ensure<test_link_component>();
             const auto actor_idx = type_reg.ensure<test_actor_component>();
             const auto tf_idx = type_reg.ensure<tempest::ecs::transform_component>();
+            const auto rt_idx = type_reg.ensure<test_runtime_component>();
 
             type_reg.add_alias("test_link_component", type_reg.type_info(link_idx).name);
             type_reg.add_alias("test_actor_component", type_reg.type_info(actor_idx).name);
             type_reg.add_alias("transform_component", type_reg.type_info(tf_idx).name);
+            type_reg.add_alias("test_runtime_component", type_reg.type_info(rt_idx).name);
         }
     };
 } // namespace
@@ -501,3 +524,30 @@ TEST(scene_codec_tests, preserves_unrecognized_schema_data)
     // Assert: Output is completely stable across round-trips
     EXPECT_EQ(roundtrip_json, final_json);
 }
+
+/// @brief Verifies that non-authorable runtime components are omitted from scene serialization JSON.
+TEST(scene_codec_tests, non_authorable_components_are_not_serialized)
+{
+    // Setup: Create an entity with both an authorable component (test_actor_component)
+    // and a non-authorable component (test_runtime_component).
+    auto context = test_registry_context{};
+    auto& reg = context.registry;
+
+    const auto entity = reg.create();
+    reg.name(entity, "Player");
+    reg.assign(entity, test_actor_component{.health = 75, .speed = 10.0F});
+    reg.assign(entity, test_runtime_component{.runtime_speed = 99.9F});
+
+    auto roots = tempest::vector<tempest::ecs::entity>{};
+    roots.push_back(entity);
+
+    // Act: Serialize entity to JSON
+    const auto json_str = tempest::scene::scene_codec::serialize(reg, roots);
+
+    // Assert: Serialized JSON contains test_actor_component but omits test_runtime_component
+    const auto json_view = tempest::string_view{json_str.data(), json_str.size()};
+    EXPECT_NE(tempest::search(json_view, "\"tempest_test::test_actor_component\""), json_view.end());
+    EXPECT_EQ(tempest::search(json_view, "\"tempest_test::test_runtime_component\""), json_view.end());
+    EXPECT_EQ(tempest::search(json_view, "99.9"), json_view.end());
+}
+
