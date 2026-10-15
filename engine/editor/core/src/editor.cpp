@@ -11,8 +11,8 @@
 #include <tempest/string.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
-#include <tempest/windows/engine_component_view_providers.hpp>
 #include <tempest/windows/hierarchy_window.hpp>
+#include <tempest/windows/inspector_window.hpp>
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -162,6 +162,72 @@ namespace tempest::editor
           private:
             log_view_window* _window;
         };
+
+        class undo_menu_item final : public menu_item
+        {
+          public:
+            undo_menu_item(command_history& history, editor_engine_context& ctx)
+                : menu_item("Edit", "Undo"), _history{&history}, _ctx{&ctx}
+            {
+            }
+
+            [[nodiscard]] auto get_shortcut() const noexcept -> string_view override
+            {
+                return "Ctrl+Z";
+            }
+
+            [[nodiscard]] auto validate() const noexcept -> bool override
+            {
+                return _history->can_undo();
+            }
+
+            auto on_press() noexcept -> void override
+            {
+                auto cmd_ctx = command_context{
+                    .registry = _ctx->get_entities(),
+                    .scene_manager = _ctx->get_scene_manager(),
+                    .events = &_ctx->get_events(),
+                };
+                _history->undo(cmd_ctx);
+            }
+
+          private:
+            command_history* _history;
+            editor_engine_context* _ctx;
+        };
+
+        class redo_menu_item final : public menu_item
+        {
+          public:
+            redo_menu_item(command_history& history, editor_engine_context& ctx)
+                : menu_item("Edit", "Redo"), _history{&history}, _ctx{&ctx}
+            {
+            }
+
+            [[nodiscard]] auto get_shortcut() const noexcept -> string_view override
+            {
+                return "Ctrl+Y";
+            }
+
+            [[nodiscard]] auto validate() const noexcept -> bool override
+            {
+                return _history->can_redo();
+            }
+
+            auto on_press() noexcept -> void override
+            {
+                auto cmd_ctx = command_context{
+                    .registry = _ctx->get_entities(),
+                    .scene_manager = _ctx->get_scene_manager(),
+                    .events = &_ctx->get_events(),
+                };
+                _history->redo(cmd_ctx);
+            }
+
+          private:
+            command_history* _history;
+            editor_engine_context* _ctx;
+        };
     } // namespace
 
     editor_context::menu_hierarchy::menu_node::~menu_node() = default;
@@ -256,19 +322,18 @@ namespace tempest::editor
 
     editor_context::editor_context(editor_engine_context& ctx, window_handle win, ui_context& ui_ctx)
         : _engine_ctx{&ctx}, _win{win}, _ui_ctx{&ui_ctx},
-          _entity_view(register_window(make_unique<entity_view_window>(ctx.get_entities()))),
-          _hierarchy_view(register_window(make_unique<hierarchy_window>(ctx.get_entities(), &ctx.get_scene_manager(), &_selection))),
-          _viewport_view(register_window(make_unique<viewport_window>(ctx))),
-          _log_view(register_window(make_unique<log_view_window>(ctx.get_log_store())))
+          _inspector_view{register_window(make_unique<inspector_window>(
+              ctx.get_entities(), &ctx.get_scene_manager(), &_selection, &_history, nullptr,
+              &ctx.get_events()))},
+          _hierarchy_view{register_window(make_unique<hierarchy_window>(
+              ctx.get_entities(), &ctx.get_scene_manager(), &_selection, &_history))},
+          _viewport_view{register_window(make_unique<viewport_window>(ctx))},
+          _log_view{register_window(make_unique<log_view_window>(ctx.get_log_store()))}
     {
         ctx.set_ui_context(&ui_ctx);
         _selection.attach_event_registry(ctx.get_events());
 
-        register_engine_component_view_providers(*this);
-
         register_on_paint_callback([&, this](engine_context& engine_ctx) -> void {
-            _entity_view->target = _hierarchy_view->selected_entity;
-
             // Sync aspect ratio to editor camera
             const auto current_aspect = _viewport_view->aspect_ratio();
             _engine_ctx->get_editor_camera().set_aspect_ratio(current_aspect);
@@ -296,6 +361,8 @@ namespace tempest::editor
         });
 
         register_menu_item(make_unique<exit_menu_item>(ctx));
+        register_menu_item(make_unique<undo_menu_item>(_history, ctx));
+        register_menu_item(make_unique<redo_menu_item>(_history, ctx));
         register_menu_item(make_unique<create_empty_entity_menu>(ctx, *_hierarchy_view));
         register_menu_item(make_unique<web_profiler_menu_item>(ctx));
         register_menu_item(make_unique<live_stream_menu_item>(ctx));
@@ -314,6 +381,29 @@ namespace tempest::editor
         const auto ctrl = ImGui::IsKeyDown(ImGuiMod_Ctrl);
         const auto alt = ImGui::IsKeyDown(ImGuiMod_Alt);
         const auto shift = ImGui::IsKeyDown(ImGuiMod_Shift);
+
+        // Ctrl + Z: Undo
+        if (ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGuiKey_Z, false))
+        {
+            auto cmd_ctx = command_context{
+                .registry = _engine_ctx->get_entities(),
+                .scene_manager = _engine_ctx->get_scene_manager(),
+                .events = &_engine_ctx->get_events(),
+            };
+            _history.undo(cmd_ctx);
+        }
+
+        // Ctrl + Y or Ctrl + Shift + Z: Redo
+        if ((ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGuiKey_Y, false)) ||
+            (ctrl && shift && !alt && ImGui::IsKeyPressed(ImGuiKey_Z, false)))
+        {
+            auto cmd_ctx = command_context{
+                .registry = _engine_ctx->get_entities(),
+                .scene_manager = _engine_ctx->get_scene_manager(),
+                .events = &_engine_ctx->get_events(),
+            };
+            _history.redo(cmd_ctx);
+        }
 
         // Ctrl + Alt + P: Open Web Profiler in default browser
         if (ctrl && alt && !shift && ImGui::IsKeyPressed(ImGuiKey_P, false))

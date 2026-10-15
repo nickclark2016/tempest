@@ -12,11 +12,11 @@
 #include <tempest/tempest.hpp>
 #include <tempest/ui.hpp>
 #include <tempest/vector.hpp>
-#include <tempest/windows/component_view.hpp>
+#include <tempest/command_history.hpp>
 #include <tempest/windows/editor_window.hpp>
-#include <tempest/windows/entity_view_window.hpp>
-#include <tempest/windows/log_view_window.hpp>
 #include <tempest/windows/hierarchy_window.hpp>
+#include <tempest/windows/inspector_window.hpp>
+#include <tempest/windows/log_view_window.hpp>
 #include <tempest/windows/viewport_window.hpp>
 
 namespace tempest::editor
@@ -43,12 +43,6 @@ namespace tempest::editor
             return ptr;
         }
 
-        template <derived_from<component_view_provider> T>
-        auto register_component_view_provider(unique_ptr<T> provider) -> void
-        {
-            _entity_view->providers.push_back(tempest::move(provider));
-        }
-
         auto register_on_paint_callback(function<void(engine_context&)>) -> void;
         auto register_on_update_callback(function<void(engine_context&)>) -> void;
 
@@ -70,6 +64,16 @@ namespace tempest::editor
             return _log_view;
         }
 
+        [[nodiscard]] auto get_inspector_window() noexcept -> inspector_window*
+        {
+            return _inspector_view;
+        }
+
+        [[nodiscard]] auto get_inspector_window() const noexcept -> const inspector_window*
+        {
+            return _inspector_view;
+        }
+
         [[nodiscard]] auto get_selection() noexcept -> editor_selection&
         {
             return _selection;
@@ -78,6 +82,16 @@ namespace tempest::editor
         [[nodiscard]] auto get_selection() const noexcept -> const editor_selection&
         {
             return _selection;
+        }
+
+        [[nodiscard]] auto get_command_history() noexcept -> command_history&
+        {
+            return _history;
+        }
+
+        [[nodiscard]] auto get_command_history() const noexcept -> const command_history&
+        {
+            return _history;
         }
 
       private:
@@ -93,14 +107,15 @@ namespace tempest::editor
         window_handle _win;
         ui_context* _ui_ctx;
 
-        static constexpr entity_view_window* default_entity_view = nullptr;
+        static constexpr inspector_window* default_inspector_view = nullptr;
         static constexpr hierarchy_window* default_hierarchy_view = nullptr;
         static constexpr viewport_window* default_viewport_view = nullptr;
         static constexpr log_view_window* default_log_view = nullptr;
 
+        command_history _history;
         editor_selection _selection;
         vector<unique_ptr<editor_window>> _windows;
-        entity_view_window* _entity_view = default_entity_view;
+        inspector_window* _inspector_view = default_inspector_view;
         hierarchy_window* _hierarchy_view = default_hierarchy_view;
         viewport_window* _viewport_view = default_viewport_view;
         log_view_window* _log_view = default_log_view;

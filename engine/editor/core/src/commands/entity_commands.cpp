@@ -2527,7 +2527,7 @@ namespace tempest::editor
             return;
         }
 
-        if (!_captured && _target_addr.scene.is_valid() && !_target_addr.id_path.empty())
+        if (_target_addr.scene.is_valid() && !_target_addr.id_path.empty())
         {
             auto* unrec = ctx.scene_manager->get_unrecognized_data(_target_addr.scene);
             if (unrec != nullptr)

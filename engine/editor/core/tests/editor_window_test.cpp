@@ -5,6 +5,7 @@
 #include <tempest/default_importers.hpp>
 #include <tempest/editor.hpp>
 #include <tempest/editor_engine_context.hpp>
+#include <tempest/engine_types.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/memory.hpp>
@@ -16,9 +17,8 @@
 #include <tempest/ui.hpp>
 #include <tempest/vk/context.hpp>
 #include <tempest/window_manager.hpp>
-#include <tempest/windows/engine_component_view_providers.hpp>
-#include <tempest/windows/entity_view_window.hpp>
 #include <tempest/windows/hierarchy_window.hpp>
+#include <tempest/windows/inspector_window.hpp>
 #include <tempest/windows/viewport_window.hpp>
 
 #include <imgui.h>
@@ -87,63 +87,9 @@ namespace tempest::editor::tests
         }
     } // namespace
 
-    TEST(editor_window_test, component_view_providers_names_and_default_creation)
-    {
-        auto events = event::event_registry{};
-        auto types = ecs::component_type_registry{};
-        auto reg = ecs::archetype_registry{events, types};
-
-        auto transform_provider = transform_component_view_provider{};
-        EXPECT_EQ(transform_provider.name(), "Transform Component");
-
-        auto camera_provider = camera_component_view_provider{};
-        EXPECT_EQ(camera_provider.name(), "Camera Component");
-
-        auto dir_light_provider = directional_light_component_view_provider{};
-        EXPECT_EQ(dir_light_provider.name(), "Directional Light Component");
-
-        auto pt_light_provider = point_light_component_view_provider{};
-        EXPECT_EQ(pt_light_provider.name(), "Point Light Component");
-
-        auto shadow_provider = shadow_caster_component_view_provider{};
-        EXPECT_EQ(shadow_provider.name(), "Shadow Caster Component");
-
-        // Test create_default
-        auto ent = reg.create();
-
-        transform_provider.create_default(&reg, ent);
-        ASSERT_TRUE(reg.has<ecs::transform_component>(ent));
-        const auto& tr = reg.get<ecs::transform_component>(ent);
-        EXPECT_EQ(tr.position(), math::float3(0.0F, 0.0F, 0.0F));
-
-        camera_provider.create_default(&reg, ent);
-        ASSERT_TRUE(reg.has<render_system::camera_component>(ent));
-        const auto& cam = reg.get<render_system::camera_component>(ent);
-        EXPECT_NEAR(cam.aspect_ratio, 16.0F / 9.0F, 0.001F);
-        EXPECT_NEAR(cam.vertical_fov, math::as_radians(60.0F), 0.001F);
-
-        auto ent2 = reg.create();
-        dir_light_provider.create_default(&reg, ent2);
-        ASSERT_TRUE(reg.has<render_system::directional_light_component>(ent2));
-        const auto& dl = reg.get<render_system::directional_light_component>(ent2);
-        EXPECT_EQ(dl.intensity, 1.0F);
-
-        auto ent3 = reg.create();
-        pt_light_provider.create_default(&reg, ent3);
-        ASSERT_TRUE(reg.has<render_system::point_light_component>(ent3));
-        const auto& pl = reg.get<render_system::point_light_component>(ent3);
-        EXPECT_EQ(pl.intensity, 10.0F);
-        EXPECT_EQ(pl.range, 10.0F);
-
-        auto ent4 = reg.create();
-        shadow_provider.create_default(&reg, ent4);
-        ASSERT_TRUE(reg.has<render_system::shadow_caster_component>(ent4));
-        const auto& sc = reg.get<render_system::shadow_caster_component>(ent4);
-        EXPECT_EQ(sc.resolution, 2048U);
-        EXPECT_EQ(sc.num_cascades, 4U);
-    }
-
-    TEST(editor_window_test, component_view_providers_draw_execution)
+    /// @brief Verifies inspector_window dock defaults, window name, and drawing execution
+    /// with all reflected engine components present on the target entity.
+    TEST(editor_window_test, inspector_window_properties_and_draw)
     {
         auto env = create_test_env();
         ASSERT_NE(env.dev, nullptr);
@@ -156,20 +102,23 @@ namespace tempest::editor::tests
             auto events = event::event_registry{};
             auto types = ecs::component_type_registry{};
             auto reg = ecs::archetype_registry{events, types};
+            tempest::register_engine_types(types);
 
             auto ent = reg.create();
+            reg.name(ent, "Test Reflected Entity");
             reg.assign(ent, ecs::transform_component{});
             reg.assign(ent, render_system::camera_component{
                                 .aspect_ratio = 16.0F / 9.0F,
                                 .vertical_fov = math::as_radians(60.0F),
                                 .near_plane = 0.1F,
+                                .far_plane = 1000.0F,
                             });
             reg.assign(ent, render_system::directional_light_component{
-                                .color = math::float3(1.0F, 1.0F, 1.0F),
+                                .color = math::float3{1.0F, 1.0F, 1.0F},
                                 .intensity = 2.0F,
                             });
             reg.assign(ent, render_system::point_light_component{
-                                .color = math::float3(1.0F, 0.5F, 0.0F),
+                                .color = math::float3{1.0F, 0.5F, 0.0F},
                                 .intensity = 5.0F,
                                 .range = 20.0F,
                             });
@@ -184,24 +133,46 @@ namespace tempest::editor::tests
                                 .debug_mode = render_system::shadow_debug_mode::cascades,
                             });
 
-            auto transform_provider = transform_component_view_provider{};
-            auto camera_provider = camera_component_view_provider{};
-            auto dir_light_provider = directional_light_component_view_provider{};
-            auto pt_light_provider = point_light_component_view_provider{};
-            auto shadow_provider = shadow_caster_component_view_provider{};
+            auto scene_mgr = scene::scene_manager{reg};
+            auto selection = editor_selection{};
+            auto inspector = inspector_window{reg, &scene_mgr, &selection};
+
+            EXPECT_EQ(inspector.desired_initial_dock(), editor_window::dock_location::right);
+            EXPECT_EQ(inspector.window_name(), "Inspector");
+
+            // Direct target
+            inspector.target = ent;
 
             ui_ctx.begin_ui_commands();
-            if (ImGui::Begin("Inspector Window"))
-            {
-                EXPECT_NO_THROW({
-                    transform_provider.draw(&reg, ent);
-                    camera_provider.draw(&reg, ent);
-                    dir_light_provider.draw(&reg, ent);
-                    pt_light_provider.draw(&reg, ent);
-                    shadow_provider.draw(&reg, ent);
-                });
-            }
-            ImGui::End();
+            EXPECT_NO_THROW(inspector.draw());
+            ui_ctx.finish_ui_commands();
+        }
+
+        env.win_mgr.destroy_window(env.win);
+    }
+
+    /// @brief Verifies that inspector_window safely draws placeholder text when no entity is selected.
+    TEST(editor_window_test, inspector_window_no_entity_selected)
+    {
+        auto env = create_test_env();
+        ASSERT_NE(env.dev, nullptr);
+        ASSERT_TRUE(env.win.is_valid());
+
+        {
+            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
+            ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
+
+            auto events = event::event_registry{};
+            auto types = ecs::component_type_registry{};
+            auto reg = ecs::archetype_registry{events, types};
+            auto scene_mgr = scene::scene_manager{reg};
+            auto selection = editor_selection{};
+
+            auto inspector = inspector_window{reg, &scene_mgr, &selection};
+            inspector.target = ecs::null;
+
+            ui_ctx.begin_ui_commands();
+            EXPECT_NO_THROW(inspector.draw());
             ui_ctx.finish_ui_commands();
         }
 
@@ -246,40 +217,6 @@ namespace tempest::editor::tests
 
             ui_ctx.begin_ui_commands();
             EXPECT_NO_THROW(hierarchy.draw());
-            ui_ctx.finish_ui_commands();
-        }
-
-        env.win_mgr.destroy_window(env.win);
-    }
-
-    TEST(editor_window_test, entity_view_window_draw)
-    {
-        auto env = create_test_env();
-        ASSERT_NE(env.dev, nullptr);
-        ASSERT_TRUE(env.win.is_valid());
-
-        {
-            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
-            ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
-
-            auto events = event::event_registry{};
-            auto types = ecs::component_type_registry{};
-            auto reg = ecs::archetype_registry{events, types};
-
-            auto ent = reg.create();
-            reg.name(ent, "Test Entity");
-            reg.assign(ent, ecs::transform_component{});
-
-            auto view_window = entity_view_window{reg};
-            view_window.target = ent;
-            view_window.providers.push_back(make_unique<transform_component_view_provider>());
-            view_window.providers.push_back(make_unique<camera_component_view_provider>());
-
-            EXPECT_EQ(view_window.desired_initial_dock(), editor_window::dock_location::right);
-            EXPECT_EQ(view_window.window_name(), "Entity Editor");
-
-            ui_ctx.begin_ui_commands();
-            EXPECT_NO_THROW(view_window.draw());
             ui_ctx.finish_ui_commands();
         }
 
