@@ -43,6 +43,7 @@ scoped.project('physics', function()
             'jolt-shim',
             'core',
             'ecs',
+            'event',
             'logger',
             'job',
             'network:includedirs',
@@ -64,6 +65,7 @@ scoped.project('physics', function()
             'jolt-shim',
             'core:includedirs',
             'ecs:includedirs',
+            'event:includedirs',
             'network:includedirs',
         }
 

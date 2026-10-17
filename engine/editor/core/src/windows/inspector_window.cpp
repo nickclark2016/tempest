@@ -215,8 +215,16 @@ namespace tempest::editor
             const auto addr = compute_entity_address(*entity_registry, active_ent);
 
             _draw_entity_header(active_ent, addr, cmd_ctx);
-            _draw_component_cards(active_ent, addr, cmd_ctx);
-            _draw_unknown_components(active_ent, addr, cmd_ctx);
+            if (_draw_component_cards(active_ent, addr, cmd_ctx))
+            {
+                ImGui::End();
+                return;
+            }
+            if (_draw_unknown_components(active_ent, addr, cmd_ctx))
+            {
+                ImGui::End();
+                return;
+            }
             _draw_add_component_button(active_ent, addr, cmd_ctx);
         }
         ImGui::End();
@@ -261,7 +269,7 @@ namespace tempest::editor
     }
 
     auto inspector_window::_draw_component_cards(ecs::entity ent, const entity_address& addr, command_context& cmd_ctx)
-        -> void
+        -> bool
     {
         const auto root_ent = find_prefab_instance_root(*entity_registry, ent);
         const auto is_prefab_member = (root_ent != ecs::tombstone && entity_registry->is_valid(root_ent));
@@ -362,6 +370,9 @@ namespace tempest::editor
                     {
                         ecs::raw_registry_access::remove_raw(*entity_registry, ent, comp_info.index);
                     }
+                    ImGui::PopStyleColor(3);
+                    ImGui::PopStyleVar(2);
+                    return true;
                 }
             }
 
@@ -423,6 +434,9 @@ namespace tempest::editor
                     {
                         ecs::raw_registry_access::remove_raw(*entity_registry, ent, comp_info.index);
                     }
+                    ImGui::EndPopup();
+                    ImGui::PopID();
+                    return true;
                 }
                 if (is_prefab_member && comp_has_override)
                 {
@@ -546,32 +560,34 @@ namespace tempest::editor
                 }
             }
         }
+
+        return false;
     }
 
     auto inspector_window::_draw_unknown_components(ecs::entity ent, const entity_address& addr,
-                                                    command_context& cmd_ctx) -> void
+                                                    command_context& cmd_ctx) -> bool
     {
         if (scene_mgr == nullptr || !addr.scene.is_valid())
         {
-            return;
+            return false;
         }
 
         const auto* unrec_data = scene_mgr->get_unrecognized_data(addr.scene);
         if (unrec_data == nullptr)
         {
-            return;
+            return false;
         }
 
         const auto* ent_comp = entity_registry->try_get<scene::scene_entity_component>(ent);
         if (ent_comp == nullptr)
         {
-            return;
+            return false;
         }
 
         const auto iter = unrec_data->entities.find(ent_comp->local_id.value);
         if (iter == unrec_data->entities.end())
         {
-            return;
+            return false;
         }
 
         for (const auto& unk : iter->second.unknown_components)
@@ -600,6 +616,9 @@ namespace tempest::editor
                         auto cmd = remove_unknown_component_command{addr.scene, ent_comp->local_id.value, unk.name};
                         cmd.apply(cmd_ctx);
                     }
+                    ImGui::EndPopup();
+                    ImGui::PopStyleColor(2);
+                    return true;
                 }
                 if (ImGui::BeginMenu("Map to Component..."))
                 {
@@ -630,6 +649,10 @@ namespace tempest::editor
                                 auto cmd = map_unknown_component_command{addr, unk.name, t};
                                 cmd.apply(cmd_ctx);
                             }
+                            ImGui::EndMenu();
+                            ImGui::EndPopup();
+                            ImGui::PopStyleColor(2);
+                            return true;
                         }
                     }
                     ImGui::EndMenu();
@@ -645,6 +668,8 @@ namespace tempest::editor
             ImGui::PopStyleColor(2);
             ImGui::Spacing();
         }
+
+        return false;
     }
 
     auto inspector_window::_draw_add_component_button(ecs::entity ent, const entity_address& addr,
@@ -697,6 +722,7 @@ namespace tempest::editor
                             ecs::raw_registry_access::assign_raw(*entity_registry, ent, c_info);
                         }
                         ImGui::CloseCurrentPopup();
+                        break;
                     }
                 }
             }

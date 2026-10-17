@@ -200,6 +200,11 @@ namespace tempest::ecs
 
     auto basic_archetype::erase(basic_archetype::key_type key) -> bool
     {
+        if (key.index >= _trampoline.size())
+        {
+            return false;
+        }
+
         auto& trampoline = _trampoline[key.index];
         if (trampoline.generation != key.generation)
         {
@@ -231,20 +236,32 @@ namespace tempest::ecs
 
     auto basic_archetype::element_at(size_t el_index, size_t type_info_index) -> byte*
     {
+        if (type_info_index >= _storage.size())
+        {
+            return nullptr;
+        }
         auto& s = _storage[type_info_index];
         return s.element_at(el_index);
     }
 
     auto basic_archetype::element_at(size_t el_index, size_t type_info_index) const -> const byte*
     {
+        if (type_info_index >= _storage.size())
+        {
+            return nullptr;
+        }
         const auto& s = _storage[type_info_index];
         return s.element_at(el_index);
     }
 
     auto basic_archetype::element_at(basic_archetype::key_type key, size_t type_info_index) -> byte*
     {
-        auto trampoline = _trampoline[key.index];
-        if (trampoline.generation != key.generation)
+        if (key.index >= _trampoline.size() || type_info_index >= _storage.size())
+        {
+            return nullptr;
+        }
+        const auto trampoline = _trampoline[key.index];
+        if (trampoline.generation != key.generation || trampoline.index >= _element_count)
         {
             return nullptr;
         }
@@ -253,8 +270,12 @@ namespace tempest::ecs
 
     auto basic_archetype::element_at(basic_archetype::key_type key, size_t type_info_index) const -> const byte*
     {
-        auto trampoline = _trampoline[key.index];
-        if (trampoline.generation != key.generation)
+        if (key.index >= _trampoline.size() || type_info_index >= _storage.size())
+        {
+            return nullptr;
+        }
+        const auto trampoline = _trampoline[key.index];
+        if (trampoline.generation != key.generation || trampoline.index >= _element_count)
         {
             return nullptr;
         }

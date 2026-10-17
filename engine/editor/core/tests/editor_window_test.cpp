@@ -9,9 +9,15 @@
 #include <tempest/logger.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/commands/entity_commands.hpp>
+#include <tempest/physics/box_collider_component.hpp>
+#include <tempest/physics/physics_scene_system.hpp>
+#include <tempest/physics/physics_world.hpp>
+#include <tempest/physics/rigid_body_component.hpp>
 #include <tempest/render_system/camera_system.hpp>
 #include <tempest/render_system/render_components.hpp>
 #include <tempest/scene/scene_manager.hpp>
+#include <tempest/shared_library.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/transform_history_component.hpp>
 #include <tempest/ui.hpp>
@@ -510,5 +516,173 @@ namespace tempest::editor::tests
         EXPECT_FALSE(engine_ctx.is_play_mode());
         EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::normal);
         EXPECT_FALSE(wm.is_cursor_disabled(reg_info.handle));
+    }
+
+    /// @brief Verifies that removing box_collider_component via remove_component_command from an entity
+    /// with rigid_body_component and box_collider_component in the presence of physics_scene_system
+    /// does not crash during command execution or subsequent inspector window draw calls.
+    TEST(editor_window_test, inspector_remove_box_collider_with_physics_scene_no_crash)
+    {
+        auto env = create_test_env();
+        ASSERT_NE(env.dev, nullptr);
+        ASSERT_TRUE(env.win.is_valid());
+
+        {
+            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
+            ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
+
+            auto events = event::event_registry{};
+            auto types = ecs::component_type_registry{};
+            tempest::register_engine_types(types);
+            auto reg = ecs::archetype_registry{events, types};
+            auto scene_mgr = scene::scene_manager{reg};
+            auto selection = editor_selection{};
+            auto history = command_history{};
+            auto inspector = inspector_window{reg, &scene_mgr, &selection, &history};
+            inspector.open = true;
+
+            auto physics = physics::physics_world{};
+            auto physics_scene = physics::physics_scene_system{physics, reg, events};
+
+            // Create Floor entity matching sandbox setup
+            const auto floor = reg.create();
+            reg.assign(floor, ecs::transform_component{});
+            reg.assign(floor, core::mesh_component{});
+            reg.assign(floor, core::material_component{});
+            reg.assign(floor, physics::rigid_body_component{
+                .motion = jolt::shim::motion_type::static_motion,
+                .layer = jolt::shim::object_layer::non_moving,
+            });
+            reg.assign(floor, physics::box_collider_component{
+                .half_extents = {20.0F, 0.5F, 20.0F},
+                .offset = {0.0F, -0.5F, 0.0F},
+            });
+            reg.name(floor, "FloorPlane");
+
+            // Create Step obstacle entity matching sandbox setup
+            const auto step = reg.create();
+            reg.assign(step, ecs::transform_component{});
+            reg.assign(step, core::mesh_component{});
+            reg.assign(step, core::material_component{});
+            reg.assign(step, physics::rigid_body_component{
+                .motion = jolt::shim::motion_type::static_motion,
+                .layer = jolt::shim::object_layer::non_moving,
+            });
+            reg.assign(step, physics::box_collider_component{
+                .half_extents = {1.0F, 0.1F, 1.0F},
+                .offset = {0.0F, 0.0F, 0.0F},
+            });
+            reg.name(step, "StepObstacle");
+
+            selection.set_selection(floor, reg, &scene_mgr);
+
+            // Act: Draw initial frame
+            ui_ctx.begin_ui_commands();
+            inspector.draw();
+            ui_ctx.finish_ui_commands();
+
+            // Act: Execute remove_component_command for box_collider_component
+            const auto addr = compute_entity_address(reg, floor);
+            const auto box_type_idx = types.type_index<physics::box_collider_component>();
+            ASSERT_TRUE(box_type_idx.has_value());
+
+            auto cmd_ctx = command_context{
+                .registry = reg,
+                .scene_manager = scene_mgr,
+                .events = &events,
+            };
+            history.execute(make_unique<remove_component_command>(addr, *box_type_idx), cmd_ctx);
+
+            // Act: Draw second frame with box_collider removed
+            ui_ctx.begin_ui_commands();
+            inspector.draw();
+            ui_ctx.finish_ui_commands();
+
+            // Assert: Floor no longer has box_collider, still has rigid_body
+            EXPECT_FALSE(reg.has<physics::box_collider_component>(floor));
+            EXPECT_TRUE(reg.has<physics::rigid_body_component>(floor));
+        }
+
+        env.win_mgr.destroy_window(env.win);
+    }
+
+    /// @brief Verifies that removing box_collider_component from FloorPlane in a fully loaded game scene
+    /// inside editor_engine_context and editor_context does not crash.
+    TEST(editor_window_test, inspector_remove_box_collider_full_editor_scene_reproduce)
+    {
+        auto game_lib_res = shared_library::load(L"game-runtime.dll");
+        ASSERT_TRUE(game_lib_res.has_value());
+        const auto& game_lib = *game_lib_res;
+
+        const auto game_on_load =
+            game_lib.get_function_handle<void, engine_context*, span<string_view>>("on_load");
+        ASSERT_TRUE(game_on_load.has_value());
+        const auto game_on_unload = game_lib.get_function_handle<void>("on_unload");
+        ASSERT_TRUE(game_on_unload.has_value());
+
+        {
+            auto engine = editor_engine_context{};
+            const auto win_info = engine.register_window(
+                {
+                    .width = 1280,
+                    .height = 720,
+                    .title = "Test Window",
+                    .fullscreen = false,
+                    .resizable = true,
+                },
+                false);
+            ASSERT_TRUE(win_info.handle.is_valid());
+
+            auto* const surface = engine.get_render_surface(win_info.handle);
+            const auto fmt = surface ? rhi::to_data_format(surface->get_format()) : rhi::data_format::rgba8_unorm;
+
+            auto ui_ctx = ui_context(engine.get_window_manager(), win_info.handle, engine.get_device(),
+                                     engine.get_assets(), fmt, 2);
+            auto ui_editor = editor_context(engine, win_info.handle, ui_ctx);
+
+            auto empty_args = vector<string_view>{};
+            (*game_on_load)(&engine, empty_args);
+
+            auto frame_count = 0;
+            engine.register_on_editor_update_callback([&](engine_context& ctx) {
+                ++frame_count;
+                auto& reg = ctx.get_entities();
+                const auto floor = reg.find_first_with_name("FloorPlane");
+                if (frame_count == 1)
+                {
+                    ASSERT_TRUE(floor.has_value());
+                    engine.set_simulation_state(simulation_state::play);
+                    ui_editor.get_selection().set_selection(*floor, reg, &engine.get_scene_manager());
+                }
+                else if (frame_count == 2)
+                {
+                    ASSERT_TRUE(floor.has_value());
+                    const auto addr = compute_entity_address(reg, *floor);
+                    const auto box_type_idx = reg.type_registry().type_index<physics::box_collider_component>();
+                    ASSERT_TRUE(box_type_idx.has_value());
+
+                    auto cmd_ctx = command_context{
+                        .registry = reg,
+                        .scene_manager = engine.get_scene_manager(),
+                        .events = &ctx.get_events(),
+                    };
+                    ui_editor.get_command_history().execute(
+                        make_unique<remove_component_command>(addr, *box_type_idx), cmd_ctx);
+                }
+
+                ui_ctx.begin_ui_commands();
+                ui_editor.draw();
+                ui_ctx.finish_ui_commands();
+
+                if (frame_count >= 30)
+                {
+                    ctx.request_close();
+                }
+            });
+
+            engine.run();
+        }
+
+        (*game_on_unload)();
     }
 } // namespace tempest::editor::tests

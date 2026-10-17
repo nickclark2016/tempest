@@ -196,6 +196,12 @@ namespace tempest::math
     }
 
     template <typename T>
+    inline constexpr vec3<T> rotate(const quat<T>& q, const vec3<T>& v) noexcept
+    {
+        return q * v;
+    }
+
+    template <typename T>
     inline constexpr mat4<T> rotate(const vec3<T>& euler)
     {
         return as_mat4(quat(euler));

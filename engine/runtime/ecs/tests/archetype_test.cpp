@@ -718,3 +718,38 @@ TEST(basic_archetype_registry, component_removed_emit_event_with_multiple_compon
     ASSERT_EQ(created_entity, event_entity);
     ASSERT_EQ(component_value, event_component_value);
 }
+
+/// @brief Verifies that calling try_get and has on an empty entity (one without any components)
+/// safely returns nullptr and false respectively without crashing or indexing out of bounds.
+TEST(basic_archetype_registry, try_get_and_has_on_empty_entity)
+{
+    // Setup registry and an empty entity with no components assigned
+    auto events = tempest::event::event_registry();
+    auto types = tempest::ecs::component_type_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events, types);
+    const auto entity = reg.create();
+
+    // Act & Assert: Querying components on empty entity returns null / false safely
+    EXPECT_EQ(reg.try_get<int>(entity), nullptr);
+    EXPECT_FALSE(reg.has<int>(entity));
+}
+
+/// @brief Verifies that calling try_get and has on an entity whose components have all been removed
+/// safely returns nullptr and false respectively without undefined behavior.
+TEST(basic_archetype_registry, try_get_and_has_on_cleared_entity)
+{
+    // Setup entity with a single component then remove it completely
+    auto events = tempest::event::event_registry();
+    auto types = tempest::ecs::component_type_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events, types);
+    const auto entity = reg.create<int>();
+    reg.assign_or_replace(entity, 123);
+
+    // Act: Remove the only component, emptying the entity
+    reg.remove<int>(entity);
+
+    // Assert: try_get and has safely report absence
+    EXPECT_EQ(reg.try_get<int>(entity), nullptr);
+    EXPECT_FALSE(reg.has<int>(entity));
+}
+

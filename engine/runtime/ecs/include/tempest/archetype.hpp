@@ -886,7 +886,13 @@ namespace tempest::ecs
         auto get(entity_type entity) const -> const remove_cvref_t<T>&;
 
         template <typename T>
+        auto get(entity_type entity) -> remove_cvref_t<T>&;
+
+        template <typename T>
         auto try_get(entity_type entity) const noexcept -> const remove_cvref_t<T>*;
+
+        template <typename T>
+        auto try_get(entity_type entity) noexcept -> remove_cvref_t<T>*;
 
         template <typename... Ts>
         [[nodiscard]] auto has(entity_type entity) const -> bool;
@@ -1393,59 +1399,71 @@ namespace tempest::ecs
     inline auto basic_archetype_registry::get(basic_archetype_registry::entity_type entity) const
         -> const remove_cvref_t<T>&
     {
-        using component_type = remove_cvref_t<T>;
-        const auto type_index_opt = _type_registry->template type_index<component_type>();
-        TEMPEST_ASSERT(type_index_opt.has_value());
-        const auto type_index = *type_index_opt;
-
-        auto key = _entity_archetype_mapping[entity];
-        auto archetype_index = key.archetype_index;
-        const auto comp_index = _index_of_component_in_archetype(archetype_index, type_index);
-        const auto& arch = _archetypes[archetype_index];
-        auto data = arch.element_at(key.archetype_key, comp_index);
-        return *reinterpret_cast<const T*>(data);
+        const auto* comp_ptr = try_get<T>(entity);
+        TEMPEST_ASSERT(comp_ptr != nullptr);
+        return *comp_ptr;
     }
 
     template <typename T>
     inline auto basic_archetype_registry::try_get(basic_archetype_registry::entity_type entity) const noexcept
         -> const remove_cvref_t<T>*
     {
+        if (!is_valid(entity))
+        {
+            return nullptr;
+        }
+
         using component_type = remove_cvref_t<T>;
         const auto type_index_opt = _type_registry->template type_index<component_type>();
         if (!type_index_opt.has_value())
         {
             return nullptr;
         }
-        const auto type_index = *type_index_opt;
-        basic_archetype_entity key = _entity_archetype_mapping[entity];
+        return reinterpret_cast<const component_type*>(_get_component_raw(entity, *type_index_opt));
+    }
 
-        // Check if the archetype contains the component
-        const auto& hash = _hashes[key.archetype_index];
-        if ((hash.hash[type_index / char_bit] & static_cast<byte>(1 << (type_index % char_bit))) ==
-            static_cast<byte>(0))
+    template <typename T>
+    inline auto basic_archetype_registry::get(basic_archetype_registry::entity_type entity)
+        -> remove_cvref_t<T>&
+    {
+        auto* comp_ptr = try_get<T>(entity);
+        TEMPEST_ASSERT(comp_ptr != nullptr);
+        return *comp_ptr;
+    }
+
+    template <typename T>
+    inline auto basic_archetype_registry::try_get(basic_archetype_registry::entity_type entity) noexcept
+        -> remove_cvref_t<T>*
+    {
+        if (!is_valid(entity))
         {
             return nullptr;
         }
 
-        auto archetype_index = key.archetype_index;
-        const auto storage_index = _index_of_component_in_archetype(archetype_index, type_index);
-        const auto& arch = _archetypes[archetype_index];
-        auto data = arch.element_at(key.archetype_key, storage_index);
-        return reinterpret_cast<const remove_cvref_t<T>*>(data);
+        using component_type = remove_cvref_t<T>;
+        const auto type_index_opt = _type_registry->template type_index<component_type>();
+        if (!type_index_opt.has_value())
+        {
+            return nullptr;
+        }
+        return reinterpret_cast<component_type*>(_get_component_raw(entity, *type_index_opt));
     }
 
     template <typename... Ts>
     inline auto basic_archetype_registry::has(basic_archetype_registry::entity_type entity) const -> bool
     {
-        auto key = _entity_archetype_mapping[entity];
-        auto len = _archetypes[key.archetype_index].storages().size();
-        auto check_has = [this, &key, len]<typename U>() -> bool {
+        if (!is_valid(entity))
+        {
+            return false;
+        }
+
+        auto check_has = [this, entity]<typename U>() -> bool {
             const auto opt_idx = _type_registry->template type_index<remove_cvref_t<U>>();
             if (!opt_idx.has_value())
             {
                 return false;
             }
-            return _index_of_component_in_archetype(key.archetype_index, *opt_idx) != len;
+            return _has_raw(entity, *opt_idx);
         };
         return (check_has.template operator()<Ts>() && ...);
     }

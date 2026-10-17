@@ -15,12 +15,15 @@
 #include <tempest/network/socket.hpp>
 #include <tempest/network/user_cmd.hpp>
 #include <tempest/optional.hpp>
+#include <tempest/physics/box_collider_component.hpp>
 #include <tempest/physics/character_controller_component.hpp>
 #include <tempest/physics/character_prediction.hpp>
 #include <tempest/physics/character_protocol.hpp>
 #include <tempest/physics/character_reconciliation.hpp>
 #include <tempest/physics/character_snapshot.hpp>
+#include <tempest/physics/physics_scene_system.hpp>
 #include <tempest/physics/physics_world.hpp>
+#include <tempest/physics/rigid_body_component.hpp>
 #include <tempest/physics/velocity_component.hpp>
 #include <tempest/quat.hpp>
 #include <tempest/render_system/render_components.hpp>
@@ -338,8 +341,7 @@ namespace
 
         // Authoritative simulation & client prediction
         tempest::physics::physics_world client_physics_world = {};
-        tempest::vector<jolt::shim::body_id> static_bodies = {};
-        tempest::vector<jolt::shim::shape_handle> static_shapes = {};
+        tempest::unique_ptr<tempest::physics::physics_scene_system> physics_scene = nullptr;
         tempest::ecs::entity local_player_entity = tempest::ecs::null;
         tempest::ecs::entity camera_entity = tempest::ecs::null;
         tempest::physics::character_prediction_buffer prediction_buffer = {};
@@ -369,72 +371,6 @@ namespace
         tempest::guid step_mesh_id = {};
         tempest::guid step_mat_id = {};
     };
-
-    auto setup_client_static_environment(tempest::physics::physics_world& world,
-                                         tempest::vector<jolt::shim::body_id>& bodies,
-                                         tempest::vector<jolt::shim::shape_handle>& shapes) -> void
-    {
-        auto* const system = world.physics_system();
-        if (system == nullptr)
-        {
-            return;
-        }
-
-        // Static floor box: 40m x 1m x 40m centered at (0, -0.5, 0) so top surface is at Y = 0.0m
-        const auto floor_shape = system->create_box_shape(jolt::shim::vec3{20.0F, 0.5F, 20.0F});
-        shapes.push_back(floor_shape);
-
-        const auto floor_desc = jolt::shim::body_desc{
-            .shape = floor_shape,
-            .position = jolt::shim::vec3{0.0F, -0.5F, 0.0F},
-            .rotation = jolt::shim::quat{.x = 0.0F, .y = 0.0F, .z = 0.0F, .w = 1.0F},
-            .motion = jolt::shim::motion_type::static_motion,
-            .layer = jolt::shim::object_layer::non_moving,
-        };
-        const auto floor_body = system->create_body(floor_desc);
-        system->add_body(floor_body, false);
-        bodies.push_back(floor_body);
-
-        // Static step box: 2m x 0.2m x 2m step at (0, 0.1, 5.0) for stair-stepping verification
-        const auto step_shape = system->create_box_shape(jolt::shim::vec3{1.0F, 0.1F, 1.0F});
-        shapes.push_back(step_shape);
-
-        const auto step_desc = jolt::shim::body_desc{
-            .shape = step_shape,
-            .position = jolt::shim::vec3{0.0F, 0.1F, 5.0F},
-            .rotation = jolt::shim::quat{.x = 0.0F, .y = 0.0F, .z = 0.0F, .w = 1.0F},
-            .motion = jolt::shim::motion_type::static_motion,
-            .layer = jolt::shim::object_layer::non_moving,
-        };
-        const auto step_body = system->create_body(step_desc);
-        system->add_body(step_body, false);
-        bodies.push_back(step_body);
-    }
-
-    auto cleanup_client_static_environment(tempest::physics::physics_world& world,
-                                           tempest::vector<jolt::shim::body_id>& bodies,
-                                           tempest::vector<jolt::shim::shape_handle>& shapes) -> void
-    {
-        auto* const system = world.physics_system();
-        if (system != nullptr)
-        {
-            for (const auto body : bodies)
-            {
-                system->remove_body(body);
-                system->destroy_body(body);
-            }
-            bodies.clear();
-
-            for (auto* const shape : shapes)
-            {
-                if (shape != nullptr)
-                {
-                    system->destroy_shape(shape);
-                }
-            }
-            shapes.clear();
-        }
-    }
 
     auto spawn_local_player(tempest::client_context* ctx, multiplayer_client* client) -> void
     {
@@ -618,8 +554,9 @@ namespace
             client->connection.set_remote_endpoint(server_ep);
         }
 
-        // Setup static physics environment in client physics world for collision
-        setup_client_static_environment(client->client_physics_world, client->static_bodies, client->static_shapes);
+        // Setup physics scene system in client physics world for collision and dynamics
+        client->physics_scene = tempest::make_unique<tempest::physics::physics_scene_system>(
+            client->client_physics_world, ctx->get_entities(), ctx->get_events());
 
         // Register procedural sandbox meshes and materials
         // Floor: 40m x 40m plane mesh with clockwise winding
@@ -716,6 +653,14 @@ namespace
             registry.assign(floor_entity, floor_tx);
             registry.assign(floor_entity, tempest::core::mesh_component{.mesh_id = client->floor_mesh_id});
             registry.assign(floor_entity, tempest::core::material_component{.material_id = client->floor_mat_id});
+            registry.assign(floor_entity, tempest::physics::rigid_body_component{
+                .motion = jolt::shim::motion_type::static_motion,
+                .layer = jolt::shim::object_layer::non_moving,
+            });
+            registry.assign(floor_entity, tempest::physics::box_collider_component{
+                .half_extents = {20.0F, 0.5F, 20.0F},
+                .offset = {0.0F, -0.5F, 0.0F},
+            });
             registry.name(floor_entity, "FloorPlane");
 
             // Static Step Obstacle Entity
@@ -725,6 +670,14 @@ namespace
             registry.assign(step_entity, step_tx);
             registry.assign(step_entity, tempest::core::mesh_component{.mesh_id = client->step_mesh_id});
             registry.assign(step_entity, tempest::core::material_component{.material_id = client->step_mat_id});
+            registry.assign(step_entity, tempest::physics::rigid_body_component{
+                .motion = jolt::shim::motion_type::static_motion,
+                .layer = jolt::shim::object_layer::non_moving,
+            });
+            registry.assign(step_entity, tempest::physics::box_collider_component{
+                .half_extents = {1.0F, 0.1F, 1.0F},
+                .offset = {0.0F, 0.0F, 0.0F},
+            });
             registry.name(step_entity, "StepObstacle");
 
             // In offline mode, spawn local player immediately
@@ -919,6 +872,11 @@ namespace
                 }
             }
 
+            if (client->physics_scene != nullptr)
+            {
+                client->physics_scene->pre_simulation_flush();
+            }
+
             // Player Input & Simulation
             const auto can_simulate = client->is_offline || (client->connected && client->local_player_entity != tempest::ecs::null);
             if (can_simulate && client->local_player_entity != tempest::ecs::null)
@@ -1033,6 +991,15 @@ namespace
                         tempest::span<const tempest::byte>{packet_bytes.data(), packet_bytes.size()}));
                 }
             }
+            else
+            {
+                client->client_physics_world.step(delta_time);
+            }
+
+            if (client->physics_scene != nullptr)
+            {
+                client->physics_scene->post_simulation_sync();
+            }
         });
 
         ctx->register_on_interpolate_callback([client](tempest::engine_context& engine_ctx,
@@ -1127,8 +1094,7 @@ namespace
                     client->socket.close();
                 }
 
-                cleanup_client_static_environment(client->client_physics_world, client->static_bodies,
-                                                  client->static_shapes);
+                client->physics_scene.reset();
                 delete client;
             }
         });

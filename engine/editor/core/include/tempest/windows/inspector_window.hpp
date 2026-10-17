@@ -68,8 +68,8 @@ namespace tempest::editor
 
       private:
         auto _draw_entity_header(ecs::entity ent, const entity_address& addr, command_context& cmd_ctx) -> void;
-        auto _draw_component_cards(ecs::entity ent, const entity_address& addr, command_context& cmd_ctx) -> void;
-        auto _draw_unknown_components(ecs::entity ent, const entity_address& addr, command_context& cmd_ctx) -> void;
+        auto _draw_component_cards(ecs::entity ent, const entity_address& addr, command_context& cmd_ctx) -> bool;
+        auto _draw_unknown_components(ecs::entity ent, const entity_address& addr, command_context& cmd_ctx) -> bool;
         auto _draw_add_component_button(ecs::entity ent, const entity_address& addr, command_context& cmd_ctx) -> void;
 
         ImGuiTextFilter _component_search_filter;
