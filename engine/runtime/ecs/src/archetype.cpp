@@ -2,6 +2,7 @@
 #include <tempest/archetype.hpp>
 
 #include <tempest/algorithm.hpp>
+#include <tempest/array.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/inplace_vector.hpp>
 #include <tempest/memory.hpp>
@@ -12,6 +13,46 @@
 
 namespace tempest::ecs
 {
+    namespace
+    {
+        struct aligned_capture_buffer
+        {
+            static constexpr size_t stack_limit = 256;
+            static constexpr size_t max_stack_alignment = 64;
+
+            alignas(max_stack_alignment) array<byte, stack_limit> stack_storage{};
+            byte* heap_storage = nullptr;
+            byte* data = nullptr;
+
+            aligned_capture_buffer(size_t size, size_t alignment)
+            {
+                const auto effective_alignment = tempest::max(alignment, alignof(void*));
+                if (size <= stack_limit && effective_alignment <= max_stack_alignment)
+                {
+                    data = stack_storage.data();
+                }
+                else
+                {
+                    heap_storage = static_cast<byte*>(tempest::aligned_alloc(size, effective_alignment));
+                    data = heap_storage;
+                }
+            }
+
+            ~aligned_capture_buffer()
+            {
+                if (heap_storage != nullptr)
+                {
+                    tempest::aligned_free(heap_storage);
+                }
+            }
+
+            aligned_capture_buffer(const aligned_capture_buffer&) = delete;
+            aligned_capture_buffer(aligned_capture_buffer&&) = delete;
+            auto operator=(const aligned_capture_buffer&) -> aligned_capture_buffer& = delete;
+            auto operator=(aligned_capture_buffer&&) -> aligned_capture_buffer& = delete;
+        };
+    } // namespace
+
     basic_archetype_storage::basic_archetype_storage(basic_archetype_type_info info, size_t initial_capacity)
         : _storage{info}, _size{info.size * initial_capacity}
     {
@@ -1082,7 +1123,19 @@ namespace tempest::ecs
 
     auto basic_archetype_registry::_has_raw(entity_type entity, uint32_t type_index) const noexcept -> bool
     {
-        return _get_component_raw(entity, type_index) != nullptr;
+        const auto iter = _entity_archetype_mapping.find(entity);
+        if (iter == _entity_archetype_mapping.end())
+        {
+            return false;
+        }
+        const auto key = iter->second;
+        if (key.archetype_index >= _hashes.size() || type_index >= max_component_types)
+        {
+            return false;
+        }
+        const auto& hash = _hashes[key.archetype_index];
+        return (hash.hash[type_index / char_bit] & static_cast<byte>(1 << (type_index % char_bit))) !=
+               static_cast<byte>(0);
     }
 
     auto basic_archetype_registry::_get_component_raw(entity_type entity, uint32_t type_index) const noexcept -> const
@@ -1163,27 +1216,14 @@ namespace tempest::ecs
         {
             if (src_data != nullptr)
             {
-                static constexpr size_t stack_capture_limit = 256;
-                auto stack_old = inplace_vector<byte, stack_capture_limit>{};
-                auto heap_old = vector<byte>{};
-                const auto use_stack = (type_info.size <= stack_capture_limit);
-                if (use_stack)
-                {
-                    stack_old.resize(type_info.size);
-                    tempest::memcpy(stack_old.data(), existing, type_info.size);
-                }
-                else
-                {
-                    heap_old.resize(type_info.size);
-                    tempest::memcpy(heap_old.data(), existing, type_info.size);
-                }
+                auto capture = aligned_capture_buffer{type_info.size, type_info.alignment};
+                tempest::memcpy(capture.data, existing, type_info.size);
 
                 tempest::memcpy(existing, src_data, type_info.size);
 
                 if (_event_registry != nullptr && type_info.publish_replaced != nullptr)
                 {
-                    const auto* const old_ptr = use_stack ? stack_old.data() : heap_old.data();
-                    type_info.publish_replaced(*_event_registry, entity, old_ptr, existing);
+                    type_info.publish_replaced(*_event_registry, entity, capture.data, existing);
                 }
             }
             return existing;
@@ -1332,23 +1372,12 @@ namespace tempest::ecs
         const auto& t_info = _type_registry->type_info(type_index);
         auto* removed_data = arch->element_at(key.archetype_key, comp_index);
 
-        static constexpr size_t stack_capture_limit = 256;
-        auto stack_bytes = inplace_vector<byte, stack_capture_limit>{};
-        auto heap_bytes = vector<byte>{};
         const auto should_publish_removed =
             (_event_registry != nullptr && t_info.publish_removed != nullptr && removed_data != nullptr);
+        auto capture = aligned_capture_buffer{should_publish_removed ? t_info.size : size_t{0}, t_info.alignment};
         if (should_publish_removed)
         {
-            if (t_info.size <= stack_capture_limit)
-            {
-                stack_bytes.resize(t_info.size);
-                tempest::memcpy(stack_bytes.data(), removed_data, t_info.size);
-            }
-            else
-            {
-                heap_bytes.resize(t_info.size);
-                tempest::memcpy(heap_bytes.data(), removed_data, t_info.size);
-            }
+            tempest::memcpy(capture.data, removed_data, t_info.size);
         }
 
         if (t_info.destruct != nullptr)
@@ -1375,9 +1404,7 @@ namespace tempest::ecs
             _entity_archetype_mapping.erase(entity);
             if (should_publish_removed)
             {
-                const auto* const bytes_ptr =
-                    (t_info.size <= stack_capture_limit) ? stack_bytes.data() : heap_bytes.data();
-                t_info.publish_removed(*_event_registry, entity, bytes_ptr);
+                t_info.publish_removed(*_event_registry, entity, capture.data);
             }
             return true;
         }
@@ -1445,9 +1472,7 @@ namespace tempest::ecs
 
         if (should_publish_removed)
         {
-            const auto* const bytes_ptr =
-                (t_info.size <= stack_capture_limit) ? stack_bytes.data() : heap_bytes.data();
-            t_info.publish_removed(*_event_registry, entity, bytes_ptr);
+            t_info.publish_removed(*_event_registry, entity, capture.data);
         }
 
         return true;

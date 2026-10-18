@@ -1408,11 +1408,6 @@ namespace tempest::ecs
     inline auto basic_archetype_registry::try_get(basic_archetype_registry::entity_type entity) const noexcept
         -> const remove_cvref_t<T>*
     {
-        if (!is_valid(entity))
-        {
-            return nullptr;
-        }
-
         using component_type = remove_cvref_t<T>;
         const auto type_index_opt = _type_registry->template type_index<component_type>();
         if (!type_index_opt.has_value())
@@ -1435,11 +1430,6 @@ namespace tempest::ecs
     inline auto basic_archetype_registry::try_get(basic_archetype_registry::entity_type entity) noexcept
         -> remove_cvref_t<T>*
     {
-        if (!is_valid(entity))
-        {
-            return nullptr;
-        }
-
         using component_type = remove_cvref_t<T>;
         const auto type_index_opt = _type_registry->template type_index<component_type>();
         if (!type_index_opt.has_value())
@@ -1452,18 +1442,32 @@ namespace tempest::ecs
     template <typename... Ts>
     inline auto basic_archetype_registry::has(basic_archetype_registry::entity_type entity) const -> bool
     {
-        if (!is_valid(entity))
+        const auto iter = _entity_archetype_mapping.find(entity);
+        if (iter == _entity_archetype_mapping.end())
         {
             return false;
         }
 
-        auto check_has = [this, entity]<typename U>() -> bool {
+        const auto key = iter->second;
+        if (key.archetype_index >= _hashes.size())
+        {
+            return false;
+        }
+
+        const auto& hash = _hashes[key.archetype_index];
+        auto check_has = [this, &hash]<typename U>() -> bool {
             const auto opt_idx = _type_registry->template type_index<remove_cvref_t<U>>();
             if (!opt_idx.has_value())
             {
                 return false;
             }
-            return _has_raw(entity, *opt_idx);
+            const auto type_index = *opt_idx;
+            if (type_index >= max_component_types)
+            {
+                return false;
+            }
+            return (hash.hash[type_index / char_bit] & static_cast<byte>(1 << (type_index % char_bit))) !=
+                   static_cast<byte>(0);
         };
         return (check_has.template operator()<Ts>() && ...);
     }

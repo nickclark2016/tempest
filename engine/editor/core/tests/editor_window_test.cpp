@@ -610,7 +610,12 @@ namespace tempest::editor::tests
     /// inside editor_engine_context and editor_context does not crash.
     TEST(editor_window_test, inspector_remove_box_collider_full_editor_scene_reproduce)
     {
-        auto game_lib_res = shared_library::load(L"game-runtime.dll");
+#if defined(TEMPEST_PLATFORM_WINDOWS)
+        constexpr auto game_library_name = L"game-runtime.dll";
+#elif defined(TEMPEST_PLATFORM_LINUX)
+        constexpr auto game_library_name = "libgame-runtime.so";
+#endif
+        auto game_lib_res = shared_library::load(game_library_name);
         ASSERT_TRUE(game_lib_res.has_value());
         const auto& game_lib = *game_lib_res;
 

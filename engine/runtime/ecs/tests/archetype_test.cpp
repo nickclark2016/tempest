@@ -753,3 +753,110 @@ TEST(basic_archetype_registry, try_get_and_has_on_cleared_entity)
     EXPECT_FALSE(reg.has<int>(entity));
 }
 
+namespace
+{
+    struct alignas(16) aligned_16_component
+    {
+        float x = 1.0F;
+        float y = 2.0F;
+        float z = 3.0F;
+        float w = 4.0F;
+    };
+
+    static_assert(tempest::ecs::component<aligned_16_component>);
+} // namespace
+
+/// @brief Verifies that removing an overaligned component (alignas(16)) captures the component
+/// bytes with correct alignment and safely dispatches component_removed_event without segfaulting.
+TEST(basic_archetype_registry, remove_overaligned_component_dispatches_event_safely)
+{
+    // Setup event registry and archetype registry
+    auto events = tempest::event::event_registry();
+    auto types = tempest::ecs::component_type_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events, types);
+
+    auto captured_entity = tempest::ecs::entity{tempest::ecs::tombstone};
+    auto captured_value = aligned_16_component{};
+
+    [[maybe_unused]] const auto subscription_handle =
+        events.dispatcher<tempest::ecs::component_removed_event<tempest::ecs::entity, aligned_16_component>>().subscribe(
+            [&captured_entity, &captured_value](const auto& evt) -> void {
+                captured_entity = evt.entity;
+                captured_value = evt.component;
+            });
+
+    const auto entity = reg.create<aligned_16_component, int>();
+    const auto initial_component = aligned_16_component{
+        .x = 10.0F,
+        .y = 20.0F,
+        .z = 30.0F,
+        .w = 40.0F,
+    };
+    reg.assign_or_replace(entity, initial_component);
+    reg.assign_or_replace(entity, 42);
+
+    // Act: Remove the 16-byte aligned component
+    reg.remove<aligned_16_component>(entity);
+
+    // Assert: Event was published with correct entity and component contents
+    EXPECT_EQ(captured_entity, entity);
+    EXPECT_FLOAT_EQ(captured_value.x, 10.0F);
+    EXPECT_FLOAT_EQ(captured_value.y, 20.0F);
+    EXPECT_FLOAT_EQ(captured_value.z, 30.0F);
+    EXPECT_FLOAT_EQ(captured_value.w, 40.0F);
+    EXPECT_FALSE(reg.has<aligned_16_component>(entity));
+    EXPECT_TRUE(reg.has<int>(entity));
+}
+
+/// @brief Verifies that replacing an existing overaligned component (alignas(16)) captures the old
+/// component bytes with correct alignment and safely dispatches component_replaced_event without segfaulting.
+TEST(basic_archetype_registry, replace_overaligned_component_dispatches_event_safely)
+{
+    // Setup event registry and archetype registry
+    auto events = tempest::event::event_registry();
+    auto types = tempest::ecs::component_type_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events, types);
+
+    auto captured_entity = tempest::ecs::entity{tempest::ecs::tombstone};
+    auto captured_old_value = aligned_16_component{};
+    auto captured_new_value = aligned_16_component{};
+
+    [[maybe_unused]] const auto subscription_handle =
+        events.dispatcher<tempest::ecs::component_replaced_event<tempest::ecs::entity, aligned_16_component>>().subscribe(
+            [&captured_entity, &captured_old_value, &captured_new_value](const auto& evt) -> void {
+                captured_entity = evt.entity;
+                captured_old_value = evt.old_component;
+                captured_new_value = evt.new_component;
+            });
+
+    const auto entity = reg.create<aligned_16_component>();
+    const auto old_component = aligned_16_component{
+        .x = 1.0F,
+        .y = 2.0F,
+        .z = 3.0F,
+        .w = 4.0F,
+    };
+    reg.assign_or_replace(entity, old_component);
+
+    const auto new_component = aligned_16_component{
+        .x = 100.0F,
+        .y = 200.0F,
+        .z = 300.0F,
+        .w = 400.0F,
+    };
+
+    // Act: Replace the 16-byte aligned component
+    reg.assign_or_replace(entity, new_component);
+
+    // Assert: Replaced event was published with correct old and new contents
+    EXPECT_EQ(captured_entity, entity);
+    EXPECT_FLOAT_EQ(captured_old_value.x, 1.0F);
+    EXPECT_FLOAT_EQ(captured_old_value.y, 2.0F);
+    EXPECT_FLOAT_EQ(captured_old_value.z, 3.0F);
+    EXPECT_FLOAT_EQ(captured_old_value.w, 4.0F);
+    EXPECT_FLOAT_EQ(captured_new_value.x, 100.0F);
+    EXPECT_FLOAT_EQ(captured_new_value.y, 200.0F);
+    EXPECT_FLOAT_EQ(captured_new_value.z, 300.0F);
+    EXPECT_FLOAT_EQ(captured_new_value.w, 400.0F);
+}
+
