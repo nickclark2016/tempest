@@ -1,6 +1,7 @@
 #ifndef TEMPEST_SERVER_SERVER_CONTEXT_HPP
 #define TEMPEST_SERVER_SERVER_CONTEXT_HPP
 
+#include <tempest/api.hpp>
 #include <tempest/archetype.hpp>
 #include <tempest/atomic.hpp>
 #include <tempest/chrono.hpp>
@@ -22,6 +23,10 @@
 #include <tempest/profiler/session.hpp>
 #include <tempest/span.hpp>
 #include <tempest/vector.hpp>
+
+#ifndef TEMPEST_SERVER_API
+#    define TEMPEST_SERVER_API
+#endif
 
 namespace tempest::server
 {
@@ -65,7 +70,7 @@ namespace tempest::server
 
     /// @brief Encapsulates headless server subsystems (logging, jobs, physics, ECS, networking)
     /// running on a fixed 60Hz deterministic tick clock.
-    class server_context
+    class TEMPEST_SERVER_API server_context
     {
       public:
         explicit server_context(server_config config = {});
