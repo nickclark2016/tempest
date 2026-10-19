@@ -19,7 +19,8 @@ namespace tempest::server
     server_context::server_context(server_config config)
         : _config(config), _log_sink(), _logger(_log_sink), _profiler(false), _job_system(nullptr),
           _registry(_events, _component_types),
-          _accumulator(config.fixed_timestep, config.max_frame_delta), _running(false)
+          _accumulator(config.fixed_timestep, config.max_frame_delta), _running(default_running),
+          _paused(default_paused), _initialized(default_initialized), _client_count(default_client_count)
     {
     }
 
@@ -31,6 +32,8 @@ namespace tempest::server
         {
             despawn_session(_sessions.size() - 1);
         }
+
+        _client_count.store(0);
 
         auto* const system = _physics_world.physics_system();
         if (system != nullptr)
@@ -96,6 +99,11 @@ namespace tempest::server
 
     auto server_context::initialize() -> bool
     {
+        if (_initialized.load())
+        {
+            return true;
+        }
+
         _logger.info("Initializing Tempest Headless Server...");
 
         _job_system = make_unique<job::job_system>(_logger, _profiler,
@@ -104,14 +112,34 @@ namespace tempest::server
                                                        .topology = job::discover_cpu_topology(),
                                                    });
 
-        if (!_socket.open())
+        auto bound = false;
+        for (auto attempt = uint16_t{0}; attempt < _config.max_port_attempts; ++attempt)
         {
-            _logger.error("Failed to open UDP socket.");
-            return false;
+            const auto target_port = static_cast<uint32_t>(_config.port) + attempt;
+            if (target_port > 65535U)
+            {
+                break;
+            }
+
+            if (!_socket.open())
+            {
+                _logger.error("Failed to open UDP socket.");
+                return false;
+            }
+
+            const auto current_port = static_cast<uint16_t>(target_port);
+            const auto bind_ep = network::endpoint::any(current_port);
+            if (_socket.bind(bind_ep))
+            {
+                _config.port = current_port;
+                bound = true;
+                break;
+            }
+
+            _socket.close();
         }
 
-        const auto bind_ep = network::endpoint::any(_config.port);
-        if (!_socket.bind(bind_ep))
+        if (!bound)
         {
             _logger.error("Failed to bind UDP socket to port.");
             return false;
@@ -123,6 +151,7 @@ namespace tempest::server
         }
 
         _logger.info("UDP socket bound successfully.");
+        _initialized.store(true);
         _running.store(true);
         return true;
     }
@@ -135,6 +164,21 @@ namespace tempest::server
     auto server_context::is_running() const noexcept -> bool
     {
         return _running.load();
+    }
+
+    auto server_context::set_paused(bool paused) noexcept -> void
+    {
+        _paused.store(paused);
+    }
+
+    auto server_context::is_paused() const noexcept -> bool
+    {
+        return _paused.load();
+    }
+
+    auto server_context::bound_port() const noexcept -> uint16_t
+    {
+        return _config.port;
     }
 
     auto server_context::total_ticks() const noexcept -> uint64_t
@@ -163,6 +207,7 @@ namespace tempest::server
         }
 
         _sessions.erase(_sessions.begin() + session_index);
+        _client_count.store(_sessions.size(), memory_order::release);
     }
 
     auto server_context::poll_network_packets() -> void
@@ -291,6 +336,7 @@ namespace tempest::server
                     };
 
                     _sessions.push_back(tempest::move(new_session));
+                    _client_count.store(_sessions.size(), memory_order::release);
                     auto& registered_session = _sessions.back();
 
                     // Send connect_accepted
@@ -476,12 +522,17 @@ namespace tempest::server
 
     auto server_context::run() -> int
     {
-        if (!_running.load())
+        if (!_initialized.load())
         {
             if (!initialize())
             {
                 return 1;
             }
+        }
+
+        if (!_running.load())
+        {
+            return 0;
         }
 
         _logger.info("Server entering main loop (60Hz fixed timestep)...");
@@ -511,10 +562,13 @@ namespace tempest::server
             while (_accumulator.has_pending_ticks())
             {
                 poll_network_packets();
-                tick_simulation(_accumulator.fixed_delta());
-                broadcast_snapshots();
+                if (!_paused.load())
+                {
+                    tick_simulation(_accumulator.fixed_delta());
+                    broadcast_snapshots();
+                    ++_tick_counter;
+                }
                 _accumulator.consume_tick();
-                ++_tick_counter;
             }
 
             this_thread::sleep_for(chrono::milliseconds(1));

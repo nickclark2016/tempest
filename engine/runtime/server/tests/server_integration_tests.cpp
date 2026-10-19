@@ -55,6 +55,7 @@ namespace tempest::server::tests
 
         // Assert: Server registered session
         ASSERT_EQ(server.sessions().size(), 1U);
+        EXPECT_EQ(server.client_count(), 1U);
         EXPECT_EQ(server.sessions()[0].slot, 0U);
         EXPECT_NE(server.sessions()[0].session_id, 0ULL);
         EXPECT_TRUE(server.sessions()[0].character_entity != ecs::null);
@@ -75,6 +76,11 @@ namespace tempest::server::tests
         ASSERT_TRUE(accepted_opt.has_value());
         EXPECT_EQ(accepted_opt->session_id, server.sessions()[0].session_id);
         EXPECT_EQ(accepted_opt->player_slot, 0U);
+
+        // Despawn session and verify client count decrement
+        server.despawn_session(0);
+        EXPECT_EQ(server.client_count(), 0U);
+        EXPECT_EQ(server.sessions().size(), 0U);
     }
 
     // =========================================================================
@@ -272,5 +278,64 @@ namespace tempest::server::tests
 
         // Assert
         EXPECT_TRUE(server.sessions().empty());
+    }
+
+    // =========================================================================
+    // SECTION: Port Hunting & Server Pause Control
+    // =========================================================================
+
+    /// @brief Verifies that server_context automatically hunts to subsequent ports when
+    /// the configured port is already occupied, and supports pause/resume toggling.
+    TEST(server_integration_tests, port_hunting_and_pause_control)
+    {
+        // Setup: Occupy port 17781 with a raw UDP socket
+        auto net_ctx = network::network_context{};
+        auto blocker = network::udp_socket{};
+        ASSERT_TRUE(blocker.open());
+        ASSERT_TRUE(blocker.bind(network::endpoint::any(17781)));
+
+        // Act: Initialize server targeting port 17781 with max 10 attempts
+        auto config = server_config{
+            .port = 17781,
+            .max_port_attempts = 10,
+            .create_ground_plane = false,
+        };
+        auto server = server_context{config};
+        ASSERT_TRUE(server.initialize());
+
+        // Assert: Bound port hunted to 17782
+        EXPECT_EQ(server.bound_port(), 17782);
+        EXPECT_EQ(server.client_count(), 0U);
+
+        // Verify pause/resume methods
+        EXPECT_FALSE(server.is_paused());
+        server.set_paused(true);
+        EXPECT_TRUE(server.is_paused());
+        server.set_paused(false);
+        EXPECT_FALSE(server.is_paused());
+
+        blocker.close();
+    }
+
+    /// @brief Verifies that port hunting terminates and returns false when target_port exceeds 65535.
+    TEST(server_integration_tests, port_hunting_range_limit_exceeded)
+    {
+        // Setup: Bind UDP socket to 65535
+        auto blocker = network::udp_socket{};
+        ASSERT_TRUE(blocker.open());
+        ASSERT_TRUE(blocker.bind(network::endpoint::any(65535)));
+
+        auto config = server_config{
+            .port = 65535,
+            .max_port_attempts = 10,
+            .create_ground_plane = false,
+        };
+        auto server = server_context{config};
+
+        // Act & Assert: initialize fails because 65535 is blocked and subsequent attempts exceed 65535
+        EXPECT_FALSE(server.initialize());
+        EXPECT_FALSE(server.is_running());
+
+        blocker.close();
     }
 } // namespace tempest::server::tests

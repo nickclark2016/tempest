@@ -99,6 +99,8 @@ namespace tempest::editor
         auto _draw_status_bar() -> void;
         auto _draw_log_status_pill() -> void;
         auto _calculate_log_pill_width() const -> float;
+        auto _draw_server_status_pill() -> void;
+        auto _calculate_server_status_pill_width() const -> float;
         auto _draw_profiler_status_pill() -> void;
         auto _calculate_profiler_pill_width() const -> float;
         auto _draw_profiler_tooltip() -> void;

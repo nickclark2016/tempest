@@ -492,9 +492,11 @@ namespace tempest::editor
                 ImGui::TextUnformatted("Status: Ready");
 
                 const auto log_pill_width = _calculate_log_pill_width();
+                const auto server_pill_width = _calculate_server_status_pill_width();
                 const auto profiler_pill_width = _calculate_profiler_pill_width();
                 constexpr auto pill_spacing = 8.0F;
-                const auto total_width = log_pill_width + pill_spacing + profiler_pill_width;
+                const auto total_width =
+                    log_pill_width + pill_spacing + server_pill_width + pill_spacing + profiler_pill_width;
                 const auto avail_width = ImGui::GetContentRegionAvail().x;
 
                 if (avail_width > total_width)
@@ -503,6 +505,8 @@ namespace tempest::editor
                 }
 
                 _draw_log_status_pill();
+                ImGui::SameLine(0.0F, pill_spacing);
+                _draw_server_status_pill();
                 ImGui::SameLine(0.0F, pill_spacing);
                 _draw_profiler_status_pill();
 
@@ -598,6 +602,84 @@ namespace tempest::editor
             ImGui::TextColored(ImVec4(1.0F, 0.3F, 0.3F, 1.0F), "Errors        : %zu", error_count);
             ImGui::Separator();
             ImGui::TextDisabled("Click to open Log View");
+            ImGui::EndTooltip();
+        }
+    }
+
+    auto editor_context::_calculate_server_status_pill_width() const -> float
+    {
+        const auto& play_ctrl = _engine_ctx->get_play_mode_controller();
+        const auto running = play_ctrl.is_server_running();
+        const auto* const dot_symbol = running ? "●" : "○";
+        const auto pill_text = running
+                                   ? tempest::format(" Server: :{} ({} clients) ]", play_ctrl.get_server_port(),
+                                                     play_ctrl.get_server_client_count())
+                                   : string(" Server: Stopped ]");
+
+        const auto bracket_left_size = ImGui::CalcTextSize("[ ");
+        const auto dot_size = ImGui::CalcTextSize(dot_symbol);
+        const auto text_size = ImGui::CalcTextSize(pill_text.c_str());
+        return bracket_left_size.x + dot_size.x + text_size.x + 16.0F;
+    }
+
+    auto editor_context::_draw_server_status_pill() -> void
+    {
+        const auto& play_ctrl = _engine_ctx->get_play_mode_controller();
+        const auto running = play_ctrl.is_server_running();
+
+        const auto* const dot_symbol = running ? "●" : "○";
+        const auto dot_color = running ? ImVec4(0.2F, 0.9F, 0.2F, 1.0F) : ImVec4(0.6F, 0.6F, 0.6F, 1.0F);
+        const auto pill_text = running
+                                   ? tempest::format(" Server: :{} ({} clients) ]", play_ctrl.get_server_port(),
+                                                     play_ctrl.get_server_client_count())
+                                   : string(" Server: Stopped ]");
+
+        const auto bracket_left_size = ImGui::CalcTextSize("[ ");
+        const auto dot_size = ImGui::CalcTextSize(dot_symbol);
+        const auto text_size = ImGui::CalcTextSize(pill_text.c_str());
+        const auto total_width = bracket_left_size.x + dot_size.x + text_size.x + 16.0F;
+
+        const auto pos = ImGui::GetCursorScreenPos();
+        const auto size = ImVec2(total_width, ImGui::GetFrameHeight());
+
+        auto* draw_list = ImGui::GetWindowDrawList();
+        const auto bg_color = ImGui::GetColorU32(ImGuiCol_FrameBg);
+        const auto border_color = ImGui::GetColorU32(ImGuiCol_Border);
+        draw_list->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), bg_color, 4.0F);
+        draw_list->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), border_color, 4.0F);
+
+        ImGui::InvisibleButton("##ServerStatusPill", size);
+
+        const auto is_hovered = ImGui::IsItemHovered();
+        if (is_hovered)
+        {
+            draw_list->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), ImGui::GetColorU32(ImGuiCol_ButtonHovered),
+                               4.0F);
+        }
+
+        const auto text_pos_y = pos.y + ((size.y - dot_size.y) * 0.5F);
+        auto cur_x = pos.x + 8.0F;
+        draw_list->AddText(ImVec2(cur_x, text_pos_y), ImGui::GetColorU32(ImGuiCol_Text), "[ ");
+        cur_x += bracket_left_size.x;
+        draw_list->AddText(ImVec2(cur_x, text_pos_y), ImGui::GetColorU32(dot_color), dot_symbol);
+        cur_x += dot_size.x;
+        draw_list->AddText(ImVec2(cur_x, text_pos_y), ImGui::GetColorU32(ImGuiCol_Text), pill_text.c_str());
+
+        if (is_hovered)
+        {
+            ImGui::BeginTooltip();
+            ImGui::TextColored(ImVec4(0.4F, 0.8F, 1.0F, 1.0F), "Tempest Dedicated Server");
+            ImGui::Separator();
+            if (running)
+            {
+                ImGui::Text("State   : Running");
+                ImGui::Text("Port    : %u", play_ctrl.get_server_port());
+                ImGui::Text("Clients : %zu", play_ctrl.get_server_client_count());
+            }
+            else
+            {
+                ImGui::TextDisabled("State   : Stopped");
+            }
             ImGui::EndTooltip();
         }
     }

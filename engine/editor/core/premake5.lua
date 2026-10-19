@@ -21,6 +21,7 @@ scoped.project('editor-core', function()
         'tempest',
         'imgui',
         'glfw',
+        'server',
     }
 
     scoped.usage('PUBLIC', function()
@@ -28,6 +29,7 @@ scoped.project('editor-core', function()
             'tempest',
             'imgui',
             'glfw',
+            'server',
         }
 
         externalincludedirs {

@@ -34,12 +34,14 @@ namespace tempest::server
     struct server_config
     {
         static constexpr uint16_t default_port = 7777;
+        static constexpr uint16_t default_max_port_attempts = 10;
         static constexpr float default_fixed_timestep = 1.0F / 60.0F;
         static constexpr float default_max_frame_delta = 0.1F;
         static constexpr float default_test_timeout_seconds = 2.0F;
         static constexpr uint32_t default_max_clients = 8;
 
         uint16_t port = default_port;
+        uint16_t max_port_attempts = default_max_port_attempts;
         float fixed_timestep = default_fixed_timestep;
         float max_frame_delta = default_max_frame_delta;
         bool test_run = false;
@@ -95,6 +97,21 @@ namespace tempest::server
 
         /// @brief Checks if the server loop is actively running.
         [[nodiscard]] auto is_running() const noexcept -> bool;
+
+        /// @brief Sets whether simulation tick execution is paused.
+        auto set_paused(bool paused) noexcept -> void;
+
+        /// @brief Checks if simulation tick execution is paused.
+        [[nodiscard]] auto is_paused() const noexcept -> bool;
+
+        /// @brief Returns the local port to which the server UDP socket is bound.
+        [[nodiscard]] auto bound_port() const noexcept -> uint16_t;
+
+        /// @brief Returns the count of active client sessions.
+        [[nodiscard]] auto client_count() const noexcept -> size_t
+        {
+            return _client_count.load(memory_order::relaxed);
+        }
 
         /// @brief Polls incoming UDP packets from the listening socket.
         auto poll_network_packets() -> void;
@@ -160,6 +177,13 @@ namespace tempest::server
         [[nodiscard]] auto total_ticks() const noexcept -> uint64_t;
 
       private:
+        static constexpr bool default_running = false;
+        static constexpr bool default_paused = false;
+        static constexpr bool default_initialized = false;
+        static constexpr size_t default_client_count = 0;
+        static constexpr uint64_t default_tick_counter = 0;
+        static constexpr uint64_t default_next_session_id = 1;
+
         server_config _config;
         mt_stdout_log_sink _log_sink;
         logger _logger;
@@ -172,12 +196,15 @@ namespace tempest::server
         ecs::component_type_registry _component_types;
         ecs::archetype_registry _registry;
         fixed_timestep_accumulator _accumulator;
-        atomic<bool> _running = false;
-        uint64_t _tick_counter = 0;
+        atomic<bool> _running = default_running;
+        atomic<bool> _paused = default_paused;
+        atomic<bool> _initialized = default_initialized;
+        atomic<size_t> _client_count = default_client_count;
+        uint64_t _tick_counter = default_tick_counter;
         vector<client_session> _sessions;
         vector<jolt::shim::body_id> _static_bodies;
         vector<jolt::shim::shape_handle> _static_shapes;
-        uint64_t _next_session_id = 1;
+        uint64_t _next_session_id = default_next_session_id;
     };
 } // namespace tempest::server
 

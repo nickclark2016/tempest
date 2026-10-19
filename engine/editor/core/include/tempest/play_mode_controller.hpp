@@ -6,8 +6,11 @@
 #include <tempest/editor_camera.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/game_module.hpp>
+#include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/scene/scene_manager.hpp>
+#include <tempest/server/server_context.hpp>
+#include <tempest/thread.hpp>
 
 namespace tempest::editor
 {
@@ -18,7 +21,7 @@ namespace tempest::editor
     {
       public:
         explicit play_mode_controller(editor_engine_context& context);
-        ~play_mode_controller() = default;
+        ~play_mode_controller();
 
         play_mode_controller(const play_mode_controller&) = delete;
         play_mode_controller(play_mode_controller&&) noexcept = delete;
@@ -38,13 +41,24 @@ namespace tempest::editor
         [[nodiscard]] auto is_paused() const noexcept -> bool;
         [[nodiscard]] auto is_edit() const noexcept -> bool;
 
+        [[nodiscard]] auto is_server_running() const noexcept -> bool;
+        [[nodiscard]] auto is_server_paused() const noexcept -> bool;
+        [[nodiscard]] auto get_server_port() const noexcept -> uint16_t;
+        [[nodiscard]] auto get_server_client_count() const noexcept -> size_t;
+        [[nodiscard]] auto get_server() const noexcept -> const server::server_context*;
+
       private:
+        static constexpr uint16_t default_server_port = 0;
+
         non_null<editor_engine_context> _context;
         optional<ecs::registry_snapshot> _saved_registry_snapshot;
         optional<scene::scene_manager_snapshot> _saved_scene_snapshot;
         optional<editor_camera> _saved_editor_camera;
         function<void(const play_settings&)> _on_play_begin;
         function<void()> _on_play_end;
+        unique_ptr<server::server_context> _server;
+        unique_ptr<thread> _server_thread;
+        uint16_t _server_port = default_server_port;
     };
 } // namespace tempest::editor
 

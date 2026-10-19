@@ -10,6 +10,11 @@ namespace tempest::editor
     {
     }
 
+    play_mode_controller::~play_mode_controller()
+    {
+        stop();
+    }
+
     auto play_mode_controller::play(const play_settings& settings) -> bool
     {
         if (_context->get_scene_manager().has_in_flight_loads())
@@ -25,13 +30,32 @@ namespace tempest::editor
 
         if (current_state == simulation_state::edit)
         {
+            auto effective_settings = settings;
+            if (settings.start_embedded_server)
+            {
+                const auto server_cfg = server::server_config{
+                    .port = settings.port,
+                    .max_port_attempts = 10,
+                };
+                _server = make_unique<server::server_context>(server_cfg);
+                if (!_server->initialize())
+                {
+                    _server.reset();
+                    return false;
+                }
+                _server_port = _server->bound_port();
+                effective_settings.port = _server_port;
+                auto* const server_ptr = _server.get();
+                _server_thread = make_unique<thread>([server_ptr]() { server_ptr->run(); });
+            }
+
             _saved_registry_snapshot = _context->get_entities().snapshot();
             _saved_scene_snapshot = _context->get_scene_manager().snapshot();
             _saved_editor_camera = _context->get_editor_camera();
             _context->set_simulation_state(simulation_state::playing);
             if (_on_play_begin)
             {
-                _on_play_begin(settings);
+                _on_play_begin(effective_settings);
             }
             _context->get_events().dispatcher<ecs::simulation_started_event>().publish(ecs::simulation_started_event{});
             return true;
@@ -39,6 +63,10 @@ namespace tempest::editor
 
         if (current_state == simulation_state::paused)
         {
+            if (_server)
+            {
+                _server->set_paused(false);
+            }
             _context->set_simulation_state(simulation_state::playing);
             _context->get_events().dispatcher<ecs::simulation_started_event>().publish(ecs::simulation_started_event{});
             return true;
@@ -53,6 +81,11 @@ namespace tempest::editor
         if (current_state != simulation_state::playing)
         {
             return;
+        }
+
+        if (_server)
+        {
+            _server->set_paused(true);
         }
 
         _context->set_simulation_state(simulation_state::paused);
@@ -78,6 +111,18 @@ namespace tempest::editor
 
     auto play_mode_controller::stop() -> void
     {
+        if (_server)
+        {
+            _server->request_close();
+            if (_server_thread && _server_thread->joinable())
+            {
+                _server_thread->join();
+            }
+            _server_thread.reset();
+            _server.reset();
+            _server_port = 0;
+        }
+
         const auto current_state = _context->get_simulation_state();
         if (current_state == simulation_state::edit)
         {
@@ -140,5 +185,30 @@ namespace tempest::editor
     auto play_mode_controller::is_edit() const noexcept -> bool
     {
         return _context->get_simulation_state() == simulation_state::edit;
+    }
+
+    auto play_mode_controller::is_server_running() const noexcept -> bool
+    {
+        return _server != nullptr && _server->is_running();
+    }
+
+    auto play_mode_controller::is_server_paused() const noexcept -> bool
+    {
+        return _server != nullptr && _server->is_paused();
+    }
+
+    auto play_mode_controller::get_server_port() const noexcept -> uint16_t
+    {
+        return _server_port;
+    }
+
+    auto play_mode_controller::get_server_client_count() const noexcept -> size_t
+    {
+        return _server != nullptr ? _server->client_count() : 0;
+    }
+
+    auto play_mode_controller::get_server() const noexcept -> const server::server_context*
+    {
+        return _server.get();
     }
 } // namespace tempest::editor

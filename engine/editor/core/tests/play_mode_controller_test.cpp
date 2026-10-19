@@ -2,6 +2,8 @@
 
 #include <tempest/ecs_events.hpp>
 #include <tempest/editor_engine_context.hpp>
+#include <tempest/network/endpoint.hpp>
+#include <tempest/network/socket.hpp>
 #include <tempest/play_mode_controller.hpp>
 #include <tempest/transform_component.hpp>
 
@@ -239,5 +241,70 @@ TEST(play_mode_controller_test, play_begin_and_play_end_callbacks)
     // Assert: on_play_end was called
     EXPECT_EQ(begin_call_count, 1);
     EXPECT_EQ(end_call_count, 1);
+}
+
+/// @brief Verifies that embedded dedicated server is hosted in-process, hunts for open ports, and pauses/stops cleanly.
+TEST(play_mode_controller_test, embedded_server_lifecycle_and_port_hunting)
+{
+    // Setup: Bind UDP socket to default port 7777 to verify automatic port hunting
+    auto blocker_socket = tempest::network::udp_socket{};
+    ASSERT_TRUE(blocker_socket.open());
+    ASSERT_TRUE(blocker_socket.bind(tempest::network::endpoint::any(7777)));
+
+    auto engine_ctx = tempest::editor::editor_engine_context{};
+    auto& controller = engine_ctx.get_play_mode_controller();
+
+    // Act: Enter play mode with embedded server enabled
+    EXPECT_TRUE(controller.play(tempest::play_settings{
+        .start_embedded_server = true,
+    }));
+
+    // Assert: Server is running and hunted to an open port >= 7777
+    EXPECT_TRUE(controller.is_server_running());
+    EXPECT_GE(controller.get_server_port(), 7777);
+    EXPECT_GT(controller.get_server_port(), 7777);
+
+    // Act: Pause play mode
+    controller.pause();
+
+    // Assert: Server and controller are paused
+    EXPECT_TRUE(controller.is_paused());
+    EXPECT_TRUE(controller.is_server_paused());
+
+    // Act: Stop play mode
+    controller.stop();
+
+    // Assert: Server stops and thread joins cleanly
+    EXPECT_FALSE(controller.is_server_running());
+    EXPECT_EQ(controller.get_server_port(), 0);
+    EXPECT_TRUE(controller.is_edit());
+
+    blocker_socket.close();
+}
+
+/// @brief Verifies that play_mode_controller fails fast and remains in edit mode when the embedded server fails to initialize.
+TEST(play_mode_controller_test, embedded_server_initialization_failure_fails_fast)
+{
+    // Setup: Bind UDP socket to port 65535 so port hunting exceeds range and fails
+    auto blocker_socket = tempest::network::udp_socket{};
+    ASSERT_TRUE(blocker_socket.open());
+    ASSERT_TRUE(blocker_socket.bind(tempest::network::endpoint::any(65535)));
+
+    auto engine_ctx = tempest::editor::editor_engine_context{};
+    auto& controller = engine_ctx.get_play_mode_controller();
+
+    // Act: Attempt to enter play mode with embedded server on blocked port 65535
+    const auto play_result = controller.play(tempest::play_settings{
+        .port = 65535,
+        .start_embedded_server = true,
+    });
+
+    // Assert: Play fails fast and controller remains cleanly in edit mode
+    EXPECT_FALSE(play_result);
+    EXPECT_FALSE(controller.is_server_running());
+    EXPECT_EQ(controller.get_server_port(), 0);
+    EXPECT_TRUE(controller.is_edit());
+
+    blocker_socket.close();
 }
 
