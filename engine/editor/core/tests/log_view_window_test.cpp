@@ -95,16 +95,16 @@ namespace tempest::editor::tests
         // Act: Query window properties
         const auto dock = window.desired_initial_dock();
         const auto name = window.window_name();
-        const auto supported_stopped = window.is_mode_supported(simulation_state::stopped);
-        const auto supported_pause = window.is_mode_supported(simulation_state::pause);
-        const auto supported_play = window.is_mode_supported(simulation_state::play);
+        const auto supported_edit = window.is_mode_supported(simulation_state::edit);
+        const auto supported_paused = window.is_mode_supported(simulation_state::paused);
+        const auto supported_playing = window.is_mode_supported(simulation_state::playing);
 
         // Assert: Verify all properties match architectural specification
         EXPECT_EQ(dock, editor_window::dock_location::bottom);
         EXPECT_EQ(name, "Log View");
-        EXPECT_TRUE(supported_stopped);
-        EXPECT_TRUE(supported_pause);
-        EXPECT_TRUE(supported_play);
+        EXPECT_TRUE(supported_edit);
+        EXPECT_TRUE(supported_paused);
+        EXPECT_TRUE(supported_playing);
         EXPECT_TRUE(window.open);
         EXPECT_TRUE(window.auto_scroll);
         EXPECT_FALSE(window.request_scroll_to_bottom);

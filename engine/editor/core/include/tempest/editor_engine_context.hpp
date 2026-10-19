@@ -15,17 +15,20 @@
 namespace tempest::editor
 {
     class ui_context;
+    class play_mode_controller;
 
     enum class simulation_state : uint8_t
     {
-        stopped,
-        pause,
-        play
+        edit,
+        playing,
+        paused
     };
 
     class TEMPEST_EDITOR_API editor_engine_context final : public standalone_engine_context
     {
       public:
+        static constexpr simulation_state default_simulation_state = simulation_state::edit;
+
         explicit editor_engine_context(const engine_config& config = {});
         ~editor_engine_context() override;
 
@@ -43,7 +46,7 @@ namespace tempest::editor
 
         [[nodiscard]] auto is_play_mode() const noexcept -> bool override
         {
-            return _sim_state == simulation_state::play;
+            return _sim_state == simulation_state::playing;
         }
 
         [[nodiscard]] auto get_simulation_state() const noexcept -> simulation_state
@@ -52,6 +55,9 @@ namespace tempest::editor
         }
 
         auto set_simulation_state(simulation_state state) noexcept -> void;
+
+        [[nodiscard]] auto get_play_mode_controller() noexcept -> play_mode_controller&;
+        [[nodiscard]] auto get_play_mode_controller() const noexcept -> const play_mode_controller&;
 
         auto set_ui_context(ui_context* ui_ctx) noexcept -> void
         {
@@ -196,7 +202,8 @@ namespace tempest::editor
         auto on_frame_end() -> void override;
 
       private:
-        simulation_state _sim_state = simulation_state::stopped;
+        simulation_state _sim_state = default_simulation_state;
+        unique_ptr<play_mode_controller> _play_mode_controller;
         ui_context* _ui_ctx{nullptr};
         editor_camera _editor_camera{};
 

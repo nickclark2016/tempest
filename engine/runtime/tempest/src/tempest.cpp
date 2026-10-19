@@ -285,6 +285,13 @@ namespace tempest
         }
     }
 
+    auto engine_context::step_simulation_once(chrono::duration<double> delta_time) -> void
+    {
+        ecs::step_transform_history(get_entities());
+        _update_fixed(delta_time);
+        _update_variable(delta_time);
+    }
+
     auto engine_context::run() -> void
     {
         get_logger().trace("Starting engine context");
@@ -299,6 +306,8 @@ namespace tempest
         _accumulator.reset();
         auto current_time = chrono::steady_clock::now();
         _last_frame_time = current_time;
+
+        _is_running = true;
 
         get_logger().trace("Starting main loop");
         while (!_should_close)
@@ -323,17 +332,30 @@ namespace tempest
 
             // Fixed Timestep Simulation
             _accumulator.accumulate(delta_ns);
-            if (should_step_simulation())
+            const auto step_sim = should_step_simulation();
+            const auto single_step = _single_step_requested;
+
+            if (step_sim || single_step)
             {
-                while (_accumulator.has_pending_ticks())
+                if (single_step)
                 {
                     ecs::step_transform_history(get_entities());
                     _update_fixed(_accumulator.fixed_delta());
-                    if (_should_close)
-                    {
-                        break;
-                    }
                     _accumulator.consume_tick();
+                    _single_step_requested = false;
+                }
+                else
+                {
+                    while (_accumulator.has_pending_ticks())
+                    {
+                        ecs::step_transform_history(get_entities());
+                        _update_fixed(_accumulator.fixed_delta());
+                        if (_should_close)
+                        {
+                            break;
+                        }
+                        _accumulator.consume_tick();
+                    }
                 }
             }
             else
@@ -365,6 +387,8 @@ namespace tempest
             // Frame End / Profiling & Telemetry
             on_frame_end();
         }
+
+        _is_running = false;
 
         get_logger().trace("Exiting main loop");
 

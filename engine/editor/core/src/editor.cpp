@@ -2,6 +2,7 @@
 #include <tempest/editor.hpp>
 
 #include <tempest/editor_engine_context.hpp>
+#include <tempest/play_mode_controller.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/menus/menu_item.hpp>
@@ -426,9 +427,9 @@ namespace tempest::editor
         }
 
         // Escape in play mode: pause simulation and release cursor
-        if (_engine_ctx->get_simulation_state() == simulation_state::play && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        if (_engine_ctx->get_simulation_state() == simulation_state::playing && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
         {
-            _engine_ctx->set_simulation_state(simulation_state::pause);
+            _engine_ctx->get_play_mode_controller().pause();
         }
     }
 
@@ -773,7 +774,7 @@ namespace tempest::editor
     auto editor_context::draw() -> void
     {
         const auto sim_state = _engine_ctx->get_simulation_state();
-        const auto is_play_mode = sim_state == simulation_state::play;
+        const auto is_play_mode = (sim_state == simulation_state::playing);
 
         _process_shortcuts();
 

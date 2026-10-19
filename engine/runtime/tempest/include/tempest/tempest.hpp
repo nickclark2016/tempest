@@ -42,6 +42,9 @@ namespace tempest
     class TEMPEST_API engine_context
     {
       public:
+        static constexpr bool default_single_step_requested = false;
+        static constexpr bool default_is_running = false;
+
         engine_context();
         engine_context(float fixed_timestep, float max_frame_delta);
         engine_context(const engine_context&) = delete;
@@ -109,6 +112,23 @@ namespace tempest
             return true;
         }
 
+        virtual auto request_single_step() -> void
+        {
+            _single_step_requested = true;
+        }
+
+        [[nodiscard]] virtual auto is_single_step_requested() const noexcept -> bool
+        {
+            return _single_step_requested;
+        }
+
+        [[nodiscard]] virtual auto is_running() const noexcept -> bool
+        {
+            return _is_running;
+        }
+
+        virtual auto step_simulation_once(chrono::duration<double> delta_time = chrono::duration<double>{1.0 / 60.0}) -> void;
+
       protected:
         virtual auto on_poll_events() -> void {}
         [[nodiscard]] virtual auto should_step_simulation() -> bool { return true; }
@@ -129,6 +149,8 @@ namespace tempest
         chrono::steady_clock::time_point _last_frame_time{};
         chrono::duration<double> _delta_frame_time = chrono::duration<double>::zero();
         bool _should_close{false};
+        bool _single_step_requested = default_single_step_requested;
+        bool _is_running = default_is_running;
         // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
     };
 
@@ -186,6 +208,7 @@ namespace tempest
         [[nodiscard]] virtual auto get_render_surface(window_handle win) const -> const rhi::render_surface* = 0;
         [[nodiscard]] virtual auto get_raw_surface(window_handle win) const -> rhi::raw_surface_handle = 0;
         [[nodiscard]] virtual auto get_main_window() const -> window_handle = 0;
+        [[nodiscard]] virtual auto has_renderer() const noexcept -> bool = 0;
     };
 
     class TEMPEST_API standalone_engine_context : public client_context
@@ -282,6 +305,10 @@ namespace tempest
         [[nodiscard]] auto get_render_surface(window_handle win) const -> const rhi::render_surface* override;
         [[nodiscard]] auto get_raw_surface(window_handle win) const -> rhi::raw_surface_handle override;
         [[nodiscard]] auto get_main_window() const -> window_handle override;
+        [[nodiscard]] auto has_renderer() const noexcept -> bool override
+        {
+            return _renderer != nullptr;
+        }
 
         auto load_entity(ecs::entity src) -> ecs::entity override;
 

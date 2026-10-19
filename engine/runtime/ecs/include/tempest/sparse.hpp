@@ -616,11 +616,22 @@ namespace tempest::ecs
     template <typename T, typename Allocator>
     constexpr basic_sparse_set<T, Allocator>::basic_sparse_set(const basic_sparse_set& rhs) noexcept
     {
-        _request_storage_resize(rhs._packed_capacity);
-        uninitialized_copy_n(rhs._packed, rhs._packed_count, _packed);
-        for (size_t page_idx = 0; page_idx < _sparse_page_count; ++page_idx)
+        if (rhs._sparse_page_count > 0)
         {
-            copy_n(rhs._sparse[page_idx], traits_type::page_size, _sparse[page_idx]);
+            _sparse = sparse_alloc_traits::allocate(_sparse_alloc, rhs._sparse_page_count);
+            _sparse_page_count = rhs._sparse_page_count;
+            for (size_t page_idx = 0; page_idx < _sparse_page_count; ++page_idx)
+            {
+                _sparse[page_idx] = packed_alloc_traits::allocate(_packed_alloc, traits_type::page_size);
+                copy_n(rhs._sparse[page_idx], traits_type::page_size, _sparse[page_idx]);
+            }
+        }
+        if (rhs._packed_capacity > 0)
+        {
+            _packed = packed_alloc_traits::allocate(_packed_alloc, rhs._packed_capacity);
+            _packed_capacity = rhs._packed_capacity;
+            uninitialized_copy_n(rhs._packed, rhs._packed_count, _packed);
+            _packed_count = rhs._packed_count;
         }
         _free_list_head = rhs._free_list_head;
     }
@@ -646,19 +657,31 @@ namespace tempest::ecs
     constexpr auto basic_sparse_set<T, Allocator>::operator=(const basic_sparse_set& rhs)
         -> basic_sparse_set<T, Allocator>&
     {
-        if (&rhs == this)
+        if (this == &rhs)
         {
             return *this;
         }
 
         _release_resources();
 
-        _request_storage_resize(rhs._packed_capacity);
-        uninitialized_copy_n(rhs._packed, rhs._packed_count, _packed);
-        for (size_t page_idx = 0; page_idx < _sparse_page_count; ++page_idx)
+        if (rhs._sparse_page_count > 0)
         {
-            copy_n(rhs._sparse[page_idx], traits_type::page_size, _sparse[page_idx]);
+            _sparse = sparse_alloc_traits::allocate(_sparse_alloc, rhs._sparse_page_count);
+            _sparse_page_count = rhs._sparse_page_count;
+            for (size_t page_idx = 0; page_idx < _sparse_page_count; ++page_idx)
+            {
+                _sparse[page_idx] = packed_alloc_traits::allocate(_packed_alloc, traits_type::page_size);
+                copy_n(rhs._sparse[page_idx], traits_type::page_size, _sparse[page_idx]);
+            }
         }
+        if (rhs._packed_capacity > 0)
+        {
+            _packed = packed_alloc_traits::allocate(_packed_alloc, rhs._packed_capacity);
+            _packed_capacity = rhs._packed_capacity;
+            uninitialized_copy_n(rhs._packed, rhs._packed_count, _packed);
+            _packed_count = rhs._packed_count;
+        }
+        _free_list_head = rhs._free_list_head;
 
         return *this;
     }
@@ -667,7 +690,7 @@ namespace tempest::ecs
     constexpr auto basic_sparse_set<T, Allocator>::operator=(basic_sparse_set&& rhs) noexcept
         -> basic_sparse_set<T, Allocator>&
     {
-        if (&rhs == this)
+        if (this == &rhs)
         {
             return *this;
         }
@@ -681,6 +704,7 @@ namespace tempest::ecs
         tempest::swap(_packed_capacity, rhs._packed_capacity);
         tempest::swap(_packed_alloc, rhs._packed_alloc);
         tempest::swap(_sparse_alloc, rhs._sparse_alloc);
+        tempest::swap(_free_list_head, rhs._free_list_head);
 
         return *this;
     }
@@ -986,16 +1010,25 @@ namespace tempest::ecs
     constexpr basic_sparse_map<K, V, Allocator>::basic_sparse_map(const basic_sparse_map& rhs)
         : basic_sparse_map_interface<K>{}
     {
-        _request_storage_resize(rhs._packed_capacity);
-
-        uninitialized_copy_n(rhs._packed, rhs._packed_count, _packed);
-        uninitialized_copy_n(rhs._values, rhs._packed_count, _values);
-
-        for (size_t page_idx = 0; page_idx < _sparse_page_count; ++page_idx)
+        if (rhs._sparse_page_count > 0)
         {
-            copy_n(rhs._sparse[page_idx], traits_type::page_size, _sparse[page_idx]);
+            _sparse = sparse_alloc_traits::allocate(_sparse_alloc, rhs._sparse_page_count);
+            _sparse_page_count = rhs._sparse_page_count;
+            for (size_t page_idx = 0; page_idx < _sparse_page_count; ++page_idx)
+            {
+                _sparse[page_idx] = packed_alloc_traits::allocate(_packed_alloc, traits_type::page_size);
+                copy_n(rhs._sparse[page_idx], traits_type::page_size, _sparse[page_idx]);
+            }
         }
-
+        if (rhs._packed_capacity > 0)
+        {
+            _packed = packed_alloc_traits::allocate(_packed_alloc, rhs._packed_capacity);
+            _values = value_alloc_traits::allocate(_value_alloc, rhs._packed_capacity);
+            _packed_capacity = rhs._packed_capacity;
+            uninitialized_copy_n(rhs._packed, rhs._packed_count, _packed);
+            uninitialized_copy_n(rhs._values, rhs._packed_count, _values);
+            _packed_count = rhs._packed_count;
+        }
         _free_list_head = rhs._free_list_head;
     }
 
@@ -1023,22 +1056,33 @@ namespace tempest::ecs
     constexpr auto basic_sparse_map<K, V, Allocator>::operator=(const basic_sparse_map& rhs)
         -> basic_sparse_map<K, V, Allocator>&
     {
-        if (&rhs == this)
+        if (this == &rhs)
         {
             return *this;
         }
 
         _release_resources();
 
-        _request_storage_resize(rhs._packed_capacity);
-
-        uninitialized_copy_n(rhs._packed, rhs._packed_count, _packed);
-        uninitialized_copy_n(rhs._values, rhs._packed_count, _values);
-
-        for (size_t page_idx = 0; page_idx < _sparse_page_count; ++page_idx)
+        if (rhs._sparse_page_count > 0)
         {
-            copy_n(rhs._sparse[page_idx], traits_type::page_size, _sparse[page_idx]);
+            _sparse = sparse_alloc_traits::allocate(_sparse_alloc, rhs._sparse_page_count);
+            _sparse_page_count = rhs._sparse_page_count;
+            for (size_t page_idx = 0; page_idx < _sparse_page_count; ++page_idx)
+            {
+                _sparse[page_idx] = packed_alloc_traits::allocate(_packed_alloc, traits_type::page_size);
+                copy_n(rhs._sparse[page_idx], traits_type::page_size, _sparse[page_idx]);
+            }
         }
+        if (rhs._packed_capacity > 0)
+        {
+            _packed = packed_alloc_traits::allocate(_packed_alloc, rhs._packed_capacity);
+            _values = value_alloc_traits::allocate(_value_alloc, rhs._packed_capacity);
+            _packed_capacity = rhs._packed_capacity;
+            uninitialized_copy_n(rhs._packed, rhs._packed_count, _packed);
+            uninitialized_copy_n(rhs._values, rhs._packed_count, _values);
+            _packed_count = rhs._packed_count;
+        }
+        _free_list_head = rhs._free_list_head;
 
         return *this;
     }
@@ -1047,7 +1091,7 @@ namespace tempest::ecs
     constexpr basic_sparse_map<K, V, Allocator>& basic_sparse_map<K, V, Allocator>::operator=(
         basic_sparse_map&& rhs) noexcept
     {
-        if (&rhs == this)
+        if (this == &rhs)
         {
             return *this;
         }

@@ -40,6 +40,20 @@ namespace tempest::render_system
             _active_camera_entity = tempest::nullopt;
         }
 
+        auto active_tagged_camera = tempest::optional<ecs::entity>();
+        _registry->each([&](const ecs::self_component& self, const active_camera_component&,
+                            const camera_component& cam, const ecs::transform_component&) {
+            if (!active_tagged_camera.has_value() && cam.is_active && cam.target == camera_target_type::viewport)
+            {
+                active_tagged_camera = self.entity;
+            }
+        });
+
+        if (active_tagged_camera.has_value())
+        {
+            return active_tagged_camera;
+        }
+
         auto fallback = tempest::optional<ecs::entity>();
         _registry->each(
             [&](const ecs::self_component& self, const camera_component& cam, const ecs::transform_component&) {

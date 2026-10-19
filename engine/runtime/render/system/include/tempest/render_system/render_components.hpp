@@ -127,6 +127,10 @@ namespace tempest::render_system
         bool is_active = default_is_active;
     };
 
+    struct TEMPEST_API active_camera_component
+    {
+    };
+
     struct TEMPEST_API directional_light_component
     {
         static constexpr math::vec3<float> default_color = {1.0F, 1.0F, 1.0F};
@@ -221,6 +225,15 @@ namespace tempest::ecs
                 })
                 .field<&render_system::camera_component::is_active>("is_active", field_flags::none,
                     field_ui_hints{.display_name = "Active"});
+        }
+    };
+
+    template <>
+    struct reflect<render_system::active_camera_component>
+    {
+        static void describe(type_builder<render_system::active_camera_component>& builder)
+        {
+            builder.version(1);
         }
     };
 

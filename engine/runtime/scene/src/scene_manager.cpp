@@ -491,4 +491,54 @@ namespace tempest::scene
         record.is_dirty = false;
         return serialized;
     }
+
+    auto scene_manager::snapshot() const -> scene_manager_snapshot
+    {
+        auto snap = scene_manager_snapshot{};
+        snap.scenes = _scenes;
+        snap.free_slots = _free_slots;
+        snap.occupied_count = _occupied_count;
+        snap.active_scene = _active_scene;
+        return snap;
+    }
+
+    auto scene_manager::restore(scene_manager_snapshot&& snap) -> void
+    {
+        for (auto& op : _async_ops)
+        {
+            if (op.occupied)
+            {
+                cancel_load(scene_load_handle{
+                    .index = static_cast<uint32_t>(&op - _async_ops.data()),
+                    .generation = op.generation,
+                    .manager = this,
+                });
+            }
+        }
+
+        _scenes = tempest::move(snap.scenes);
+        _free_slots = tempest::move(snap.free_slots);
+        _occupied_count = snap.occupied_count;
+        _active_scene = snap.active_scene;
+    }
+
+    auto scene_manager::restore(const scene_manager_snapshot& snap) -> void
+    {
+        auto copy = snap;
+        restore(tempest::move(copy));
+    }
+
+    auto scene_manager::has_in_flight_loads() const noexcept -> bool
+    {
+        for (const auto& op : _async_ops)
+        {
+            if (op.occupied && (op.state == scene_load_state::decoding ||
+                                op.state == scene_load_state::resolving_assets ||
+                                op.state == scene_load_state::committing))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 } // namespace tempest::scene

@@ -59,6 +59,16 @@ namespace tempest::ecs
         reserve(initial_capacity);
     }
 
+    basic_archetype_storage::basic_archetype_storage(const basic_archetype_storage& other)
+        : _storage{other._storage}, _data{nullptr}, _size{other._size}
+    {
+        if (_size > 0 && other._data != nullptr)
+        {
+            _data = reinterpret_cast<byte*>(aligned_alloc(_size, _storage.alignment));
+            copy_n(other._data, _size, _data);
+        }
+    }
+
     basic_archetype_storage::basic_archetype_storage(basic_archetype_storage&& rhs) noexcept
         : _storage{tempest::move(rhs._storage)}, _data{tempest::exchange(rhs._data, nullptr)},
           _size{tempest::exchange(rhs._size, 0)}
@@ -74,9 +84,33 @@ namespace tempest::ecs
         _data = nullptr;
     }
 
+    auto basic_archetype_storage::operator=(const basic_archetype_storage& other) -> basic_archetype_storage&
+    {
+        if (this == &other)
+        {
+            return *this;
+        }
+
+        if (_data != nullptr)
+        {
+            aligned_free(_data);
+            _data = nullptr;
+        }
+
+        _storage = other._storage;
+        _size = other._size;
+        if (_size > 0 && other._data != nullptr)
+        {
+            _data = reinterpret_cast<byte*>(aligned_alloc(_size, _storage.alignment));
+            copy_n(other._data, _size, _data);
+        }
+
+        return *this;
+    }
+
     auto basic_archetype_storage::operator=(basic_archetype_storage&& rhs) noexcept -> basic_archetype_storage&
     {
-        if (&rhs == this)
+        if (this == &rhs)
         {
             return *this;
         }
@@ -131,7 +165,6 @@ namespace tempest::ecs
     }
 
     basic_archetype::basic_archetype(span<const basic_archetype_type_info> fields)
-
     {
         _storage.reserve(fields.size());
 
@@ -139,6 +172,57 @@ namespace tempest::ecs
         {
             _storage.emplace_back(field);
         }
+    }
+
+    basic_archetype::basic_archetype(const basic_archetype& other)
+        : _trampoline{other._trampoline}, _look_back_table{other._look_back_table}, _storage{other._storage},
+          _element_count{other._element_count}, _element_capacity{other._element_capacity},
+          _first_free_element{other._first_free_element}
+    {
+    }
+
+    basic_archetype::basic_archetype(basic_archetype&& other) noexcept
+        : _trampoline{tempest::move(other._trampoline)}, _look_back_table{tempest::move(other._look_back_table)},
+          _storage{tempest::move(other._storage)}, _element_count{tempest::exchange(other._element_count, 0)},
+          _element_capacity{tempest::exchange(other._element_capacity, 0)},
+          _first_free_element{tempest::exchange(other._first_free_element, 0)}
+    {
+    }
+
+    basic_archetype::~basic_archetype() = default;
+
+    auto basic_archetype::operator=(const basic_archetype& other) -> basic_archetype&
+    {
+        if (this == &other)
+        {
+            return *this;
+        }
+
+        _trampoline = other._trampoline;
+        _look_back_table = other._look_back_table;
+        _storage = other._storage;
+        _element_count = other._element_count;
+        _element_capacity = other._element_capacity;
+        _first_free_element = other._first_free_element;
+
+        return *this;
+    }
+
+    auto basic_archetype::operator=(basic_archetype&& other) noexcept -> basic_archetype&
+    {
+        if (this == &other)
+        {
+            return *this;
+        }
+
+        _trampoline = tempest::move(other._trampoline);
+        _look_back_table = tempest::move(other._look_back_table);
+        _storage = tempest::move(other._storage);
+        _element_count = tempest::exchange(other._element_count, 0);
+        _element_capacity = tempest::exchange(other._element_capacity, 0);
+        _first_free_element = tempest::exchange(other._first_free_element, 0);
+
+        return *this;
     }
 
     auto basic_archetype::allocate() -> basic_archetype::key_type
@@ -1476,5 +1560,36 @@ namespace tempest::ecs
         }
 
         return true;
+    }
+
+    auto basic_archetype_registry::snapshot() const -> registry_snapshot
+    {
+        auto snap = registry_snapshot{};
+        snap._archetypes = _archetypes;
+        snap._hashes = _hashes;
+        snap._entities = _entities;
+        snap._entity_archetype_mapping = _entity_archetype_mapping;
+        snap._names = _names;
+        return snap;
+    }
+
+    auto basic_archetype_registry::restore(registry_snapshot&& snap) -> void
+    {
+        _archetypes = tempest::move(snap._archetypes);
+        _hashes = tempest::move(snap._hashes);
+        _entities = tempest::move(snap._entities);
+        _entity_archetype_mapping = tempest::move(snap._entity_archetype_mapping);
+        _names = tempest::move(snap._names);
+
+        if (_event_registry != nullptr)
+        {
+            _event_registry->dispatcher<world_restored_event>().publish(world_restored_event{});
+        }
+    }
+
+    auto basic_archetype_registry::restore(const registry_snapshot& snap) -> void
+    {
+        auto snap_copy = snap;
+        restore(tempest::move(snap_copy));
     }
 } // namespace tempest::ecs

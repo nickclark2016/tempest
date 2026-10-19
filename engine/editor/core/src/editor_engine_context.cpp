@@ -1,4 +1,5 @@
 #include <tempest/editor_engine_context.hpp>
+#include <tempest/play_mode_controller.hpp>
 
 #include <tempest/array.hpp>
 #include <tempest/asset_database.hpp>
@@ -143,6 +144,8 @@ namespace tempest::editor
             _renderer->set_pipeline_statistics(_capture_gpu_stats ? render_system::all_pipeline_statistics
                                                                   : enum_mask{rhi::pipeline_statistic_flags::none});
         }
+
+        _play_mode_controller = make_unique<play_mode_controller>(*this);
     }
 
     editor_engine_context::~editor_engine_context()
@@ -156,13 +159,23 @@ namespace tempest::editor
         }
     }
 
+    auto editor_engine_context::get_play_mode_controller() noexcept -> play_mode_controller&
+    {
+        return *_play_mode_controller;
+    }
+
+    auto editor_engine_context::get_play_mode_controller() const noexcept -> const play_mode_controller&
+    {
+        return *_play_mode_controller;
+    }
+
     auto editor_engine_context::register_window(window_desc desc, bool install_swapchain_blit)
         -> window_registration_info
     {
         auto info = standalone_engine_context::register_window(desc, install_swapchain_blit);
         if (info.handle.is_valid())
         {
-            _window_manager.set_cursor_mode(info.handle, (_sim_state == simulation_state::play)
+            _window_manager.set_cursor_mode(info.handle, (_sim_state == simulation_state::playing)
                                                              ? cursor_mode::disabled
                                                              : cursor_mode::normal);
         }
@@ -174,7 +187,7 @@ namespace tempest::editor
         _sim_state = state;
         for (auto& win : _windows)
         {
-            if (state == simulation_state::play)
+            if (state == simulation_state::playing)
             {
                 _window_manager.set_cursor_mode(win.handle, cursor_mode::disabled);
             }
@@ -375,7 +388,7 @@ namespace tempest::editor
 
     auto editor_engine_context::should_step_simulation() -> bool
     {
-        return _sim_state == simulation_state::play;
+        return _sim_state == simulation_state::playing;
     }
 
     auto editor_engine_context::on_render_frame(float alpha) -> void
@@ -384,7 +397,7 @@ namespace tempest::editor
 
         static_cast<void>(get_assets().tick_file_watcher());
 
-        if (_sim_state == simulation_state::play)
+        if (_sim_state != simulation_state::edit)
         {
             ecs::interpolate_transform_history(_entity_registry, alpha);
 
@@ -431,9 +444,9 @@ namespace tempest::editor
             }
 
             auto camera_override =
-                (_sim_state == simulation_state::play)
-                    ? tempest::nullopt
-                    : tempest::optional<render_system::render_camera>(_editor_camera.get_render_camera());
+                (_sim_state == simulation_state::edit)
+                    ? tempest::optional<render_system::render_camera>(_editor_camera.get_render_camera())
+                    : tempest::nullopt;
 
             _with_pass_dispatcher([&](render_graph::pass_dispatcher_fn pass_dispatcher) {
                 [[maybe_unused]] auto result = _renderer->render_frame(

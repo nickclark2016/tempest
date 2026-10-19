@@ -46,6 +46,22 @@ namespace tempest::ecs
         C old_component;
         C new_component;
     };
+
+    struct world_restored_event
+    {
+    };
+
+    struct simulation_started_event
+    {
+    };
+
+    struct simulation_paused_event
+    {
+    };
+
+    struct simulation_stopped_event
+    {
+    };
 }
 
 #endif // tempest_ecs_ecs_events_hpp

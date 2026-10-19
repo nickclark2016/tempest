@@ -2,6 +2,7 @@
 
 #include <tempest/int.hpp>
 #include <tempest/sparse.hpp>
+#include <tempest/utility.hpp>
 
 using namespace tempest::ecs;
 
@@ -217,3 +218,63 @@ TEST(sparse_map, iterator)
 
     ASSERT_EQ(it, s.end());
 }
+
+/// @brief Verifies that basic_sparse_set move assignment transfers resources, frees old state, and handles self-assignment.
+TEST(sparse_set, move_assignment_and_self_assignment)
+{
+    // Setup: Populate initial sparse set
+    auto source_set = sparse_set{};
+    const auto ent_one = entity_traits<entity>::construct(10, 0);
+    const auto ent_two = entity_traits<entity>::construct(20, 0);
+    source_set.insert(ent_one);
+    source_set.insert(ent_two);
+    source_set.erase(source_set.find(ent_one));
+
+    // Act: Move assign to destination set
+    auto destination_set = sparse_set{};
+    destination_set = tempest::move(source_set);
+
+    // Assert: Elements and state are correctly transferred
+    EXPECT_EQ(destination_set.size(), 1U);
+    EXPECT_FALSE(destination_set.contains(ent_one));
+    EXPECT_TRUE(destination_set.contains(ent_two));
+
+    // Act: Self move assignment via pointer to exercise inverted guard clause
+    auto* const self_ptr = &destination_set;
+    *self_ptr = tempest::move(*self_ptr);
+
+    // Assert: Set remains valid and intact after self-move assignment
+    EXPECT_EQ(destination_set.size(), 1U);
+    EXPECT_TRUE(destination_set.contains(ent_two));
+}
+
+/// @brief Verifies that basic_sparse_map move assignment transfers keys, values, and handles self-assignment.
+TEST(sparse_map, move_assignment_and_self_assignment)
+{
+    // Setup: Populate initial sparse map
+    auto source_map = sparse_map<int>{};
+    const auto ent_one = entity_traits<entity>::construct(100, 0);
+    const auto ent_two = entity_traits<entity>::construct(200, 0);
+    source_map.insert(ent_one, 42);
+    source_map.insert(ent_two, 84);
+    source_map.erase(ent_one);
+
+    // Act: Move assign to destination map
+    auto destination_map = sparse_map<int>{};
+    destination_map = tempest::move(source_map);
+
+    // Assert: Keys and values are correctly transferred
+    EXPECT_EQ(destination_map.size(), 1U);
+    EXPECT_FALSE(destination_map.contains(ent_one));
+    EXPECT_TRUE(destination_map.contains(ent_two));
+    EXPECT_EQ(destination_map[ent_two], 84);
+
+    // Act: Self move assignment via pointer to exercise inverted guard clause
+    auto* const self_ptr = &destination_map;
+    *self_ptr = tempest::move(*self_ptr);
+
+    // Assert: Map remains valid and intact after self-move assignment
+    EXPECT_EQ(destination_map.size(), 1U);
+    EXPECT_TRUE(destination_map.contains(ent_two));
+    EXPECT_EQ(destination_map[ent_two], 84);
+}

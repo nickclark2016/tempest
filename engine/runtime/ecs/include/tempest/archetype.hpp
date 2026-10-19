@@ -93,11 +93,11 @@ namespace tempest::ecs
     {
       public:
         basic_archetype_storage(basic_archetype_type_info info, size_t initial_capacity = 0);
-        basic_archetype_storage(const basic_archetype_storage&) = delete;
+        basic_archetype_storage(const basic_archetype_storage& other);
         basic_archetype_storage(basic_archetype_storage&& rhs) noexcept;
         ~basic_archetype_storage();
 
-        auto operator=(const basic_archetype_storage&) -> basic_archetype_storage& = delete;
+        auto operator=(const basic_archetype_storage& other) -> basic_archetype_storage&;
         auto operator=(basic_archetype_storage&& rhs) noexcept -> basic_archetype_storage&;
 
         void reserve(size_t count);
@@ -146,6 +146,12 @@ namespace tempest::ecs
         using key_type = basic_archetype_key;
 
         basic_archetype(span<const basic_archetype_type_info> field_info);
+        basic_archetype(const basic_archetype& other);
+        basic_archetype(basic_archetype&& other) noexcept;
+        ~basic_archetype();
+
+        auto operator=(const basic_archetype& other) -> basic_archetype&;
+        auto operator=(basic_archetype&& other) noexcept -> basic_archetype&;
 
         auto allocate() -> key_type;
         void reserve(size_t count);
@@ -840,6 +846,7 @@ namespace tempest::ecs
         auto _acquire_next_entity(/*inout*/ size_t& archetype_index, /*intout*/ size_t& entity_index) const -> void;
     };
 
+    class registry_snapshot;
     class raw_registry_access;
 
     class TEMPEST_API basic_archetype_registry
@@ -857,6 +864,10 @@ namespace tempest::ecs
 
         auto operator=(const basic_archetype_registry&) -> basic_archetype_registry& = delete;
         auto operator=(basic_archetype_registry&& other) noexcept -> basic_archetype_registry&;
+
+        [[nodiscard]] auto snapshot() const -> registry_snapshot;
+        auto restore(registry_snapshot&& snap) -> void;
+        auto restore(const registry_snapshot& snap) -> void;
 
         using entity_type = entity;
 
@@ -976,6 +987,7 @@ namespace tempest::ecs
         friend class basic_archetype_with_components_view;
 
         friend class raw_registry_access;
+        friend class registry_snapshot;
 
         [[nodiscard]] auto _has_raw(entity_type entity, uint32_t type_index) const noexcept -> bool;
         [[nodiscard]] auto _get_component_raw(entity_type entity, uint32_t type_index) const noexcept -> const void*;
@@ -985,6 +997,33 @@ namespace tempest::ecs
             -> void*;
         auto _assign_raw(entity_type entity, uint32_t type_index, const void* src_data = nullptr) -> void*;
         auto _remove_raw(entity_type entity, uint32_t type_index) -> bool;
+    };
+
+    /// @brief Opaque snapshot capturing all archetype storage data, entity store versions,
+    /// free list state, entity mappings, and name tables for Play Mode restoration.
+    class TEMPEST_API registry_snapshot
+    {
+      public:
+        registry_snapshot() = default;
+
+        [[nodiscard]] auto empty() const noexcept -> bool
+        {
+            return _entities.empty();
+        }
+
+        [[nodiscard]] auto size() const noexcept -> size_t
+        {
+            return _entities.size();
+        }
+
+      private:
+        vector<basic_archetype> _archetypes;
+        vector<basic_archetype_registry::types_hash_type> _hashes;
+        basic_entity_store<entity, basic_archetype_registry::default_entities_per_chunk, uint64_t> _entities;
+        sparse_map<basic_archetype_entity> _entity_archetype_mapping;
+        flat_unordered_map<entity, tempest::string> _names;
+
+        friend class basic_archetype_registry;
     };
 
     /// @brief Friended system-level accessor for type-erased component manipulation.
@@ -1075,24 +1114,28 @@ namespace tempest::ecs
         : _archetypes{tempest::move(other._archetypes)}, _hashes{tempest::move(other._hashes)},
           _entities{tempest::move(other._entities)},
           _entity_archetype_mapping{tempest::move(other._entity_archetype_mapping)},
-          _names{tempest::move(other._names)}, _event_registry{other._event_registry},
-          _type_registry{other._type_registry}
+          _names{tempest::move(other._names)},
+          _event_registry{tempest::exchange(other._event_registry, nullptr)},
+          _type_registry{tempest::exchange(other._type_registry, nullptr)}
     {
     }
 
     inline auto basic_archetype_registry::operator=(basic_archetype_registry&& other) noexcept
         -> basic_archetype_registry&
     {
-        if (this != &other)
+        if (this == &other)
         {
-            _archetypes = tempest::move(other._archetypes);
-            _hashes = tempest::move(other._hashes);
-            _entities = tempest::move(other._entities);
-            _entity_archetype_mapping = tempest::move(other._entity_archetype_mapping);
-            _names = tempest::move(other._names);
-            _event_registry = other._event_registry;
-            _type_registry = other._type_registry;
+            return *this;
         }
+
+        _archetypes = tempest::move(other._archetypes);
+        _hashes = tempest::move(other._hashes);
+        _entities = tempest::move(other._entities);
+        _entity_archetype_mapping = tempest::move(other._entity_archetype_mapping);
+        _names = tempest::move(other._names);
+        _event_registry = tempest::exchange(other._event_registry, nullptr);
+        _type_registry = tempest::exchange(other._type_registry, nullptr);
+
         return *this;
     }
 

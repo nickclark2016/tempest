@@ -33,7 +33,7 @@ namespace tempest::editor
 
         [[nodiscard]] virtual auto is_mode_supported(simulation_state state) const noexcept -> bool
         {
-            return state != simulation_state::play;
+            return state != simulation_state::playing;
         }
 
       protected:

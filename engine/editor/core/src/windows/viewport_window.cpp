@@ -2,6 +2,7 @@
 
 #include <tempest/algorithm.hpp>
 #include <tempest/editor_engine_context.hpp>
+#include <tempest/play_mode_controller.hpp>
 #include <tempest/ui.hpp>
 
 #include <imgui.h>
@@ -32,33 +33,83 @@ namespace tempest::editor
 
         if (ImGui::Begin(name.data(), &_open))
         {
-            const auto current_state = _ctx->get_simulation_state();
+            auto& controller = _ctx->get_play_mode_controller();
+            const auto current_state = controller.get_state();
 
-            auto draw_sim_button = [&](const char* label, simulation_state state) {
-                const auto is_active = (current_state == state);
-                if (is_active)
-                {
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-                    ImGui::BeginDisabled(true);
-                }
+            const auto is_playing = (current_state == simulation_state::playing);
+            if (is_playing)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+                ImGui::BeginDisabled(true);
+            }
+            if (ImGui::Button("Play"))
+            {
+                controller.play();
+            }
+            if (is_playing)
+            {
+                ImGui::EndDisabled();
+                ImGui::PopStyleColor();
+            }
 
-                if (ImGui::Button(label))
-                {
-                    _ctx->set_simulation_state(state);
-                }
-
-                if (is_active)
-                {
-                    ImGui::EndDisabled();
-                    ImGui::PopStyleColor();
-                }
-            };
-
-            draw_sim_button("Play", simulation_state::play);
             ImGui::SameLine();
-            draw_sim_button("Pause", simulation_state::pause);
+
+            const auto is_paused = (current_state == simulation_state::paused);
+            const auto can_pause = is_playing;
+            if (!can_pause && !is_paused)
+            {
+                ImGui::BeginDisabled(true);
+            }
+            if (is_paused)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+                ImGui::BeginDisabled(true);
+            }
+            if (ImGui::Button("Pause"))
+            {
+                controller.pause();
+            }
+            if (is_paused)
+            {
+                ImGui::EndDisabled();
+                ImGui::PopStyleColor();
+            }
+            else if (!can_pause)
+            {
+                ImGui::EndDisabled();
+            }
+
             ImGui::SameLine();
-            draw_sim_button("Stop", simulation_state::stopped);
+
+            const auto can_step = is_paused;
+            if (!can_step)
+            {
+                ImGui::BeginDisabled(true);
+            }
+            if (ImGui::Button("Step"))
+            {
+                controller.step();
+            }
+            if (!can_step)
+            {
+                ImGui::EndDisabled();
+            }
+
+            ImGui::SameLine();
+
+            const auto can_stop = (current_state != simulation_state::edit);
+            if (!can_stop)
+            {
+                ImGui::BeginDisabled(true);
+            }
+            if (ImGui::Button("Stop"))
+            {
+                controller.stop();
+            }
+            if (!can_stop)
+            {
+                ImGui::EndDisabled();
+            }
 
             if (_ctx->get_config().headless)
             {
@@ -100,7 +151,7 @@ namespace tempest::editor
                 auto& cam = _ctx->get_editor_camera();
 
                 // Left click in viewport while in play mode to capture cursor
-                if (current_state == simulation_state::play && (is_hovered || is_active) &&
+                if (current_state == simulation_state::playing && (is_hovered || is_active) &&
                     ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                 {
                     const auto main_win = _ctx->get_main_window();
@@ -111,7 +162,7 @@ namespace tempest::editor
                 }
 
                 // Right click hold for fly camera navigation (active in edit/pause modes)
-                if (current_state != simulation_state::play && (is_hovered || is_active) &&
+                if (current_state != simulation_state::playing && (is_hovered || is_active) &&
                     ImGui::IsMouseDown(ImGuiMouseButton_Right))
                 {
                     // Mouse look

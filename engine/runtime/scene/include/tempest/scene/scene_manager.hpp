@@ -88,6 +88,18 @@ namespace tempest::scene
         scene_unrecognized_data unrecognized_data;
     };
 
+    /// @brief Snapshot capturing loaded scene slots, free list, occupied count, and active scene handle.
+    struct TEMPEST_API scene_manager_snapshot
+    {
+        static constexpr size_t default_occupied_count = 0;
+        static constexpr scene_handle default_active_scene = {};
+
+        vector<scene_record> scenes;
+        vector<uint32_t> free_slots;
+        size_t occupied_count = default_occupied_count;
+        scene_handle active_scene = default_active_scene;
+    };
+
     /// @brief Type-erased base interface for asynchronous decoding and asset resolution background tasks.
     struct async_load_task_base
     {
@@ -165,6 +177,12 @@ namespace tempest::scene
 
         [[nodiscard]] auto is_dirty(scene_handle handle) const noexcept -> bool;
         auto set_dirty(scene_handle handle, bool dirty) -> bool;
+
+        [[nodiscard]] auto snapshot() const -> scene_manager_snapshot;
+        auto restore(scene_manager_snapshot&& snap) -> void;
+        auto restore(const scene_manager_snapshot& snap) -> void;
+
+        [[nodiscard]] auto has_in_flight_loads() const noexcept -> bool;
 
         auto create_entity(scene_handle handle, string_view name = {}) -> ecs::entity;
 

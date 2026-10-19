@@ -239,21 +239,21 @@ namespace tempest::editor::tests
         // Initial State & Docking
         EXPECT_EQ(viewport.desired_initial_dock(), editor_window::dock_location::center);
         EXPECT_EQ(viewport.window_name(), "Viewport");
-        EXPECT_TRUE(viewport.is_mode_supported(simulation_state::stopped));
-        EXPECT_TRUE(viewport.is_mode_supported(simulation_state::pause));
-        EXPECT_TRUE(viewport.is_mode_supported(simulation_state::play));
+        EXPECT_TRUE(viewport.is_mode_supported(simulation_state::edit));
+        EXPECT_TRUE(viewport.is_mode_supported(simulation_state::paused));
+        EXPECT_TRUE(viewport.is_mode_supported(simulation_state::playing));
 
         // Default Aspect Ratio (Zero-size safe fallback to 1.0)
         EXPECT_FLOAT_EQ(viewport.aspect_ratio(), 1.0F);
 
         // Simulation State Switching
-        EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::stopped);
-        engine_ctx.set_simulation_state(simulation_state::play);
-        EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::play);
-        engine_ctx.set_simulation_state(simulation_state::pause);
-        EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::pause);
-        engine_ctx.set_simulation_state(simulation_state::stopped);
-        EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::stopped);
+        EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::edit);
+        engine_ctx.set_simulation_state(simulation_state::playing);
+        EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::playing);
+        engine_ctx.set_simulation_state(simulation_state::paused);
+        EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::paused);
+        engine_ctx.set_simulation_state(simulation_state::edit);
+        EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::edit);
     }
 
     /// @brief Verifies that editor context initialization does NOT insert any phantom
@@ -444,7 +444,7 @@ namespace tempest::editor::tests
         reg.assign(ent, hist);
         reg.assign(ent, tx);
 
-        engine_ctx.set_simulation_state(simulation_state::play);
+        engine_ctx.set_simulation_state(simulation_state::playing);
 
         // Act: register fixed update that moves the entity, and request close after ticks run
         auto fixed_updated = false;
@@ -493,26 +493,26 @@ namespace tempest::editor::tests
 
         auto& wm = engine_ctx.get_window_manager();
 
-        // Assert initial state: stopped mode, not playing, cursor normal
-        EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::stopped);
+        // Assert initial state: edit mode, not playing, cursor normal
+        EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::edit);
         EXPECT_FALSE(engine_ctx.is_play_mode());
         EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::normal);
         EXPECT_FALSE(wm.is_cursor_disabled(reg_info.handle));
 
-        // Act & Assert: Transition to play mode captures cursor
-        engine_ctx.set_simulation_state(simulation_state::play);
+        // Act & Assert: Transition to playing mode captures cursor
+        engine_ctx.set_simulation_state(simulation_state::playing);
         EXPECT_TRUE(engine_ctx.is_play_mode());
         EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::disabled);
         EXPECT_TRUE(wm.is_cursor_disabled(reg_info.handle));
 
-        // Act & Assert: Transition to pause mode uncaptures cursor
-        engine_ctx.set_simulation_state(simulation_state::pause);
+        // Act & Assert: Transition to paused mode uncaptures cursor
+        engine_ctx.set_simulation_state(simulation_state::paused);
         EXPECT_FALSE(engine_ctx.is_play_mode());
         EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::normal);
         EXPECT_FALSE(wm.is_cursor_disabled(reg_info.handle));
 
-        // Act & Assert: Transition to stopped mode retains normal cursor
-        engine_ctx.set_simulation_state(simulation_state::stopped);
+        // Act & Assert: Transition to edit mode retains normal cursor
+        engine_ctx.set_simulation_state(simulation_state::edit);
         EXPECT_FALSE(engine_ctx.is_play_mode());
         EXPECT_EQ(wm.get_cursor_mode(reg_info.handle), cursor_mode::normal);
         EXPECT_FALSE(wm.is_cursor_disabled(reg_info.handle));
@@ -656,7 +656,7 @@ namespace tempest::editor::tests
                 if (frame_count == 1)
                 {
                     ASSERT_TRUE(floor.has_value());
-                    engine.set_simulation_state(simulation_state::play);
+                    engine.set_simulation_state(simulation_state::playing);
                     ui_editor.get_selection().set_selection(*floor, reg, &engine.get_scene_manager());
                 }
                 else if (frame_count == 2)
