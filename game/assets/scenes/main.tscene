@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "entities": [
+    {
+      "id": "0x0000000000000001",
+      "name": "Camera",
+      "components": {
+        "transform_component": {
+          "position": [0.0, 1.6, 0.0],
+          "rotation": [0.0, 0.0, 0.0, 1.0],
+          "scale": [1.0, 1.0, 1.0]
+        },
+        "camera_component": {
+          "aspect_ratio": 1.7777778,
+          "vertical_fov": 1.0471976,
+          "near_plane": 0.05,
+          "far_plane": 1000.0,
+          "target": "Viewport",
+          "is_active": true
+        },
+        "active_camera_component": {}
+      }
+    },
+    {
+      "id": "0x0000000000000002",
+      "name": "Sun",
+      "components": {
+        "transform_component": {
+          "position": [0.0, 0.0, 0.0],
+          "rotation": [0.52456346, 0.18254332, -0.11629292, 0.8233997],
+          "scale": [1.0, 1.0, 1.0]
+        },
+        "directional_light_component": {
+          "color": [1.0, 0.98, 0.95],
+          "intensity": 2.0
+        },
+        "shadow_caster_component": {
+          "resolution": 2048,
+          "num_cascades": 4,
+          "split_lambda": 0.5,
+          "max_shadow_distance": 100.0,
+          "normal_bias": 0.015,
+          "depth_bias": 0.001,
+          "priority": 0,
+          "debug_mode": "None"
+        }
+      }
+    },
+    {
+      "id": "0x0000000000000003",
+      "name": "FloorPlane",
+      "components": {
+        "transform_component": {
+          "position": [0.0, 0.0, 0.0],
+          "rotation": [0.0, 0.0, 0.0, 1.0],
+          "scale": [1.0, 1.0, 1.0]
+        },
+        "mesh_component": {
+          "mesh_id": "b0010000-0000-0000-0000-000000000001"
+        },
+        "material_component": {
+          "material_id": "b0030000-0000-0000-0000-000000000001"
+        },
+        "rigid_body_component": {
+          "motion": "Static",
+          "layer": "Non-Moving",
+          "mass": 0.0
+        },
+        "box_collider_component": {
+          "half_extents": [20.0, 0.5, 20.0],
+          "offset": [0.0, -0.5, 0.0]
+        }
+      }
+    },
+    {
+      "id": "0x0000000000000004",
+      "name": "StepObstacle",
+      "components": {
+        "transform_component": {
+          "position": [0.0, 0.1, 5.0],
+          "rotation": [0.0, 0.0, 0.0, 1.0],
+          "scale": [1.0, 1.0, 1.0]
+        },
+        "mesh_component": {
+          "mesh_id": "b0010000-0000-0000-0000-000000000002"
+        },
+        "material_component": {
+          "material_id": "b0030000-0000-0000-0000-000000000001"
+        },
+        "rigid_body_component": {
+          "motion": "Static",
+          "layer": "Non-Moving",
+          "mass": 0.0
+        },
+        "box_collider_component": {
+          "half_extents": [1.0, 0.1, 1.0],
+          "offset": [0.0, 0.0, 0.0]
+        }
+      }
+    },
+    {
+      "id": "0x0000000000000005",
+      "name": "CapsuleProxyTarget",
+      "components": {
+        "transform_component": {
+          "position": [0.0, 0.92, 2.5],
+          "rotation": [0.0, 0.0, 0.0, 1.0],
+          "scale": [1.0, 1.0, 1.0]
+        },
+        "mesh_component": {
+          "mesh_id": "b0010000-0000-0000-0000-000000000004"
+        },
+        "material_component": {
+          "material_id": "b0030000-0000-0000-0000-000000000001"
+        },
+        "transform_history_component": {}
+      }
+    }
+  ]
+}

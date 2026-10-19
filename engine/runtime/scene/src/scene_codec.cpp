@@ -466,25 +466,28 @@ namespace tempest::scene
                     continue;
                 }
 
-                if (type_info != nullptr && type_info->descriptor.has_value())
+                if (type_info != nullptr)
                 {
                     auto* comp_ptr =
                         ecs::raw_registry_access::get_component_raw(registry, target_ent, type_info->index);
                     if (comp_ptr == nullptr)
                     {
                         comp_ptr = ecs::raw_registry_access::assign_raw(registry, target_ent, *type_info);
-                        for (const auto& field : type_info->descriptor->fields)
+                        if (type_info->descriptor.has_value())
                         {
-                            if (field.kind == ecs::field_kind::entity_ref)
+                            for (const auto& field : type_info->descriptor->fields)
                             {
-                                detail::set_field_val(field, comp_ptr, ecs::tombstone);
+                                if (field.kind == ecs::field_kind::entity_ref)
+                                {
+                                    detail::set_field_val(field, comp_ptr, ecs::tombstone);
+                                }
                             }
                         }
                     }
-                    const auto& desc = *type_info->descriptor;
 
-                    if (comp_val.is_object())
+                    if (type_info->descriptor.has_value() && comp_val.is_object())
                     {
+                        const auto& desc = *type_info->descriptor;
                         const auto fields_obj_res = comp_val.as_object();
                         if (fields_obj_res.has_value())
                         {

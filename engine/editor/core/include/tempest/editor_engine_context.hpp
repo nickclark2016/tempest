@@ -175,6 +175,7 @@ namespace tempest::editor
         auto set_gpu_stats_enabled(bool enabled) noexcept -> void;
 
         auto collect_and_broadcast_telemetry() -> void;
+        auto load_startup_scene_if_needed() -> bool;
 
         [[nodiscard]] auto get_log_sink() noexcept -> editor_log_sink&
         {

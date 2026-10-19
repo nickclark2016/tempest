@@ -10,7 +10,7 @@ namespace tempest::editor
     {
     }
 
-    auto play_mode_controller::play() -> bool
+    auto play_mode_controller::play(const play_settings& settings) -> bool
     {
         if (_context->get_scene_manager().has_in_flight_loads())
         {
@@ -29,6 +29,10 @@ namespace tempest::editor
             _saved_scene_snapshot = _context->get_scene_manager().snapshot();
             _saved_editor_camera = _context->get_editor_camera();
             _context->set_simulation_state(simulation_state::playing);
+            if (_on_play_begin)
+            {
+                _on_play_begin(settings);
+            }
             _context->get_events().dispatcher<ecs::simulation_started_event>().publish(ecs::simulation_started_event{});
             return true;
         }
@@ -80,6 +84,11 @@ namespace tempest::editor
             return;
         }
 
+        if (_on_play_end)
+        {
+            _on_play_end();
+        }
+
         _context->set_simulation_state(simulation_state::edit);
 
         if (_saved_scene_snapshot.has_value())
@@ -101,6 +110,16 @@ namespace tempest::editor
         }
 
         _context->get_events().dispatcher<ecs::simulation_stopped_event>().publish(ecs::simulation_stopped_event{});
+    }
+
+    auto play_mode_controller::set_on_play_begin(function<void(const play_settings&)> callback) -> void
+    {
+        _on_play_begin = tempest::move(callback);
+    }
+
+    auto play_mode_controller::set_on_play_end(function<void()> callback) -> void
+    {
+        _on_play_end = tempest::move(callback);
     }
 
     auto play_mode_controller::get_state() const noexcept -> simulation_state

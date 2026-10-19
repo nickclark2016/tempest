@@ -1,4 +1,8 @@
+#define TEMPEST_GAME_EXPORT
+#include <tempest/game_module.hpp>
+
 #include <tempest/algorithm.hpp>
+#include <tempest/archetype.hpp>
 #include <tempest/array.hpp>
 #include <tempest/chrono.hpp>
 #include <tempest/guid.hpp>
@@ -17,6 +21,7 @@
 #include <tempest/optional.hpp>
 #include <tempest/physics/box_collider_component.hpp>
 #include <tempest/physics/character_controller_component.hpp>
+#include <tempest/physics/character_movement_intent.hpp>
 #include <tempest/physics/character_prediction.hpp>
 #include <tempest/physics/character_protocol.hpp>
 #include <tempest/physics/character_reconciliation.hpp>
@@ -36,12 +41,8 @@
 #include <tempest/vec3.hpp>
 #include <tempest/vector.hpp>
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
-#define GAME_API __declspec(dllexport)
-#elif defined(TEMPEST_PLATFORM_LINUX)
-#define GAME_API __attribute__((visibility("default")))
-#else
-#error "Unsupported platform"
+#ifndef GAME_API
+#define GAME_API TEMPEST_GAME_API
 #endif
 
 namespace
@@ -53,61 +54,6 @@ namespace
             return {};
         }
         return tempest::string_view{sv.data() + offset, sv.size() - offset};
-    }
-
-    auto starts_with(tempest::string_view sv, tempest::string_view prefix) noexcept -> bool
-    {
-        if (sv.size() < prefix.size())
-        {
-            return false;
-        }
-        for (size_t i = 0; i < prefix.size(); ++i)
-        {
-            if (sv[i] != prefix[i])
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    auto create_plane_mesh(float width, float depth, float uv_scale = 1.0F,
-                           tempest::math::vec4<float> color = {1.0F, 1.0F, 1.0F, 1.0F}) -> tempest::core::mesh
-    {
-        auto m = tempest::core::mesh{};
-        const auto hw = width * 0.5F;
-        const auto hd = depth * 0.5F;
-
-        // Front-facing clockwise winding order in Vulkan screen coords (normal: 0, 1, 0):
-        m.vertices.push_back(tempest::core::vertex{.position = {-hw, 0.0F, hd},
-                                                   .uv = {0.0F, 0.0F},
-                                                   .normal = {0.0F, 1.0F, 0.0F},
-                                                   .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
-                                                   .color = color});
-        m.vertices.push_back(tempest::core::vertex{.position = {hw, 0.0F, hd},
-                                                   .uv = {uv_scale, 0.0F},
-                                                   .normal = {0.0F, 1.0F, 0.0F},
-                                                   .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
-                                                   .color = color});
-        m.vertices.push_back(tempest::core::vertex{.position = {hw, 0.0F, -hd},
-                                                   .uv = {uv_scale, uv_scale},
-                                                   .normal = {0.0F, 1.0F, 0.0F},
-                                                   .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
-                                                   .color = color});
-        m.vertices.push_back(tempest::core::vertex{.position = {-hw, 0.0F, -hd},
-                                                   .uv = {0.0F, uv_scale},
-                                                   .normal = {0.0F, 1.0F, 0.0F},
-                                                   .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
-                                                   .color = color});
-
-        m.indices.push_back(0);
-        m.indices.push_back(1);
-        m.indices.push_back(2);
-        m.indices.push_back(2);
-        m.indices.push_back(3);
-        m.indices.push_back(0);
-
-        return m;
     }
 
     auto create_box_mesh(tempest::math::vec3<float> half_extents, tempest::math::vec4<float> color,
@@ -154,18 +100,11 @@ namespace
         const auto y = half_extents.y;
         const auto z = half_extents.z;
 
-        // Clockwise winding order matching Vulkan pipeline front_face = clockwise:
-        // Front (+Z): normal {0, 0, 1}
         add_face({0.0F, 0.0F, 1.0F}, {1.0F, 0.0F, 0.0F}, {-x, -y, z}, {x, -y, z}, {x, y, z}, {-x, y, z}, color);
-        // Back (-Z): normal {0, 0, -1}
         add_face({0.0F, 0.0F, -1.0F}, {-1.0F, 0.0F, 0.0F}, {x, -y, -z}, {-x, -y, -z}, {-x, y, -z}, {x, y, -z}, color);
-        // Left (-X): normal {-1, 0, 0}
         add_face({-1.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}, {-x, -y, -z}, {-x, -y, z}, {-x, y, z}, {-x, y, -z}, color);
-        // Right (+X): normal {1, 0, 0}
         add_face({1.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -1.0F}, {x, -y, z}, {x, -y, -z}, {x, y, -z}, {x, y, z}, color);
-        // Top (+Y): normal {0, 1, 0}
         add_face({0.0F, 1.0F, 0.0F}, {1.0F, 0.0F, 0.0F}, {-x, y, z}, {x, y, z}, {x, y, -z}, {-x, y, -z}, color);
-        // Bottom (-Y): normal {0, -1, 0}
         add_face({0.0F, -1.0F, 0.0F}, {1.0F, 0.0F, 0.0F}, {-x, -y, -z}, {x, -y, -z}, {x, -y, z}, {-x, -y, z}, color);
 
         return m;
@@ -185,7 +124,6 @@ namespace
         const auto pi = tempest::math::constants::pi<float>;
         const auto half_pi = tempest::math::constants::half_pi<float>;
 
-        // Generate vertices ring by ring from south pole (-Y) to north pole (+Y)
         for (auto ring_idx = 0U; ring_idx < num_rings; ++ring_idx)
         {
             auto latitude = 0.0F;
@@ -193,14 +131,12 @@ namespace
 
             if (ring_idx <= rings_per_cap)
             {
-                // Bottom hemisphere: latitude goes from -pi/2 up to 0.0
                 const auto t = static_cast<float>(ring_idx) / static_cast<float>(rings_per_cap);
                 latitude = -half_pi + (t * half_pi);
                 y_offset = -cylinder_half_height;
             }
             else
             {
-                // Top hemisphere: latitude goes from 0.0 up to +pi/2
                 const auto t = static_cast<float>(ring_idx - (rings_per_cap + 1U)) / static_cast<float>(rings_per_cap);
                 latitude = t * half_pi;
                 y_offset = cylinder_half_height;
@@ -250,7 +186,6 @@ namespace
             }
         }
 
-        // Generate clockwise indices for triangles connecting consecutive rings
         for (auto ring_idx = 0U; ring_idx < num_rings - 1U; ++ring_idx)
         {
             const auto ring_start = ring_idx * verts_per_ring;
@@ -265,21 +200,18 @@ namespace
 
                 if (ring_idx == 0U)
                 {
-                    // Bottom pole: emit single non-degenerate triangle (v00, v10, v11)
                     m.indices.push_back(v00);
                     m.indices.push_back(v10);
                     m.indices.push_back(v11);
                 }
                 else if (ring_idx == num_rings - 2U)
                 {
-                    // Top pole: emit single non-degenerate triangle (v00, v11, v01)
                     m.indices.push_back(v00);
                     m.indices.push_back(v11);
                     m.indices.push_back(v01);
                 }
                 else
                 {
-                    // Quad connecting rings
                     m.indices.push_back(v00);
                     m.indices.push_back(v10);
                     m.indices.push_back(v11);
@@ -324,11 +256,9 @@ namespace
         static constexpr size_t max_packets_per_tick = 64;
         static constexpr tempest::chrono::milliseconds connect_retransmit_interval{500};
 
-        // Mode
         bool is_offline = false;
         bool is_focused = default_is_focused;
 
-        // Network connection state
         tempest::network::network_context net_ctx = {};
         tempest::network::endpoint server_endpoint = {};
         tempest::network::udp_socket socket = {};
@@ -339,7 +269,6 @@ namespace
         bool first_snapshot_received = false;
         tempest::chrono::steady_clock::time_point last_connect_attempt = {};
 
-        // Authoritative simulation & client prediction
         tempest::physics::physics_world client_physics_world = {};
         tempest::unique_ptr<tempest::physics::physics_scene_system> physics_scene = nullptr;
         tempest::ecs::entity local_player_entity = tempest::ecs::null;
@@ -347,13 +276,10 @@ namespace
         tempest::physics::character_prediction_buffer prediction_buffer = {};
         tempest::uint32_t current_client_tick = default_client_tick;
 
-        // Redundant command history for packet loss mitigation
         tempest::vector<tempest::network::user_cmd> command_history = {};
 
-        // Remote player visual proxies
         tempest::vector<remote_player_entry> remote_players = {};
 
-        // First-person camera view
         float camera_yaw = default_camera_yaw;
         float camera_pitch = default_camera_pitch;
         float last_mouse_x = default_mouse_coord;
@@ -361,18 +287,17 @@ namespace
         bool first_mouse = true;
         tempest::chrono::steady_clock::time_point last_render_time = {};
 
-        // Registered assets
         tempest::guid local_player_mesh_id = {};
         tempest::guid remote_player_mesh_id = {};
         tempest::guid local_player_mat_id = {};
         tempest::guid remote_player_mat_id = {};
-        tempest::guid floor_mesh_id = {};
-        tempest::guid floor_mat_id = {};
-        tempest::guid step_mesh_id = {};
-        tempest::guid step_mat_id = {};
     };
 
-    auto spawn_local_player(tempest::client_context* ctx, multiplayer_client* client) -> void
+    tempest::engine_context* g_engine = nullptr;
+    tempest::client_context* g_client_ctx = nullptr;
+    tempest::unique_ptr<multiplayer_client> g_client = nullptr;
+
+    auto spawn_local_player(tempest::engine_context* ctx, multiplayer_client* client) -> void
     {
         auto& registry = ctx->get_entities();
         const auto spawn_pos = client->is_offline
@@ -408,7 +333,42 @@ namespace
         ctx->get_logger().info("Spawned local player character.");
     }
 
-    auto process_world_snapshot(tempest::client_context* ctx, multiplayer_client* client,
+    auto despawn_local_player(tempest::engine_context* ctx, multiplayer_client* client) -> void
+    {
+        if (client->local_player_entity == tempest::ecs::null)
+        {
+            return;
+        }
+
+        const auto* controller =
+            ctx->get_entities().try_get<tempest::physics::character_controller_component>(client->local_player_entity);
+        if (controller != nullptr)
+        {
+            client->client_physics_world.despawn_character(controller->id);
+        }
+
+        if (ctx->get_entities().is_valid(client->local_player_entity))
+        {
+            ctx->get_entities().destroy(client->local_player_entity);
+        }
+        client->local_player_entity = tempest::ecs::null;
+        client->prediction_buffer.reset();
+        client->command_history.clear();
+    }
+
+    auto despawn_remote_players(tempest::engine_context* ctx, multiplayer_client* client) -> void
+    {
+        for (const auto& remote : client->remote_players)
+        {
+            if (remote.entity != tempest::ecs::null && ctx->get_entities().is_valid(remote.entity))
+            {
+                ctx->get_entities().destroy(remote.entity);
+            }
+        }
+        client->remote_players.clear();
+    }
+
+    auto process_world_snapshot(tempest::engine_context* ctx, multiplayer_client* client,
                                 const tempest::physics::world_snapshot_packet& world_snap) -> void
     {
         auto& registry = ctx->get_entities();
@@ -417,7 +377,6 @@ namespace
         {
             if (player_snap.session_id == client->session_id)
             {
-                // Local player reconciliation against authoritative server state
                 if (client->local_player_entity != tempest::ecs::null)
                 {
                     auto local_snap = player_snap.snapshot;
@@ -430,7 +389,6 @@ namespace
             }
             else
             {
-                // Remote player visual proxy
                 auto found_proxy = false;
                 for (auto& remote : client->remote_players)
                 {
@@ -489,7 +447,6 @@ namespace
             }
         }
 
-        // Despawn visual proxies for sessions that disconnected
         for (auto* it = client->remote_players.begin(); it != client->remote_players.end();)
         {
             auto still_active = false;
@@ -514,199 +471,103 @@ namespace
             }
         }
     }
+} // namespace
 
-    auto setup_multiplayer_client(tempest::client_context* ctx, const tempest::network::endpoint& server_ep,
-                                  bool is_offline) -> void
+extern "C"
+{
+    TEMPEST_GAME_API auto tempest_game_register_types(tempest::ecs::component_type_registry& types) -> void
     {
-        auto& logger = ctx->get_logger();
-        if (is_offline)
+        types.register_type<tempest::ecs::transform_component>();
+        types.register_type<tempest::ecs::transform_history_component>();
+        types.register_type<tempest::core::mesh_component>();
+        types.register_type<tempest::core::material_component>();
+        types.register_type<tempest::render_system::camera_component>();
+        types.register_type<tempest::render_system::active_camera_component>();
+        types.register_type<tempest::render_system::directional_light_component>();
+        types.register_type<tempest::render_system::shadow_caster_component>();
+        types.register_type<tempest::physics::rigid_body_component>();
+        types.register_type<tempest::physics::box_collider_component>();
+        types.register_type<tempest::physics::velocity_component>();
+        types.register_type<tempest::physics::character_controller_component>();
+        types.register_type<tempest::physics::character_movement_intent>();
+        types.register_type<tempest::physics::reconciliation_smoothing_component>();
+    }
+
+    TEMPEST_GAME_API auto tempest_game_on_load(tempest::engine_context& ctx,
+                                               tempest::span<const tempest::string_view> args) -> void
+    {
+        g_engine = &ctx;
+        g_client_ctx = dynamic_cast<tempest::client_context*>(&ctx);
+        g_client = tempest::make_unique<multiplayer_client>();
+        auto* const client = g_client.get();
+
+        auto server_ep = tempest::optional<tempest::network::endpoint>{};
+        for (const auto& arg : args)
         {
-            logger.info("Initializing Game Scene in standalone offline mode...");
+            constexpr auto prefix = tempest::string_view{"--connect="};
+            if (tempest::starts_with(arg, prefix))
+            {
+                const auto target = substr(arg, prefix.size());
+                server_ep = tempest::network::endpoint::parse(target);
+                if (!server_ep.has_value())
+                {
+                    ctx.get_logger().warn("Failed to parse connect endpoint, falling back to standalone.");
+                }
+            }
+        }
+
+        if (server_ep.has_value())
+        {
+            if (server_ep->port() == 0)
+            {
+                server_ep = tempest::network::endpoint{server_ep->address(), tempest::play_settings::default_port};
+            }
+            client->server_endpoint = *server_ep;
+            client->is_offline = false;
         }
         else
         {
-            logger.info("Initializing Game Scene in networked multiplayer mode...");
+            client->is_offline = true;
         }
 
-        auto client_owner = tempest::make_unique<multiplayer_client>();
-        auto* const client = client_owner.get();
-        client->is_offline = is_offline;
-        client->server_endpoint = server_ep;
-
-        if (!is_offline)
-        {
-            if (!client->socket.open())
-            {
-                logger.error("Failed to open UDP socket on client.");
-            }
-            else
-            {
-                if (client->socket.bind(tempest::network::endpoint::any(0)))
-                {
-                    logger.info("Client UDP socket opened and bound successfully.");
-                }
-                else
-                {
-                    logger.error("Failed to bind UDP socket on client.");
-                }
-            }
-
-            client->connection.set_remote_endpoint(server_ep);
-        }
-
-        // Setup physics scene system in client physics world for collision and dynamics
         client->physics_scene = tempest::make_unique<tempest::physics::physics_scene_system>(
-            client->client_physics_world, ctx->get_entities(), ctx->get_events());
+            client->client_physics_world, ctx.get_entities(), ctx.get_events());
 
-        // Register procedural sandbox meshes and materials
-        // Floor: 40m x 40m plane mesh with clockwise winding
-        client->floor_mesh_id =
-            ctx->get_meshes().register_mesh(create_plane_mesh(40.0F, 40.0F, 10.0F, {1.0F, 1.0F, 1.0F, 1.0F}));
-        auto floor_mat = tempest::core::material{};
-        floor_mat.set_vec4(tempest::core::material::base_color_factor_name, {0.65F, 0.68F, 0.72F, 1.0F});
-        floor_mat.set_vec3(tempest::core::material::emissive_factor_name, {0.0F, 0.0F, 0.0F});
-        floor_mat.set_scalar(tempest::core::material::metallic_factor_name, 0.02F);
-        floor_mat.set_scalar(tempest::core::material::roughness_factor_name, 0.65F);
-        client->floor_mat_id = ctx->get_materials().register_material(tempest::move(floor_mat));
+        if (g_client_ctx != nullptr)
+        {
+            client->local_player_mesh_id = g_client_ctx->get_meshes().register_mesh(
+                create_box_mesh({0.18F, 0.08F, 0.22F}, {1.0F, 1.0F, 1.0F, 1.0F}, {0.0F, -0.82F, 0.15F}));
+            client->remote_player_mesh_id = g_client_ctx->get_meshes().register_mesh(
+                create_capsule_mesh(0.5F, 0.4F, {1.0F, 1.0F, 1.0F, 1.0F}));
 
-        // Step obstacle: 2m x 0.2m x 2m (half-extents 1.0, 0.1, 1.0)
-        client->step_mesh_id =
-            ctx->get_meshes().register_mesh(create_box_mesh({1.0F, 0.1F, 1.0F}, {1.0F, 1.0F, 1.0F, 1.0F}));
-        auto step_mat = tempest::core::material{};
-        step_mat.set_vec4(tempest::core::material::base_color_factor_name, {0.75F, 0.78F, 0.82F, 1.0F});
-        step_mat.set_vec3(tempest::core::material::emissive_factor_name, {0.0F, 0.0F, 0.0F});
-        step_mat.set_scalar(tempest::core::material::metallic_factor_name, 0.05F);
-        step_mat.set_scalar(tempest::core::material::roughness_factor_name, 0.6F);
-        client->step_mat_id = ctx->get_materials().register_material(tempest::move(step_mat));
+            auto local_mat = tempest::core::material{};
+            local_mat.set_vec4(tempest::core::material::base_color_factor_name, {0.95F, 0.55F, 0.15F, 1.0F});
+            local_mat.set_vec3(tempest::core::material::emissive_factor_name, {0.0F, 0.0F, 0.0F});
+            local_mat.set_scalar(tempest::core::material::metallic_factor_name, 0.1F);
+            local_mat.set_scalar(tempest::core::material::roughness_factor_name, 0.5F);
+            client->local_player_mat_id = g_client_ctx->get_materials().register_material(tempest::move(local_mat));
 
-        // Local player mesh (feet indicator):
-        // Small indicator cube placed at the feet (half-extents 0.18, 0.08, 0.22) offset forward (+0.15m)
-        // so the player can verify position/orientation when looking down, avoiding phantom torso shadows.
-        client->local_player_mesh_id = ctx->get_meshes().register_mesh(
-            create_box_mesh({0.18F, 0.08F, 0.22F}, {1.0F, 1.0F, 1.0F, 1.0F}, {0.0F, -0.82F, 0.15F}));
+            auto remote_mat = tempest::core::material{};
+            remote_mat.set_vec4(tempest::core::material::base_color_factor_name, {0.15F, 0.75F, 0.95F, 1.0F});
+            remote_mat.set_vec3(tempest::core::material::emissive_factor_name, {0.0F, 0.0F, 0.0F});
+            remote_mat.set_scalar(tempest::core::material::metallic_factor_name, 0.1F);
+            remote_mat.set_scalar(tempest::core::material::roughness_factor_name, 0.5F);
+            client->remote_player_mat_id = g_client_ctx->get_materials().register_material(tempest::move(remote_mat));
+        }
 
-        // Remote player proxy mesh: capsule matching physics character controller (half-height 0.5m, radius 0.4m, total height 1.8m)
-        client->remote_player_mesh_id =
-            ctx->get_meshes().register_mesh(create_capsule_mesh(0.5F, 0.4F, {1.0F, 1.0F, 1.0F, 1.0F}));
-
-        // Local player material: Warm Amber / Orange
-        auto local_mat = tempest::core::material{};
-        local_mat.set_vec4(tempest::core::material::base_color_factor_name, {0.95F, 0.55F, 0.15F, 1.0F});
-        local_mat.set_vec3(tempest::core::material::emissive_factor_name, {0.0F, 0.0F, 0.0F});
-        local_mat.set_scalar(tempest::core::material::metallic_factor_name, 0.1F);
-        local_mat.set_scalar(tempest::core::material::roughness_factor_name, 0.5F);
-        client->local_player_mat_id = ctx->get_materials().register_material(tempest::move(local_mat));
-
-        // Remote player material: Vibrant Cyan
-        auto remote_mat = tempest::core::material{};
-        remote_mat.set_vec4(tempest::core::material::base_color_factor_name, {0.15F, 0.75F, 0.95F, 1.0F});
-        remote_mat.set_vec3(tempest::core::material::emissive_factor_name, {0.0F, 0.0F, 0.0F});
-        remote_mat.set_scalar(tempest::core::material::metallic_factor_name, 0.1F);
-        remote_mat.set_scalar(tempest::core::material::roughness_factor_name, 0.5F);
-        client->remote_player_mat_id = ctx->get_materials().register_material(tempest::move(remote_mat));
-
-        // Register engine callbacks
-        ctx->register_on_initialize_callback([client, ctx](tempest::engine_context& engine_ctx) -> void {
-            auto& registry = engine_ctx.get_entities();
-
-            // First-person camera: Eye position at character eye level (~1.6m above floor)
-            const auto camera = registry.create();
-            registry.name(camera, "Camera");
-            const auto camera_data = tempest::render_system::camera_component{
-                .aspect_ratio = 16.0F / 9.0F,
-                .vertical_fov = tempest::math::as_radians(60.0F),
-                .near_plane = 0.05F,
-            };
-            registry.assign(camera, camera_data);
-            auto camera_tx = tempest::ecs::transform_component{};
-            camera_tx.position({0.0F, 1.6F, 0.0F});
-            camera_tx.rotation(
-                tempest::math::quat<float>(tempest::math::vec3<float>{-client->camera_pitch, client->camera_yaw, 0.0F}));
-            registry.assign(camera, camera_tx);
-            client->camera_entity = camera;
-
-            // Directional Sun Light
-            const auto sun = registry.create();
-            registry.name(sun, "Sun");
-            const auto sun_data = tempest::render_system::directional_light_component{
-                .color = {1.0F, 0.98F, 0.95F},
-                .intensity = 2.0F,
-            };
-            const auto sun_shadows = tempest::render_system::shadow_caster_component{
-                .resolution = 2048,
-                .num_cascades = 4,
-                .split_lambda = 0.5F,
-                .max_shadow_distance = 100.0F,
-                .normal_bias = 0.015F,
-                .depth_bias = 0.001F,
-            };
-            auto sun_tx = tempest::ecs::transform_component{};
-            sun_tx.rotation({tempest::math::as_radians(65.0F), tempest::math::as_radians(25.0F), 0.0F});
-            registry.assign_or_replace(sun, sun_shadows);
-            registry.assign_or_replace(sun, sun_data);
-            registry.assign_or_replace(sun, sun_tx);
-
-            // Static Floor Entity
-            const auto floor_entity = registry.create();
-            auto floor_tx = tempest::ecs::transform_component{};
-            floor_tx.position({0.0F, 0.0F, 0.0F});
-            registry.assign(floor_entity, floor_tx);
-            registry.assign(floor_entity, tempest::core::mesh_component{.mesh_id = client->floor_mesh_id});
-            registry.assign(floor_entity, tempest::core::material_component{.material_id = client->floor_mat_id});
-            registry.assign(floor_entity, tempest::physics::rigid_body_component{
-                .motion = jolt::shim::motion_type::static_motion,
-                .layer = jolt::shim::object_layer::non_moving,
-            });
-            registry.assign(floor_entity, tempest::physics::box_collider_component{
-                .half_extents = {20.0F, 0.5F, 20.0F},
-                .offset = {0.0F, -0.5F, 0.0F},
-            });
-            registry.name(floor_entity, "FloorPlane");
-
-            // Static Step Obstacle Entity
-            const auto step_entity = registry.create();
-            auto step_tx = tempest::ecs::transform_component{};
-            step_tx.position({0.0F, 0.1F, 5.0F});
-            registry.assign(step_entity, step_tx);
-            registry.assign(step_entity, tempest::core::mesh_component{.mesh_id = client->step_mesh_id});
-            registry.assign(step_entity, tempest::core::material_component{.material_id = client->step_mat_id});
-            registry.assign(step_entity, tempest::physics::rigid_body_component{
-                .motion = jolt::shim::motion_type::static_motion,
-                .layer = jolt::shim::object_layer::non_moving,
-            });
-            registry.assign(step_entity, tempest::physics::box_collider_component{
-                .half_extents = {1.0F, 0.1F, 1.0F},
-                .offset = {0.0F, 0.0F, 0.0F},
-            });
-            registry.name(step_entity, "StepObstacle");
-
-            // In offline mode, spawn local player immediately
-            if (client->is_offline)
+        ctx.register_on_initialize_callback([client](tempest::engine_context& engine_ctx) -> void {
+            auto* const cl_ctx = dynamic_cast<tempest::client_context*>(&engine_ctx);
+            if (cl_ctx == nullptr)
             {
-                spawn_local_player(ctx, client);
-
-                // Spawn a stationary capsule proxy target in offline mode so the user can verify
-                // the capsule mesh and shadow edge alignment without needing a dedicated server.
-                const auto dummy_proxy = registry.create();
-                auto dummy_tx = tempest::ecs::transform_component{};
-                dummy_tx.position({0.0F, 0.92F, 2.5F});
-                registry.assign(dummy_proxy, dummy_tx);
-                registry.assign(dummy_proxy,
-                                tempest::ecs::transform_history_component::create(dummy_tx.position()));
-                registry.assign(dummy_proxy,
-                                tempest::core::mesh_component{.mesh_id = client->remote_player_mesh_id});
-                registry.assign(dummy_proxy,
-                                tempest::core::material_component{.material_id = client->remote_player_mat_id});
-                registry.name(dummy_proxy, "CapsuleProxyTarget");
+                return;
             }
 
-            // Window Input & Cursor Capture
-            const auto win = ctx->get_main_window();
+            const auto win = cl_ctx->get_main_window();
             if (win.is_valid())
             {
-                auto& wm = ctx->get_window_manager();
+                auto& wm = cl_ctx->get_window_manager();
                 client->is_focused = wm.is_focused(win);
-                if (ctx->is_play_mode())
+                if (cl_ctx->is_play_mode())
                 {
                     wm.set_cursor_mode(win, tempest::cursor_mode::disabled);
                 }
@@ -715,8 +576,8 @@ namespace
                     wm.set_cursor_mode(win, tempest::cursor_mode::normal);
                 }
 
-                wm.register_cursor_pos_callback(win, [client, ctx](float xpos, float ypos) -> void {
-                    if (!ctx->is_play_mode() || !client->is_focused)
+                wm.register_cursor_pos_callback(win, [client, cl_ctx](float xpos, float ypos) -> void {
+                    if (!cl_ctx->is_play_mode() || !client->is_focused)
                     {
                         client->first_mouse = true;
                         return;
@@ -756,33 +617,37 @@ namespace
                     client->first_mouse = true;
                 });
 
-                wm.register_key_callback(win, [ctx](tempest::core::key_state state) -> void {
+                wm.register_key_callback(win, [cl_ctx](tempest::core::key_state state) -> void {
                     if (state.k == tempest::core::key::escape && state.action == tempest::core::key_action::press)
                     {
-                        if (ctx->is_play_mode())
+                        if (cl_ctx->is_play_mode())
                         {
-                            const auto main_win = ctx->get_main_window();
+                            const auto main_win = cl_ctx->get_main_window();
                             if (main_win.is_valid())
                             {
-                                ctx->get_window_manager().set_cursor_mode(main_win, tempest::cursor_mode::normal);
+                                cl_ctx->get_window_manager().set_cursor_mode(main_win, tempest::cursor_mode::normal);
                             }
                         }
                         else
                         {
-                            ctx->request_close(true);
+                            cl_ctx->request_close(true);
                         }
                     }
                 });
             }
         });
 
-        ctx->register_on_fixed_update_callback([client, ctx]([[maybe_unused]] tempest::engine_context& engine_ctx,
-                                                             tempest::chrono::duration<double> delta_time) -> void {
+        ctx.register_on_fixed_update_callback([client](tempest::engine_context& engine_ctx,
+                                                       tempest::chrono::duration<double> delta_time) -> void {
+            if (!engine_ctx.is_play_mode())
+            {
+                return;
+            }
+
             const auto now = tempest::chrono::steady_clock::now();
 
             if (!client->is_offline)
             {
-                // Connection Handshake Retransmission
                 if (!client->connected)
                 {
                     if (now - client->last_connect_attempt > multiplayer_client::connect_retransmit_interval)
@@ -804,7 +669,6 @@ namespace
                     }
                 }
 
-                // Ingest Incoming Network Packets
                 auto buffer = tempest::array<tempest::byte, 2048>{};
                 auto sender = tempest::network::endpoint{};
                 auto packets_processed = size_t{0};
@@ -847,8 +711,8 @@ namespace
                                 client->connection.set_state(tempest::network::connection_state::connected);
                                 client->connected = true;
 
-                                ctx->get_logger().info("Connected to server! Handshake complete.");
-                                spawn_local_player(ctx, client);
+                                engine_ctx.get_logger().info("Connected to server! Handshake complete.");
+                                spawn_local_player(&engine_ctx, client);
                             }
                         }
                     }
@@ -863,9 +727,9 @@ namespace
                                 if (!client->first_snapshot_received)
                                 {
                                     client->first_snapshot_received = true;
-                                    ctx->get_logger().info("Received initial authoritative world snapshot.");
+                                    engine_ctx.get_logger().info("Received initial authoritative world snapshot.");
                                 }
-                                process_world_snapshot(ctx, client, world_snap);
+                                process_world_snapshot(&engine_ctx, client, world_snap);
                             }
                         }
                     }
@@ -877,18 +741,18 @@ namespace
                 client->physics_scene->pre_simulation_flush();
             }
 
-            // Player Input & Simulation
             const auto can_simulate = client->is_offline || (client->connected && client->local_player_entity != tempest::ecs::null);
             if (can_simulate && client->local_player_entity != tempest::ecs::null)
             {
-                const auto win = ctx->get_main_window();
+                auto* const cl_ctx = dynamic_cast<tempest::client_context*>(&engine_ctx);
+                const auto win = (cl_ctx != nullptr) ? cl_ctx->get_main_window() : tempest::window_handle{};
                 auto forward_move = 0.0F;
                 auto right_move = 0.0F;
                 auto buttons = static_cast<tempest::uint16_t>(tempest::network::user_button_none);
 
-                if (client->is_focused && win.is_valid() && ctx->is_play_mode())
+                if (cl_ctx != nullptr && client->is_focused && win.is_valid() && engine_ctx.is_play_mode())
                 {
-                    auto& wm = ctx->get_window_manager();
+                    auto& wm = cl_ctx->get_window_manager();
                     const auto& kb = wm.get_keyboard(win);
 
                     if (kb.is_key_down(tempest::core::key::w))
@@ -931,9 +795,8 @@ namespace
                     .buttons = buttons,
                 };
 
-                // Orient physics character according to camera yaw
                 const auto* controller =
-                    ctx->get_entities().try_get<tempest::physics::character_controller_component>(client->local_player_entity);
+                    engine_ctx.get_entities().try_get<tempest::physics::character_controller_component>(client->local_player_entity);
                 if (controller != nullptr)
                 {
                     auto* char_obj = client->client_physics_world.get_character(controller->id);
@@ -947,40 +810,36 @@ namespace
 
                 if (client->is_offline)
                 {
-                    // Offline local simulation
-                    tempest::physics::step_character_simulation(client->client_physics_world, ctx->get_entities(),
+                    tempest::physics::step_character_simulation(client->client_physics_world, engine_ctx.get_entities(),
                                                                client->local_player_entity, cmd, delta_time);
                 }
                 else
                 {
-                    // Online predictive simulation
-                    tempest::physics::step_client_prediction(client->client_physics_world, ctx->get_entities(),
+                    tempest::physics::step_client_prediction(client->client_physics_world, engine_ctx.get_entities(),
                                                              client->local_player_entity, cmd, delta_time,
                                                              client->prediction_buffer);
 
-                    // Add to redundant command history
                     client->command_history.push_back(cmd);
                     if (client->command_history.size() > multiplayer_client::max_command_history)
                     {
                         client->command_history.erase(client->command_history.begin());
                     }
 
-                    // Transmit input packet with redundant commands
                     const auto total_history = client->command_history.size();
                     const auto send_count = tempest::min(total_history, tempest::network::max_commands_per_packet);
                     auto packet_cmds = tempest::inplace_vector<tempest::network::user_cmd, 4>{};
-                    for (size_t i = total_history - send_count; i < total_history; ++i)
+                    for (auto cmd_idx = total_history - send_count; cmd_idx < total_history; ++cmd_idx)
                     {
-                        packet_cmds.push_back(client->command_history[i]);
+                        packet_cmds.push_back(client->command_history[cmd_idx]);
                     }
 
                     auto writer = tempest::network::bit_writer{};
                     const auto count = packet_cmds.size();
                     const auto count_code = static_cast<tempest::uint32_t>(count - 1U);
                     writer.write_bits(count_code, 2);
-                    for (size_t i = 0; i < count; ++i)
+                    for (auto cmd_idx = 0ULL; cmd_idx < count; ++cmd_idx)
                     {
-                        tempest::network::write_user_cmd(writer, packet_cmds[i]);
+                        tempest::network::write_user_cmd(writer, packet_cmds[cmd_idx]);
                     }
                     writer.flush();
 
@@ -1002,143 +861,267 @@ namespace
             }
         });
 
-        ctx->register_on_interpolate_callback([client](tempest::engine_context& engine_ctx,
-                                                       [[maybe_unused]] float alpha) -> void {
-            if (client->local_player_entity == tempest::ecs::null)
-            {
-                return;
-            }
-
-            auto& registry = engine_ctx.get_entities();
-            const auto now = tempest::chrono::steady_clock::now();
-            const auto dt = (client->last_render_time.time_since_epoch().count() == 0)
-                                ? tempest::chrono::duration<double>{1.0 / 60.0}
-                                : tempest::chrono::duration_cast<tempest::chrono::duration<double>>(
-                                      now - client->last_render_time);
-            client->last_render_time = now;
-
-            // Decay visual reconciliation error smoothing
-            tempest::physics::update_reconciliation_smoothing(registry, dt);
-
-            // Position first-person camera relative to local player's transform
-            const auto* player_tx = registry.try_get<tempest::ecs::transform_component>(client->local_player_entity);
-            if (player_tx == nullptr)
-            {
-                return;
-            }
-
-            // Keep local player orientation aligned with camera yaw
-            auto updated_tx = *player_tx;
-            updated_tx.rotation(
-                tempest::math::quat<float>(tempest::math::vec3<float>{0.0F, client->camera_yaw, 0.0F}));
-            registry.assign_or_replace(client->local_player_entity, updated_tx);
-
-            // Camera positioned at eye level (0.7m above character center, ~1.6m above floor)
-            const auto char_pos = updated_tx.position();
-            const auto cam_pos = char_pos + tempest::math::vec3<float>{0.0F, 0.70F, 0.0F};
-            const auto cam_rot = tempest::math::quat<float>(tempest::math::vec3<float>{
-                -client->camera_pitch,
-                client->camera_yaw,
-                0.0F,
-            });
-
-            auto cam_tx = tempest::ecs::transform_component{};
-            cam_tx.position(cam_pos);
-            cam_tx.rotation(cam_rot);
-            registry.assign_or_replace(client->camera_entity, cam_tx);
-
-            // Smoothly interpolate remote player visual proxies between snapshots
-            for (auto& remote : client->remote_players)
-            {
-                if (remote.entity == tempest::ecs::null)
-                {
-                    continue;
-                }
-
-                remote.interp_factor =
-                    tempest::min(1.0F, remote.interp_factor +
-                                           static_cast<float>(dt.count()) * remote_player_entry::default_interpolation_speed);
-                const auto interp_pos =
-                    tempest::math::lerp(remote.current_pos, remote.target_pos, remote.interp_factor);
-                const auto interp_rot =
-                    tempest::math::slerp(remote.current_rot, remote.target_rot, remote.interp_factor);
-
-                auto proxy_tx = tempest::ecs::transform_component{};
-                proxy_tx.position(interp_pos);
-                proxy_tx.rotation(interp_rot);
-                registry.assign_or_replace(remote.entity, proxy_tx);
-            }
-        });
-
-        ctx->register_on_close_callback([client]([[maybe_unused]] tempest::engine_context& engine_ctx) -> void {
-            if (client != nullptr)
-            {
-                if (client->socket.is_open())
-                {
-                    if (client->connected)
-                    {
-                        auto writer = tempest::network::bit_writer{};
-                        const auto disco = tempest::network::disconnect_payload{
-                            .reason = tempest::network::disconnect_reason::user_quit,
-                        };
-                        tempest::network::write_disconnect(writer, disco);
-                        writer.flush();
-
-                        const auto now = tempest::chrono::steady_clock::now();
-                        const auto packet_bytes = client->connection.build_packet(
-                            tempest::network::packet_type::disconnect, writer.data(), now);
-                        static_cast<void>(client->socket.send_to(
-                            client->server_endpoint,
-                            tempest::span<const tempest::byte>{packet_bytes.data(), packet_bytes.size()}));
-                    }
-                    client->socket.close();
-                }
-
-                client->physics_scene.reset();
-                delete client;
-            }
-        });
-
-        // Transfer unique ownership to the registered on_close engine lifecycle callback
-        static_cast<void>(client_owner.release());
-    }
-} // namespace
-
-extern "C"
-{
-    GAME_API void on_load(tempest::client_context* ctx, [[maybe_unused]] tempest::span<tempest::string_view> args)
-    {
-        auto& logger = ctx->get_logger();
-        auto server_ep = tempest::optional<tempest::network::endpoint>{};
-
-        for (const auto& arg : args)
+        if (g_client_ctx != nullptr)
         {
-            constexpr auto prefix = tempest::string_view{"--connect="};
-            if (arg.size() >= prefix.size() && starts_with(arg, prefix))
-            {
-                const auto target = substr(arg, prefix.size());
-                server_ep = tempest::network::endpoint::parse(target);
-                if (!server_ep.has_value())
+            g_client_ctx->register_on_interpolate_callback([client](tempest::engine_context& engine_ctx,
+                                                                   [[maybe_unused]] float alpha) -> void {
+                if (!engine_ctx.is_play_mode() || client->local_player_entity == tempest::ecs::null)
                 {
-                    logger.warn("Failed to parse connect endpoint, falling back to standalone.");
+                    return;
                 }
-            }
+
+                auto& registry = engine_ctx.get_entities();
+                const auto now = tempest::chrono::steady_clock::now();
+                const auto dt = (client->last_render_time.time_since_epoch().count() == 0)
+                                    ? tempest::chrono::duration<double>{1.0 / 60.0}
+                                    : tempest::chrono::duration_cast<tempest::chrono::duration<double>>(
+                                          now - client->last_render_time);
+                client->last_render_time = now;
+
+                tempest::physics::update_reconciliation_smoothing(registry, dt);
+
+                const auto* player_tx = registry.try_get<tempest::ecs::transform_component>(client->local_player_entity);
+                if (player_tx == nullptr)
+                {
+                    return;
+                }
+
+                auto updated_tx = *player_tx;
+                updated_tx.rotation(
+                    tempest::math::quat<float>(tempest::math::vec3<float>{0.0F, client->camera_yaw, 0.0F}));
+                registry.assign_or_replace(client->local_player_entity, updated_tx);
+
+                if (client->camera_entity == tempest::ecs::null)
+                {
+                    const auto cam_opt = registry.find_first_with_name("Camera");
+                    if (cam_opt.has_value())
+                    {
+                        client->camera_entity = *cam_opt;
+                    }
+                    else
+                    {
+                        for (const auto [self, cam] :
+                             registry.with<tempest::ecs::self_component, tempest::render_system::camera_component>())
+                        {
+                            client->camera_entity = self.entity;
+                            break;
+                        }
+                    }
+                }
+
+                if (client->camera_entity != tempest::ecs::null)
+                {
+                    const auto char_pos = updated_tx.position();
+                    const auto cam_pos = char_pos + tempest::math::vec3<float>{0.0F, 0.70F, 0.0F};
+                    const auto cam_rot = tempest::math::quat<float>(tempest::math::vec3<float>{
+                        -client->camera_pitch,
+                        client->camera_yaw,
+                        0.0F,
+                    });
+
+                    auto cam_tx = tempest::ecs::transform_component{};
+                    cam_tx.position(cam_pos);
+                    cam_tx.rotation(cam_rot);
+                    registry.assign_or_replace(client->camera_entity, cam_tx);
+                }
+
+                for (auto& remote : client->remote_players)
+                {
+                    if (remote.entity == tempest::ecs::null)
+                    {
+                        continue;
+                    }
+
+                    remote.interp_factor =
+                        tempest::min(1.0F, remote.interp_factor +
+                                               static_cast<float>(dt.count()) * remote_player_entry::default_interpolation_speed);
+                    const auto interp_pos =
+                        tempest::math::lerp(remote.current_pos, remote.target_pos, remote.interp_factor);
+                    const auto interp_rot =
+                        tempest::math::slerp(remote.current_rot, remote.target_rot, remote.interp_factor);
+
+                    auto proxy_tx = tempest::ecs::transform_component{};
+                    proxy_tx.position(interp_pos);
+                    proxy_tx.rotation(interp_rot);
+                    registry.assign_or_replace(remote.entity, proxy_tx);
+                }
+            });
         }
 
-        if (server_ep.has_value())
+        ctx.register_on_close_callback([]([[maybe_unused]] tempest::engine_context& engine_ctx) -> void {
+            tempest_game_on_play_end();
+            tempest_game_on_unload();
+        });
+    }
+
+    TEMPEST_GAME_API auto tempest_game_on_play_begin(const tempest::play_settings& settings) -> void
+    {
+        if (g_client == nullptr || g_engine == nullptr)
         {
-            logger.info("Starting in multiplayer mode, connecting to server...");
-            setup_multiplayer_client(ctx, *server_ep, false);
+            return;
+        }
+
+        auto* const client = g_client.get();
+        auto* const ctx = g_engine;
+
+        client->is_offline = (settings.mode == tempest::network_mode::standalone_offline);
+
+        if (client->physics_scene != nullptr)
+        {
+            client->physics_scene->init_from_registry();
+        }
+
+        client->camera_entity = tempest::ecs::null;
+        const auto cam_opt = ctx->get_entities().find_first_with_name("Camera");
+        if (cam_opt.has_value())
+        {
+            client->camera_entity = *cam_opt;
         }
         else
         {
-            logger.info("Starting in standalone offline mode with first-person character and feet indicator.");
-            setup_multiplayer_client(ctx, tempest::network::endpoint::any(0), true);
+            for (const auto [self, cam] :
+                 ctx->get_entities().with<tempest::ecs::self_component, tempest::render_system::camera_component>())
+            {
+                client->camera_entity = self.entity;
+                break;
+            }
         }
+
+        if (!client->is_offline)
+        {
+            auto ep_opt = tempest::network::endpoint::parse(settings.remote_address);
+            auto ep = ep_opt.has_value() ? *ep_opt : tempest::network::endpoint::loopback(settings.port);
+            if (ep.port() == 0)
+            {
+                ep = tempest::network::endpoint{ep.address(), settings.port};
+            }
+            client->server_endpoint = ep;
+
+            if (!client->socket.open())
+            {
+                ctx->get_logger().error("Failed to open UDP socket on client.");
+            }
+            else
+            {
+                if (client->socket.bind(tempest::network::endpoint::any(0)))
+                {
+                    ctx->get_logger().info("Client UDP socket opened and bound successfully.");
+                }
+                else
+                {
+                    ctx->get_logger().error("Failed to bind UDP socket on client.");
+                }
+            }
+            client->connection.set_remote_endpoint(client->server_endpoint);
+        }
+
+        if (client->is_offline)
+        {
+            spawn_local_player(ctx, client);
+        }
+
+        if (g_client_ctx != nullptr)
+        {
+            const auto win = g_client_ctx->get_main_window();
+            if (win.is_valid())
+            {
+                g_client_ctx->get_window_manager().set_cursor_mode(win, tempest::cursor_mode::disabled);
+            }
+        }
+        client->first_mouse = true;
+    }
+
+    TEMPEST_GAME_API auto tempest_game_on_play_end() -> void
+    {
+        if (g_client == nullptr || g_engine == nullptr)
+        {
+            return;
+        }
+
+        auto* const client = g_client.get();
+        auto* const ctx = g_engine;
+
+        despawn_local_player(ctx, client);
+        despawn_remote_players(ctx, client);
+
+        if (client->physics_scene != nullptr)
+        {
+            client->physics_scene->clear();
+        }
+
+        if (client->socket.is_open())
+        {
+            if (client->connected)
+            {
+                auto writer = tempest::network::bit_writer{};
+                const auto disco = tempest::network::disconnect_payload{
+                    .reason = tempest::network::disconnect_reason::user_quit,
+                };
+                tempest::network::write_disconnect(writer, disco);
+                writer.flush();
+
+                const auto now = tempest::chrono::steady_clock::now();
+                const auto packet_bytes =
+                    client->connection.build_packet(tempest::network::packet_type::disconnect, writer.data(), now);
+                static_cast<void>(client->socket.send_to(
+                    client->server_endpoint,
+                    tempest::span<const tempest::byte>{packet_bytes.data(), packet_bytes.size()}));
+            }
+            client->socket.close();
+        }
+        client->connected = false;
+        client->first_snapshot_received = false;
+        client->session_id = multiplayer_client::default_session_id;
+
+        if (g_client_ctx != nullptr)
+        {
+            const auto win = g_client_ctx->get_main_window();
+            if (win.is_valid())
+            {
+                g_client_ctx->get_window_manager().set_cursor_mode(win, tempest::cursor_mode::normal);
+            }
+        }
+        client->camera_entity = tempest::ecs::null;
+    }
+
+    TEMPEST_GAME_API auto tempest_game_on_unload() -> void
+    {
+        if (g_client != nullptr)
+        {
+            g_client->physics_scene.reset();
+            g_client.reset();
+        }
+        g_engine = nullptr;
+        g_client_ctx = nullptr;
+    }
+
+    GAME_API void on_load(tempest::client_context* ctx, [[maybe_unused]] tempest::span<tempest::string_view> args)
+    {
+        tempest_game_register_types(ctx->get_components());
+
+        auto const_args = tempest::vector<tempest::string_view>{};
+        for (const auto& arg : args)
+        {
+            const_args.push_back(arg);
+        }
+        tempest_game_on_load(*ctx, tempest::span<const tempest::string_view>{const_args.data(), const_args.size()});
+
+        auto settings = tempest::play_settings{};
+        for (const auto& arg : args)
+        {
+            constexpr auto prefix = tempest::string_view{"--connect="};
+            if (tempest::starts_with(arg, prefix))
+            {
+                settings.mode = tempest::network_mode::connect_remote;
+                settings.remote_address = substr(arg, prefix.size());
+            }
+        }
+        tempest_game_on_play_begin(settings);
     }
 
     GAME_API void on_unload()
     {
-        // Cleanup code for the game goes here
+        tempest_game_on_play_end();
+        tempest_game_on_unload();
     }
 }

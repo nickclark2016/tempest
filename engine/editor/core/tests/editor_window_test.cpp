@@ -647,6 +647,7 @@ namespace tempest::editor::tests
 
             auto empty_args = vector<string_view>{};
             (*game_on_load)(&engine, empty_args);
+            engine.load_startup_scene_if_needed();
 
             auto frame_count = 0;
             engine.register_on_editor_update_callback([&](engine_context& ctx) {

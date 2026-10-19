@@ -2,6 +2,7 @@
 #define tempest_ecs_transform_history_component_hpp
 
 #include <tempest/quat.hpp>
+#include <tempest/reflection.hpp>
 #include <tempest/traits.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/vec3.hpp>
@@ -42,6 +43,15 @@ namespace tempest::ecs
     template <>
     struct is_authorable<transform_history_component> : false_type
     {
+    };
+
+    template <>
+    struct reflect<transform_history_component>
+    {
+        static void describe(type_builder<transform_history_component>& builder)
+        {
+            builder.version(1);
+        }
     };
 } // namespace tempest::ecs
 

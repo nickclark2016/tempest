@@ -1,3 +1,4 @@
+#include <tempest/builtin_assets.hpp>
 #include <tempest/default_importers.hpp>
 #include <tempest/engine_types.hpp>
 #include <tempest/input.hpp>
@@ -61,6 +62,7 @@ namespace tempest
         register_engine_types(_component_types);
 
         assets::register_default_importers(_asset_database, &_mesh_reg, &_texture_reg, &_material_reg);
+        assets::builtin::register_builtin_assets(_asset_database, &_mesh_reg, &_texture_reg, &_material_reg);
         assets::mount_default_shader_roots(_asset_database);
         _asset_database.scan_and_index();
 

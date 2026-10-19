@@ -74,6 +74,16 @@ namespace tempest
         [[nodiscard]] virtual auto get_entities() -> ecs::archetype_registry& = 0;
         [[nodiscard]] virtual auto get_entities() const -> const ecs::archetype_registry& = 0;
 
+        [[nodiscard]] virtual auto get_components() noexcept -> ecs::component_type_registry&
+        {
+            return get_entities().type_registry();
+        }
+
+        [[nodiscard]] virtual auto get_components() const noexcept -> const ecs::component_type_registry&
+        {
+            return get_entities().type_registry();
+        }
+
         [[nodiscard]] virtual auto get_scene_manager() -> scene::scene_manager& = 0;
         [[nodiscard]] virtual auto get_scene_manager() const -> const scene::scene_manager& = 0;
 
@@ -243,6 +253,16 @@ namespace tempest
         }
 
         [[nodiscard]] auto component_types() const noexcept -> const ecs::component_type_registry&
+        {
+            return _component_types;
+        }
+
+        [[nodiscard]] auto get_components() noexcept -> ecs::component_type_registry& override
+        {
+            return _component_types;
+        }
+
+        [[nodiscard]] auto get_components() const noexcept -> const ecs::component_type_registry& override
         {
             return _component_types;
         }

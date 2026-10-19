@@ -3,6 +3,7 @@
 
 #include <tempest/array.hpp>
 #include <tempest/asset_database.hpp>
+#include <tempest/filesystem.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/move.hpp>
@@ -465,5 +466,38 @@ namespace tempest::editor
                 frame_end - frame_start);
             _last_cpu_time_ms = frame_dur.count();
         }
+    }
+
+    auto editor_engine_context::load_startup_scene_if_needed() -> bool
+    {
+        if (get_scene_manager().get_scene_count() > 0)
+        {
+            return false;
+        }
+
+        if (filesystem::exists(".cache/editor_session.json"))
+        {
+            return false;
+        }
+
+        const auto candidates = array<filesystem::path, 2>{
+            filesystem::path{"game/assets/scenes/main.tscene"},
+            filesystem::path{"assets/scenes/main.tscene"},
+        };
+
+        for (const auto& path : candidates)
+        {
+            if (filesystem::exists(path))
+            {
+                const auto load_result = get_scene_manager().load_sync(path);
+                if (load_result.has_value())
+                {
+                    get_logger().info(format("Loaded startup scene: {}", path.generic_string()));
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 } // namespace tempest::editor

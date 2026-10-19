@@ -550,13 +550,17 @@ namespace tempest::scene
                             const auto comp_val = member.value;
 
                             const auto* type_info = find_component_type_info(type_reg, comp_name);
-                            if (type_info != nullptr && type_info->descriptor.has_value())
+                            if (type_info != nullptr)
                             {
                                 auto comp = staged_component{};
                                 comp.type_info = type_info;
                                 comp.data.resize(type_info->size, byte{0});
+                                if (type_info->construct != nullptr)
+                                {
+                                    type_info->construct(comp.data.data());
+                                }
 
-                                if (comp_val.is_object())
+                                if (type_info->descriptor.has_value() && comp_val.is_object())
                                 {
                                     const auto fields_obj_res = comp_val.as_object();
                                     if (fields_obj_res.has_value())

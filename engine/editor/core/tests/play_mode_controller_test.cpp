@@ -194,3 +194,50 @@ TEST(play_mode_controller_test, step_executes_single_simulation_tick)
 
     controller.stop();
 }
+
+/// @brief Verifies that play_mode_controller invokes registered on_play_begin and on_play_end callbacks across Play -> Stop transitions.
+TEST(play_mode_controller_test, play_begin_and_play_end_callbacks)
+{
+    // Setup: Initialize context and controller
+    auto engine_ctx = tempest::editor::editor_engine_context{};
+    auto& controller = engine_ctx.get_play_mode_controller();
+
+    auto begin_call_count = 0;
+    auto end_call_count = 0;
+    auto observed_mode = tempest::network_mode::embedded_server;
+    auto observed_port = tempest::uint16_t{0};
+
+    controller.set_on_play_begin([&](const tempest::play_settings& settings) {
+        ++begin_call_count;
+        observed_mode = settings.mode;
+        observed_port = settings.port;
+    });
+
+    controller.set_on_play_end([&]() {
+        ++end_call_count;
+    });
+
+    // Act: Enter play mode with custom settings
+    const auto custom_settings = tempest::play_settings{
+        .mode = tempest::network_mode::connect_remote,
+        .remote_address = "192.168.1.100",
+        .port = 8888,
+        .start_embedded_server = false,
+    };
+
+    EXPECT_TRUE(controller.play(custom_settings));
+
+    // Assert: on_play_begin was called with the provided settings
+    EXPECT_EQ(begin_call_count, 1);
+    EXPECT_EQ(end_call_count, 0);
+    EXPECT_EQ(observed_mode, tempest::network_mode::connect_remote);
+    EXPECT_EQ(observed_port, 8888);
+
+    // Act: Stop play mode
+    controller.stop();
+
+    // Assert: on_play_end was called
+    EXPECT_EQ(begin_call_count, 1);
+    EXPECT_EQ(end_call_count, 1);
+}
+

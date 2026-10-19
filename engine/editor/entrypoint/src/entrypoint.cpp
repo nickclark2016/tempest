@@ -1,7 +1,9 @@
 #include <tempest/editor.hpp>
 #include <tempest/editor_engine_context.hpp>
+#include <tempest/game_module.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/move.hpp>
+#include <tempest/play_mode_controller.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/shared_library.hpp>
 #include <tempest/span.hpp>
@@ -40,11 +42,21 @@ namespace
         }
 
         const auto& game_shared_library = *game_shared_library_result;
+        const auto game_register_types_result =
+            game_shared_library.get_function_handle<void, ecs::component_type_registry&>("tempest_game_register_types");
         const auto game_on_load_result =
-            game_shared_library.get_function_handle<void, engine_context*, span<string_view>>("on_load");
-        const auto game_on_unload_result = game_shared_library.get_function_handle<void>("on_unload");
+            game_shared_library.get_function_handle<void, engine_context&, span<const string_view>>("tempest_game_on_load");
+        const auto game_on_unload_result = game_shared_library.get_function_handle<void>("tempest_game_on_unload");
+        const auto game_on_play_begin_result =
+            game_shared_library.get_function_handle<void, const play_settings&>("tempest_game_on_play_begin");
+        const auto game_on_play_end_result =
+            game_shared_library.get_function_handle<void>("tempest_game_on_play_end");
 
-        if (!game_on_load_result || !game_on_unload_result)
+        const auto legacy_game_on_load_result =
+            game_shared_library.get_function_handle<void, engine_context*, span<string_view>>("on_load");
+        const auto legacy_game_on_unload_result = game_shared_library.get_function_handle<void>("on_unload");
+
+        if (!game_on_load_result && !legacy_game_on_load_result)
         {
             return 1;
         }
@@ -90,13 +102,52 @@ namespace
 
             auto ui_editor = editor::editor_context(tempest_engine, window_data.handle, ui_ctx);
 
-            (*game_on_load_result)(&tempest_engine, args);
+            if (game_on_load_result)
+            {
+                if (game_register_types_result)
+                {
+                    (*game_register_types_result)(tempest_engine.get_components());
+                }
+
+                if (game_on_play_begin_result)
+                {
+                    tempest_engine.get_play_mode_controller().set_on_play_begin(
+                        [fn = *game_on_play_begin_result](const play_settings& settings) {
+                            fn(settings);
+                        });
+                }
+
+                if (game_on_play_end_result)
+                {
+                    tempest_engine.get_play_mode_controller().set_on_play_end(
+                        [fn = *game_on_play_end_result]() {
+                            fn();
+                        });
+                }
+
+                (*game_on_load_result)(tempest_engine, span<const string_view>{args.data(), args.size()});
+            }
+            else if (legacy_game_on_load_result)
+            {
+                (*legacy_game_on_load_result)(&tempest_engine, args);
+            }
+
             (*game_editor_on_load_result)(&tempest_engine, &ui_editor, args);
+
+            tempest_engine.load_startup_scene_if_needed();
 
             tempest_engine.run();
 
             (*game_editor_on_unload_result)();
-            (*game_on_unload_result)();
+
+            if (game_on_unload_result)
+            {
+                (*game_on_unload_result)();
+            }
+            else if (legacy_game_on_unload_result)
+            {
+                (*legacy_game_on_unload_result)();
+            }
         }
 
         return 0;
