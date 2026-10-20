@@ -63,12 +63,7 @@ scoped.project('server', function()
 
     scoped.usage("PUBLIC", function()
         uses {
-            'api',
-            'core',
-            'ecs',
-            'physics',
             'tempest',
-            'network',
         }
     end)
 
