@@ -234,10 +234,7 @@ namespace tempest::physics
     auto physics_scene_system::init_from_registry() -> void
     {
         _registry->each([this](const ecs::self_component& self, const box_collider_component&) {
-            if (!has_body(self.entity))
-            {
-                _spawn_body(self.entity);
-            }
+            _spawn_body(self.entity);
         });
     }
 

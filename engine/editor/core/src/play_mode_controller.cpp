@@ -2,6 +2,7 @@
 
 #include <tempest/ecs_events.hpp>
 #include <tempest/editor_engine_context.hpp>
+#include <tempest/transform_history_system.hpp>
 #include <tempest/utility.hpp>
 
 namespace tempest::editor
@@ -49,6 +50,7 @@ namespace tempest::editor
                 _server_thread = make_unique<thread>([server_ptr]() { server_ptr->run(); });
             }
 
+            ecs::sync_transform_history_from_transforms(_context->get_entities());
             _session_diff.attach(_context->get_events());
             _saved_registry_snapshot = _context->get_entities().snapshot();
             _saved_scene_snapshot = _context->get_scene_manager().snapshot();

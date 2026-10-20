@@ -5,10 +5,13 @@
 #include <tempest/array.hpp>
 #include <tempest/component_type_registry.hpp>
 #include <tempest/event_registry.hpp>
+#include <tempest/guid.hpp>
 #include <tempest/json.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/reflection.hpp>
 #include <tempest/relationship_component.hpp>
+#include <tempest/scene/prefab_cache.hpp>
+#include <tempest/scene/prefab_template.hpp>
 #include <tempest/scene/scene_codec.hpp>
 #include <tempest/scene/scene_entity_component.hpp>
 #include <tempest/scene/scene_types.hpp>
@@ -549,5 +552,121 @@ TEST(scene_codec_tests, non_authorable_components_are_not_serialized)
     EXPECT_NE(tempest::search(json_view, "\"tempest_test::test_actor_component\""), json_view.end());
     EXPECT_EQ(tempest::search(json_view, "\"tempest_test::test_runtime_component\""), json_view.end());
     EXPECT_EQ(tempest::search(json_view, "99.9"), json_view.end());
+}
+
+/// @brief Verifies that deserializing a new entity component publishes component_added_event with authored field values.
+TEST(scene_codec_tests, deserialize_publishes_component_added_event)
+{
+    // Setup: Registry context with event registry and registered components
+    auto ctx = test_registry_context{};
+
+    auto added_called = false;
+    auto observed_health = 0;
+    [[maybe_unused]] auto added_sub =
+        ctx.event_reg.dispatcher<tempest::ecs::component_added_event<tempest::ecs::entity, test_actor_component>>()
+            .subscribe([&](const tempest::ecs::component_added_event<tempest::ecs::entity, test_actor_component>& evt) {
+                added_called = true;
+                observed_health = evt.component.health;
+            });
+
+    auto replaced_called = false;
+    [[maybe_unused]] auto replaced_sub =
+        ctx.event_reg.dispatcher<tempest::ecs::component_replaced_event<tempest::ecs::entity, test_actor_component>>()
+            .subscribe([&]([[maybe_unused]] const auto& evt) {
+                replaced_called = true;
+            });
+
+    const auto json_src = tempest::string_view{
+        "{\n"
+        "  \"schema_version\": 1,\n"
+        "  \"entities\": [\n"
+        "    {\n"
+        "      \"id\": \"entity_0001\",\n"
+        "      \"name\": \"ActorWithHealth\",\n"
+        "      \"components\": {\n"
+        "        \"test_actor_component\": {\n"
+        "          \"health\": 250\n"
+        "        }\n"
+        "      }\n"
+        "    }\n"
+        "  ]\n"
+        "}\n"};
+
+    // Act: Deserialize scene
+    const auto result =
+        tempest::scene::scene_codec::deserialize(ctx.registry, tempest::scene::scene_handle{1, 1}, json_src);
+    EXPECT_TRUE(result.success);
+
+    // Assert: component_added_event was published with authored health value, and no replaced event
+    EXPECT_TRUE(added_called);
+    EXPECT_EQ(observed_health, 250);
+    EXPECT_FALSE(replaced_called);
+}
+
+/// @brief Verifies that deserializing a prefab instance with custom transform publishes component_replaced_event.
+TEST(scene_codec_tests, deserialize_publishes_component_replaced_event_when_component_exists)
+{
+    // Setup: Registry context with event registry, registered components, and prefab template
+    auto ctx = test_registry_context{};
+    auto cache = tempest::scene::prefab_cache{};
+
+    const auto prefab_guid = *tempest::parse_guid("cafecafe-1234-5678-0102-030405060708");
+    const auto local_root_id = tempest::scene::entity_local_id{0x100};
+
+    auto builder = tempest::scene::prefab_template_builder{};
+    const auto root_idx = builder.add_entity(local_root_id, "BasePrefab");
+
+    const auto tf_info = ctx.type_reg.type_info(
+        tempest::core::normalized_type_name<tempest::ecs::transform_component>());
+    auto base_tf = tempest::ecs::transform_component{};
+    base_tf.position({1.0F, 2.0F, 3.0F});
+    const auto bytes = tempest::span<const tempest::byte>{
+        reinterpret_cast<const tempest::byte*>(&base_tf), sizeof(base_tf)};
+    builder.add_component(root_idx, tf_info, bytes);
+
+    cache.register_template(prefab_guid, builder.build());
+
+    auto replaced_called = false;
+    auto old_x = 0.0F;
+    auto new_x = 0.0F;
+    [[maybe_unused]] auto replaced_sub =
+        ctx.event_reg
+            .dispatcher<tempest::ecs::component_replaced_event<tempest::ecs::entity, tempest::ecs::transform_component>>()
+            .subscribe([&](const tempest::ecs::component_replaced_event<tempest::ecs::entity, tempest::ecs::transform_component>&
+                               evt) {
+                replaced_called = true;
+                old_x = evt.old_component.position().x;
+                new_x = evt.new_component.position().x;
+            });
+
+    const auto json_src = tempest::string_view{
+        "{\n"
+        "  \"schema_version\": 1,\n"
+        "  \"entities\": [\n"
+        "    {\n"
+        "      \"id\": \"0000000000000500\",\n"
+        "      \"name\": \"PrefabWithCustomTransform\",\n"
+        "      \"components\": {\n"
+        "        \"transform_component\": {\n"
+        "          \"position\": [10.0, 20.0, 30.0]\n"
+        "        }\n"
+        "      },\n"
+        "      \"prefab\": {\n"
+        "        \"guid\": \"cafecafe-1234-5678-0102-030405060708\",\n"
+        "        \"instance_id\": \"0000000000000500\"\n"
+        "      }\n"
+        "    }\n"
+        "  ]\n"
+        "}\n"};
+
+    // Act: Deserialize scene
+    const auto result =
+        tempest::scene::scene_codec::deserialize(ctx.registry, tempest::scene::scene_handle{1, 1}, json_src, &cache);
+    EXPECT_TRUE(result.success);
+
+    // Assert: component_replaced_event was published with old and new transform positions
+    EXPECT_TRUE(replaced_called);
+    EXPECT_FLOAT_EQ(old_x, 1.0F);
+    EXPECT_FLOAT_EQ(new_x, 10.0F);
 }
 

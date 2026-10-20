@@ -12,6 +12,7 @@
 #include <tempest/scene/scene_manager.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/transform_history_component.hpp>
+#include <tempest/transform_history_system.hpp>
 
 // =========================================================================
 // SECTION: Main Scene Integration Tests
@@ -105,6 +106,9 @@ TEST(main_scene_test, load_main_scene_and_verify_entities)
         EXPECT_NEAR(tx->position().x, 0.0F, 0.001F);
         EXPECT_NEAR(tx->position().y, 0.0F, 0.001F);
         EXPECT_NEAR(tx->position().z, 0.0F, 0.001F);
+        EXPECT_NEAR(tx->scale().x, 40.0F, 0.001F);
+        EXPECT_NEAR(tx->scale().y, 1.0F, 0.001F);
+        EXPECT_NEAR(tx->scale().z, 40.0F, 0.001F);
 
         const auto* const mesh = registry.try_get<tempest::core::mesh_component>(floor_entity);
         ASSERT_NE(mesh, nullptr);
@@ -134,6 +138,9 @@ TEST(main_scene_test, load_main_scene_and_verify_entities)
         EXPECT_NEAR(tx->position().x, 0.0F, 0.001F);
         EXPECT_NEAR(tx->position().y, 0.1F, 0.001F);
         EXPECT_NEAR(tx->position().z, 5.0F, 0.001F);
+        EXPECT_NEAR(tx->scale().x, 2.0F, 0.001F);
+        EXPECT_NEAR(tx->scale().y, 0.2F, 0.001F);
+        EXPECT_NEAR(tx->scale().z, 2.0F, 0.001F);
 
         const auto* const mesh = registry.try_get<tempest::core::mesh_component>(step_entity);
         ASSERT_NE(mesh, nullptr);
@@ -173,6 +180,19 @@ TEST(main_scene_test, load_main_scene_and_verify_entities)
         EXPECT_EQ(mat->material_id, tempest::assets::builtin::default_material_guid);
 
         const auto* const hist = registry.try_get<tempest::ecs::transform_history_component>(capsule_entity);
-        EXPECT_NE(hist, nullptr);
+        ASSERT_NE(hist, nullptr);
+        EXPECT_NEAR(hist->current_position.x, 0.0F, 0.001F);
+        EXPECT_NEAR(hist->current_position.y, 0.92F, 0.001F);
+        EXPECT_NEAR(hist->current_position.z, 2.5F, 0.001F);
+
+        // Act: Run interpolation (as happens during play mode frames)
+        tempest::ecs::interpolate_transform_history(registry, 0.5F);
+
+        // Assert: Transform position is preserved and not reset to origin
+        const auto* const interpolated_tx = registry.try_get<tempest::ecs::transform_component>(capsule_entity);
+        ASSERT_NE(interpolated_tx, nullptr);
+        EXPECT_NEAR(interpolated_tx->position().x, 0.0F, 0.001F);
+        EXPECT_NEAR(interpolated_tx->position().y, 0.92F, 0.001F);
+        EXPECT_NEAR(interpolated_tx->position().z, 2.5F, 0.001F);
     }
 }

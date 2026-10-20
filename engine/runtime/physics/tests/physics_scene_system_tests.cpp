@@ -436,4 +436,72 @@ namespace tempest::physics::tests
         ASSERT_NE(falling_tx, nullptr);
         EXPECT_LT(falling_tx->position().y, 0.9F);
     }
+
+    /// @brief Verifies that init_from_registry updates existing bodies when collider extents have changed.
+    TEST_F(physics_scene_fixture, init_from_registry_updates_existing_bodies_with_new_collider_extents)
+    {
+        // Setup: World and registry with scene system attached
+        auto world = physics_world{make_description()};
+        auto scene_system = physics_scene_system{world, registry, event_reg};
+
+        const auto floor_entity = registry.create<ecs::transform_component>();
+        auto floor_tx = ecs::transform_component{};
+        floor_tx.position(math::vec3<float>{0.0F, 0.0F, 0.0F});
+        registry.assign(floor_entity, floor_tx);
+
+        // Assign initial small 0.5m box collider
+        const auto small_collider = box_collider_component{
+            .half_extents = math::vec3<float>{0.5F, 0.5F, 0.5F},
+        };
+        const auto static_body = rigid_body_component{
+            .motion = jolt::shim::motion_type::static_motion,
+            .layer = jolt::shim::object_layer::non_moving,
+        };
+        registry.assign(floor_entity, small_collider);
+        registry.assign(floor_entity, static_body);
+
+        EXPECT_TRUE(scene_system.has_body(floor_entity));
+
+        // Mutate collider to 20m half-extents (simulating post-load deserialization)
+        auto* mutable_collider = registry.try_get<box_collider_component>(floor_entity);
+        ASSERT_NE(mutable_collider, nullptr);
+        mutable_collider->half_extents = math::vec3<float>{20.0F, 0.5F, 20.0F};
+
+        // Act: Re-initialize from registry (e.g. at play begin)
+        scene_system.init_from_registry();
+
+        // Spawn character at (5.0, 1.0, 5.0) which is outside 0.5m box but inside 20m box
+        const auto player_entity = registry.create<ecs::transform_component>();
+        auto player_tx = ecs::transform_component{};
+        const auto initial_position = math::vec3<float>{5.0F, 1.0F, 5.0F};
+        player_tx.position(initial_position);
+        registry.assign(player_entity, player_tx);
+
+        auto controller = character_controller_component{
+            .character_height = 1.8F,
+            .character_radius = 0.4F,
+        };
+        const auto char_id = world.spawn_character(controller, initial_position);
+        controller.id = char_id;
+        registry.assign(player_entity, controller);
+        registry.assign(player_entity, velocity_component{});
+        registry.assign(player_entity, character_movement_intent{});
+
+        // Act: Step character simulation for 10 frames
+        constexpr auto delta_time = chrono::duration<double>{1.0 / 60.0};
+        const auto cmd = network::user_cmd{};
+        for (auto frame_idx = 0; frame_idx < 10; ++frame_idx)
+        {
+            step_character_simulation(world, registry, player_entity, cmd, delta_time);
+        }
+
+        // Assert: Character remains supported by the 20m floor and is grounded
+        const auto* post_ground_controller = registry.try_get<character_controller_component>(player_entity);
+        ASSERT_NE(post_ground_controller, nullptr);
+        EXPECT_TRUE(post_ground_controller->is_grounded);
+
+        const auto* final_tx = registry.try_get<ecs::transform_component>(player_entity);
+        ASSERT_NE(final_tx, nullptr);
+        EXPECT_GT(final_tx->position().y, 0.5F);
+    }
 } // namespace tempest::physics::tests

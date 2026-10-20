@@ -943,6 +943,11 @@ namespace tempest::ecs
             return basic_archetype_with_components_view<Ts...>(*this);
         }
 
+        [[nodiscard]] auto has_event_registry() const noexcept -> bool
+        {
+            return _event_registry != nullptr;
+        }
+
         [[nodiscard]] auto event_registry() noexcept -> event::event_registry&
         {
             return *_event_registry;

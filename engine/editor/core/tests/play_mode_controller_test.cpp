@@ -6,6 +6,8 @@
 #include <tempest/network/socket.hpp>
 #include <tempest/play_mode_controller.hpp>
 #include <tempest/transform_component.hpp>
+#include <tempest/transform_history_component.hpp>
+#include <tempest/transform_history_system.hpp>
 
 // ============================================================================
 // Play Mode Controller Tests
@@ -306,5 +308,50 @@ TEST(play_mode_controller_test, embedded_server_initialization_failure_fails_fas
     EXPECT_TRUE(controller.is_edit());
 
     blocker_socket.close();
+}
+
+/// @brief Verifies that play() synchronizes transform_history_component from transform_component so interpolation does not reset positions to origin.
+TEST(play_mode_controller_test, play_syncs_transform_history_from_transforms)
+{
+    // Setup: Context with entity having authored transform and uninitialized/default transform_history_component
+    auto engine_ctx = tempest::editor::editor_engine_context{};
+    auto& controller = engine_ctx.get_play_mode_controller();
+    auto& reg = engine_ctx.get_entities();
+
+    const auto ent = reg.create();
+    auto tx = tempest::ecs::transform_component{};
+    tx.position(tempest::math::vec3<float>{0.0F, 0.92F, 2.5F});
+    reg.assign(ent, tx);
+    reg.assign(ent, tempest::ecs::transform_history_component{});
+
+    // Act: Enter play mode
+    EXPECT_TRUE(controller.play(tempest::play_settings{.start_embedded_server = false}));
+
+    // Assert: transform_history_component was synced to match transform_component
+    const auto* const hist = reg.try_get<tempest::ecs::transform_history_component>(ent);
+    ASSERT_NE(hist, nullptr);
+    EXPECT_FLOAT_EQ(hist->current_position.x, 0.0F);
+    EXPECT_FLOAT_EQ(hist->current_position.y, 0.92F);
+    EXPECT_FLOAT_EQ(hist->current_position.z, 2.5F);
+
+    // Act: Run interpolation (as happens during render frames in play mode)
+    tempest::ecs::interpolate_transform_history(reg, 0.5F);
+
+    // Assert: transform_component retains authored position and is not reset to origin
+    const auto* const current_tx = reg.try_get<tempest::ecs::transform_component>(ent);
+    ASSERT_NE(current_tx, nullptr);
+    EXPECT_FLOAT_EQ(current_tx->position().x, 0.0F);
+    EXPECT_FLOAT_EQ(current_tx->position().y, 0.92F);
+    EXPECT_FLOAT_EQ(current_tx->position().z, 2.5F);
+
+    // Act: Stop play mode
+    controller.stop();
+
+    // Assert: Position is preserved back in edit mode
+    const auto* const restored_tx = reg.try_get<tempest::ecs::transform_component>(ent);
+    ASSERT_NE(restored_tx, nullptr);
+    EXPECT_FLOAT_EQ(restored_tx->position().x, 0.0F);
+    EXPECT_FLOAT_EQ(restored_tx->position().y, 0.92F);
+    EXPECT_FLOAT_EQ(restored_tx->position().z, 2.5F);
 }
 

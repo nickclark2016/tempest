@@ -9,6 +9,13 @@
 
 namespace tempest::ecs
 {
+    inline auto sync_transform_history_from_transforms(archetype_registry& registry) -> void
+    {
+        registry.each([](const transform_component& tx, transform_history_component& hist) {
+            hist = transform_history_component::create(tx.position(), tx.rotation());
+        });
+    }
+
     inline auto step_transform_history(archetype_registry& registry) -> void
     {
         registry.each([](transform_history_component& hist) {

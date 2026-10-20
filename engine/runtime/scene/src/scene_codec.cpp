@@ -3,6 +3,7 @@
 #include "scene_codec_detail.hpp"
 
 #include <tempest/algorithm.hpp>
+#include <tempest/array.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/guid.hpp>
 #include <tempest/json.hpp>
@@ -15,6 +16,8 @@
 #include <tempest/scene/prefab_overrides.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
+#include <tempest/transform_component.hpp>
+#include <tempest/transform_history_component.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
 #include <tempest/vector.hpp>
@@ -24,6 +27,43 @@ namespace tempest::scene
     namespace
     {
         using namespace detail;
+
+        struct staging_buffer
+        {
+            static constexpr size_t default_stack_limit = 512;
+            static constexpr size_t default_max_stack_alignment = 64;
+
+            alignas(default_max_stack_alignment) array<byte, default_stack_limit> stack_storage = {};
+            byte* heap_storage = nullptr;
+            byte* data = nullptr;
+
+            staging_buffer(size_t size, size_t alignment)
+            {
+                const auto effective_alignment = tempest::max(alignment, alignof(void*));
+                if (size <= default_stack_limit && effective_alignment <= default_max_stack_alignment)
+                {
+                    data = stack_storage.data();
+                }
+                else
+                {
+                    heap_storage = static_cast<byte*>(tempest::aligned_alloc(size, effective_alignment));
+                    data = heap_storage;
+                }
+            }
+
+            ~staging_buffer()
+            {
+                if (heap_storage != nullptr)
+                {
+                    tempest::aligned_free(heap_storage);
+                }
+            }
+
+            staging_buffer(const staging_buffer&) = delete;
+            staging_buffer(staging_buffer&&) = delete;
+            auto operator=(const staging_buffer&) -> staging_buffer& = delete;
+            auto operator=(staging_buffer&&) -> staging_buffer& = delete;
+        };
 
         void ensure_entity_local_ids_recursive(ecs::basic_archetype_registry& registry,
                                                ecs::entity entity,
@@ -468,18 +508,32 @@ namespace tempest::scene
 
                 if (type_info != nullptr)
                 {
-                    auto* comp_ptr =
+                    auto* existing =
                         ecs::raw_registry_access::get_component_raw(registry, target_ent, type_info->index);
-                    if (comp_ptr == nullptr)
+
+                    auto staged = staging_buffer{type_info->size, type_info->alignment};
+                    if (existing != nullptr)
                     {
-                        comp_ptr = ecs::raw_registry_access::assign_raw(registry, target_ent, *type_info);
+                        tempest::memcpy(staged.data, existing, type_info->size);
+                    }
+                    else
+                    {
+                        if (type_info->construct != nullptr)
+                        {
+                            type_info->construct(staged.data);
+                        }
+                        else
+                        {
+                            tempest::memset(staged.data, 0, type_info->size);
+                        }
+
                         if (type_info->descriptor.has_value())
                         {
                             for (const auto& field : type_info->descriptor->fields)
                             {
                                 if (field.kind == ecs::field_kind::entity_ref)
                                 {
-                                    detail::set_field_val(field, comp_ptr, ecs::tombstone);
+                                    detail::set_field_val(field, staged.data, ecs::tombstone);
                                 }
                             }
                         }
@@ -499,7 +553,7 @@ namespace tempest::scene
                                 const auto* field_desc = desc.find_field(field_name);
                                 if (field_desc != nullptr)
                                 {
-                                    deserialize_field(*field_desc, field_v, comp_ptr);
+                                    deserialize_field(*field_desc, field_v, staged.data);
                                 }
                                 else
                                 {
@@ -514,6 +568,8 @@ namespace tempest::scene
                             }
                         }
                     }
+
+                    ecs::raw_registry_access::assign_raw(registry, target_ent, *type_info, staged.data);
                 }
                 else
                 {
@@ -523,6 +579,13 @@ namespace tempest::scene
                         .json_payload = comp_json,
                     });
                 }
+            }
+
+            auto* const hist = registry.try_get<ecs::transform_history_component>(target_ent);
+            const auto* const tx = registry.try_get<ecs::transform_component>(target_ent);
+            if (hist != nullptr && tx != nullptr)
+            {
+                *hist = ecs::transform_history_component::create(tx->position(), tx->rotation());
             }
         };
 

@@ -11,18 +11,21 @@ namespace tempest::ecs
 {
     struct transform_history_component
     {
-        math::vec3<float> previous_position;
-        math::quat<float> previous_rotation;
-        math::vec3<float> current_position;
-        math::quat<float> current_rotation;
-        math::vec3<float> render_position;
-        math::quat<float> render_rotation;
+        static constexpr math::vec3<float> default_position = {0.0F, 0.0F, 0.0F};
+        static constexpr math::quat<float> default_rotation = {0.0F, 0.0F, 0.0F, 1.0F};
 
-        static constexpr auto create(math::vec3<float> position = {0.0F, 0.0F, 0.0F},
-                                     math::quat<float> rotation = {0.0F, 0.0F, 0.0F, 1.0F}) noexcept
+        math::vec3<float> previous_position = default_position;
+        math::quat<float> previous_rotation = default_rotation;
+        math::vec3<float> current_position = default_position;
+        math::quat<float> current_rotation = default_rotation;
+        math::vec3<float> render_position = default_position;
+        math::quat<float> render_rotation = default_rotation;
+
+        static constexpr auto create(math::vec3<float> position = default_position,
+                                     math::quat<float> rotation = default_rotation) noexcept
             -> transform_history_component
         {
-            transform_history_component component;
+            auto component = transform_history_component{};
             component.previous_position = position;
             component.previous_rotation = rotation;
             component.current_position = position;

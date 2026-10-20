@@ -37,6 +37,8 @@
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/transform_history_component.hpp>
+#include <tempest/transform_history_system.hpp>
+#include <tempest/transformations.hpp>
 #include <tempest/utility.hpp>
 #include <tempest/vec3.hpp>
 #include <tempest/vector.hpp>
@@ -971,6 +973,8 @@ extern "C"
             client->physics_scene->init_from_registry();
         }
 
+        tempest::ecs::sync_transform_history_from_transforms(ctx->get_entities());
+
         client->camera_entity = tempest::ecs::null;
         const auto cam_opt = ctx->get_entities().find_first_with_name("Camera");
         if (cam_opt.has_value())
@@ -985,6 +989,28 @@ extern "C"
                 client->camera_entity = self.entity;
                 break;
             }
+        }
+
+        client->camera_yaw = multiplayer_client::default_camera_yaw;
+        client->camera_pitch = multiplayer_client::default_camera_pitch;
+        client->first_mouse = true;
+        client->last_mouse_x = multiplayer_client::default_mouse_coord;
+        client->last_mouse_y = multiplayer_client::default_mouse_coord;
+
+        if (client->camera_entity != tempest::ecs::null)
+        {
+            const auto cam_rot = tempest::math::quat<float>(tempest::math::vec3<float>{
+                -client->camera_pitch,
+                client->camera_yaw,
+                0.0F,
+            });
+            const auto spawn_pos = client->is_offline
+                                       ? tempest::math::vec3<float>{0.0F, 1.0F, 0.0F}
+                                       : tempest::math::vec3<float>{static_cast<float>(client->player_slot) * 2.0F, 1.0F, 0.0F};
+            auto cam_tx = tempest::ecs::transform_component{};
+            cam_tx.position(spawn_pos + tempest::math::vec3<float>{0.0F, 0.70F, 0.0F});
+            cam_tx.rotation(cam_rot);
+            ctx->get_entities().assign_or_replace(client->camera_entity, cam_tx);
         }
 
         if (!client->is_offline)
@@ -1081,6 +1107,11 @@ extern "C"
                 g_client_ctx->get_window_manager().set_cursor_mode(win, tempest::cursor_mode::normal);
             }
         }
+        client->camera_yaw = multiplayer_client::default_camera_yaw;
+        client->camera_pitch = multiplayer_client::default_camera_pitch;
+        client->first_mouse = true;
+        client->last_mouse_x = multiplayer_client::default_mouse_coord;
+        client->last_mouse_y = multiplayer_client::default_mouse_coord;
         client->camera_entity = tempest::ecs::null;
     }
 
