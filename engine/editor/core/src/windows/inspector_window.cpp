@@ -7,6 +7,7 @@
 #include <tempest/iterator.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/math_utils.hpp>
+#include <tempest/play_session_diff.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/scene/prefab_instance_component.hpp>
 #include <tempest/scene/prefab_operations.hpp>
@@ -147,9 +148,9 @@ namespace tempest::editor
     inspector_window::inspector_window(ecs::archetype_registry& registry, scene::scene_manager* in_scene_mgr,
                                        editor_selection* in_selection, command_history* in_history,
                                        scene::prefab_cache* in_prefab_cache, event::event_registry* in_events,
-                                       logger* in_logger)
+                                       logger* in_logger, const play_session_diff* in_session_diff)
         : entity_registry{&registry}, scene_mgr{in_scene_mgr}, selection{in_selection}, history{in_history},
-          prefab_cache{in_prefab_cache}, events{in_events}, log{in_logger}
+          prefab_cache{in_prefab_cache}, events{in_events}, log{in_logger}, session_diff{in_session_diff}
     {
         if (scene_mgr == nullptr)
         {
@@ -226,7 +227,7 @@ namespace tempest::editor
         -> void
     {
         const auto name_opt = entity_registry->name(ent);
-        char name_buf[256]{};
+        char name_buf[256] = {};
         if (name_opt.has_value())
         {
             const auto copy_len = tempest::min(name_opt->size(), sizeof(name_buf) - 1);
@@ -256,6 +257,15 @@ namespace tempest::editor
             ImGui::SameLine();
             ImGui::TextDisabled("| Scene: #%u", addr.scene.index);
         }
+
+        const auto is_dynamic = (session_diff != nullptr && session_diff->is_spawned(ent)) ||
+                                (entity_registry->try_get<scene::scene_entity_component>(ent) == nullptr);
+        if (is_dynamic)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0F, 0.82F, 0.35F, 1.0F), "[ Dynamic Entity ]");
+        }
+
         ImGui::Separator();
         ImGui::Spacing();
     }
@@ -303,10 +313,10 @@ namespace tempest::editor
             ImGui::TextUnformatted("Tags & Capabilities");
             ImGui::Spacing();
 
-            const auto window_visible_x2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
             const auto& style = ImGui::GetStyle();
+            const auto window_visible_x2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
 
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.0F);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0F, 6.0F));
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0F, 3.0F));
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2F, 0.25F, 0.3F, 1.0F));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28F, 0.35F, 0.42F, 1.0F));
@@ -316,8 +326,17 @@ namespace tempest::editor
             {
                 const auto& comp_info = tag_components[tag_idx];
                 const auto display_title = get_display_component_name(comp_info.name);
-                char pill_label[256]{};
-                format_to_buffer(pill_label, "{}  x##tag_pill_{}", display_title, comp_info.index);
+                const auto is_comp_dynamic =
+                    (session_diff != nullptr && session_diff->is_component_added(ent, comp_info.index));
+                char pill_label[256] = {};
+                if (is_comp_dynamic)
+                {
+                    format_to_buffer(pill_label, "{} [Dynamic]  x##tag_pill_{}", display_title, comp_info.index);
+                }
+                else
+                {
+                    format_to_buffer(pill_label, "{}  x##tag_pill_{}", display_title, comp_info.index);
+                }
 
                 const auto button_size_x = ImGui::CalcTextSize(pill_label).x + style.FramePadding.x * 2.0F;
 
@@ -336,7 +355,7 @@ namespace tempest::editor
                     should_remove = true;
                 }
 
-                char menu_id[64]{};
+                char menu_id[64] = {};
                 format_to_buffer(menu_id, "##tag_menu_{}", comp_info.index);
                 if (ImGui::BeginPopupContextItem(menu_id))
                 {
@@ -377,8 +396,17 @@ namespace tempest::editor
         for (const auto& comp_info : authored_components)
         {
             const auto display_title = get_display_component_name(comp_info.name);
-            char header_id[256]{};
-            format_to_buffer(header_id, "{}##card_{}", display_title, comp_info.index);
+            const auto is_comp_dynamic =
+                (session_diff != nullptr && session_diff->is_component_added(ent, comp_info.index));
+            char header_id[256] = {};
+            if (is_comp_dynamic)
+            {
+                format_to_buffer(header_id, "{} [Dynamic]##card_{}", display_title, comp_info.index);
+            }
+            else
+            {
+                format_to_buffer(header_id, "{}##card_{}", display_title, comp_info.index);
+            }
 
             auto comp_has_override = false;
             if (prefab_inst != nullptr)
@@ -397,7 +425,7 @@ namespace tempest::editor
             const auto is_open =
                 ImGui::CollapsingHeader(header_id, ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Framed);
 
-            char menu_id[64]{};
+            char menu_id[64] = {};
             format_to_buffer(menu_id, "##comp_menu_{}", comp_info.index);
             if (ImGui::BeginPopupContextItem(menu_id))
             {
@@ -508,8 +536,17 @@ namespace tempest::editor
                 for (const auto& comp_info : runtime_components)
                 {
                     const auto display_title = get_display_component_name(comp_info.name);
-                    char header_id[256]{};
-                    format_to_buffer(header_id, "{}##rt_card_{}", display_title, comp_info.index);
+                    const auto is_comp_dynamic =
+                        (session_diff != nullptr && session_diff->is_component_added(ent, comp_info.index));
+                    char header_id[256] = {};
+                    if (is_comp_dynamic)
+                    {
+                        format_to_buffer(header_id, "{} [Dynamic]##rt_card_{}", display_title, comp_info.index);
+                    }
+                    else
+                    {
+                        format_to_buffer(header_id, "{}##rt_card_{}", display_title, comp_info.index);
+                    }
 
                     ImGui::PushID(static_cast<int>(comp_info.index));
                     const auto is_open =
@@ -578,12 +615,12 @@ namespace tempest::editor
         {
             ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.7F, 0.15F, 0.15F, 1.0F));
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.85F, 0.25F, 0.25F, 1.0F));
-            char header_label[256]{};
+            char header_label[256] = {};
             format_to_buffer(header_label, "Unknown: {}##unk_{}", unk.name, unk.name);
             const auto header_open =
                 ImGui::CollapsingHeader(header_label, ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Framed);
 
-            char popup_unk_id[256]{};
+            char popup_unk_id[256] = {};
             format_to_buffer(popup_unk_id, "##unk_menu_{}", unk.name);
             if (ImGui::BeginPopupContextItem(popup_unk_id))
             {
@@ -614,7 +651,7 @@ namespace tempest::editor
                         {
                             continue;
                         }
-                        char tname_buf[256]{};
+                        char tname_buf[256] = {};
                         const auto copy_len = tempest::min(t_info.name.size(), sizeof(tname_buf) - 1);
                         tempest::memcpy(tname_buf, t_info.name.data(), copy_len);
                         tname_buf[copy_len] = '\0';

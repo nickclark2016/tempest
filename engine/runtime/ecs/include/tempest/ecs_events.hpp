@@ -1,10 +1,25 @@
 #ifndef tempest_ecs_ecs_events_hpp
 #define tempest_ecs_ecs_events_hpp
 
+#include <tempest/int.hpp>
 #include <tempest/string_view.hpp>
 
 namespace tempest::ecs
 {
+    template <typename E>
+    struct entity_component_added_event
+    {
+        E entity;
+        uint32_t component_type_index;
+    };
+
+    template <typename E>
+    struct entity_component_removed_event
+    {
+        E entity;
+        uint32_t component_type_index;
+    };
+
     template <typename E>
     struct entity_renamed_event
     {
@@ -62,6 +77,6 @@ namespace tempest::ecs
     struct simulation_stopped_event
     {
     };
-}
+} // namespace tempest::ecs
 
 #endif // tempest_ecs_ecs_events_hpp

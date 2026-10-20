@@ -3,6 +3,7 @@
 #include <tempest/algorithm.hpp>
 #include <tempest/format.hpp>
 #include <tempest/math_utils.hpp>
+#include <tempest/play_session_diff.hpp>
 #include <tempest/utility.hpp>
 
 #include <imgui.h>
@@ -10,8 +11,10 @@
 namespace tempest::editor
 {
     hierarchy_window::hierarchy_window(ecs::archetype_registry& registry, scene::scene_manager* in_scene_mgr,
-                                       editor_selection* in_selection, command_history* in_history)
-        : entity_registry{&registry}, scene_mgr{in_scene_mgr}, selection{in_selection}, history{in_history}
+                                       editor_selection* in_selection, command_history* in_history,
+                                       const play_session_diff* in_session_diff)
+        : entity_registry{&registry}, scene_mgr{in_scene_mgr}, selection{in_selection}, history{in_history},
+          session_diff{in_session_diff}
     {
         if (scene_mgr == nullptr)
         {
@@ -81,7 +84,7 @@ namespace tempest::editor
 
         _handle_shortcuts();
 
-        _cache.rebuild(*entity_registry, *scene_mgr);
+        _cache.rebuild(*entity_registry, *scene_mgr, session_diff);
         const auto visible_rows = _cache.get_visible_rows();
 
         auto clipper = ImGuiListClipper{};
@@ -131,15 +134,21 @@ namespace tempest::editor
     {
         if (row.type == row_type::entity_node)
         {
-            ImGui::PushID(static_cast<int>(static_cast<uint32_t>(row.entity)));
+            ImGui::PushID("ent");
+            ImGui::PushID(static_cast<int>(static_cast<uint64_t>(row.entity) & 0xFFFFFFFFU));
+            ImGui::PushID(static_cast<int>(static_cast<uint64_t>(row.entity) >> 32U));
         }
         else if (row.type == row_type::scene_header)
         {
+            ImGui::PushID("scene");
             ImGui::PushID(static_cast<int>(row.scene.index));
+            ImGui::PushID(static_cast<int>(row.scene.generation));
         }
         else
         {
-            ImGui::PushID(-1);
+            ImGui::PushID("dynamic");
+            ImGui::PushID(0);
+            ImGui::PushID(0);
         }
 
         const auto indent_px = static_cast<float>(row.depth) * 16.0F;
@@ -161,7 +170,7 @@ namespace tempest::editor
             }
         }
 
-        char label_buffer[256]{};
+        char label_buffer[256] = {};
         if (row.type == row_type::scene_header)
         {
             if (row.is_active_scene && row.is_dirty)
@@ -175,6 +184,25 @@ namespace tempest::editor
             else if (row.is_dirty)
             {
                 tempest::format_to_buffer(label_buffer, "{} *", row.name);
+            }
+            else
+            {
+                tempest::format_to_buffer(label_buffer, "{}", row.name);
+            }
+        }
+        else if (row.type == row_type::entity_node)
+        {
+            if (row.is_dynamic && row.is_networked)
+            {
+                tempest::format_to_buffer(label_buffer, "[~] [net] {}", row.name);
+            }
+            else if (row.is_dynamic)
+            {
+                tempest::format_to_buffer(label_buffer, "[~] {}", row.name);
+            }
+            else if (row.is_networked)
+            {
+                tempest::format_to_buffer(label_buffer, "[net] {}", row.name);
             }
             else
             {
@@ -229,15 +257,21 @@ namespace tempest::editor
 
             ImGui::SetNextItemOpen(row.is_expanded);
 
-            const auto push_color = (row.is_prefab_instance && row.type == row_type::entity_node);
-            if (push_color)
+            const auto push_dynamic_color = (row.is_dynamic && row.type == row_type::entity_node);
+            const auto push_prefab_color = (row.is_prefab_instance && row.type == row_type::entity_node);
+
+            if (push_dynamic_color)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0F, 0.82F, 0.35F, 1.0F));
+            }
+            else if (push_prefab_color)
             {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35F, 0.65F, 1.0F, 1.0F));
             }
 
             const auto node_open = ImGui::TreeNodeEx("##node", node_flags, "%s", label_buffer);
 
-            if (push_color)
+            if (push_dynamic_color || push_prefab_color)
             {
                 ImGui::PopStyleColor();
             }
@@ -322,7 +356,7 @@ namespace tempest::editor
                                     {
                                         auto sync_scene = [&](auto&& self, ecs::entity e) -> void {
                                             entity_registry->assign_or_replace(
-                                                e, scene::scene_entity_component{.scene = row.scene});
+                                                 e, scene::scene_entity_component{.scene = row.scene});
                                             const auto* const rel_c =
                                                 entity_registry
                                                     ->try_get<ecs::relationship_component<ecs::entity>>(e);
@@ -420,6 +454,8 @@ namespace tempest::editor
             ImGui::Unindent(indent_px);
         }
 
+        ImGui::PopID();
+        ImGui::PopID();
         ImGui::PopID();
     }
 

@@ -26,6 +26,7 @@ namespace tempest
 namespace tempest::editor
 {
     class command_history;
+    class play_session_diff;
 
     /// @brief Generic reflection-driven entity and component inspector window.
     struct TEMPEST_EDITOR_API inspector_window final : public editor_window
@@ -40,11 +41,13 @@ namespace tempest::editor
         static constexpr scene::prefab_cache* default_prefab_cache = nullptr;
         static constexpr event::event_registry* default_events = nullptr;
         static constexpr logger* default_logger = nullptr;
+        static constexpr const play_session_diff* default_session_diff = nullptr;
 
         explicit inspector_window(ecs::archetype_registry& registry, scene::scene_manager* in_scene_mgr = nullptr,
                                   editor_selection* in_selection = nullptr, command_history* in_history = nullptr,
                                   scene::prefab_cache* in_prefab_cache = nullptr,
-                                  event::event_registry* in_events = nullptr, logger* in_logger = nullptr);
+                                  event::event_registry* in_events = nullptr, logger* in_logger = nullptr,
+                                  const play_session_diff* in_session_diff = nullptr);
         ~inspector_window() override;
 
         inspector_window(const inspector_window&) = delete;
@@ -63,6 +66,7 @@ namespace tempest::editor
         scene::prefab_cache* prefab_cache = default_prefab_cache;
         event::event_registry* events = default_events;
         logger* log = default_logger;
+        const play_session_diff* session_diff = default_session_diff;
         ecs::entity target = default_target;
         bool open = default_open;
 

@@ -636,6 +636,54 @@ TEST(basic_archetype_registry, component_added_emit_event)
     ASSERT_EQ(component_value, event_component_value);
 }
 
+/// @brief Verifies that assigning and removing components publishes entity_component_added_event
+/// and entity_component_removed_event containing the correct entity and type indices.
+TEST(basic_archetype_registry, publishes_generic_component_lifecycle_events)
+{
+    auto events = tempest::event::event_registry();
+    auto types = tempest::ecs::component_type_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events, types);
+
+    const auto entity = reg.create();
+
+    auto added_entity = tempest::ecs::entity{tempest::ecs::tombstone};
+    auto added_type_index = 0u;
+    auto added_count = 0;
+
+    auto removed_entity = tempest::ecs::entity{tempest::ecs::tombstone};
+    auto removed_type_index = 0u;
+    auto removed_count = 0;
+
+    [[maybe_unused]] const auto add_sub =
+        events.dispatcher<tempest::ecs::entity_component_added_event<tempest::ecs::entity>>().subscribe(
+            [&](const auto& evt) {
+                added_entity = evt.entity;
+                added_type_index = evt.component_type_index;
+                ++added_count;
+            });
+
+    [[maybe_unused]] const auto rem_sub =
+        events.dispatcher<tempest::ecs::entity_component_removed_event<tempest::ecs::entity>>().subscribe(
+            [&](const auto& evt) {
+                removed_entity = evt.entity;
+                removed_type_index = evt.component_type_index;
+                ++removed_count;
+            });
+
+    reg.assign(entity, int{123});
+
+    const auto expected_int_idx = types.ensure<int>();
+    EXPECT_EQ(added_count, 1);
+    EXPECT_EQ(added_entity, entity);
+    EXPECT_EQ(added_type_index, expected_int_idx);
+
+    reg.remove<int>(entity);
+
+    EXPECT_EQ(removed_count, 1);
+    EXPECT_EQ(removed_entity, entity);
+    EXPECT_EQ(removed_type_index, expected_int_idx);
+}
+
 TEST(basic_archetype_registry, component_replaced_emit_event)
 {
     auto events = tempest::event::event_registry();

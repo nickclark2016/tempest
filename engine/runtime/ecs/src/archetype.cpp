@@ -1416,9 +1416,16 @@ namespace tempest::ecs
             _entity_archetype_mapping[entity] = new_key;
         }
 
-        if (_event_registry != nullptr && type_info.publish_added != nullptr)
+        if (_event_registry != nullptr)
         {
-            type_info.publish_added(*_event_registry, entity, new_component_ptr);
+            if (type_info.publish_added != nullptr)
+            {
+                type_info.publish_added(*_event_registry, entity, new_component_ptr);
+            }
+            _event_registry->dispatcher<entity_component_added_event<basic_archetype_registry::entity_type>>().publish({
+                .entity = entity,
+                .component_type_index = type_info.index,
+            });
         }
 
         return new_component_ptr;
@@ -1490,6 +1497,13 @@ namespace tempest::ecs
             {
                 t_info.publish_removed(*_event_registry, entity, capture.data);
             }
+            if (_event_registry != nullptr)
+            {
+                _event_registry->dispatcher<entity_component_removed_event<basic_archetype_registry::entity_type>>().publish({
+                    .entity = entity,
+                    .component_type_index = type_index,
+                });
+            }
             return true;
         }
 
@@ -1557,6 +1571,13 @@ namespace tempest::ecs
         if (should_publish_removed)
         {
             t_info.publish_removed(*_event_registry, entity, capture.data);
+        }
+        if (_event_registry != nullptr)
+        {
+            _event_registry->dispatcher<entity_component_removed_event<basic_archetype_registry::entity_type>>().publish({
+                .entity = entity,
+                .component_type_index = type_index,
+            });
         }
 
         return true;

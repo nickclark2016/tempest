@@ -28,6 +28,7 @@
 #include <tempest/windows/viewport_window.hpp>
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 namespace tempest::editor::tests
 {
@@ -690,5 +691,74 @@ namespace tempest::editor::tests
         }
 
         (*game_on_unload)();
+    }
+
+
+    /// @brief Verifies that hierarchy_window avoids ImGui ID conflicts between scene headers
+    /// and entity nodes that share the same numerical index (e.g. scene 0 and entity 0).
+    TEST(editor_window_test, hierarchy_window_no_id_conflict_between_scene_and_camera_entity)
+    {
+        auto env = create_test_env();
+        ASSERT_NE(env.dev, nullptr);
+        ASSERT_TRUE(env.win.is_valid());
+
+        {
+            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
+            auto* const imgui_ctx = ui_ctx.get_imgui_context();
+            ImGui::SetCurrentContext(imgui_ctx);
+            imgui_ctx->IO.ConfigDebugHighlightIdConflicts = true;
+
+            auto events = event::event_registry{};
+            auto types = ecs::component_type_registry{};
+            auto reg = ecs::archetype_registry{events, types};
+            auto scene_mgr = scene::scene_manager{reg};
+            auto selection = editor_selection{};
+            selection.attach_event_registry(events);
+
+            const auto scene_opt = scene_mgr.load_from_string_sync(
+                R"({"schema_version":1,"generator":"test","entities":[]})", "main.tscene");
+            ASSERT_TRUE(scene_opt.has_value());
+            const auto scene = *scene_opt;
+            EXPECT_EQ(scene.index, 0U);
+
+            const auto camera_ent = scene_mgr.create_entity(scene, "Camera");
+            EXPECT_EQ(static_cast<uint32_t>(camera_ent), 0U);
+
+            auto hierarchy = hierarchy_window{reg, &scene_mgr, &selection};
+
+            // First verify that the ImGui IDs computed for the scene header and the camera entity differ inside "Hierarchy"
+            ui_ctx.begin_ui_commands();
+            ImGui::Begin("Hierarchy");
+            ImGui::PushID("scene");
+            ImGui::PushID(static_cast<int>(scene.index));
+            ImGui::PushID(static_cast<int>(scene.generation));
+            const auto scene_node_id = ImGui::GetID("##node");
+            ImGui::PopID();
+            ImGui::PopID();
+            ImGui::PopID();
+
+            ImGui::PushID("ent");
+            ImGui::PushID(static_cast<int>(static_cast<uint64_t>(camera_ent) & 0xFFFFFFFFU));
+            ImGui::PushID(static_cast<int>(static_cast<uint64_t>(camera_ent) >> 32U));
+            const auto camera_node_id = ImGui::GetID("##node");
+            ImGui::PopID();
+            ImGui::PopID();
+            ImGui::PopID();
+            ImGui::End();
+
+            EXPECT_NE(scene_node_id, camera_node_id);
+
+            // Simulate hovering over camera_node_id in previous frame
+            imgui_ctx->HoveredIdPreviousFrame = camera_node_id;
+
+            hierarchy.draw();
+            ui_ctx.finish_ui_commands();
+
+            // Exactly 1 item must match the hovered ID, proving zero duplicate ID conflicts
+            EXPECT_EQ(imgui_ctx->HoveredIdPreviousFrameItemCount, 1);
+            EXPECT_EQ(imgui_ctx->DebugDrawIdConflicts, 0U);
+        }
+
+        env.win_mgr.destroy_window(env.win);
     }
 } // namespace tempest::editor::tests

@@ -325,9 +325,10 @@ namespace tempest::editor
         : _engine_ctx{&ctx}, _win{win}, _ui_ctx{&ui_ctx},
           _inspector_view{register_window(make_unique<inspector_window>(
               ctx.get_entities(), &ctx.get_scene_manager(), &_selection, &_history, nullptr,
-              &ctx.get_events()))},
+              &ctx.get_events(), nullptr, &ctx.get_play_mode_controller().get_session_diff()))},
           _hierarchy_view{register_window(make_unique<hierarchy_window>(
-              ctx.get_entities(), &ctx.get_scene_manager(), &_selection, &_history))},
+              ctx.get_entities(), &ctx.get_scene_manager(), &_selection, &_history,
+              &ctx.get_play_mode_controller().get_session_diff()))},
           _viewport_view{register_window(make_unique<viewport_window>(ctx))},
           _log_view{register_window(make_unique<log_view_window>(ctx.get_log_store()))}
     {

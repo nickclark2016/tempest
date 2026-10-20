@@ -10,6 +10,7 @@
 #include <tempest/optional.hpp>
 #include <tempest/scene/scene_manager.hpp>
 #include <tempest/server/server_context.hpp>
+#include <tempest/play_session_diff.hpp>
 #include <tempest/thread.hpp>
 
 namespace tempest::editor
@@ -47,6 +48,16 @@ namespace tempest::editor
         [[nodiscard]] auto get_server_client_count() const noexcept -> size_t;
         [[nodiscard]] auto get_server() const noexcept -> const server::server_context*;
 
+        [[nodiscard]] auto get_session_diff() const noexcept -> const play_session_diff&
+        {
+            return _session_diff;
+        }
+
+        [[nodiscard]] auto get_session_diff() noexcept -> play_session_diff&
+        {
+            return _session_diff;
+        }
+
       private:
         static constexpr uint16_t default_server_port = 0;
 
@@ -59,6 +70,7 @@ namespace tempest::editor
         unique_ptr<server::server_context> _server;
         unique_ptr<thread> _server_thread;
         uint16_t _server_port = default_server_port;
+        play_session_diff _session_diff;
     };
 } // namespace tempest::editor
 

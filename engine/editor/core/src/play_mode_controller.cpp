@@ -49,6 +49,7 @@ namespace tempest::editor
                 _server_thread = make_unique<thread>([server_ptr]() { server_ptr->run(); });
             }
 
+            _session_diff.attach(_context->get_events());
             _saved_registry_snapshot = _context->get_entities().snapshot();
             _saved_scene_snapshot = _context->get_scene_manager().snapshot();
             _saved_editor_camera = _context->get_editor_camera();
@@ -111,6 +112,9 @@ namespace tempest::editor
 
     auto play_mode_controller::stop() -> void
     {
+        _session_diff.detach();
+        _session_diff.clear();
+
         if (_server)
         {
             _server->request_close();

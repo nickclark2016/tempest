@@ -22,6 +22,7 @@
 
 namespace tempest::editor
 {
+    class play_session_diff;
     /// @brief Tag component identifying an entity as networked.
     struct networked_tag
     {
@@ -77,7 +78,8 @@ namespace tempest::editor
         auto operator=(hierarchy_cache&& other) noexcept -> hierarchy_cache&;
 
         /// @brief Rebuilds the flattened visible row model if marked dirty or scene state changed.
-        auto rebuild(const ecs::basic_archetype_registry& reg, const scene::scene_manager& scene_mgr) -> void;
+        auto rebuild(const ecs::basic_archetype_registry& reg, const scene::scene_manager& scene_mgr,
+                     const play_session_diff* session_diff = nullptr) -> void;
 
         /// @brief Returns the cached flattened visible rows.
         [[nodiscard]] auto get_visible_rows() const noexcept -> span<const hierarchy_row>;
@@ -127,21 +129,36 @@ namespace tempest::editor
         size_t _last_scene_count = default_scene_count;
 
         event::event_registry* _events = default_events;
-        event::subscription_handle<ecs::entity_created_event<ecs::entity>> _entity_created_sub = {};
-        event::subscription_handle<ecs::entity_destroyed_event<ecs::entity>> _entity_destroyed_sub = {};
-        event::subscription_handle<ecs::entity_renamed_event<ecs::entity>> _entity_renamed_sub = {};
+        event::subscription_handle<ecs::entity_created_event<ecs::entity>> _entity_created_sub =
+            event::null_subscription<ecs::entity_created_event<ecs::entity>>;
+        event::subscription_handle<ecs::entity_destroyed_event<ecs::entity>> _entity_destroyed_sub =
+            event::null_subscription<ecs::entity_destroyed_event<ecs::entity>>;
+        event::subscription_handle<ecs::entity_renamed_event<ecs::entity>> _entity_renamed_sub =
+            event::null_subscription<ecs::entity_renamed_event<ecs::entity>>;
         event::subscription_handle<ecs::component_added_event<ecs::entity, ecs::relationship_component<ecs::entity>>>
-            _rel_added_sub = {};
+            _rel_added_sub =
+                event::null_subscription<ecs::component_added_event<ecs::entity, ecs::relationship_component<ecs::entity>>>;
         event::subscription_handle<ecs::component_removed_event<ecs::entity, ecs::relationship_component<ecs::entity>>>
-            _rel_removed_sub = {};
+            _rel_removed_sub =
+                event::null_subscription<ecs::component_removed_event<ecs::entity, ecs::relationship_component<ecs::entity>>>;
         event::subscription_handle<ecs::component_replaced_event<ecs::entity, ecs::relationship_component<ecs::entity>>>
-            _rel_replaced_sub = {};
+            _rel_replaced_sub =
+                event::null_subscription<ecs::component_replaced_event<ecs::entity, ecs::relationship_component<ecs::entity>>>;
         event::subscription_handle<ecs::component_added_event<ecs::entity, scene::scene_entity_component>>
-            _scene_comp_added_sub = {};
+            _scene_comp_added_sub =
+                event::null_subscription<ecs::component_added_event<ecs::entity, scene::scene_entity_component>>;
         event::subscription_handle<ecs::component_removed_event<ecs::entity, scene::scene_entity_component>>
-            _scene_comp_removed_sub = {};
+            _scene_comp_removed_sub =
+                event::null_subscription<ecs::component_removed_event<ecs::entity, scene::scene_entity_component>>;
         event::subscription_handle<ecs::component_replaced_event<ecs::entity, scene::scene_entity_component>>
-            _scene_comp_replaced_sub = {};
+            _scene_comp_replaced_sub =
+                event::null_subscription<ecs::component_replaced_event<ecs::entity, scene::scene_entity_component>>;
+        event::subscription_handle<ecs::world_restored_event> _world_restored_sub =
+            event::null_subscription<ecs::world_restored_event>;
+        event::subscription_handle<ecs::simulation_started_event> _sim_started_sub =
+            event::null_subscription<ecs::simulation_started_event>;
+        event::subscription_handle<ecs::simulation_stopped_event> _sim_stopped_sub =
+            event::null_subscription<ecs::simulation_stopped_event>;
     };
 } // namespace tempest::editor
 

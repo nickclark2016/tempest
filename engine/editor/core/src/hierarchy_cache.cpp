@@ -1,5 +1,7 @@
 #include <tempest/hierarchy_cache.hpp>
 
+#include <tempest/play_session_diff.hpp>
+
 #include <tempest/algorithm.hpp>
 #include <tempest/format.hpp>
 #include <tempest/scene/prefab_instance_component.hpp>
@@ -240,6 +242,15 @@ namespace tempest::editor
         _scene_comp_replaced_sub =
             _events->dispatcher<ecs::component_replaced_event<ecs::entity, scene::scene_entity_component>>().subscribe(
                 [this](const auto&) { mark_dirty(); });
+
+        _world_restored_sub = _events->dispatcher<ecs::world_restored_event>().subscribe(
+            [this](const auto&) { mark_dirty(); });
+
+        _sim_started_sub = _events->dispatcher<ecs::simulation_started_event>().subscribe(
+            [this](const auto&) { mark_dirty(); });
+
+        _sim_stopped_sub = _events->dispatcher<ecs::simulation_stopped_event>().subscribe(
+            [this](const auto&) { mark_dirty(); });
     }
 
     auto hierarchy_cache::detach_event_registry() -> void
@@ -253,19 +264,19 @@ namespace tempest::editor
         {
             [[maybe_unused]] const auto unsub =
                 _events->dispatcher<ecs::entity_created_event<ecs::entity>>().unsubscribe(_entity_created_sub);
-            _entity_created_sub = {};
+            _entity_created_sub = event::null_subscription<ecs::entity_created_event<ecs::entity>>;
         }
         if (_entity_destroyed_sub != event::null_subscription<ecs::entity_destroyed_event<ecs::entity>>)
         {
             [[maybe_unused]] const auto unsub =
                 _events->dispatcher<ecs::entity_destroyed_event<ecs::entity>>().unsubscribe(_entity_destroyed_sub);
-            _entity_destroyed_sub = {};
+            _entity_destroyed_sub = event::null_subscription<ecs::entity_destroyed_event<ecs::entity>>;
         }
         if (_entity_renamed_sub != event::null_subscription<ecs::entity_renamed_event<ecs::entity>>)
         {
             [[maybe_unused]] const auto unsub =
                 _events->dispatcher<ecs::entity_renamed_event<ecs::entity>>().unsubscribe(_entity_renamed_sub);
-            _entity_renamed_sub = {};
+            _entity_renamed_sub = event::null_subscription<ecs::entity_renamed_event<ecs::entity>>;
         }
         if (_rel_added_sub !=
             event::null_subscription<ecs::component_added_event<ecs::entity, ecs::relationship_component<ecs::entity>>>)
@@ -274,7 +285,8 @@ namespace tempest::editor
                 _events
                     ->dispatcher<ecs::component_added_event<ecs::entity, ecs::relationship_component<ecs::entity>>>()
                     .unsubscribe(_rel_added_sub);
-            _rel_added_sub = {};
+            _rel_added_sub =
+                event::null_subscription<ecs::component_added_event<ecs::entity, ecs::relationship_component<ecs::entity>>>;
         }
         if (_rel_removed_sub !=
             event::null_subscription<ecs::component_removed_event<ecs::entity, ecs::relationship_component<ecs::entity>>>)
@@ -283,7 +295,8 @@ namespace tempest::editor
                 _events
                     ->dispatcher<ecs::component_removed_event<ecs::entity, ecs::relationship_component<ecs::entity>>>()
                     .unsubscribe(_rel_removed_sub);
-            _rel_removed_sub = {};
+            _rel_removed_sub =
+                event::null_subscription<ecs::component_removed_event<ecs::entity, ecs::relationship_component<ecs::entity>>>;
         }
         if (_rel_replaced_sub !=
             event::null_subscription<
@@ -294,7 +307,8 @@ namespace tempest::editor
                     ->dispatcher<
                         ecs::component_replaced_event<ecs::entity, ecs::relationship_component<ecs::entity>>>()
                     .unsubscribe(_rel_replaced_sub);
-            _rel_replaced_sub = {};
+            _rel_replaced_sub =
+                event::null_subscription<ecs::component_replaced_event<ecs::entity, ecs::relationship_component<ecs::entity>>>;
         }
         if (_scene_comp_added_sub !=
             event::null_subscription<ecs::component_added_event<ecs::entity, scene::scene_entity_component>>)
@@ -302,7 +316,8 @@ namespace tempest::editor
             [[maybe_unused]] const auto unsub =
                 _events->dispatcher<ecs::component_added_event<ecs::entity, scene::scene_entity_component>>()
                     .unsubscribe(_scene_comp_added_sub);
-            _scene_comp_added_sub = {};
+            _scene_comp_added_sub =
+                event::null_subscription<ecs::component_added_event<ecs::entity, scene::scene_entity_component>>;
         }
         if (_scene_comp_removed_sub !=
             event::null_subscription<ecs::component_removed_event<ecs::entity, scene::scene_entity_component>>)
@@ -310,7 +325,8 @@ namespace tempest::editor
             [[maybe_unused]] const auto unsub =
                 _events->dispatcher<ecs::component_removed_event<ecs::entity, scene::scene_entity_component>>()
                     .unsubscribe(_scene_comp_removed_sub);
-            _scene_comp_removed_sub = {};
+            _scene_comp_removed_sub =
+                event::null_subscription<ecs::component_removed_event<ecs::entity, scene::scene_entity_component>>;
         }
         if (_scene_comp_replaced_sub !=
             event::null_subscription<ecs::component_replaced_event<ecs::entity, scene::scene_entity_component>>)
@@ -318,13 +334,33 @@ namespace tempest::editor
             [[maybe_unused]] const auto unsub =
                 _events->dispatcher<ecs::component_replaced_event<ecs::entity, scene::scene_entity_component>>()
                     .unsubscribe(_scene_comp_replaced_sub);
-            _scene_comp_replaced_sub = {};
+            _scene_comp_replaced_sub =
+                event::null_subscription<ecs::component_replaced_event<ecs::entity, scene::scene_entity_component>>;
+        }
+        if (_world_restored_sub != event::null_subscription<ecs::world_restored_event>)
+        {
+            [[maybe_unused]] const auto unsub =
+                _events->dispatcher<ecs::world_restored_event>().unsubscribe(_world_restored_sub);
+            _world_restored_sub = event::null_subscription<ecs::world_restored_event>;
+        }
+        if (_sim_started_sub != event::null_subscription<ecs::simulation_started_event>)
+        {
+            [[maybe_unused]] const auto unsub =
+                _events->dispatcher<ecs::simulation_started_event>().unsubscribe(_sim_started_sub);
+            _sim_started_sub = event::null_subscription<ecs::simulation_started_event>;
+        }
+        if (_sim_stopped_sub != event::null_subscription<ecs::simulation_stopped_event>)
+        {
+            [[maybe_unused]] const auto unsub =
+                _events->dispatcher<ecs::simulation_stopped_event>().unsubscribe(_sim_stopped_sub);
+            _sim_stopped_sub = event::null_subscription<ecs::simulation_stopped_event>;
         }
 
-        _events = nullptr;
+        _events = default_events;
     }
 
-    auto hierarchy_cache::rebuild(const ecs::basic_archetype_registry& reg, const scene::scene_manager& scene_mgr)
+    auto hierarchy_cache::rebuild(const ecs::basic_archetype_registry& reg, const scene::scene_manager& scene_mgr,
+                                  const play_session_diff* session_diff)
         -> void
     {
         const auto current_active = scene_mgr.get_active_scene();
@@ -403,8 +439,10 @@ namespace tempest::editor
             ent_row.has_children = has_children;
             ent_row.is_dirty = false;
             ent_row.is_active_scene = false;
+            const auto entity_is_dyn = is_dyn || (session_diff != nullptr && session_diff->is_spawned(ent));
+
             ent_row.is_prefab_instance = reg.has<scene::prefab_instance_component>(ent);
-            ent_row.is_dynamic = is_dyn;
+            ent_row.is_dynamic = entity_is_dyn;
             ent_row.is_networked = reg.has<networked_tag>(ent);
 
             _visible_rows.push_back(tempest::move(ent_row));
@@ -414,7 +452,7 @@ namespace tempest::editor
                 auto child = rel->first_child;
                 while (child != ecs::tombstone && reg.is_valid(child))
                 {
-                    self(self, child, depth + 1, scn, is_dyn);
+                    self(self, child, depth + 1, scn, entity_is_dyn);
                     const auto* const child_rel = reg.try_get<ecs::relationship_component<ecs::entity>>(child);
                     child = (child_rel != nullptr) ? child_rel->next_sibling : ecs::tombstone;
                 }
@@ -533,7 +571,8 @@ namespace tempest::editor
         while (dyn_it != _dynamic_roots.end())
         {
             const auto ent = *dyn_it;
-            if (!reg.is_valid(ent) || reg.try_get<scene::scene_entity_component>(ent) != nullptr)
+            const auto is_spawned_dyn = (session_diff != nullptr && session_diff->is_spawned(ent));
+            if (!reg.is_valid(ent) || (!is_spawned_dyn && reg.try_get<scene::scene_entity_component>(ent) != nullptr))
             {
                 dyn_it = _dynamic_roots.erase(dyn_it);
                 continue;
@@ -557,6 +596,22 @@ namespace tempest::editor
                 if (is_root && tempest::find(_dynamic_roots.begin(), _dynamic_roots.end(), ent) == _dynamic_roots.end())
                 {
                     _dynamic_roots.push_back(ent);
+                }
+            }
+        }
+
+        if (session_diff != nullptr)
+        {
+            for (const auto ent : session_diff->get_spawned_entities())
+            {
+                if (reg.is_valid(ent))
+                {
+                    const auto* const rel = reg.try_get<ecs::relationship_component<ecs::entity>>(ent);
+                    const auto is_root = (rel == nullptr || rel->parent == ecs::tombstone || rel->parent == ecs::null);
+                    if (is_root && tempest::find(_dynamic_roots.begin(), _dynamic_roots.end(), ent) == _dynamic_roots.end())
+                    {
+                        _dynamic_roots.push_back(ent);
+                    }
                 }
             }
         }

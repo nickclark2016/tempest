@@ -11,6 +11,7 @@
 namespace tempest::editor
 {
     class command_history;
+    class play_session_diff;
 
     /// @brief Interactive virtualized scene and entity hierarchy window for the Tempest editor.
     struct TEMPEST_EDITOR_API hierarchy_window final : public editor_window
@@ -22,9 +23,11 @@ namespace tempest::editor
         static constexpr scene::scene_manager* default_scene_mgr = nullptr;
         static constexpr editor_selection* default_selection = nullptr;
         static constexpr command_history* default_history = nullptr;
+        static constexpr const play_session_diff* default_session_diff = nullptr;
 
         explicit hierarchy_window(ecs::archetype_registry& registry, scene::scene_manager* in_scene_mgr = nullptr,
-                                  editor_selection* in_selection = nullptr, command_history* in_history = nullptr);
+                                  editor_selection* in_selection = nullptr, command_history* in_history = nullptr,
+                                  const play_session_diff* in_session_diff = nullptr);
         ~hierarchy_window() override;
 
         hierarchy_window(const hierarchy_window&) = delete;
@@ -50,6 +53,7 @@ namespace tempest::editor
         scene::scene_manager* scene_mgr = default_scene_mgr;
         editor_selection* selection = default_selection;
         command_history* history = default_history;
+        const play_session_diff* session_diff = default_session_diff;
         ecs::entity selected_entity = default_selected_entity;
         bool open = default_open;
 

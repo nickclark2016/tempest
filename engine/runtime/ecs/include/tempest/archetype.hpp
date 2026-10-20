@@ -1280,6 +1280,14 @@ namespace tempest::ecs
                 });
         }
 
+        if (_event_registry != nullptr)
+        {
+            _event_registry->dispatcher<entity_component_added_event<basic_archetype_registry::entity_type>>().publish({
+                .entity = entity,
+                .component_type_index = type_info.index,
+            });
+        }
+
         return *result_ptr;
     }
 
@@ -1435,6 +1443,14 @@ namespace tempest::ecs
                     .entity = entity,
                     .component = old_value,
                 });
+        }
+
+        if (_event_registry != nullptr)
+        {
+            _event_registry->dispatcher<entity_component_removed_event<basic_archetype_registry::entity_type>>().publish({
+                .entity = entity,
+                .component_type_index = type_info_index,
+            });
         }
     }
 
