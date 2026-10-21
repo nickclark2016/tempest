@@ -26,7 +26,10 @@ graph LR
     RB --> LV["log_view_window: cached match indices"]
     FW["file_watcher events"] --> PT["project_tree_model (cached rows)"]
     DB["asset_database + .tmeta"] --> PT
+    DB --> RDI["reverse_dependency_index (.cache/reverse_dependencies.json)"]
     PT --> PV["project_view_window (single-column tree)"]
+    PV -->|"drag TEMPEST_ASSET_PAYLOAD"| VW["viewport_window & hierarchy_window"]
+    PV -->|"remove flow"| RDI
 ```
 
 ## Detailed Design
@@ -90,23 +93,79 @@ namespace tempest
 - **Status bar.** The editor status bar shows a pill with the error and warning counts since the last clear. Clicking it focuses the Log View.
 
 ### 4. Project View (M8)
-- **Single-column tree** (Unity "One Column Layout") rooted at the project's mount roots (5a).
-  - Folders and files are interleaved: folders first, then files alphabetically.
-  - Moving up and down the tree is done by expanding and collapsing nodes (5b). There is a search filter box, plus a Reveal in Explorer action.
-- **Imported vs loose** (5d):
-  - **Imported files** (with a `.tmeta`) show a type icon and can be expanded to list their sub-assets: prefab, meshes, materials, textures.
-  - **Loose files** are greyed out with an Import action (5c). It is enabled only when an importer is registered for the file extension.
-  - `.tmeta` files themselves are hidden.
-- **Cached model.**
-  - `project_tree_model` holds a node tree plus the flattened list of expanded rows.
-  - Only `file_watcher` events and import or removal results invalidate it, and only the affected directory nodes.
-  - Rows are virtualized with `ImGuiListClipper`.
-- **Drag sources:**
-  - A prefab or model dropped onto the hierarchy instantiates under the drop target.
-  - Dropped onto the viewport, it instantiates at the camera-ray hit point; if nothing is hit, 5 m in front of the camera.
-  - A material dropped onto an entity in the hierarchy assigns `material_component`.
-  - Each of these is an undoable `editor_command`.
-- **Context menu:** Import, Reimport, Remove from Project (runs the removal flow in [Project & Asset Workspace](project_asset_workspace.md)), Create > Folder / Material / Scene, Open Scene (Single / Additive), Rename.
+
+#### 4.1 Architecture & Cached Tree Model
+- **`project_tree_model`**:
+  - Encapsulates a hierarchical node tree rooted at the active workspace mount points.
+  - Generates and caches a flattened list of visible rows consumed by `ImGuiListClipper`.
+  - Maintains persistent expansion states for directories and imported files.
+  - Driven by `file_watcher` events; invalidates and re-scans only affected directory nodes.
+  - **Deferred invalidation**: Structural tree rebuilds triggered by background file events are deferred while an inline rename or drag-and-drop operation is active to prevent focus loss or input corruption.
+- **`project_view_window`**:
+  - Implements `editor_window`, docks initially at `dock_location::bottom`, and exposes `"Window" > "Project"` toggle.
+  - Hosts the single-column virtualized tree, top breadcrumb bar, search filter bar, and context menu dispatchers.
+  - Maintains internal item selection without disrupting `editor_selection` until asset inspection is active.
+- **`reverse_dependency_index`**:
+  - Maintained as an engine library component in `runtime/scene` (or `runtime/assets`).
+  - Maps `asset guid -> [{owner: scene/prefab guid, id_path, component, field}]`.
+  - Serialized as human-readable JSON at `.cache/reverse_dependencies.json`. Rebuilt on project open and updated incrementally on scene/prefab saves and asset imports.
+
+#### 4.2 Workspace & Project Discovery
+- **Launch Resolution**: The editor loads the project specified via `--project=<path>`. If omitted:
+  - The editor checks the current working directory; if a single `.tproject` exists, it opens automatically.
+  - Otherwise, a blocking modal dialog prompts the user to select from a "Recent Projects" list (persisted in `.cache/editor_session.json`), browse for an existing `.tproject`, or create a new project.
+- **Mount Roots**: Each mount root declared in `project_workspace` (e.g. `assets`) is presented as a top-level node.
+
+#### 4.3 Node Classification & Visual Presentation
+- **Interleaved ordering**: Folders appear first, followed by files alphabetically.
+- **Imported assets** (with `.tmeta` sidecar): Display type badge (e.g. `[Model]`, `[Prefab]`, `[Material]`, `[Scene]`) and expand with an arrow to list sub-assets (`prefab`, `mesh/0`, `material/0`, `texture/baseColor`).
+- **Loose files** (without `.tmeta`): Displayed greyed out with a `[Loose]` badge. Context menu enables "Import" if a registered importer matches the file extension.
+- **Hidden sidecars**: `.tmeta` sidecars are hidden from the tree.
+
+#### 4.4 Navigation & Search Filtering
+- **Breadcrumb navigation bar**: Horizontal path strip at the top (`assets > characters > enemies`) for fast directory jumping.
+- **Search filtering**: Case-insensitive substring query on filename or path. When search is non-empty, the tree switches to a flattened view displaying all matching files and sub-assets alongside their relative paths. Clearing search restores the hierarchical tree and prior expansion states.
+
+#### 4.5 Inline Renaming & Input Validation
+- Triggered by $F2$ or context menu > Rename on any file or folder.
+- Renders an inline `ImGui::InputText` overlay on the row.
+- **Real-time validation**: Validates input buffer every keystroke against illegal OS characters (`/`, `\`, `:`, `*`, `?`, `"`, `<`, `>`, `|`), empty names, and existing file collisions. Highlights red with an error tooltip on collision; Enter/commit is disabled until valid.
+- Pressing Enter commits file rename and associated `.tmeta` rename on disk, notifying `asset_database`. Pressing Escape cancels safely.
+
+#### 4.6 Drag-and-Drop Instantiation & Payloads
+- **Payload**: Draggable items set `TEMPEST_ASSET_PAYLOAD` containing the asset GUID and metadata, compatible with the Inspector property grid.
+- **Hierarchy drop target**:
+  - Dropping a prefab or model onto an entity row parents the instantiated prefab under that entity.
+  - Dropping onto a scene header or blank space instantiates as a root entity in that scene.
+  - Dropping a material onto an entity assigns its material.
+  - Sub-assets (e.g. `mesh/0`, `material/0`, `prefab`) are draggable individually.
+- **Viewport drop target**:
+  - Raycasts from the camera into the scene. Instantiates at raycast hit point; if no surface is hit, positions $5\,\text{m}$ in front of `editor_camera`.
+  - Displays a placement ghost preview while hovering.
+  - Dropping a material onto an entity under the cursor assigns to that entity's material slot.
+- **Undoable commands**: Instantiations and material assignments execute via `instantiate_prefab_command` and `assign_material_command` recorded in `command_history`.
+
+#### 4.7 Context Actions & File Activation
+- **Create > Folder / Material / Scene**: Creates directory or default `.tmaterial` / `.tscene` file and immediately activates inline rename mode.
+- **Import / Reimport**:
+  - Single-file import and reimport (preserving existing sub-asset GUIDs).
+  - Bulk import for multiple selected loose files and folder-level recursive import.
+- **Double-click activation**:
+  - Folder: Toggles expansion state.
+  - `.tscene`: Triggers Open Scene (Single).
+  - `.tprefab` or `.tmaterial`: Focuses in Inspector.
+  - Scripts, shaders, text files: Opens in configured external code editor (or OS default application).
+- **Scene opening & dirty state protection**: Opening a scene (Single) checks for unsaved changes in currently loaded scenes. If dirty edits exist, a confirmation dialog prompts: `Save Changes to '<scene>'? [Save] [Don't Save] [Cancel]`.
+- **Reveal in Explorer**: Opens OS file manager with the target file or folder selected.
+
+#### 4.8 Asset Removal Flow & Dependency Resolution
+- Triggered by right-click > "Remove from Project".
+- Queries `reverse_dependency_index` for the target asset GUID:
+  - **No references found**: Prompts simple confirmation dialog with a "Delete source file" checkbox. On confirm, deletes `.tmeta`, unregisters database entries, and removes source file if checked.
+  - **References found**: Displays a modal warning dialog listing all referencing scenes, prefabs, and entity IDs with three actions:
+    1. **Abort**: Cancels the removal operation without modifying files.
+    2. **Leave dangling**: Deletes `.tmeta` and unregisters asset; existing references remain dangling (rendering missing-asset placeholders).
+    3. **Remove referencing entities**: For currently open scenes, executes undoable `destroy_entity_command` instances; for unopened scenes and prefabs on disk, atomically updates JSON files on disk. If closed scenes are affected, the dialog prompts that disk rewrites cannot be undone and suggests opening them first.
 
 ## Public API Surface & Subsystem Invariants
 - **Thread confinement.** Sinks never touch UI state. All view state is owned by the main thread.
@@ -120,13 +179,16 @@ namespace tempest
 - Timestamps are monotonic per thread.
 - The default logger delivers to every sink (regression test for the last-sink bug).
 
+**`scene-tests` / `assets-tests`**
+- `reverse_dependency_index`: Construction from scenes and prefabs; querying references by asset GUID; JSON serialization round-trip to `.cache/reverse_dependencies.json`; incremental updates on save and import; stripping referencing entities across open registries and disk files.
+
 **`editor-core-tests`**
 - `log_store`: ring eviction and dropped count; sequence numbers stay stable across eviction.
 - Clear hides earlier records and shows later ones.
 - The incremental filter result equals a full rebuild after a random mix of ingest, filter and clear operations.
 - Search is case-insensitive.
 - Relative time window trimming.
-- `project_tree_model`: classification of imported and loose files; sub-asset expansion; incremental invalidation touches only the affected directories; `.tmeta` files are hidden.
+- `project_tree_model`: classification of imported and loose files; sub-asset expansion; incremental invalidation touches only the affected directories; `.tmeta` files are hidden; flattened search mode matches query with relative paths; deferred invalidation during active editing and drag operations.
 
 **TSan**
 - Logger tests and `editor-core-tests` log-store tests: multiple producer threads, one main-thread drain.
@@ -134,11 +196,16 @@ namespace tempest
 **Manual**
 - Flood 1M log lines from workers. The editor stays responsive and the drop counter increases.
 - Filter by Error, search, then clear. Only new entries appear.
-- Import a loose `.glb`, drag it into the viewport, and undo.
+- Launch editor with and without `--project`; verify auto-discovery of working directory `.tproject` or modal selector.
+- Create new folder, material, and scene; verify inline rename with invalid character / collision validation.
+- Import loose `.glb` and reimport; verify sub-asset expansion.
+- Drag prefab/model into hierarchy (parenting) and viewport (raycast hit / 5m fallback with placement ghost); verify undo/redo.
+- Attempt to open a scene with unsaved changes; verify dirty scene protection prompt.
+- Remove an asset referenced by a scene; verify removal modal options (`Abort`, `Leave dangling`, `Remove referencing entities`).
 
 ## Implementation Phases
 | Phase | Subsystem | Description |
 | :--- | :--- | :--- |
 | M1 | logger | `log_record`, `add_sink` / `remove_sink`, timestamps and thread ids, default-logger fix |
 | M2 | editor | `editor_log_sink`, `log_store`, `log_view_window`, status-bar pill |
-| M8 | editor | `project_tree_model`, `project_view_window`, drag-to-instantiate, context actions |
+| M8 | editor / scene | `project_tree_model`, `project_view_window`, `reverse_dependency_index`, drag-to-instantiate, context actions, removal flow |
