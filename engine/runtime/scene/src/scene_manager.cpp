@@ -1,9 +1,12 @@
 #include <tempest/scene/scene_manager.hpp>
 
 #include <tempest/algorithm.hpp>
+#include <tempest/asset_database.hpp>
 #include <tempest/files.hpp>
 #include <tempest/random.hpp>
 #include <tempest/relationship_component.hpp>
+#include <tempest/scene/reverse_dependency_index.hpp>
+#include <tempest/scene/scene_asset_scanner.hpp>
 #include <tempest/utility.hpp>
 
 namespace tempest::scene
@@ -199,6 +202,16 @@ namespace tempest::scene
         }
         _scenes[handle.index].is_dirty = dirty;
         return true;
+    }
+
+    auto scene_manager::set_reverse_dependency_index(reverse_dependency_index* index) noexcept -> void
+    {
+        _reverse_deps = index;
+    }
+
+    auto scene_manager::get_reverse_dependency_index() const noexcept -> reverse_dependency_index*
+    {
+        return _reverse_deps;
     }
 
     auto scene_manager::create_entity(scene_handle handle, string_view name) -> ecs::entity
@@ -459,6 +472,21 @@ namespace tempest::scene
             _scenes[handle.index].name = path.stem().string();
         }
         _scenes[handle.index].is_dirty = false;
+
+        if (_reverse_deps != nullptr)
+        {
+            auto scene_guid = guid{};
+            if (_assets != nullptr)
+            {
+                const auto* entry = _assets->find_by_path(path.generic_string());
+                if (entry != nullptr)
+                {
+                    scene_guid = entry->id;
+                }
+            }
+            scene_asset_scanner::record_references_for_file(*_reverse_deps, path.generic_string(), *str_res,
+                                                            _registry->type_registry(), scene_guid);
+        }
 
         return {};
     }

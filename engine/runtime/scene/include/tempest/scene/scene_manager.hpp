@@ -30,6 +30,8 @@ namespace tempest::job
 
 namespace tempest::scene
 {
+    class reverse_dependency_index;
+
     /// @brief Operating modes when loading a scene document.
     enum class scene_load_mode : uint8_t
     {
@@ -148,6 +150,7 @@ namespace tempest::scene
       public:
         static constexpr assets::asset_database* default_asset_database = nullptr;
         static constexpr job::job_system* default_job_system = nullptr;
+        static constexpr reverse_dependency_index* default_reverse_dependency_index = nullptr;
         static constexpr size_t default_occupied_count = 0;
         static constexpr scene_handle default_active_scene = {};
 
@@ -213,6 +216,14 @@ namespace tempest::scene
         auto save_to_string(scene_handle handle, const scene_serialize_options& options = {})
             -> expected<string, scene_error>;
 
+        /// @brief Configures the reverse dependency index used to track cross-asset dependencies upon saving.
+        /// @param index Pointer to the reverse dependency index instance, or nullptr to disable tracking.
+        auto set_reverse_dependency_index(reverse_dependency_index* index) noexcept -> void;
+
+        /// @brief Retrieves the active reverse dependency index instance, if configured.
+        /// @return Pointer to the active reverse dependency index, or nullptr if none is configured.
+        [[nodiscard]] auto get_reverse_dependency_index() const noexcept -> reverse_dependency_index*;
+
         [[nodiscard]] auto get_asset_database() const noexcept -> assets::asset_database*
         {
             return _assets;
@@ -233,6 +244,7 @@ namespace tempest::scene
         non_null<ecs::archetype_registry> _registry;
         assets::asset_database* _assets = default_asset_database;
         job::job_system* _jobs = default_job_system;
+        reverse_dependency_index* _reverse_deps = default_reverse_dependency_index;
         vector<scene_record> _scenes;
         vector<uint32_t> _free_slots;
         size_t _occupied_count = default_occupied_count;
