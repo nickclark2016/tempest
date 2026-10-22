@@ -58,6 +58,12 @@ namespace tempest::scene
         /// @post If true is returned and all references for asset_id are removed, has_references(asset_id) is false.
         [[nodiscard]] auto remove_reference(const guid& asset_id, const asset_reference_location& loc) -> bool;
 
+        /// @brief Removes all reference entries associated with a specific file path.
+        /// @param file_path File path to match against asset_reference_location::owner_path.
+        /// @return Number of reference entries removed.
+        /// @post Any asset GUID whose reference locations become empty is pruned from the index.
+        auto remove_references_for_file(string_view file_path) -> size_t;
+
         /// @brief Clears all recorded dependency relationships.
         /// @post empty() is true.
         /// @post all_dependencies().empty() is true.

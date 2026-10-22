@@ -51,6 +51,31 @@ namespace tempest::scene
         return true;
     }
 
+    auto reverse_dependency_index::remove_references_for_file(string_view file_path) -> size_t
+    {
+        auto removed_count = size_t{0};
+        auto keys_to_prune = vector<guid>{};
+
+        for (auto& entry : _dependencies)
+        {
+            auto& locations = entry.second;
+            removed_count += tempest::erase_if(locations, [&](const asset_reference_location& loc) {
+                return loc.owner_path == file_path;
+            });
+            if (locations.empty())
+            {
+                keys_to_prune.push_back(entry.first);
+            }
+        }
+
+        for (const auto& key : keys_to_prune)
+        {
+            _dependencies.erase(key);
+        }
+
+        return removed_count;
+    }
+
     auto reverse_dependency_index::clear() noexcept -> void
     {
         _dependencies.clear();
