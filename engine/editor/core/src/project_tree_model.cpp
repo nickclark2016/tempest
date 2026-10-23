@@ -229,6 +229,136 @@ namespace tempest::editor
 
             return nullptr;
         }
+
+        auto to_lower_char(char ch) noexcept -> char
+        {
+            if (ch >= 'A' && ch <= 'Z')
+            {
+                return static_cast<char>(ch + ('a' - 'A'));
+            }
+            return ch;
+        }
+
+        auto case_insensitive_contains(string_view text, string_view query) noexcept -> bool
+        {
+            if (query.empty())
+            {
+                return true;
+            }
+            if (text.size() < query.size())
+            {
+                return false;
+            }
+
+            const auto max_index = text.size() - query.size();
+            for (auto index = size_t{0}; index <= max_index; ++index)
+            {
+                auto matched = true;
+                for (auto offset = size_t{0}; offset < query.size(); ++offset)
+                {
+                    if (to_lower_char(text[index + offset]) != to_lower_char(query[offset]))
+                    {
+                        matched = false;
+                        break;
+                    }
+                }
+                if (matched)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        auto append_hierarchy_rows(vector<project_tree_row>& rows, const project_tree_node* node, size_t depth) -> void
+        {
+            if (node == nullptr)
+            {
+                return;
+            }
+
+            auto row = project_tree_row{
+                .node = node,
+                .depth = depth,
+                .display_label = node->name,
+                .relative_path = node->path,
+                .kind = node->kind,
+                .asset_id = node->asset_id,
+                .type = node->type,
+                .is_expanded = node->is_expanded,
+                .has_children = node->has_children(),
+            };
+            rows.push_back(tempest::move(row));
+
+            if (node->is_expanded)
+            {
+                for (const auto& child : node->children)
+                {
+                    if (child)
+                    {
+                        append_hierarchy_rows(rows, child.get(), depth + 1);
+                    }
+                }
+            }
+        }
+
+        auto append_search_matches(vector<project_tree_row>& rows, const project_tree_node* node, string_view query) -> void
+        {
+            if (node == nullptr)
+            {
+                return;
+            }
+
+            const auto is_file_or_sub_asset = (node->kind == tree_node_kind::imported_file ||
+                                               node->kind == tree_node_kind::loose_file ||
+                                               node->kind == tree_node_kind::sub_asset);
+
+            if (is_file_or_sub_asset)
+            {
+                if (case_insensitive_contains(node->name, query) ||
+                    case_insensitive_contains(node->path, query))
+                {
+                    auto row = project_tree_row{
+                        .node = node,
+                        .depth = 0,
+                        .display_label = node->name,
+                        .relative_path = node->path,
+                        .kind = node->kind,
+                        .asset_id = node->asset_id,
+                        .type = node->type,
+                        .is_expanded = false,
+                        .has_children = false,
+                    };
+                    rows.push_back(tempest::move(row));
+                }
+            }
+
+            for (const auto& child : node->children)
+            {
+                if (child)
+                {
+                    append_search_matches(rows, child.get(), query);
+                }
+            }
+        }
+
+        auto set_all_expanded_impl(project_tree_node* node, bool expanded) -> void
+        {
+            if (node == nullptr)
+            {
+                return;
+            }
+
+            node->is_expanded = expanded;
+
+            for (auto& child : node->children)
+            {
+                if (child)
+                {
+                    set_all_expanded_impl(child.get(), expanded);
+                }
+            }
+        }
     } // namespace
 
     // =========================================================================
@@ -309,7 +439,10 @@ namespace tempest::editor
 
     project_tree_model::project_tree_model(project_tree_model&& other) noexcept
         : _roots{tempest::move(other._roots)},
-          _asset_db{tempest::exchange(other._asset_db, default_asset_database)}
+          _asset_db{tempest::exchange(other._asset_db, default_asset_database)},
+          _visible_rows{tempest::move(other._visible_rows)},
+          _search_query{tempest::move(other._search_query)},
+          _rows_dirty{tempest::exchange(other._rows_dirty, default_rows_dirty)}
     {
     }
 
@@ -322,6 +455,9 @@ namespace tempest::editor
 
         _roots = tempest::move(other._roots);
         _asset_db = tempest::exchange(other._asset_db, default_asset_database);
+        _visible_rows = tempest::move(other._visible_rows);
+        _search_query = tempest::move(other._search_query);
+        _rows_dirty = tempest::exchange(other._rows_dirty, default_rows_dirty);
 
         return *this;
     }
@@ -344,6 +480,7 @@ namespace tempest::editor
         {
             auto root_node = tempest::make_unique<project_tree_node>();
             root_node->kind = tree_node_kind::mount_root;
+            root_node->is_expanded = true;
 
             const auto mount_path = filesystem::path(mount.path);
             auto name = string{};
@@ -371,6 +508,8 @@ namespace tempest::editor
 
             _roots.push_back(tempest::move(root_node));
         }
+
+        rebuild_visible_rows();
     }
 
     auto project_tree_model::rebuild_from_workspace(const assets::project_workspace& workspace) -> void
@@ -502,5 +641,139 @@ namespace tempest::editor
     auto project_tree_model::clear() noexcept -> void
     {
         _roots.clear();
+        _visible_rows.clear();
+        _search_query.clear();
+        _rows_dirty = false;
+    }
+
+    auto project_tree_model::get_row(size_t index) const noexcept -> const project_tree_row*
+    {
+        if (index < _visible_rows.size())
+        {
+            return &_visible_rows[index];
+        }
+        return nullptr;
+    }
+
+    auto project_tree_model::rebuild_visible_rows() -> void
+    {
+        _visible_rows.clear();
+
+        if (_search_query.empty())
+        {
+            for (const auto& root : _roots)
+            {
+                if (root)
+                {
+                    append_hierarchy_rows(_visible_rows, root.get(), 0);
+                }
+            }
+        }
+        else
+        {
+            for (const auto& root : _roots)
+            {
+                if (root)
+                {
+                    append_search_matches(_visible_rows, root.get(), _search_query);
+                }
+            }
+
+            tempest::sort(_visible_rows.begin(), _visible_rows.end(),
+                          [](const project_tree_row& lhs, const project_tree_row& rhs) {
+                              if (lhs.relative_path != rhs.relative_path)
+                              {
+                                  return lhs.relative_path < rhs.relative_path;
+                              }
+                              return lhs.display_label < rhs.display_label;
+                          });
+        }
+
+        _rows_dirty = false;
+    }
+
+    auto project_tree_model::set_expanded(project_tree_node* node, bool expanded) -> void
+    {
+        if (node == nullptr || node->is_expanded == expanded)
+        {
+            return;
+        }
+
+        node->is_expanded = expanded;
+        _rows_dirty = true;
+        rebuild_visible_rows();
+    }
+
+    auto project_tree_model::set_expanded_by_path(string_view path, bool expanded) -> void
+    {
+        auto* node = find_node_by_path(path);
+        if (node != nullptr)
+        {
+            set_expanded(node, expanded);
+        }
+    }
+
+    auto project_tree_model::toggle_expanded(project_tree_node* node) -> void
+    {
+        if (node == nullptr)
+        {
+            return;
+        }
+
+        set_expanded(node, !node->is_expanded);
+    }
+
+    auto project_tree_model::expand_all() -> void
+    {
+        for (auto& root : _roots)
+        {
+            set_all_expanded_impl(root.get(), true);
+        }
+        _rows_dirty = true;
+        rebuild_visible_rows();
+    }
+
+    auto project_tree_model::collapse_all() -> void
+    {
+        for (auto& root : _roots)
+        {
+            set_all_expanded_impl(root.get(), false);
+        }
+        _rows_dirty = true;
+        rebuild_visible_rows();
+    }
+
+    auto project_tree_model::set_search_query(string_view query) -> void
+    {
+        if (_search_query == query)
+        {
+            return;
+        }
+
+        _search_query = query;
+        _rows_dirty = true;
+        rebuild_visible_rows();
+    }
+
+    auto project_tree_model::search_query() const noexcept -> string_view
+    {
+        return _search_query;
+    }
+
+    auto project_tree_model::clear_search_query() -> void
+    {
+        if (_search_query.empty())
+        {
+            return;
+        }
+
+        _search_query.clear();
+        _rows_dirty = true;
+        rebuild_visible_rows();
+    }
+
+    auto project_tree_model::is_search_active() const noexcept -> bool
+    {
+        return !_search_query.empty();
     }
 } // namespace tempest::editor

@@ -90,6 +90,26 @@ namespace tempest::editor
         }
     };
 
+    /// @brief Flattened visual row for virtualization and tree navigation.
+    struct TEMPEST_EDITOR_API project_tree_row
+    {
+        static constexpr size_t default_depth = 0;
+        static constexpr bool default_is_expanded = false;
+        static constexpr bool default_has_children = false;
+        static constexpr const project_tree_node* default_node = nullptr;
+        static constexpr tree_node_kind default_kind = tree_node_kind::directory;
+
+        const project_tree_node* node = default_node;
+        size_t depth = default_depth;
+        string_view display_label = {};
+        string_view relative_path = {};
+        tree_node_kind kind = default_kind;
+        guid asset_id = {};
+        assets::asset_type_id type = {};
+        bool is_expanded = default_is_expanded;
+        bool has_children = default_has_children;
+    };
+
     /// @brief Tree model holding the hierarchical project structure.
     class TEMPEST_EDITOR_API project_tree_model
     {
@@ -142,6 +162,85 @@ namespace tempest::editor
             return _roots;
         }
 
+        /// @brief Returns the flattened list of currently visible rows.
+        /// @return Read-only span of visible rows.
+        [[nodiscard]] auto visible_rows() const noexcept -> span<const project_tree_row>
+        {
+            return _visible_rows;
+        }
+
+        /// @brief Returns the number of currently visible rows.
+        /// @return Count of visible rows.
+        [[nodiscard]] auto visible_row_count() const noexcept -> size_t
+        {
+            return _visible_rows.size();
+        }
+
+        /// @brief Retrieves the visible row at the specified visual index.
+        /// @param index 0-based visual index of the row.
+        /// @return Pointer to the visible row, or nullptr if index is out of bounds.
+        [[nodiscard]] auto get_row(size_t index) const noexcept -> const project_tree_row*;
+
+        /// @brief Rebuilds the cached list of visible rows based on expansion states or active search filter.
+        /// @post `visible_rows()` reflects the updated hierarchy expansion states or search results.
+        auto rebuild_visible_rows() -> void;
+
+        /// @brief Returns whether the cached visible rows are dirty and require rebuilding.
+        /// @return True if rows are dirty, false otherwise.
+        [[nodiscard]] auto is_dirty() const noexcept -> bool
+        {
+            return _rows_dirty;
+        }
+
+        /// @brief Marks the cached visible rows as dirty, indicating a rebuild is required.
+        /// @post `is_dirty()` returns true.
+        auto mark_dirty() noexcept -> void
+        {
+            _rows_dirty = true;
+        }
+
+        /// @brief Sets the expansion state of a specific node.
+        /// @param node Pointer to the node whose expansion state to update.
+        /// @param expanded True to expand, false to collapse.
+        /// @post If node is non-null and state changes, visible rows are rebuilt.
+        auto set_expanded(project_tree_node* node, bool expanded) -> void;
+
+        /// @brief Sets the expansion state of a node located by path.
+        /// @param path Relative path, mount-prefixed path, or disk path of the node.
+        /// @param expanded True to expand, false to collapse.
+        /// @post If matching node is found and state changes, visible rows are rebuilt.
+        auto set_expanded_by_path(string_view path, bool expanded) -> void;
+
+        /// @brief Toggles the expansion state of a specific node.
+        /// @param node Pointer to the node to toggle.
+        /// @post If node is non-null, its expansion state is inverted and visible rows rebuilt.
+        auto toggle_expanded(project_tree_node* node) -> void;
+
+        /// @brief Expands all expandable nodes in the tree.
+        /// @post All nodes with children have is_expanded set to true and visible rows rebuilt.
+        auto expand_all() -> void;
+
+        /// @brief Collapses all nodes in the tree.
+        /// @post All nodes have is_expanded set to false and visible rows rebuilt.
+        auto collapse_all() -> void;
+
+        /// @brief Sets the active search filter query, switching to flattened search mode if non-empty.
+        /// @param query Search query substring to filter nodes.
+        /// @post If query differs from current search query, visible rows are rebuilt.
+        auto set_search_query(string_view query) -> void;
+
+        /// @brief Returns the current active search filter query.
+        /// @return Active search query string view.
+        [[nodiscard]] auto search_query() const noexcept -> string_view;
+
+        /// @brief Clears the active search query, returning to hierarchical tree mode.
+        /// @post Search query is cleared and visible rows rebuilt reflecting hierarchy.
+        auto clear_search_query() -> void;
+
+        /// @brief Returns whether a search query is currently active.
+        /// @return True if search query is non-empty, false otherwise.
+        [[nodiscard]] auto is_search_active() const noexcept -> bool;
+
         /// @brief Finds a node by relative or disk path (const overload).
         /// @param path Relative path, mount-prefixed path, or full disk path to find.
         /// @return Const pointer to the matching node, or `nullptr` if not found.
@@ -167,8 +266,13 @@ namespace tempest::editor
         auto clear() noexcept -> void;
 
       private:
+        static constexpr bool default_rows_dirty = true;
+
         vector<unique_ptr<project_tree_node>> _roots = {};
         assets::asset_database* _asset_db = default_asset_database;
+        vector<project_tree_row> _visible_rows = {};
+        string _search_query = {};
+        bool _rows_dirty = default_rows_dirty;
     };
 } // namespace tempest::editor
 
