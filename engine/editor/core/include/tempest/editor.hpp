@@ -17,6 +17,7 @@
 #include <tempest/windows/hierarchy_window.hpp>
 #include <tempest/windows/inspector_window.hpp>
 #include <tempest/windows/log_view_window.hpp>
+#include <tempest/windows/project_view_window.hpp>
 #include <tempest/windows/viewport_window.hpp>
 
 namespace tempest::editor
@@ -62,6 +63,20 @@ namespace tempest::editor
         [[nodiscard]] auto get_log_view_window() const noexcept -> const log_view_window*
         {
             return _log_view;
+        }
+
+        /// @brief Retrieves the project view window instance managed by this editor.
+        /// @return Pointer to the mutable project view window, or nullptr if not registered.
+        [[nodiscard]] auto get_project_view_window() noexcept -> project_view_window*
+        {
+            return _project_view;
+        }
+
+        /// @brief Retrieves the read-only project view window instance managed by this editor.
+        /// @return Pointer to the const project view window, or nullptr if not registered.
+        [[nodiscard]] auto get_project_view_window() const noexcept -> const project_view_window*
+        {
+            return _project_view;
         }
 
         [[nodiscard]] auto get_inspector_window() noexcept -> inspector_window*
@@ -113,6 +128,7 @@ namespace tempest::editor
         static constexpr hierarchy_window* default_hierarchy_view = nullptr;
         static constexpr viewport_window* default_viewport_view = nullptr;
         static constexpr log_view_window* default_log_view = nullptr;
+        static constexpr project_view_window* default_project_view = nullptr;
 
         command_history _history;
         editor_selection _selection;
@@ -121,6 +137,7 @@ namespace tempest::editor
         hierarchy_window* _hierarchy_view = default_hierarchy_view;
         viewport_window* _viewport_view = default_viewport_view;
         log_view_window* _log_view = default_log_view;
+        project_view_window* _project_view = default_project_view;
 
         class menu_hierarchy
         {

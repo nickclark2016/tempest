@@ -1,4 +1,5 @@
 #include <tempest/algorithm.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/editor.hpp>
 
 #include <tempest/editor_engine_context.hpp>
@@ -162,6 +163,28 @@ namespace tempest::editor
 
           private:
             log_view_window* _window;
+        };
+
+        class project_view_menu_item final : public menu_item
+        {
+          public:
+            explicit project_view_menu_item(project_view_window& window)
+                : menu_item("Window", "Project"), _window{window}
+            {
+            }
+
+            [[nodiscard]] auto is_checked() const noexcept -> bool override
+            {
+                return _window->open;
+            }
+
+            auto on_press() noexcept -> void override
+            {
+                _window->open = !_window->open;
+            }
+
+          private:
+            non_null<project_view_window> _window;
         };
 
         class undo_menu_item final : public menu_item
@@ -330,7 +353,8 @@ namespace tempest::editor
               ctx.get_entities(), &ctx.get_scene_manager(), &_selection, &_history,
               &ctx.get_play_mode_controller().get_session_diff()))},
           _viewport_view{register_window(make_unique<viewport_window>(ctx))},
-          _log_view{register_window(make_unique<log_view_window>(ctx.get_log_store()))}
+          _log_view{register_window(make_unique<log_view_window>(ctx.get_log_store()))},
+          _project_view{register_window(make_unique<project_view_window>(ctx.get_scene_manager().get_asset_database()))}
     {
         ctx.set_ui_context(&ui_ctx);
         _selection.attach_event_registry(ctx.get_events());
@@ -371,6 +395,7 @@ namespace tempest::editor
         register_menu_item(make_unique<gpu_stats_menu_item>(ctx));
         register_menu_item(make_unique<open_captures_folder_menu_item>(ctx));
         register_menu_item(make_unique<log_view_menu_item>(*_log_view));
+        register_menu_item(make_unique<project_view_menu_item>(*_project_view));
     }
 
     auto editor_context::_process_shortcuts() -> void
