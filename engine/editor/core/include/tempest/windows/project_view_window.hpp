@@ -2,8 +2,11 @@
 #define tempest_editor_core_project_view_window_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/int.hpp>
 #include <tempest/project_tree_model.hpp>
+#include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
+#include <tempest/vector.hpp>
 #include <tempest/windows/editor_window.hpp>
 
 namespace tempest::assets
@@ -13,14 +16,24 @@ namespace tempest::assets
 
 namespace tempest::editor
 {
+    /// @brief Segment in the breadcrumb navigation bar.
+    struct TEMPEST_EDITOR_API breadcrumb_item
+    {
+        string name = {};
+        string path = {};
+    };
+
     /// @brief Editor window for navigating and managing project directories, mounts, and asset hierarchies.
     class TEMPEST_EDITOR_API project_view_window final : public editor_window
     {
       public:
         static constexpr bool default_open = true;
         static constexpr assets::asset_database* default_asset_database = nullptr;
+        static constexpr size_t search_buffer_capacity = 256;
 
         bool open = default_open;
+        char search_buffer[search_buffer_capacity] = "";
+        string current_directory = {};
 
         /// @brief Constructs a project view window with an optional asset database reference.
         /// @param asset_db Pointer to the asset database, or nullptr if none.
@@ -83,6 +96,39 @@ namespace tempest::editor
         {
             _model = tempest::move(model);
         }
+
+        /// @brief Sets the search filter query and updates the backing tree model.
+        /// @param query Search query substring.
+        /// @post `search_buffer` and backing tree model reflect `query`.
+        auto set_search_query(string_view query) -> void;
+
+        /// @brief Clears the active search filter query.
+        /// @post `search_buffer` is emptied and backing model search query cleared.
+        auto clear_search_query() -> void;
+
+        /// @brief Retrieves the active search filter query.
+        /// @return Current search query as a string view.
+        [[nodiscard]] auto search_query() const noexcept -> string_view
+        {
+            return string_view{static_cast<const char*>(search_buffer)};
+        }
+
+        /// @brief Navigates to a specific directory path, expanding all ancestor nodes.
+        /// @param dir_path Path of directory to navigate to.
+        /// @post `current_directory` is set to `dir_path` and matching ancestors expanded.
+        auto navigate_to_directory(string_view dir_path) -> void;
+
+        /// @brief Determines the display badge for a visual project tree row.
+        /// @param row Visual row to evaluate.
+        /// @param asset_db Optional pointer to the asset database for procedural type resolution.
+        /// @return Display badge string (e.g. "[Folder]", "[Mesh]", "[GLTF]").
+        [[nodiscard]] static auto get_node_badge(const project_tree_row& row,
+                                                 const assets::asset_database* asset_db = nullptr) -> string;
+
+        /// @brief Parses a hierarchical path into discrete breadcrumb segments.
+        /// @param path Directory path to parse.
+        /// @return Vector of breadcrumb items containing segment name and cumulative path.
+        [[nodiscard]] static auto split_breadcrumb_path(string_view path) -> vector<breadcrumb_item>;
 
       private:
         project_tree_model _model;
