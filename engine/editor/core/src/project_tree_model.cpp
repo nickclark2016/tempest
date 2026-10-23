@@ -3,6 +3,7 @@
 #include <tempest/algorithm.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/filesystem.hpp>
+#include <tempest/flat_unordered_map.hpp>
 #include <tempest/utility.hpp>
 
 namespace tempest::editor
@@ -29,9 +30,11 @@ namespace tempest::editor
 
         struct dir_item
         {
+            static constexpr bool default_is_directory = false;
+
             filesystem::path path = {};
             string filename = {};
-            bool is_directory = false;
+            bool is_directory = default_is_directory;
         };
 
         auto populate_directory_children(project_tree_node* parent_node,
@@ -359,6 +362,156 @@ namespace tempest::editor
                 }
             }
         }
+
+        auto trim_trailing_slash(string_view path_view) noexcept -> string_view
+        {
+            auto trimmed = path_view;
+            while (trimmed.size() > 1 && (trimmed.back() == '/' || trimmed.back() == '\\'))
+            {
+                if (trimmed.size() == 3 && trimmed[1] == ':')
+                {
+                    break;
+                }
+                trimmed = string_view{trimmed.data(), trimmed.size() - 1};
+            }
+            return trimmed;
+        }
+
+        auto paths_match(string_view left_path, string_view right_path) noexcept -> bool
+        {
+            const auto trimmed_left = trim_trailing_slash(left_path);
+            const auto trimmed_right = trim_trailing_slash(right_path);
+            if (trimmed_left.size() != trimmed_right.size())
+            {
+                return false;
+            }
+            for (auto char_index = size_t{0}; char_index < trimmed_left.size(); ++char_index)
+            {
+                const auto left_ch = trimmed_left[char_index];
+                const auto right_ch = trimmed_right[char_index];
+                if ((left_ch == '/' || left_ch == '\\') && (right_ch == '/' || right_ch == '\\'))
+                {
+                    continue;
+                }
+                if (to_lower_char(left_ch) != to_lower_char(right_ch))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        auto find_directory_node_impl(project_tree_node* node, string_view target_path) -> project_tree_node*
+        {
+            if (node == nullptr)
+            {
+                return nullptr;
+            }
+
+            if (node->is_directory_like())
+            {
+                if ((!node->disk_path.empty() && paths_match(node->disk_path, target_path)) ||
+                    (!node->path.empty() && paths_match(node->path, target_path)))
+                {
+                    return node;
+                }
+            }
+
+            for (auto& child : node->children)
+            {
+                if (child && child->is_directory_like())
+                {
+                    auto* found_child = find_directory_node_impl(child.get(), target_path);
+                    if (found_child != nullptr)
+                    {
+                        return found_child;
+                    }
+                }
+            }
+
+            return nullptr;
+        }
+
+        auto collect_expanded_paths(const project_tree_node* node, flat_unordered_map<string, bool>& expanded_states) -> void
+        {
+            if (node == nullptr)
+            {
+                return;
+            }
+
+            if (node->is_expanded && !node->path.empty())
+            {
+                expanded_states[node->path] = true;
+            }
+
+            for (const auto& child : node->children)
+            {
+                if (child)
+                {
+                    collect_expanded_paths(child.get(), expanded_states);
+                }
+            }
+        }
+
+        auto restore_expanded_paths(project_tree_node* node, const flat_unordered_map<string, bool>& expanded_states) -> void
+        {
+            if (node == nullptr)
+            {
+                return;
+            }
+
+            if (expanded_states.contains(node->path))
+            {
+                node->is_expanded = true;
+            }
+
+            for (auto& child : node->children)
+            {
+                if (child)
+                {
+                    restore_expanded_paths(child.get(), expanded_states);
+                }
+            }
+        }
+
+        auto rescan_directory_node(project_tree_node* target_node, assets::asset_database* asset_db) -> void
+        {
+            if (target_node == nullptr)
+            {
+                return;
+            }
+
+            const auto dir_path = filesystem::path(target_node->disk_path);
+            if (!filesystem::exists(dir_path) || !filesystem::is_directory(dir_path))
+            {
+                target_node->children.clear();
+                return;
+            }
+
+            auto expanded_states = flat_unordered_map<string, bool>{};
+            for (const auto& child : target_node->children)
+            {
+                if (child)
+                {
+                    collect_expanded_paths(child.get(), expanded_states);
+                }
+            }
+
+            target_node->children.clear();
+
+            const auto rel_path = (target_node->kind == tree_node_kind::mount_root)
+                                      ? string_view{}
+                                      : string_view{target_node->path};
+            populate_directory_children(target_node, dir_path, rel_path, asset_db);
+
+            for (auto& child : target_node->children)
+            {
+                if (child)
+                {
+                    restore_expanded_paths(child.get(), expanded_states);
+                }
+            }
+        }
     } // namespace
 
     // =========================================================================
@@ -442,7 +595,10 @@ namespace tempest::editor
           _asset_db{tempest::exchange(other._asset_db, default_asset_database)},
           _visible_rows{tempest::move(other._visible_rows)},
           _search_query{tempest::move(other._search_query)},
-          _rows_dirty{tempest::exchange(other._rows_dirty, default_rows_dirty)}
+          _deferred_invalidated_paths{tempest::move(other._deferred_invalidated_paths)},
+          _rows_dirty{tempest::exchange(other._rows_dirty, default_rows_dirty)},
+          _invalidation_deferred{tempest::exchange(other._invalidation_deferred, default_invalidation_deferred)},
+          _has_deferred_invalidation{tempest::exchange(other._has_deferred_invalidation, default_has_deferred_invalidation)}
     {
     }
 
@@ -457,7 +613,10 @@ namespace tempest::editor
         _asset_db = tempest::exchange(other._asset_db, default_asset_database);
         _visible_rows = tempest::move(other._visible_rows);
         _search_query = tempest::move(other._search_query);
+        _deferred_invalidated_paths = tempest::move(other._deferred_invalidated_paths);
         _rows_dirty = tempest::exchange(other._rows_dirty, default_rows_dirty);
+        _invalidation_deferred = tempest::exchange(other._invalidation_deferred, default_invalidation_deferred);
+        _has_deferred_invalidation = tempest::exchange(other._has_deferred_invalidation, default_has_deferred_invalidation);
 
         return *this;
     }
@@ -643,7 +802,10 @@ namespace tempest::editor
         _roots.clear();
         _visible_rows.clear();
         _search_query.clear();
+        _deferred_invalidated_paths.clear();
         _rows_dirty = false;
+        _invalidation_deferred = default_invalidation_deferred;
+        _has_deferred_invalidation = default_has_deferred_invalidation;
     }
 
     auto project_tree_model::get_row(size_t index) const noexcept -> const project_tree_row*
@@ -775,5 +937,188 @@ namespace tempest::editor
     auto project_tree_model::is_search_active() const noexcept -> bool
     {
         return !_search_query.empty();
+    }
+
+    auto project_tree_model::_find_directory_node_for_path(const filesystem::path& target_dir) -> project_tree_node*
+    {
+        auto current_dir = target_dir;
+        while (!current_dir.empty() && (!filesystem::exists(current_dir) || !filesystem::is_directory(current_dir)))
+        {
+            const auto parent_dir = current_dir.parent_path();
+            if (parent_dir == current_dir || parent_dir.empty())
+            {
+                current_dir = filesystem::path{};
+                break;
+            }
+            current_dir = parent_dir;
+        }
+
+        while (!current_dir.empty())
+        {
+            const auto current_str = current_dir.generic_string();
+            if (!current_str.empty())
+            {
+                for (auto& root : _roots)
+                {
+                    if (!root)
+                    {
+                        continue;
+                    }
+                    auto* found_node = find_directory_node_impl(root.get(), current_str);
+                    if (found_node != nullptr)
+                    {
+                        return found_node;
+                    }
+
+                    if (tempest::starts_with(string_view{current_str}, string_view{root->name}) &&
+                        current_str.size() > root->name.size() &&
+                        (current_str[root->name.size()] == '/' || current_str[root->name.size()] == '\\'))
+                    {
+                        const auto stripped_path = string_view{current_str.data() + root->name.size() + 1,
+                                                              current_str.size() - root->name.size() - 1};
+                        auto* stripped_found = find_directory_node_impl(root.get(), stripped_path);
+                        if (stripped_found != nullptr)
+                        {
+                            return stripped_found;
+                        }
+                    }
+                }
+            }
+
+            const auto parent_dir = current_dir.parent_path();
+            if (parent_dir == current_dir || parent_dir.empty())
+            {
+                break;
+            }
+            current_dir = parent_dir;
+        }
+
+        return nullptr;
+    }
+
+    auto project_tree_model::set_invalidation_deferred(bool deferred) -> void
+    {
+        if (_invalidation_deferred == deferred)
+        {
+            return;
+        }
+
+        _invalidation_deferred = deferred;
+
+        if (!_invalidation_deferred && _has_deferred_invalidation)
+        {
+            flush_deferred_invalidation();
+        }
+    }
+
+    auto project_tree_model::is_invalidation_deferred() const noexcept -> bool
+    {
+        return _invalidation_deferred;
+    }
+
+    auto project_tree_model::has_deferred_invalidation() const noexcept -> bool
+    {
+        return _has_deferred_invalidation;
+    }
+
+    auto project_tree_model::flush_deferred_invalidation() -> void
+    {
+        if (!_has_deferred_invalidation && !_rows_dirty)
+        {
+            return;
+        }
+
+        auto pending_paths = tempest::move(_deferred_invalidated_paths);
+        _deferred_invalidated_paths.clear();
+        _has_deferred_invalidation = false;
+
+        auto rescanned_nodes = vector<project_tree_node*>{};
+
+        for (const auto& pending_path : pending_paths)
+        {
+            auto target_dir = pending_path;
+            if (!filesystem::exists(target_dir) || !filesystem::is_directory(target_dir))
+            {
+                target_dir = pending_path.parent_path();
+            }
+
+            auto* target_node = _find_directory_node_for_path(target_dir);
+            if (target_node != nullptr)
+            {
+                const auto already_rescanned =
+                    tempest::find(rescanned_nodes.begin(), rescanned_nodes.end(), target_node) != rescanned_nodes.end();
+                if (!already_rescanned)
+                {
+                    rescan_directory_node(target_node, _asset_db);
+                    rescanned_nodes.push_back(target_node);
+                    _rows_dirty = true;
+                }
+            }
+        }
+
+        rebuild_visible_rows();
+    }
+
+    auto project_tree_model::invalidate_path(const filesystem::path& disk_path) -> void
+    {
+        if (disk_path.empty())
+        {
+            return;
+        }
+
+        if (_invalidation_deferred)
+        {
+            _deferred_invalidated_paths.push_back(disk_path);
+            _has_deferred_invalidation = true;
+            return;
+        }
+
+        auto target_dir = disk_path;
+        if (!filesystem::exists(target_dir) || !filesystem::is_directory(target_dir))
+        {
+            target_dir = disk_path.parent_path();
+        }
+
+        auto* target_node = _find_directory_node_for_path(target_dir);
+        if (target_node != nullptr)
+        {
+            rescan_directory_node(target_node, _asset_db);
+            _rows_dirty = true;
+        }
+
+        rebuild_visible_rows();
+    }
+
+    auto project_tree_model::handle_file_watch_event(const file_watch_event& event) -> void
+    {
+        invalidate_path(event.path);
+        if (event.type == file_watch_event_type::renamed && !event.old_path.empty())
+        {
+            invalidate_path(event.old_path);
+        }
+    }
+
+    auto project_tree_model::handle_file_watch_events(span<const file_watch_event> events) -> void
+    {
+        if (events.empty())
+        {
+            return;
+        }
+
+        const auto was_deferred = _invalidation_deferred;
+        if (!was_deferred)
+        {
+            _invalidation_deferred = true;
+        }
+
+        for (const auto& event : events)
+        {
+            handle_file_watch_event(event);
+        }
+
+        if (!was_deferred)
+        {
+            set_invalidation_deferred(false);
+        }
     }
 } // namespace tempest::editor

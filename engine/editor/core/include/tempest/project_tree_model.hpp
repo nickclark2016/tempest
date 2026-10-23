@@ -3,6 +3,8 @@
 
 #include <tempest/api.hpp>
 #include <tempest/asset_type_id.hpp>
+#include <tempest/file_watcher.hpp>
+#include <tempest/filesystem.hpp>
 #include <tempest/guid.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
@@ -199,6 +201,38 @@ namespace tempest::editor
             _rows_dirty = true;
         }
 
+        /// @brief Configures whether path invalidation is deferred.
+        /// @param deferred True to queue incoming invalidations without rebuilding visible rows, false to flush.
+        /// @post If transitioning from true to false with pending invalidations, deferred invalidations are flushed.
+        auto set_invalidation_deferred(bool deferred) -> void;
+
+        /// @brief Returns whether path invalidation is currently deferred.
+        /// @return True if invalidations are deferred, false otherwise.
+        [[nodiscard]] auto is_invalidation_deferred() const noexcept -> bool;
+
+        /// @brief Returns whether any path invalidations are currently queued.
+        /// @return True if pending invalidations exist, false otherwise.
+        [[nodiscard]] auto has_deferred_invalidation() const noexcept -> bool;
+
+        /// @brief Flushes all queued path invalidations and rebuilds visible rows.
+        /// @post Queued paths are cleared, `has_deferred_invalidation()` returns false, and visible rows are updated.
+        auto flush_deferred_invalidation() -> void;
+
+        /// @brief Invalidates a path on disk, rescanning its containing directory and updating visible rows.
+        /// @param disk_path Path on disk to invalidate.
+        /// @post If deferred, the path is queued; otherwise the containing directory is rescanned and rows rebuilt.
+        auto invalidate_path(const filesystem::path& disk_path) -> void;
+
+        /// @brief Handles a single filesystem watch event.
+        /// @param event Filesystem watch event describing the changed path and action.
+        /// @post If invalidation is deferred, the event paths are queued for later processing; otherwise, the affected directory is rescanned and visible rows rebuilt.
+        auto handle_file_watch_event(const file_watch_event& event) -> void;
+
+        /// @brief Handles a batch of filesystem watch events.
+        /// @param events Span of filesystem watch events to process.
+        /// @post If invalidation is deferred, the event paths are queued for later processing; otherwise, the affected directory is rescanned and visible rows rebuilt.
+        auto handle_file_watch_events(span<const file_watch_event> events) -> void;
+
         /// @brief Sets the expansion state of a specific node.
         /// @param node Pointer to the node whose expansion state to update.
         /// @param expanded True to expand, false to collapse.
@@ -267,12 +301,19 @@ namespace tempest::editor
 
       private:
         static constexpr bool default_rows_dirty = true;
+        static constexpr bool default_invalidation_deferred = false;
+        static constexpr bool default_has_deferred_invalidation = false;
+
+        auto _find_directory_node_for_path(const filesystem::path& target_dir) -> project_tree_node*;
 
         vector<unique_ptr<project_tree_node>> _roots = {};
         assets::asset_database* _asset_db = default_asset_database;
         vector<project_tree_row> _visible_rows = {};
         string _search_query = {};
+        vector<filesystem::path> _deferred_invalidated_paths = {};
         bool _rows_dirty = default_rows_dirty;
+        bool _invalidation_deferred = default_invalidation_deferred;
+        bool _has_deferred_invalidation = default_has_deferred_invalidation;
     };
 } // namespace tempest::editor
 

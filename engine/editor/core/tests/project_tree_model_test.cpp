@@ -2,6 +2,7 @@
 
 #include <tempest/asset_database.hpp>
 #include <tempest/asset_type_id.hpp>
+#include <tempest/file_watcher.hpp>
 #include <tempest/files.hpp>
 #include <tempest/filesystem.hpp>
 #include <tempest/guid.hpp>
@@ -960,5 +961,380 @@ namespace tempest::editor::tests
         // Act: Rebuild clears dirty
         model.rebuild_visible_rows();
         EXPECT_FALSE(model.is_dirty());
+    }
+
+    // =========================================================================
+    // project_tree_model Invalidation & Deferral Tests
+    // =========================================================================
+
+    /// @brief Verifies that invalidating a directory after creating a new file updates the tree
+    /// and visible rows for that directory while keeping sibling branches untouched.
+    TEST(project_tree_model_test, invalidate_path_file_addition)
+    {
+        // Setup
+        const auto temp_dir = fs::temp_directory_path() / "tempest_test_inval_add";
+        static_cast<void>(fs::remove_all(temp_dir));
+        ASSERT_TRUE(fs::create_directories(temp_dir / "textures"));
+        ASSERT_TRUE(fs::create_directories(temp_dir / "models"));
+
+        ASSERT_TRUE(write_dummy_file(temp_dir / "textures" / "albedo.png"));
+        ASSERT_TRUE(write_dummy_file(temp_dir / "models" / "hero.fbx"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = temp_dir.generic_string(),
+            .alias = "Assets",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        model.set_expanded_by_path("textures", true);
+
+        const auto initial_row_count = model.visible_row_count();
+        ASSERT_EQ(initial_row_count, 4u); // Assets, models, textures, albedo.png
+
+        // Act: Add new file to textures folder and invalidate that file path
+        const auto new_file_path = temp_dir / "textures" / "normal.png";
+        ASSERT_TRUE(write_dummy_file(new_file_path));
+        model.invalidate_path(new_file_path);
+
+        // Assert: New file appears in tree and visible rows
+        EXPECT_EQ(model.visible_row_count(), initial_row_count + 1u);
+        const auto* normal_node = model.find_node_by_path("textures/normal.png");
+        ASSERT_NE(normal_node, nullptr);
+        EXPECT_EQ(normal_node->name, "normal.png");
+        EXPECT_EQ(normal_node->kind, tree_node_kind::loose_file);
+
+        // Models branch remains untouched and collapsed
+        const auto* models_node = model.find_node_by_path("models");
+        ASSERT_NE(models_node, nullptr);
+        EXPECT_FALSE(models_node->is_expanded);
+        ASSERT_EQ(models_node->children.size(), 1u);
+        EXPECT_EQ(models_node->children.front()->name, "hero.fbx");
+
+        // Teardown
+        static_cast<void>(fs::remove_all(temp_dir));
+    }
+
+    /// @brief Verifies that invalidating a directory after removing a file on disk purges it
+    /// from the tree and removes it from visible rows.
+    TEST(project_tree_model_test, invalidate_path_file_removal)
+    {
+        // Setup
+        const auto temp_dir = fs::temp_directory_path() / "tempest_test_inval_remove";
+        static_cast<void>(fs::remove_all(temp_dir));
+        ASSERT_TRUE(fs::create_directories(temp_dir / "scripts"));
+
+        const auto script_one = temp_dir / "scripts" / "player.lua";
+        const auto script_two = temp_dir / "scripts" / "enemy.lua";
+        ASSERT_TRUE(write_dummy_file(script_one));
+        ASSERT_TRUE(write_dummy_file(script_two));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = temp_dir.generic_string(),
+            .alias = "Assets",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        model.set_expanded_by_path("scripts", true);
+        ASSERT_EQ(model.visible_row_count(), 4u); // Assets, scripts, enemy.lua, player.lua
+
+        // Act: Remove enemy.lua and invalidate path
+        ASSERT_TRUE(fs::remove(script_two));
+        model.invalidate_path(script_two);
+
+        // Assert: enemy.lua is purged from tree and visible rows
+        EXPECT_EQ(model.visible_row_count(), 3u); // Assets, scripts, player.lua
+        EXPECT_EQ(model.find_node_by_path("scripts/enemy.lua"), nullptr);
+        const auto* remaining_node = model.find_node_by_path("scripts/player.lua");
+        ASSERT_NE(remaining_node, nullptr);
+        EXPECT_EQ(remaining_node->name, "player.lua");
+
+        // Teardown
+        static_cast<void>(fs::remove_all(temp_dir));
+    }
+
+    /// @brief Verifies that modifying a .tmeta sidecar on disk and calling invalidate_path
+    /// reloads the sidecar and reflects updated sub-assets while preserving expansion state.
+    TEST(project_tree_model_test, invalidate_path_sidecar_modification_updates_sub_assets)
+    {
+        // Setup
+        const auto temp_dir = fs::temp_directory_path() / "tempest_test_inval_meta";
+        static_cast<void>(fs::remove_all(temp_dir));
+        ASSERT_TRUE(fs::create_directories(temp_dir));
+
+        const auto mesh_path = temp_dir / "mesh.fbx";
+        const auto meta_path = temp_dir / "mesh.fbx.tmeta";
+        ASSERT_TRUE(write_dummy_file(mesh_path));
+
+        const auto source_guid = guid::generate_random_guid();
+        const auto sub_guid_mesh = guid::generate_random_guid();
+
+        auto meta = assets::sidecar_meta{};
+        meta.source_guid = source_guid;
+        meta.importer = "model_importer";
+        meta.sub_assets["mesh/0"] = sub_guid_mesh;
+        meta.sub_asset_types["mesh/0"] = assets::asset_type_id::from_hash(0x1010);
+        ASSERT_TRUE(meta.save_to_file(meta_path.generic_string()));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = temp_dir.generic_string(),
+            .alias = "Assets",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+
+        // Expand mesh.fbx to reveal sub-assets
+        model.set_expanded_by_path("mesh.fbx", true);
+        ASSERT_EQ(model.visible_row_count(), 3u); // Assets, mesh.fbx, mesh/0
+
+        // Act: Update .tmeta with an additional material sub-asset and invalidate
+        const auto sub_guid_mat = guid::generate_random_guid();
+        meta.sub_assets["material/0"] = sub_guid_mat;
+        meta.sub_asset_types["material/0"] = assets::asset_type_id::from_hash(0x2020);
+        ASSERT_TRUE(meta.save_to_file(meta_path.generic_string()));
+
+        model.invalidate_path(meta_path);
+
+        // Assert: Both sub-assets are present, mesh.fbx remains expanded, visible rows updated
+        const auto* mesh_node = model.find_node_by_path("mesh.fbx");
+        ASSERT_NE(mesh_node, nullptr);
+        EXPECT_TRUE(mesh_node->is_expanded);
+        ASSERT_EQ(mesh_node->children.size(), 2u);
+        EXPECT_EQ(mesh_node->children[0]->name, "material/0");
+        EXPECT_EQ(mesh_node->children[1]->name, "mesh/0");
+        EXPECT_EQ(model.visible_row_count(), 4u); // Assets, mesh.fbx, material/0, mesh/0
+
+        // Teardown
+        static_cast<void>(fs::remove_all(temp_dir));
+    }
+
+    /// @brief Verifies that child directory expansion states are preserved across directory rescans.
+    TEST(project_tree_model_test, preserve_expansion_states_across_directory_rescan)
+    {
+        // Setup
+        const auto temp_dir = fs::temp_directory_path() / "tempest_test_inval_preserve_exp";
+        static_cast<void>(fs::remove_all(temp_dir));
+        ASSERT_TRUE(fs::create_directories(temp_dir / "textures" / "characters"));
+
+        const auto hero_path = temp_dir / "textures" / "characters" / "hero.png";
+        ASSERT_TRUE(write_dummy_file(hero_path));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = temp_dir.generic_string(),
+            .alias = "Assets",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+
+        // Expand "textures" and "textures/characters"
+        model.set_expanded_by_path("textures", true);
+        model.set_expanded_by_path("textures/characters", true);
+
+        ASSERT_EQ(model.visible_row_count(), 4u); // Assets, textures, characters, hero.png
+
+        // Act: Add another file to the nested directory and invalidate the parent textures directory
+        const auto villain_path = temp_dir / "textures" / "characters" / "villain.png";
+        ASSERT_TRUE(write_dummy_file(villain_path));
+        model.invalidate_path(temp_dir / "textures");
+
+        // Assert: Nested directory remains expanded and shows both children
+        const auto* characters_node = model.find_node_by_path("textures/characters");
+        ASSERT_NE(characters_node, nullptr);
+        EXPECT_TRUE(characters_node->is_expanded);
+        ASSERT_EQ(characters_node->children.size(), 2u);
+
+        EXPECT_EQ(model.visible_row_count(), 5u); // Assets, textures, characters, hero.png, villain.png
+
+        // Teardown
+        static_cast<void>(fs::remove_all(temp_dir));
+    }
+
+    /// @brief Verifies deferred invalidation lifecycle: events during deferral do not mutate visible rows
+    /// until deferral is disabled, which automatically flushes pending invalidations.
+    TEST(project_tree_model_test, deferred_invalidation_lifecycle)
+    {
+        // Setup
+        const auto temp_dir = fs::temp_directory_path() / "tempest_test_inval_defer";
+        static_cast<void>(fs::remove_all(temp_dir));
+        ASSERT_TRUE(fs::create_directories(temp_dir / "sounds"));
+
+        const auto sound_one = temp_dir / "sounds" / "ambient.wav";
+        ASSERT_TRUE(write_dummy_file(sound_one));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = temp_dir.generic_string(),
+            .alias = "Assets",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        model.set_expanded_by_path("sounds", true);
+
+        const auto baseline_rows = model.visible_row_count();
+        ASSERT_EQ(baseline_rows, 3u); // Assets, sounds, ambient.wav
+
+        // Act: Enable invalidation deferral
+        EXPECT_FALSE(model.is_invalidation_deferred());
+        EXPECT_FALSE(model.has_deferred_invalidation());
+        model.set_invalidation_deferred(true);
+        EXPECT_TRUE(model.is_invalidation_deferred());
+
+        // Create new file and invalidate path while deferred
+        const auto sound_two = temp_dir / "sounds" / "music.wav";
+        ASSERT_TRUE(write_dummy_file(sound_two));
+        model.invalidate_path(sound_two);
+
+        // Assert: Deferred state is flagged, but model visible rows remain untouched
+        EXPECT_TRUE(model.has_deferred_invalidation());
+        EXPECT_EQ(model.visible_row_count(), baseline_rows);
+        EXPECT_EQ(model.find_node_by_path("sounds/music.wav"), nullptr);
+
+        // Act: Disable invalidation deferral (triggers automatic flush)
+        model.set_invalidation_deferred(false);
+
+        // Assert: Deferral flushed, new file appears in visible rows and tree
+        EXPECT_FALSE(model.is_invalidation_deferred());
+        EXPECT_FALSE(model.has_deferred_invalidation());
+        EXPECT_EQ(model.visible_row_count(), baseline_rows + 1u);
+        const auto* music_node = model.find_node_by_path("sounds/music.wav");
+        ASSERT_NE(music_node, nullptr);
+        EXPECT_EQ(music_node->name, "music.wav");
+
+        // Teardown
+        static_cast<void>(fs::remove_all(temp_dir));
+    }
+
+    /// @brief Verifies that handling a rename watch event invalidates both the source and destination directories.
+    TEST(project_tree_model_test, handle_file_watch_event_rename_refreshes_both_directories)
+    {
+        // Setup
+        const auto temp_dir = fs::temp_directory_path() / "tempest_test_inval_rename";
+        static_cast<void>(fs::remove_all(temp_dir));
+        ASSERT_TRUE(fs::create_directories(temp_dir / "source_dir"));
+        ASSERT_TRUE(fs::create_directories(temp_dir / "dest_dir"));
+
+        const auto old_file_path = temp_dir / "source_dir" / "asset.txt";
+        const auto new_file_path = temp_dir / "dest_dir" / "renamed_asset.txt";
+        ASSERT_TRUE(write_dummy_file(old_file_path));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = temp_dir.generic_string(),
+            .alias = "Assets",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        model.set_expanded_by_path("source_dir", true);
+        model.set_expanded_by_path("dest_dir", true);
+
+        ASSERT_EQ(model.visible_row_count(), 4u); // Assets, dest_dir, source_dir, asset.txt
+        EXPECT_NE(model.find_node_by_path("source_dir/asset.txt"), nullptr);
+        EXPECT_EQ(model.find_node_by_path("dest_dir/renamed_asset.txt"), nullptr);
+
+        // Act: Move file on disk and dispatch rename watch event
+        ASSERT_TRUE(fs::rename(old_file_path, new_file_path));
+
+        const auto rename_event = file_watch_event{
+            .type = file_watch_event_type::renamed,
+            .path = new_file_path,
+            .old_path = old_file_path,
+        };
+        model.handle_file_watch_event(rename_event);
+
+        // Assert: Old directory purged of file, new directory populated with file
+        EXPECT_EQ(model.find_node_by_path("source_dir/asset.txt"), nullptr);
+        const auto* renamed_node = model.find_node_by_path("dest_dir/renamed_asset.txt");
+        ASSERT_NE(renamed_node, nullptr);
+        EXPECT_EQ(renamed_node->name, "renamed_asset.txt");
+        EXPECT_EQ(model.visible_row_count(), 4u); // Assets, dest_dir, renamed_asset.txt, source_dir
+
+        // Teardown
+        static_cast<void>(fs::remove_all(temp_dir));
+    }
+
+    /// @brief Verifies that batch event processing via handle_file_watch_events refreshes all affected paths.
+    TEST(project_tree_model_test, handle_file_watch_events_batch)
+    {
+        // Setup
+        const auto temp_dir = fs::temp_directory_path() / "tempest_test_inval_batch";
+        static_cast<void>(fs::remove_all(temp_dir));
+        ASSERT_TRUE(fs::create_directories(temp_dir / "batch_dir"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = temp_dir.generic_string(),
+            .alias = "Assets",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        model.set_expanded_by_path("batch_dir", true);
+        ASSERT_EQ(model.visible_row_count(), 2u); // Assets, batch_dir
+
+        // Act: Create two files on disk and dispatch batch events
+        const auto file_one = temp_dir / "batch_dir" / "first.bin";
+        const auto file_two = temp_dir / "batch_dir" / "second.bin";
+        ASSERT_TRUE(write_dummy_file(file_one));
+        ASSERT_TRUE(write_dummy_file(file_two));
+
+        auto events = vector<file_watch_event>{};
+        events.push_back(file_watch_event{
+            .type = file_watch_event_type::added,
+            .path = file_one,
+        });
+        events.push_back(file_watch_event{
+            .type = file_watch_event_type::added,
+            .path = file_two,
+        });
+
+        model.handle_file_watch_events(events);
+
+        // Assert: Both files now present in tree and visible rows
+        EXPECT_EQ(model.visible_row_count(), 4u);
+        EXPECT_NE(model.find_node_by_path("batch_dir/first.bin"), nullptr);
+        EXPECT_NE(model.find_node_by_path("batch_dir/second.bin"), nullptr);
+
+        // Teardown
+        static_cast<void>(fs::remove_all(temp_dir));
+    }
+
+    /// @brief Verifies that move operations transfer and preserve invalidation deferral state.
+    TEST(project_tree_model_test, move_operations_preserve_deferral_state)
+    {
+        // Setup
+        auto source_model = project_tree_model{};
+        source_model.set_invalidation_deferred(true);
+        source_model.invalidate_path("deferred/sample_path.txt");
+
+        EXPECT_TRUE(source_model.is_invalidation_deferred());
+        EXPECT_TRUE(source_model.has_deferred_invalidation());
+
+        // Act: Move construct
+        auto moved_model = project_tree_model{tempest::move(source_model)};
+
+        // Assert: Moved model retains deferral state; source is reset to defaults
+        EXPECT_TRUE(moved_model.is_invalidation_deferred());
+        EXPECT_TRUE(moved_model.has_deferred_invalidation());
+        EXPECT_FALSE(source_model.is_invalidation_deferred());
+        EXPECT_FALSE(source_model.has_deferred_invalidation());
+
+        // Act: Move assign
+        auto assigned_model = project_tree_model{};
+        assigned_model = tempest::move(moved_model);
+
+        // Assert: Assigned model retains deferral state; moved model is reset
+        EXPECT_TRUE(assigned_model.is_invalidation_deferred());
+        EXPECT_TRUE(assigned_model.has_deferred_invalidation());
+        EXPECT_FALSE(moved_model.is_invalidation_deferred());
+        EXPECT_FALSE(moved_model.has_deferred_invalidation());
     }
 } // namespace tempest::editor::tests
