@@ -354,7 +354,8 @@ namespace tempest::editor
               &ctx.get_play_mode_controller().get_session_diff()))},
           _viewport_view{register_window(make_unique<viewport_window>(ctx))},
           _log_view{register_window(make_unique<log_view_window>(ctx.get_log_store()))},
-          _project_view{register_window(make_unique<project_view_window>(ctx.get_scene_manager().get_asset_database()))}
+          _project_view{register_window(make_unique<project_view_window>(
+              ctx.get_scene_manager(), _selection, ctx.get_scene_manager().get_asset_database()))}
     {
         ctx.set_ui_context(&ui_ctx);
         _selection.attach_event_registry(ctx.get_events());

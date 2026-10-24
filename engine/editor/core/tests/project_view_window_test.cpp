@@ -1,13 +1,18 @@
 #include <tempest/windows/project_view_window.hpp>
 
+#include <tempest/archetype.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/asset_type_id.hpp>
 #include <tempest/asset_type_registry.hpp>
 #include <tempest/editor.hpp>
 #include <tempest/editor_engine_context.hpp>
+#include <tempest/editor_selection.hpp>
+#include <tempest/entity_hierarchy.hpp>
+#include <tempest/event.hpp>
 #include <tempest/files.hpp>
 #include <tempest/filesystem.hpp>
 #include <tempest/material.hpp>
+#include <tempest/scene/scene_manager.hpp>
 #include <tempest/span.hpp>
 #include <tempest/texture.hpp>
 #include <tempest/ui.hpp>
@@ -56,35 +61,45 @@ namespace tempest::editor::tests
         };
     } // namespace
 
+    class project_view_window_test : public ::testing::Test
+    {
+      protected:
+        event::event_registry events{};
+        ecs::component_type_registry types{};
+        ecs::archetype_registry registry{events, types};
+        scene::scene_manager scene_mgr{registry};
+        editor_selection selection{};
+    };
+
     // ============================================================================
     // Window Properties & Lifecycle Tests
     // ============================================================================
 
     /// @brief Verifies that project_view_window provides the expected initial dock location.
-    TEST(project_view_window_test, desired_initial_dock_is_bottom)
+    TEST_F(project_view_window_test, desired_initial_dock_is_bottom)
     {
         // Setup: Construct default project_view_window
-        const auto window = project_view_window{};
+        const auto window = project_view_window{scene_mgr, selection};
 
         // Act & Assert: Window requests bottom dock region
         EXPECT_EQ(window.desired_initial_dock(), editor_window::dock_location::bottom);
     }
 
     /// @brief Verifies that project_view_window exposes the designated window name "Project".
-    TEST(project_view_window_test, window_name_is_project)
+    TEST_F(project_view_window_test, window_name_is_project)
     {
         // Setup: Construct default project_view_window
-        const auto window = project_view_window{};
+        const auto window = project_view_window{scene_mgr, selection};
 
         // Act & Assert: Window name is exactly "Project"
         EXPECT_EQ(window.window_name(), "Project");
     }
 
     /// @brief Verifies that project_view_window supports all editor simulation modes (edit, paused, playing).
-    TEST(project_view_window_test, simulation_modes_supported)
+    TEST_F(project_view_window_test, simulation_modes_supported)
     {
         // Setup: Construct default project_view_window
-        const auto window = project_view_window{};
+        const auto window = project_view_window{scene_mgr, selection};
 
         // Act & Assert: All simulation modes return true
         EXPECT_TRUE(window.is_mode_supported(simulation_state::edit));
@@ -93,10 +108,10 @@ namespace tempest::editor::tests
     }
 
     /// @brief Verifies initial open state and toggling behavior.
-    TEST(project_view_window_test, open_state_and_toggling)
+    TEST_F(project_view_window_test, open_state_and_toggling)
     {
         // Setup: Construct default project_view_window
-        auto window = project_view_window{};
+        auto window = project_view_window{scene_mgr, selection};
 
         // Assert: Window is open by default
         EXPECT_TRUE(window.open);
@@ -119,10 +134,10 @@ namespace tempest::editor::tests
     // ============================================================================
 
     /// @brief Verifies mutable and const access to the backing project_tree_model, as well as replacing it.
-    TEST(project_view_window_test, model_access_and_mutation)
+    TEST_F(project_view_window_test, model_access_and_mutation)
     {
         // Setup: Construct project_view_window
-        auto window = project_view_window{};
+        auto window = project_view_window{scene_mgr, selection};
 
         // Assert: Initially dirty by default until visible rows are rebuilt
         auto& model = window.get_model();
@@ -152,14 +167,14 @@ namespace tempest::editor::tests
     }
 
     /// @brief Verifies that project_view_window can be constructed directly from a project_tree_model.
-    TEST(project_view_window_test, construct_from_model)
+    TEST_F(project_view_window_test, construct_from_model)
     {
         // Setup: Create a model with dirty flag set
         auto source_model = project_tree_model{};
         source_model.mark_dirty();
 
         // Act: Construct window from model rvalue
-        const auto window = project_view_window{tempest::move(source_model)};
+        const auto window = project_view_window{tempest::move(source_model), scene_mgr, selection};
 
         // Assert: Window retains the provided model's state
         EXPECT_TRUE(window.get_model().is_dirty());
@@ -170,10 +185,10 @@ namespace tempest::editor::tests
     // ============================================================================
 
     /// @brief Verifies that setting search query updates both the buffer and the backing model.
-    TEST(project_view_window_test, search_buffer_input_updates_model_query)
+    TEST_F(project_view_window_test, search_buffer_input_updates_model_query)
     {
         // Setup: Construct default project_view_window
-        auto window = project_view_window{};
+        auto window = project_view_window{scene_mgr, selection};
 
         // Assert: Initial search state is empty
         EXPECT_TRUE(window.search_query().empty());
@@ -189,10 +204,10 @@ namespace tempest::editor::tests
     }
 
     /// @brief Verifies that clearing the search query resets both buffer and backing model filter.
-    TEST(project_view_window_test, clear_search_resets_buffer_and_model_query)
+    TEST_F(project_view_window_test, clear_search_resets_buffer_and_model_query)
     {
         // Setup: Construct window with active search filter
-        auto window = project_view_window{};
+        auto window = project_view_window{scene_mgr, selection};
         window.set_search_query("texture");
         EXPECT_EQ(window.search_query(), "texture");
         EXPECT_TRUE(window.get_model().is_search_active());
@@ -211,7 +226,7 @@ namespace tempest::editor::tests
     // ============================================================================
 
     /// @brief Verifies badge resolution across all tree node kinds, extensions, and asset types.
-    TEST(project_view_window_test, badge_resolution_across_kinds_and_extensions)
+    TEST_F(project_view_window_test, badge_resolution_across_kinds_and_extensions)
     {
         // Setup: Directory-like rows
         const auto root_row = project_tree_row{
@@ -339,7 +354,7 @@ namespace tempest::editor::tests
     // ============================================================================
 
     /// @brief Verifies that split_breadcrumb_path correctly tokenizes hierarchical path strings.
-    TEST(project_view_window_test, split_breadcrumb_path_parsing)
+    TEST_F(project_view_window_test, split_breadcrumb_path_parsing)
     {
         // Act & Assert: Empty path yields empty breadcrumb list
         const auto empty_crumbs = project_view_window::split_breadcrumb_path("");
@@ -381,7 +396,7 @@ namespace tempest::editor::tests
     }
 
     /// @brief Verifies that navigate_to_directory updates current_directory and expands ancestor chain.
-    TEST(project_view_window_test, navigate_to_directory_expands_ancestors)
+    TEST_F(project_view_window_test, navigate_to_directory_expands_ancestors)
     {
         // Setup: Create physical directory structure
         const auto base_dir = fs::temp_directory_path() / "tempest_test_breadcrumbs_nav";
@@ -400,7 +415,7 @@ namespace tempest::editor::tests
 
         auto model = project_tree_model{};
         model.rebuild_from_mounts(mounts);
-        auto window = project_view_window{tempest::move(model)};
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
 
         // Assert: Root mount is initially expanded by default, but subdirectories are collapsed
         const auto* initial_models = window.get_model().find_node_by_path("Assets/models");
@@ -441,7 +456,7 @@ namespace tempest::editor::tests
     // ============================================================================
 
     /// @brief Verifies that draw() executes without throwing when the window is open and when closed.
-    TEST(project_view_window_test, draw_execution_headless)
+    TEST_F(project_view_window_test, draw_execution_headless)
     {
         // Setup: Initialize engine context and UI context for ImGui command recording
         auto engine_ctx = editor_engine_context{};
@@ -459,7 +474,7 @@ namespace tempest::editor::tests
         auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
                                  engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
 
-        auto window = project_view_window{};
+        auto window = project_view_window{scene_mgr, selection};
 
         // Act: Render frame with open = true
         ui_ctx.begin_ui_commands();
@@ -476,7 +491,7 @@ namespace tempest::editor::tests
     }
 
     /// @brief Verifies virtualized row rendering and breadcrumbs with populated directory hierarchy.
-    TEST(project_view_window_test, draw_headless_with_populated_tree)
+    TEST_F(project_view_window_test, draw_headless_with_populated_tree)
     {
         // Setup: Create physical directory structure with files and sidecars
         const auto base_dir = fs::temp_directory_path() / "tempest_test_draw_populated";
@@ -526,7 +541,7 @@ namespace tempest::editor::tests
         auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
                                  engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
 
-        auto window = project_view_window{tempest::move(model)};
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
 
         // Act: Draw initial state through ImGui clipper
         ui_ctx.begin_ui_commands();
@@ -544,7 +559,7 @@ namespace tempest::editor::tests
     }
 
     /// @brief Verifies that search filtering renders matching rows through virtualization in draw().
-    TEST(project_view_window_test, draw_headless_with_search_filtering)
+    TEST_F(project_view_window_test, draw_headless_with_search_filtering)
     {
         // Setup: Create physical directory structure
         const auto base_dir = fs::temp_directory_path() / "tempest_test_draw_search";
@@ -580,7 +595,7 @@ namespace tempest::editor::tests
         auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
                                  engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
 
-        auto window = project_view_window{tempest::move(model)};
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
 
         // Act: Filter by search query "warrior"
         window.set_search_query("warrior");
@@ -611,11 +626,425 @@ namespace tempest::editor::tests
     }
 
     // ============================================================================
+    // Selection Management Tests
+    // ============================================================================
+
+    /// @brief Verifies that project_view_window manages item selection state and exposes expected queries.
+    TEST_F(project_view_window_test, selection_query_and_mutation_apis)
+    {
+        // Setup: Construct model with mount points and files
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_proj_view_sel";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto sub_dir = base_dir / "textures";
+        fs::create_directories(sub_dir);
+        ASSERT_TRUE(write_dummy_file(sub_dir / "albedo.png"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "GameAssets",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Assert: Default selection state is empty
+        EXPECT_FALSE(window.has_selection());
+        EXPECT_TRUE(window.selected_path().empty());
+        EXPECT_EQ(window.selected_asset_id(), guid{});
+        EXPECT_EQ(window.selected_kind(), tree_node_kind::directory);
+
+        // Act: Set selection to directory
+        window.set_selected_path("GameAssets/textures");
+
+        // Assert: Selected path and kind are updated
+        EXPECT_TRUE(window.has_selection());
+        EXPECT_EQ(window.selected_path(), "GameAssets/textures");
+        EXPECT_EQ(window.selected_kind(), tree_node_kind::directory);
+
+        // Act: Set selection to file
+        window.set_selected_path("GameAssets/textures/albedo.png");
+
+        // Assert: Selected path is updated
+        EXPECT_TRUE(window.has_selection());
+        EXPECT_EQ(window.selected_path(), "GameAssets/textures/albedo.png");
+
+        // Act: Clear selection
+        window.clear_selection();
+
+        // Assert: Selection is cleared
+        EXPECT_FALSE(window.has_selection());
+        EXPECT_TRUE(window.selected_path().empty());
+        EXPECT_EQ(window.selected_asset_id(), guid{});
+    }
+
+    /// @brief Verifies that selected rows render with ImGui selection flags without graphical issues.
+    TEST_F(project_view_window_test, selection_highlighting_during_draw)
+    {
+        // Setup: Initialize engine context and UI context
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_proj_view_draw_sel";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "icon.png"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Content",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+
+        auto engine_ctx = editor_engine_context{};
+        const auto desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Project View Selection Draw Test",
+            .fullscreen = false,
+            .resizable = true,
+        };
+
+        auto reg_info = engine_ctx.register_window(desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Select file and render frame
+        window.set_selected_path("Content/icon.png");
+        EXPECT_TRUE(window.has_selection());
+
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+
+        // Assert: Selection state remains intact after draw
+        EXPECT_TRUE(window.has_selection());
+        EXPECT_EQ(window.selected_path(), "Content/icon.png");
+    }
+
+    // ============================================================================
+    // Activation & Double-Click Tests
+    // ============================================================================
+
+    /// @brief Verifies that activating a directory toggles its expansion state and navigates current_directory.
+    TEST_F(project_view_window_test, double_click_directory_toggles_expansion_and_sets_current_directory)
+    {
+        // Setup: Construct model with folder
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_proj_view_expand";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto sub_dir = base_dir / "scripts";
+        fs::create_directories(sub_dir);
+        ASSERT_TRUE(write_dummy_file(sub_dir / "test.lua"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Assets",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Assert: Initial directory node is collapsed
+        const auto* scripts_node = window.get_model().find_node_by_path("Assets/scripts");
+        ASSERT_NE(scripts_node, nullptr);
+        EXPECT_FALSE(scripts_node->is_expanded);
+
+        // Act: Activate directory row to expand
+        const auto row_to_expand = project_tree_row{
+            .node = scripts_node,
+            .display_label = "scripts",
+            .relative_path = "Assets/scripts",
+            .kind = tree_node_kind::directory,
+            .is_expanded = false,
+            .has_children = true,
+        };
+        window.activate_item(row_to_expand);
+
+        // Assert: Node is expanded and current_directory updated
+        EXPECT_TRUE(window.get_model().find_node_by_path("Assets/scripts")->is_expanded);
+        EXPECT_EQ(window.current_directory, "Assets/scripts");
+        EXPECT_EQ(window.selected_path(), "Assets/scripts");
+
+        // Act: Activate directory row again to collapse
+        const auto row_to_collapse = project_tree_row{
+            .node = scripts_node,
+            .display_label = "scripts",
+            .relative_path = "Assets/scripts",
+            .kind = tree_node_kind::directory,
+            .is_expanded = true,
+            .has_children = true,
+        };
+        window.activate_item(row_to_collapse);
+
+        // Assert: Node is now collapsed
+        EXPECT_FALSE(window.get_model().find_node_by_path("Assets/scripts")->is_expanded);
+    }
+
+    /// @brief Verifies that activating an external file invokes the registered open_external_callback.
+    TEST_F(project_view_window_test, double_click_external_file_invokes_callback)
+    {
+        // Setup: Construct window and register callback
+        auto window = project_view_window{scene_mgr, selection};
+        auto opened_path = string{};
+        window.set_on_open_external_file([&opened_path](string_view path) {
+            opened_path = string{path};
+        });
+
+        // Act: Activate a loose script file
+        const auto row = project_tree_row{
+            .display_label = "player_controller.lua",
+            .relative_path = "scripts/player_controller.lua",
+            .kind = tree_node_kind::loose_file,
+        };
+        window.activate_item(row);
+
+        // Assert: Callback received the file path
+        EXPECT_EQ(opened_path, "scripts/player_controller.lua");
+        EXPECT_EQ(window.selected_path(), "scripts/player_controller.lua");
+    }
+
+    /// @brief Verifies that activating prefab or material assets invokes the inspect_asset_callback.
+    TEST_F(project_view_window_test, double_click_prefab_and_material_invokes_inspect_callback)
+    {
+        // Setup: Construct window and register inspect callback
+        auto window = project_view_window{scene_mgr, selection};
+        auto inspected_guid = guid{};
+        auto inspected_type = assets::asset_type_id{};
+        auto inspected_path = string{};
+        auto callback_invoked = false;
+
+        window.set_on_inspect_asset([&](const guid& id, assets::asset_type_id type, string_view path) {
+            inspected_guid = id;
+            inspected_type = type;
+            inspected_path = string{path};
+            callback_invoked = true;
+        });
+
+        const auto test_guid = guid{array<byte, 16>{byte{1}, byte{2}, byte{3}, byte{4}}};
+        const auto prefab_type = assets::asset_type_id::of<assets::entity_hierarchy>();
+        const auto prefab_row = project_tree_row{
+            .display_label = "enemy.tprefab",
+            .relative_path = "prefabs/enemy.tprefab",
+            .kind = tree_node_kind::imported_file,
+            .asset_id = test_guid,
+            .type = prefab_type,
+        };
+
+        // Act: Activate prefab row
+        window.activate_item(prefab_row);
+
+        // Assert: Inspect callback received prefab info
+        EXPECT_TRUE(callback_invoked);
+        EXPECT_EQ(inspected_guid, test_guid);
+        EXPECT_EQ(inspected_type, prefab_type);
+        EXPECT_EQ(inspected_path, "prefabs/enemy.tprefab");
+
+        // Act: Activate material row
+        callback_invoked = false;
+        const auto material_type = assets::asset_type_id::of<core::material>();
+        const auto material_row = project_tree_row{
+            .display_label = "rust.tmaterial",
+            .relative_path = "materials/rust.tmaterial",
+            .kind = tree_node_kind::imported_file,
+            .asset_id = test_guid,
+            .type = material_type,
+        };
+        window.activate_item(material_row);
+
+        // Assert: Inspect callback received material info
+        EXPECT_TRUE(callback_invoked);
+        EXPECT_EQ(inspected_type, material_type);
+        EXPECT_EQ(inspected_path, "materials/rust.tmaterial");
+    }
+
+    // ============================================================================
+    // Dirty Scene Protection & Scene Activation Tests
+    // ============================================================================
+
+    /// @brief Verifies that opening a scene when loaded scenes are clean immediately loads via scene_manager.
+    TEST_F(project_view_window_test, double_click_clean_scene_loads_immediately)
+    {
+        // Setup: Create scene file on disk and initialize scene_manager
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_proj_view_clean_scene";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto scene_path = base_dir / "level.tscene";
+        ASSERT_TRUE(write_dummy_file(scene_path, R"({"schema_version":1,"generator":"test","entities":[]})"));
+
+        auto window = project_view_window{scene_mgr, selection};
+
+        // Act: Request opening scene
+        window.open_scene_requested(scene_path.generic_string());
+
+        // Assert: Loaded directly without opening dirty dialog
+        EXPECT_FALSE(window.is_dirty_dialog_open());
+        EXPECT_EQ(scene_mgr.get_scene_count(), 1u);
+    }
+
+    /// @brief Verifies that attempting to open a new scene while a loaded scene is dirty prompts save confirmation.
+    TEST_F(project_view_window_test, double_click_dirty_scene_opens_dirty_dialog)
+    {
+        // Setup: Initialize scene_manager with a loaded dirty scene
+        const auto load_result = scene_mgr.load_from_string_sync(
+            R"({"schema_version":1,"generator":"test","entities":[]})", "active_level.tscene");
+        ASSERT_TRUE(load_result.has_value());
+        EXPECT_TRUE(scene_mgr.set_dirty(*load_result, true));
+        EXPECT_TRUE(scene_mgr.is_dirty(*load_result));
+
+        auto window = project_view_window{scene_mgr, selection};
+
+        // Act: Request opening another scene
+        window.open_scene_requested("next_level.tscene");
+
+        // Assert: Dirty dialog is opened with pending scene and dirty scene details
+        EXPECT_TRUE(window.is_dirty_dialog_open());
+        EXPECT_EQ(window.pending_scene_path(), "next_level.tscene");
+        EXPECT_EQ(window.dirty_scene_name(), "active_level.tscene");
+    }
+
+    /// @brief Verifies that confirming save-and-open saves the dirty scene and loads the target scene.
+    TEST_F(project_view_window_test, confirm_save_and_open_saves_dirty_and_loads_new_scene)
+    {
+        // Setup: Create two scene files on disk
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_proj_view_save_open";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto dirty_scene_path = base_dir / "dirty_scene.tscene";
+        const auto next_scene_path = base_dir / "next_scene.tscene";
+        ASSERT_TRUE(write_dummy_file(dirty_scene_path, R"({"schema_version":1,"generator":"test","entities":[]})"));
+        ASSERT_TRUE(write_dummy_file(next_scene_path, R"({"schema_version":1,"generator":"test","entities":[]})"));
+
+        const auto handle = scene_mgr.load_sync(dirty_scene_path);
+        ASSERT_TRUE(handle.has_value());
+        scene_mgr.set_dirty(*handle, true);
+        EXPECT_TRUE(scene_mgr.is_dirty(*handle));
+
+        auto window = project_view_window{scene_mgr, selection};
+
+        // Act: Open scene requested and confirm save
+        window.open_scene_requested(next_scene_path.generic_string());
+        ASSERT_TRUE(window.is_dirty_dialog_open());
+
+        window.confirm_save_and_open();
+
+        // Assert: Dialog closed, scene is clean, and active scene is next_scene
+        EXPECT_FALSE(window.is_dirty_dialog_open());
+        const auto active_handle = scene_mgr.get_active_scene();
+        EXPECT_TRUE(scene_mgr.is_valid(active_handle));
+        EXPECT_FALSE(scene_mgr.is_dirty(active_handle));
+        const auto active_path = scene_mgr.get_scene_path(active_handle);
+        ASSERT_TRUE(active_path.has_value());
+        EXPECT_EQ(*active_path, next_scene_path.generic_string());
+    }
+
+    /// @brief Verifies that confirming discard-and-open loads the target scene without saving dirty scene.
+    TEST_F(project_view_window_test, confirm_discard_and_open_loads_without_saving)
+    {
+        // Setup: Create target scene file on disk
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_proj_view_discard_open";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto next_scene_path = base_dir / "next_scene.tscene";
+        ASSERT_TRUE(write_dummy_file(next_scene_path, R"({"schema_version":1,"generator":"test","entities":[]})"));
+
+        const auto handle = scene_mgr.load_from_string_sync(
+            R"({"schema_version":1,"generator":"test","entities":[]})", "unsaved_scene.tscene");
+        ASSERT_TRUE(handle.has_value());
+        scene_mgr.set_dirty(*handle, true);
+
+        auto window = project_view_window{scene_mgr, selection};
+
+        // Act: Open requested and confirm discard
+        window.open_scene_requested(next_scene_path.generic_string());
+        ASSERT_TRUE(window.is_dirty_dialog_open());
+
+        window.confirm_discard_and_open();
+
+        // Assert: Dialog closed and target scene loaded
+        EXPECT_FALSE(window.is_dirty_dialog_open());
+        const auto active_handle = scene_mgr.get_active_scene();
+        EXPECT_TRUE(scene_mgr.is_valid(active_handle));
+        const auto active_path = scene_mgr.get_scene_path(active_handle);
+        ASSERT_TRUE(active_path.has_value());
+        EXPECT_EQ(*active_path, next_scene_path.generic_string());
+    }
+
+    /// @brief Verifies that cancelling scene opening dismisses the dialog and preserves the dirty scene unmodified.
+    TEST_F(project_view_window_test, cancel_open_scene_dismisses_dialog_and_retains_dirty_state)
+    {
+        // Setup: Initialize scene_manager with a dirty scene
+        const auto handle = scene_mgr.load_from_string_sync(
+            R"({"schema_version":1,"generator":"test","entities":[]})", "my_dirty_scene.tscene");
+        ASSERT_TRUE(handle.has_value());
+        scene_mgr.set_dirty(*handle, true);
+
+        auto window = project_view_window{scene_mgr, selection};
+
+        // Act: Open requested and cancel
+        window.open_scene_requested("other.tscene");
+        ASSERT_TRUE(window.is_dirty_dialog_open());
+
+        window.cancel_open_scene();
+
+        // Assert: Dialog closed, scene remains dirty and loaded
+        EXPECT_FALSE(window.is_dirty_dialog_open());
+        EXPECT_TRUE(scene_mgr.is_dirty(*handle));
+        EXPECT_EQ(scene_mgr.get_scene_count(), 1u);
+    }
+
+    /// @brief Verifies that the "Save Changes?" confirmation popup modal renders via ImGui without crashes.
+    TEST_F(project_view_window_test, headless_imgui_dirty_dialog_rendering)
+    {
+        // Setup: Initialize engine context and UI context
+        auto engine_ctx = editor_engine_context{};
+        const auto desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Save Changes Dialog Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+
+        auto reg_info = engine_ctx.register_window(desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+
+        const auto handle = scene_mgr.load_from_string_sync(
+            R"({"schema_version":1,"generator":"test","entities":[]})", "dialog_test_scene.tscene");
+        ASSERT_TRUE(handle.has_value());
+        scene_mgr.set_dirty(*handle, true);
+
+        auto window = project_view_window{scene_mgr, selection};
+
+        // Act: Trigger dirty dialog
+        window.open_scene_requested("next.tscene");
+        ASSERT_TRUE(window.is_dirty_dialog_open());
+
+        // Assert: Draw renders modal dialog cleanly
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+
+        // Act: Redraw second frame with modal active
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+
+        // Assert: State remains valid
+        EXPECT_TRUE(window.is_dirty_dialog_open());
+    }
+
+    // ============================================================================
     // Editor Context Integration Tests
     // ============================================================================
 
     /// @brief Verifies that editor_context initializes project_view_window and exposes valid accessors.
-    TEST(project_view_window_test, editor_context_integration)
+    TEST_F(project_view_window_test, editor_context_integration)
     {
         // Setup: Initialize engine context, test window, and UI context
         auto engine_ctx = editor_engine_context{};
@@ -647,6 +1076,10 @@ namespace tempest::editor::tests
         const auto* const_project_view = const_ed_ctx.get_project_view_window();
         ASSERT_NE(const_project_view, nullptr);
         EXPECT_EQ(const_project_view, project_view);
+
+        // Assert: Subsystem dependency injection is populated correctly
+        EXPECT_EQ(&project_view->scene_manager(), &engine_ctx.get_scene_manager());
+        EXPECT_EQ(&project_view->selection(), &ed_ctx.get_selection());
 
         // Act: Render frame via editor_context draw
         ui_ctx.begin_ui_commands();
