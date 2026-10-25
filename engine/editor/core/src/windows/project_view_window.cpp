@@ -7,8 +7,10 @@
 #include <tempest/checked.hpp>
 #include <tempest/editor_selection.hpp>
 #include <tempest/entity_hierarchy.hpp>
+#include <tempest/file_watcher.hpp>
 #include <tempest/filesystem.hpp>
 #include <tempest/material.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/render_target_asset.hpp>
 #include <tempest/scene/scene_manager.hpp>
 #include <tempest/texture.hpp>
@@ -16,6 +18,7 @@
 #include <tempest/vertex.hpp>
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -138,6 +141,55 @@ namespace tempest::editor
             result.push_back(']');
             return result;
         }
+
+        auto contains_illegal_character(string_view name) noexcept -> bool
+        {
+            for (const auto ch : name)
+            {
+                switch (ch)
+                {
+                    case '/':
+                    case '\\':
+                    case ':':
+                    case '*':
+                    case '?':
+                    case '"':
+                    case '<':
+                    case '>':
+                    case '|':
+                        return true;
+                    default:
+                        break;
+                }
+            }
+            return false;
+        }
+
+        auto is_case_insensitive_equal(string_view lhs, string_view rhs) noexcept -> bool
+        {
+#if defined(_WIN32)
+            if (lhs.size() != rhs.size())
+            {
+                return false;
+            }
+            for (auto index = size_t{0}; index < lhs.size(); ++index)
+            {
+                const auto char_lhs = (lhs[index] >= 'A' && lhs[index] <= 'Z')
+                                          ? static_cast<char>(lhs[index] + ('a' - 'A'))
+                                          : lhs[index];
+                const auto char_rhs = (rhs[index] >= 'A' && rhs[index] <= 'Z')
+                                          ? static_cast<char>(rhs[index] + ('a' - 'A'))
+                                          : rhs[index];
+                if (char_lhs != char_rhs)
+                {
+                    return false;
+                }
+            }
+            return true;
+#else
+            return lhs == rhs;
+#endif
+        }
     } // namespace
 
     project_view_window::project_view_window(scene::scene_manager& in_scene_mgr,
@@ -157,20 +209,25 @@ namespace tempest::editor
     auto project_view_window::set_search_query(string_view query) -> void
     {
         const auto copy_length = tempest::min(query.size(), search_buffer_capacity - 1);
-        tempest::memcpy(search_buffer, query.data(), copy_length);
-        search_buffer[copy_length] = '\0';
-        _model.set_search_query(search_buffer);
+        tempest::memcpy(_search_buffer.data(), query.data(), copy_length);
+        _search_buffer[copy_length] = '\0';
+        _model.set_search_query(_search_buffer.data());
     }
 
     auto project_view_window::clear_search_query() -> void
     {
-        search_buffer[0] = '\0';
+        _search_buffer[0] = '\0';
         _model.clear_search_query();
+    }
+
+    auto project_view_window::set_current_directory(string_view dir_path) -> void
+    {
+        _current_directory = string{dir_path};
     }
 
     auto project_view_window::navigate_to_directory(string_view dir_path) -> void
     {
-        current_directory = string{dir_path};
+        _current_directory = string{dir_path};
 
         auto* target_node = _model.find_node_by_path(dir_path);
         if (target_node != nullptr)
@@ -409,7 +466,7 @@ namespace tempest::editor
         if (row.kind == tree_node_kind::mount_root || row.kind == tree_node_kind::directory)
         {
             _model.set_expanded_by_path(item_path, !row.is_expanded);
-            current_directory = string{item_path};
+            _current_directory = string{item_path};
             return;
         }
 
@@ -586,9 +643,303 @@ namespace tempest::editor
         _dirty_scene_name.clear();
     }
 
+    auto project_view_window::_find_target_node(string_view path) const -> const project_tree_node*
+    {
+        if (path.empty())
+        {
+            return nullptr;
+        }
+
+        const auto* node = _model.find_node_by_path(path);
+        if (node != nullptr)
+        {
+            return node;
+        }
+
+        for (const auto& root : _model.roots())
+        {
+            if (root && (root->name == path || root->path == path))
+            {
+                return root.get();
+            }
+        }
+
+        for (const auto& row : _model.visible_rows())
+        {
+            if (row.relative_path == path || (row.relative_path.empty() && row.display_label == path))
+            {
+                return row.node;
+            }
+        }
+
+        return nullptr;
+    }
+
+    auto project_view_window::start_rename(string_view path) -> bool
+    {
+        if (path.empty())
+        {
+            return false;
+        }
+
+        if (_is_renaming)
+        {
+            cancel_rename();
+        }
+
+        const auto* node = _find_target_node(path);
+        if (node == nullptr)
+        {
+            return false;
+        }
+
+        if (node->kind == tree_node_kind::mount_root || node->kind == tree_node_kind::sub_asset)
+        {
+            return false;
+        }
+
+        _is_renaming = true;
+        _renaming_path = string{path};
+
+        auto name_str = string{};
+        if (!node->name.empty())
+        {
+            name_str = node->name;
+        }
+        else
+        {
+            name_str = filesystem::path{node->path}.filename().string();
+        }
+        const auto copy_length = tempest::min(name_str.size(), rename_buffer_capacity - 1);
+        tempest::memcpy(_rename_buffer.data(), name_str.data(), copy_length);
+        _rename_buffer[copy_length] = '\0';
+
+        _rename_first_frame = true;
+        _rename_error.clear();
+        _model.set_invalidation_deferred(true);
+
+        return true;
+    }
+
+    auto project_view_window::commit_rename() -> bool
+    {
+        if (!_is_renaming)
+        {
+            return false;
+        }
+
+        const auto name_view = string_view{static_cast<const char*>(_rename_buffer.data())};
+        const auto error_opt = validate_rename_name(name_view);
+        if (error_opt.has_value())
+        {
+            _rename_error = string{*error_opt};
+            return false;
+        }
+
+        const auto* node = _find_target_node(_renaming_path);
+        if (node == nullptr)
+        {
+            cancel_rename();
+            return false;
+        }
+
+        if (node->name == name_view)
+        {
+            cancel_rename();
+            return true;
+        }
+
+        auto old_disk_path = filesystem::path{node->disk_path};
+        if (old_disk_path.empty())
+        {
+            old_disk_path = filesystem::path{_renaming_path};
+        }
+        const auto parent_dir = old_disk_path.parent_path();
+        const auto new_disk_path = parent_dir / filesystem::path{name_view};
+
+        if (filesystem::exists(old_disk_path))
+        {
+            if (!filesystem::rename(old_disk_path, new_disk_path))
+            {
+                _rename_error = "Failed to rename file on disk.";
+                return false;
+            }
+        }
+
+        auto old_meta_str = old_disk_path.generic_string();
+        old_meta_str.append(".tmeta");
+        const auto old_meta_path = filesystem::path{old_meta_str};
+
+        auto new_meta_str = new_disk_path.generic_string();
+        new_meta_str.append(".tmeta");
+        const auto new_meta_path = filesystem::path{new_meta_str};
+
+        if (filesystem::exists(old_meta_path))
+        {
+            filesystem::rename(old_meta_path, new_meta_path);
+        }
+
+        _model.handle_file_watch_event(file_watch_event{
+            .type = file_watch_event_type::renamed,
+            .path = new_disk_path,
+            .old_path = old_disk_path,
+        });
+
+        auto new_relative_path = string{};
+        const auto rel_parent = filesystem::path{_renaming_path}.parent_path().generic_string();
+        if (!rel_parent.empty() && rel_parent != ".")
+        {
+            new_relative_path = rel_parent;
+            new_relative_path.push_back('/');
+            new_relative_path.append(name_view.data(), name_view.size());
+        }
+        else
+        {
+            new_relative_path = string{name_view};
+        }
+
+        const auto was_selected = (_selected_path == _renaming_path);
+        if (was_selected)
+        {
+            _selected_path = new_relative_path;
+        }
+
+        if (_current_directory == _renaming_path)
+        {
+            _current_directory = new_relative_path;
+        }
+
+        _model.set_invalidation_deferred(false);
+
+        if (was_selected)
+        {
+            set_selected_path(new_relative_path);
+        }
+
+        _is_renaming = default_is_renaming;
+        _renaming_path.clear();
+        _rename_buffer[0] = '\0';
+        _rename_error.clear();
+        _rename_first_frame = default_rename_first_frame;
+
+        return true;
+    }
+
+    auto project_view_window::cancel_rename() noexcept -> void
+    {
+        _model.set_invalidation_deferred(false);
+        _is_renaming = default_is_renaming;
+        _renaming_path.clear();
+        _rename_buffer[0] = '\0';
+        _rename_error.clear();
+        _rename_first_frame = default_rename_first_frame;
+    }
+
+    auto project_view_window::set_rename_buffer(string_view text) -> void
+    {
+        const auto copy_length = tempest::min(text.size(), rename_buffer_capacity - 1);
+        tempest::memcpy(_rename_buffer.data(), text.data(), copy_length);
+        _rename_buffer[copy_length] = '\0';
+
+        if (ImGui::GetCurrentContext() != nullptr)
+        {
+            auto& imgui_ctx = *ImGui::GetCurrentContext();
+            if (imgui_ctx.InputTextState.ID != 0)
+            {
+                imgui_ctx.InputTextState.ReloadUserBufAndSelectAll();
+            }
+        }
+    }
+
+    auto project_view_window::validate_rename_name(string_view new_name) const -> optional<string_view>
+    {
+        if (new_name.empty())
+        {
+            return string_view{"Name cannot be empty."};
+        }
+
+        auto is_all_whitespace = true;
+        for (const auto ch : new_name)
+        {
+            if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n')
+            {
+                is_all_whitespace = false;
+                break;
+            }
+        }
+        if (is_all_whitespace)
+        {
+            return string_view{"Name cannot be empty."};
+        }
+
+        if (contains_illegal_character(new_name))
+        {
+            return string_view{"Name contains illegal characters."};
+        }
+
+        if (_renaming_path.empty())
+        {
+            return nullopt;
+        }
+
+        const auto* node = _find_target_node(_renaming_path);
+        if (node == nullptr)
+        {
+            return nullopt;
+        }
+
+        if (is_case_insensitive_equal(node->name, new_name))
+        {
+            return nullopt;
+        }
+
+        if (node->parent != nullptr)
+        {
+            for (const auto& child : node->parent->children)
+            {
+                if (child && child.get() != node)
+                {
+                    if (is_case_insensitive_equal(child->name, new_name))
+                    {
+                        return string_view{"An item with this name already exists."};
+                    }
+                }
+            }
+        }
+        else
+        {
+            for (const auto& root : _model.roots())
+            {
+                if (root && root.get() != node)
+                {
+                    if (is_case_insensitive_equal(root->name, new_name))
+                    {
+                        return string_view{"An item with this name already exists."};
+                    }
+                }
+            }
+        }
+
+        if (!node->disk_path.empty())
+        {
+            const auto current_path = filesystem::path{node->disk_path};
+            const auto parent_dir = current_path.parent_path();
+            if (!parent_dir.empty())
+            {
+                const auto target_disk_path = parent_dir / filesystem::path{new_name};
+                if (filesystem::exists(target_disk_path))
+                {
+                    return string_view{"An item with this name already exists."};
+                }
+            }
+        }
+
+        return nullopt;
+    }
+
     auto project_view_window::draw() -> void
     {
-        if (!open)
+        if (!_open)
         {
             return;
         }
@@ -598,14 +949,14 @@ namespace tempest::editor
             _model.rebuild_visible_rows();
         }
 
-        if (ImGui::Begin(window_name().data(), &open))
+        if (ImGui::Begin(window_name().data(), &_open))
         {
             // Search text input and synchronization
-            const auto text_changed = ImGui::InputTextWithHint("##ProjectSearch", "Search assets...", search_buffer,
+            const auto text_changed = ImGui::InputTextWithHint("##ProjectSearch", "Search assets...", _search_buffer.data(),
                                                                search_buffer_capacity);
-            if (text_changed || string_view{static_cast<const char*>(search_buffer)} != _model.search_query())
+            if (text_changed || string_view{static_cast<const char*>(_search_buffer.data())} != _model.search_query())
             {
-                _model.set_search_query(search_buffer);
+                _model.set_search_query(_search_buffer.data());
             }
 
             ImGui::SameLine();
@@ -622,7 +973,7 @@ namespace tempest::editor
             }
 
             // Breadcrumb navigation strip
-            auto effective_dir = string_view{current_directory};
+            auto effective_dir = string_view{_current_directory};
             if (effective_dir.empty() && !_model.roots().empty() && _model.roots()[0] != nullptr)
             {
                 effective_dir = _model.roots()[0]->name;
@@ -656,6 +1007,11 @@ namespace tempest::editor
             // Virtualized tree rows region
             if (ImGui::BeginChild("##ProjectTreeScrollRegion"))
             {
+                if (has_selection() && !_is_renaming && ImGui::IsKeyPressed(ImGuiKey_F2))
+                {
+                    start_rename(_selected_path);
+                }
+
                 const auto rows = _model.visible_rows();
                 auto clipper = ImGuiListClipper{};
                 clipper.Begin(static_cast<int>(rows.size()));
@@ -663,6 +1019,7 @@ namespace tempest::editor
                 auto pending_toggle_path = string{};
                 auto pending_toggle_open = false;
                 auto has_pending_toggle = false;
+                auto rename_committed = false;
 
                 while (clipper.Step())
                 {
@@ -683,71 +1040,134 @@ namespace tempest::editor
                         }
 
                         const auto badge = get_node_badge(row, _model.asset_database());
-
-                        auto node_flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth |
-                                          ImGuiTreeNodeFlags_NoTreePushOnOpen;
-                        if (!row.has_children)
-                        {
-                            node_flags |= ImGuiTreeNodeFlags_Leaf;
-                        }
-
                         const auto row_path = row.relative_path.empty() ? row.display_label : row.relative_path;
-                        const auto is_selected = (_selected_path == row_path);
-                        if (is_selected)
-                        {
-                            node_flags |= ImGuiTreeNodeFlags_Selected;
-                        }
 
-                        ImGui::SetNextItemOpen(row.is_expanded);
-
-                        const auto is_loose = (row.kind == tree_node_kind::loose_file);
-                        if (is_loose)
+                        if (_is_renaming && row_path == _renaming_path)
                         {
-                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6F, 0.6F, 0.6F, 1.0F));
-                        }
+                            ImGui::TextUnformatted(badge.c_str());
+                            ImGui::SameLine();
 
-                        auto node_open = false;
-                        if (_model.is_search_active() && !row.relative_path.empty())
-                        {
-                            node_open = ImGui::TreeNodeEx("##row", node_flags, "%.*s %.*s (%.*s)",
-                                                          static_cast<int>(badge.size()), badge.data(),
-                                                          static_cast<int>(row.display_label.size()),
-                                                          row.display_label.data(),
-                                                          static_cast<int>(row.relative_path.size()),
-                                                          row.relative_path.data());
+                            if (_rename_first_frame)
+                            {
+                                ImGui::SetKeyboardFocusHere();
+                                _rename_first_frame = false;
+                            }
+
+                            const auto error_opt =
+                                validate_rename_name(string_view{static_cast<const char*>(_rename_buffer.data())});
+                            const auto has_error = error_opt.has_value();
+                            if (has_error)
+                            {
+                                _rename_error = string{*error_opt};
+                            }
+                            else
+                            {
+                                _rename_error.clear();
+                            }
+
+                            if (has_error)
+                            {
+                                ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.0F, 0.2F, 0.2F, 1.0F));
+                            }
+                            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
+
+                            ImGui::SetNextItemWidth(-1.0F);
+                            const auto enter_pressed =
+                                ImGui::InputText("##InlineRename", _rename_buffer.data(), rename_buffer_capacity,
+                                                 ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+
+                            ImGui::PopStyleVar();
+                            if (has_error)
+                            {
+                                ImGui::PopStyleColor();
+                            }
+
+                            if (has_error && ImGui::IsItemHovered())
+                            {
+                                ImGui::BeginTooltip();
+                                ImGui::TextUnformatted(_rename_error.c_str());
+                                ImGui::EndTooltip();
+                            }
+
+                            if (enter_pressed)
+                            {
+                                if (!has_error)
+                                {
+                                    commit_rename();
+                                    rename_committed = true;
+                                }
+                            }
+                            else if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+                            {
+                                cancel_rename();
+                            }
                         }
                         else
                         {
-                            node_open = ImGui::TreeNodeEx("##row", node_flags, "%.*s %.*s",
-                                                          static_cast<int>(badge.size()), badge.data(),
-                                                          static_cast<int>(row.display_label.size()),
-                                                          row.display_label.data());
-                        }
-
-                        if (is_loose)
-                        {
-                            ImGui::PopStyleColor();
-                        }
-
-                        if (row.has_children && ImGui::IsItemToggledOpen())
-                        {
-                            has_pending_toggle = true;
-                            pending_toggle_path = string{row_path};
-                            pending_toggle_open = node_open;
-                        }
-
-                        if (ImGui::IsItemClicked())
-                        {
-                            set_selected_path(row_path);
-                            if (row.kind == tree_node_kind::directory || row.kind == tree_node_kind::mount_root)
+                            auto node_flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth |
+                                              ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                            if (!row.has_children)
                             {
-                                current_directory = string{row_path};
+                                node_flags |= ImGuiTreeNodeFlags_Leaf;
                             }
-                        }
 
-                        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-                        {
-                            activate_item(row);
+                            const auto is_selected = (_selected_path == row_path);
+                            if (is_selected)
+                            {
+                                node_flags |= ImGuiTreeNodeFlags_Selected;
+                            }
+
+                            ImGui::SetNextItemOpen(row.is_expanded);
+
+                            const auto is_loose = (row.kind == tree_node_kind::loose_file);
+                            if (is_loose)
+                            {
+                                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6F, 0.6F, 0.6F, 1.0F));
+                            }
+
+                            auto node_open = false;
+                            if (_model.is_search_active() && !row.relative_path.empty())
+                            {
+                                node_open = ImGui::TreeNodeEx("##row", node_flags, "%.*s %.*s (%.*s)",
+                                                              static_cast<int>(badge.size()), badge.data(),
+                                                              static_cast<int>(row.display_label.size()),
+                                                              row.display_label.data(),
+                                                              static_cast<int>(row.relative_path.size()),
+                                                              row.relative_path.data());
+                            }
+                            else
+                            {
+                                node_open = ImGui::TreeNodeEx("##row", node_flags, "%.*s %.*s",
+                                                              static_cast<int>(badge.size()), badge.data(),
+                                                              static_cast<int>(row.display_label.size()),
+                                                              row.display_label.data());
+                            }
+
+                            if (is_loose)
+                            {
+                                ImGui::PopStyleColor();
+                            }
+
+                            if (row.has_children && ImGui::IsItemToggledOpen())
+                            {
+                                has_pending_toggle = true;
+                                pending_toggle_path = string{row_path};
+                                pending_toggle_open = node_open;
+                            }
+
+                            if (ImGui::IsItemClicked())
+                            {
+                                set_selected_path(row_path);
+                                if (row.kind == tree_node_kind::directory || row.kind == tree_node_kind::mount_root)
+                                {
+                                    _current_directory = string{row_path};
+                                }
+                            }
+
+                            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                            {
+                                activate_item(row);
+                            }
                         }
 
                         if (indent_px > 0.0F)
@@ -756,6 +1176,16 @@ namespace tempest::editor
                         }
 
                         ImGui::PopID();
+
+                        if (rename_committed)
+                        {
+                            break;
+                        }
+                    }
+
+                    if (rename_committed)
+                    {
+                        break;
                     }
                 }
                 clipper.End();

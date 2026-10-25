@@ -175,12 +175,12 @@ namespace tempest::editor
 
             [[nodiscard]] auto is_checked() const noexcept -> bool override
             {
-                return _window->open;
+                return _window->is_open();
             }
 
             auto on_press() noexcept -> void override
             {
-                _window->open = !_window->open;
+                _window->set_open(!_window->is_open());
             }
 
           private:

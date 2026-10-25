@@ -2,11 +2,13 @@
 #define tempest_editor_core_project_view_window_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/array.hpp>
 #include <tempest/checked.hpp>
 #include <tempest/editor_selection.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/guid.hpp>
 #include <tempest/int.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/project_tree_model.hpp>
 #include <tempest/scene/scene_manager.hpp>
 #include <tempest/scene/scene_types.hpp>
@@ -25,8 +27,8 @@ namespace tempest::editor
     /// @brief Segment in the breadcrumb navigation bar.
     struct TEMPEST_EDITOR_API breadcrumb_item
     {
-        string name = {};
-        string path = {};
+        string name;
+        string path;
     };
 
     /// @brief Editor window for navigating and managing project directories, mounts, and asset hierarchies.
@@ -39,12 +41,11 @@ namespace tempest::editor
         static constexpr bool default_open = true;
         static constexpr assets::asset_database* default_asset_database = nullptr;
         static constexpr size_t search_buffer_capacity = 256;
+        static constexpr size_t rename_buffer_capacity = 256;
+        static constexpr bool default_is_renaming = false;
+        static constexpr bool default_rename_first_frame = false;
         static constexpr tree_node_kind default_selected_kind = tree_node_kind::directory;
         static constexpr bool default_show_dirty_dialog = false;
-
-        bool open = default_open;
-        char search_buffer[search_buffer_capacity] = "";
-        string current_directory = {};
 
         /// @brief Constructs a project view window with required subsystem dependencies and optional asset database.
         /// @param in_scene_mgr Reference to the scene manager.
@@ -91,6 +92,20 @@ namespace tempest::editor
             return true;
         }
 
+        /// @brief Checks whether the project view window is open and visible.
+        /// @return True if open, false if hidden.
+        [[nodiscard]] auto is_open() const noexcept -> bool
+        {
+            return _open;
+        }
+
+        /// @brief Sets whether the project view window is open and visible.
+        /// @param in_open Visibility state.
+        auto set_open(bool in_open) noexcept -> void
+        {
+            _open = in_open;
+        }
+
         /// @brief Draws the project view window contents via ImGui.
         auto draw() -> void override;
 
@@ -118,23 +133,34 @@ namespace tempest::editor
 
         /// @brief Sets the search filter query and updates the backing tree model.
         /// @param query Search query substring.
-        /// @post `search_buffer` and backing tree model reflect `query`.
+        /// @post `_search_buffer` and backing tree model reflect `query`.
         auto set_search_query(string_view query) -> void;
 
         /// @brief Clears the active search filter query.
-        /// @post `search_buffer` is emptied and backing model search query cleared.
+        /// @post `_search_buffer` is emptied and backing model search query cleared.
         auto clear_search_query() -> void;
 
         /// @brief Retrieves the active search filter query.
         /// @return Current search query as a string view.
         [[nodiscard]] auto search_query() const noexcept -> string_view
         {
-            return string_view{static_cast<const char*>(search_buffer)};
+            return string_view{_search_buffer.data()};
         }
+
+        /// @brief Retrieves the active directory path being navigated.
+        /// @return Current directory path string view.
+        [[nodiscard]] auto current_directory() const noexcept -> string_view
+        {
+            return _current_directory;
+        }
+
+        /// @brief Sets the active directory path.
+        /// @param dir_path Directory path to set.
+        auto set_current_directory(string_view dir_path) -> void;
 
         /// @brief Navigates to a specific directory path, expanding all ancestor nodes.
         /// @param dir_path Path of directory to navigate to.
-        /// @post `current_directory` is set to `dir_path` and matching ancestors expanded.
+        /// @post `_current_directory` is set to `dir_path` and matching ancestors expanded.
         auto navigate_to_directory(string_view dir_path) -> void;
 
         /// @brief Determines the display badge for a visual project tree row.
@@ -261,6 +287,60 @@ namespace tempest::editor
             return _dirty_scene_name;
         }
 
+        // Inline Renaming & Validation
+
+        /// @brief Initiates inline renaming for the item at the specified relative or display path.
+        /// @param path Relative or display path of the item to rename.
+        /// @return True if rename mode was successfully initiated, false if item not found or non-renamable.
+        /// @post If successful, is_renaming() is true, renaming_path() equals path, and model invalidation is deferred.
+        auto start_rename(string_view path) -> bool;
+
+        /// @brief Commits the pending rename operation, renaming the disk file and updating model and selection.
+        /// @return True if rename succeeded or name was unchanged, false if validation failed.
+        /// @post If successful, disk files are renamed, model updated, and rename mode deactivated.
+        auto commit_rename() -> bool;
+
+        /// @brief Cancels any active inline rename operation and restores model invalidation.
+        /// @post is_renaming() returns false and rename state is reset.
+        auto cancel_rename() noexcept -> void;
+
+        /// @brief Checks whether an inline rename operation is currently active.
+        /// @return True if currently renaming an item, false otherwise.
+        [[nodiscard]] auto is_renaming() const noexcept -> bool
+        {
+            return _is_renaming;
+        }
+
+        /// @brief Retrieves the relative path of the item currently being renamed.
+        /// @return Relative path string view, or empty if not renaming.
+        [[nodiscard]] auto renaming_path() const noexcept -> string_view
+        {
+            return _renaming_path;
+        }
+
+        /// @brief Retrieves the current text in the inline rename buffer.
+        /// @return Current rename buffer contents as a string view.
+        [[nodiscard]] auto rename_buffer() const noexcept -> string_view
+        {
+            return string_view{_rename_buffer.data()};
+        }
+
+        /// @brief Sets the text in the inline rename buffer.
+        /// @param text The new text to copy into the buffer.
+        auto set_rename_buffer(string_view text) -> void;
+
+        /// @brief Retrieves the active character validation error message, if any.
+        /// @return Validation error string view, or empty if buffer is valid.
+        [[nodiscard]] auto rename_error() const noexcept -> string_view
+        {
+            return _rename_error;
+        }
+
+        /// @brief Validates a prospective filename for illegal characters, emptiness, or sibling collisions.
+        /// @param new_name Candidate filename to validate.
+        /// @return Error message string view if invalid, or nullopt if valid.
+        [[nodiscard]] auto validate_rename_name(string_view new_name) const -> optional<string_view>;
+
         // Dependency Accessors
 
         /// @brief Retrieves the mutable scene manager instance.
@@ -292,21 +372,33 @@ namespace tempest::editor
         }
 
       private:
+        [[nodiscard]] auto _find_target_node(string_view path) const -> const project_tree_node*;
+
         project_tree_model _model;
         non_null<scene::scene_manager> _scene_mgr;
         non_null<editor_selection> _selection;
 
-        string _selected_path = {};
+        bool _open = default_open;
+        string _current_directory;
+        array<char, search_buffer_capacity> _search_buffer = {};
+
+        string _selected_path;
         guid _selected_asset_id = {};
         tree_node_kind _selected_kind = default_selected_kind;
 
-        inspect_asset_callback _on_inspect_asset = {};
-        open_external_callback _on_open_external_file = {};
+        inspect_asset_callback _on_inspect_asset;
+        open_external_callback _on_open_external_file;
 
         bool _show_dirty_dialog = default_show_dirty_dialog;
-        string _pending_scene_path = {};
-        scene::scene_handle _dirty_scene_to_save = {};
-        string _dirty_scene_name = {};
+        string _pending_scene_path;
+        scene::scene_handle _dirty_scene_to_save;
+        string _dirty_scene_name;
+
+        bool _is_renaming = default_is_renaming;
+        string _renaming_path;
+        array<char, rename_buffer_capacity> _rename_buffer = {};
+        bool _rename_first_frame = default_rename_first_frame;
+        string _rename_error;
     };
 } // namespace tempest::editor
 

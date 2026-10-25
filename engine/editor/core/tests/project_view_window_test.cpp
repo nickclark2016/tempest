@@ -114,19 +114,19 @@ namespace tempest::editor::tests
         auto window = project_view_window{scene_mgr, selection};
 
         // Assert: Window is open by default
-        EXPECT_TRUE(window.open);
+        EXPECT_TRUE(window.is_open());
 
         // Act: Toggle open off
-        window.open = false;
+        window.set_open(false);
 
         // Assert: Window is closed
-        EXPECT_FALSE(window.open);
+        EXPECT_FALSE(window.is_open());
 
         // Act: Toggle open back on
-        window.open = true;
+        window.set_open(true);
 
         // Assert: Window is open
-        EXPECT_TRUE(window.open);
+        EXPECT_TRUE(window.is_open());
     }
 
     // ============================================================================
@@ -430,7 +430,7 @@ namespace tempest::editor::tests
         window.navigate_to_directory("Assets/models/characters");
 
         // Assert: current_directory updated and all ancestors expanded
-        EXPECT_EQ(window.current_directory, "Assets/models/characters");
+        EXPECT_EQ(window.current_directory(), "Assets/models/characters");
 
         const auto* expanded_root = window.get_model().find_node_by_path("Assets");
         ASSERT_NE(expanded_root, nullptr);
@@ -448,7 +448,7 @@ namespace tempest::editor::tests
         window.navigate_to_directory("Assets/models");
 
         // Assert: current_directory updated to ancestor
-        EXPECT_EQ(window.current_directory, "Assets/models");
+        EXPECT_EQ(window.current_directory(), "Assets/models");
     }
 
     // ============================================================================
@@ -480,14 +480,14 @@ namespace tempest::editor::tests
         ui_ctx.begin_ui_commands();
         EXPECT_NO_THROW(window.draw());
         ui_ctx.finish_ui_commands();
-        EXPECT_TRUE(window.open);
+        EXPECT_TRUE(window.is_open());
 
-        // Act: Render frame with open = false (early returns without ImGui window)
-        window.open = false;
+        // Act: Render frame with is_open = false (early returns without ImGui window)
+        window.set_open(false);
         ui_ctx.begin_ui_commands();
         EXPECT_NO_THROW(window.draw());
         ui_ctx.finish_ui_commands();
-        EXPECT_FALSE(window.open);
+        EXPECT_FALSE(window.is_open());
     }
 
     /// @brief Verifies virtualized row rendering and breadcrumbs with populated directory hierarchy.
@@ -768,7 +768,7 @@ namespace tempest::editor::tests
 
         // Assert: Node is expanded and current_directory updated
         EXPECT_TRUE(window.get_model().find_node_by_path("Assets/scripts")->is_expanded);
-        EXPECT_EQ(window.current_directory, "Assets/scripts");
+        EXPECT_EQ(window.current_directory(), "Assets/scripts");
         EXPECT_EQ(window.selected_path(), "Assets/scripts");
 
         // Act: Activate directory row again to collapse
@@ -1069,7 +1069,7 @@ namespace tempest::editor::tests
         auto* project_view = ed_ctx.get_project_view_window();
         ASSERT_NE(project_view, nullptr);
         EXPECT_EQ(project_view->window_name(), "Project");
-        EXPECT_TRUE(project_view->open);
+        EXPECT_TRUE(project_view->is_open());
 
         // Assert: const accessor returns the identical instance
         const auto& const_ed_ctx = ed_ctx;
@@ -1087,10 +1087,423 @@ namespace tempest::editor::tests
         ui_ctx.finish_ui_commands();
 
         // Act: Toggle window visibility off and redraw
-        project_view->open = false;
+        project_view->set_open(false);
         ui_ctx.begin_ui_commands();
         EXPECT_NO_THROW(ed_ctx.draw());
         ui_ctx.finish_ui_commands();
-        EXPECT_FALSE(project_view->open);
+        EXPECT_FALSE(project_view->is_open());
+    }
+
+    // ============================================================================
+    // Inline Renaming & Validation Tests
+    // ============================================================================
+
+    /// @brief Verifies that start_rename initiates rename state, copies item name, and defers model invalidation.
+    TEST_F(project_view_window_test, start_rename_file_initiates_rename_and_defers_invalidation)
+    {
+        // Setup: Create directory hierarchy with a test file
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_start_rename";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "notes.txt"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Notes",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Initiate inline rename for the file
+        const auto start_result = window.start_rename("notes.txt");
+
+        // Assert: Rename state is active, name buffered, and invalidation deferred
+        EXPECT_TRUE(start_result);
+        EXPECT_TRUE(window.is_renaming());
+        EXPECT_EQ(window.renaming_path(), "notes.txt");
+        EXPECT_EQ(window.rename_buffer(), "notes.txt");
+        EXPECT_TRUE(window.rename_error().empty());
+        EXPECT_TRUE(window.get_model().is_invalidation_deferred());
+    }
+
+    /// @brief Verifies that start_rename rejects mount roots, sub-assets, and non-existent paths.
+    TEST_F(project_view_window_test, start_rename_mount_root_and_sub_asset_rejected)
+    {
+        // Setup: Create directory with model file and sub-asset sidecar metadata
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_rename_rejections";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto mesh_path = base_dir / "cube.mesh";
+        ASSERT_TRUE(write_dummy_file(mesh_path));
+
+        auto meta = assets::sidecar_meta{};
+        meta.source_guid = guid::generate_random_guid();
+        meta.importer = "mesh_importer";
+        meta.sub_assets["mesh/cube_sub"] = guid::generate_random_guid();
+        meta.sub_asset_types["mesh/cube_sub"] = assets::asset_type_id::of<core::mesh>();
+        ASSERT_TRUE(meta.save_to_file((base_dir / "cube.mesh.tmeta").generic_string()));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Assets",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        model.expand_all();
+
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act & Assert: Mount root cannot be renamed
+        EXPECT_FALSE(window.start_rename("Assets"));
+        EXPECT_FALSE(window.is_renaming());
+
+        // Act & Assert: Sub-asset cannot be renamed
+        EXPECT_FALSE(window.start_rename("mesh/cube_sub"));
+        EXPECT_FALSE(window.is_renaming());
+
+        // Act & Assert: Non-existent path cannot be renamed
+        EXPECT_FALSE(window.start_rename("does_not_exist.txt"));
+        EXPECT_FALSE(window.is_renaming());
+    }
+
+    /// @brief Verifies rename name validation for emptiness, illegal characters, and sibling collisions.
+    TEST_F(project_view_window_test, validate_rename_name_character_and_collision_rules)
+    {
+        // Setup: Create physical directory structure with multiple siblings
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_validate_rules";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "target.txt"));
+        ASSERT_TRUE(write_dummy_file(base_dir / "sibling.txt"));
+        fs::create_directory(base_dir / "subfolder");
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Project",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Setup: Start renaming target.txt
+        ASSERT_TRUE(window.start_rename("target.txt"));
+
+        // Act & Assert: Empty and whitespace-only name validation errors
+        const auto empty_res = window.validate_rename_name("");
+        ASSERT_TRUE(empty_res.has_value());
+        EXPECT_EQ(*empty_res, "Name cannot be empty.");
+
+        const auto whitespace_res = window.validate_rename_name("   ");
+        ASSERT_TRUE(whitespace_res.has_value());
+        EXPECT_EQ(*whitespace_res, "Name cannot be empty.");
+
+        // Act & Assert: Illegal character validation errors
+        const auto illegal_chars = string_view{"/\\:*?\"<>|"};
+        for (const auto ch : illegal_chars)
+        {
+            auto bad_name = string{"bad"};
+            bad_name.push_back(ch);
+            bad_name.append("name.txt");
+            const auto illegal_res = window.validate_rename_name(bad_name);
+            ASSERT_TRUE(illegal_res.has_value());
+            EXPECT_EQ(*illegal_res, "Name contains illegal characters.");
+        }
+
+        // Act & Assert: Sibling file collision
+        const auto file_coll_res = window.validate_rename_name("sibling.txt");
+        ASSERT_TRUE(file_coll_res.has_value());
+        EXPECT_EQ(*file_coll_res, "An item with this name already exists.");
+
+        // Act & Assert: Sibling folder collision
+        const auto folder_coll_res = window.validate_rename_name("subfolder");
+        ASSERT_TRUE(folder_coll_res.has_value());
+        EXPECT_EQ(*folder_coll_res, "An item with this name already exists.");
+
+        // Act & Assert: Same name (unchanged) is valid
+        const auto same_res = window.validate_rename_name("target.txt");
+        EXPECT_FALSE(same_res.has_value());
+
+        // Act & Assert: New non-colliding name is valid
+        const auto valid_res = window.validate_rename_name("unique_new_target.txt");
+        EXPECT_FALSE(valid_res.has_value());
+    }
+
+    /// @brief Verifies that cancel_rename resets rename state and restores model invalidation.
+    TEST_F(project_view_window_test, cancel_rename_resets_state_and_restores_deferral)
+    {
+        // Setup: Create directory with file and start rename
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_cancel_rename";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "document.txt"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Docs",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        ASSERT_TRUE(window.start_rename("document.txt"));
+        window.set_rename_buffer("changed_draft.txt");
+        ASSERT_TRUE(window.is_renaming());
+        ASSERT_TRUE(window.get_model().is_invalidation_deferred());
+
+        // Act: Cancel renaming
+        window.cancel_rename();
+
+        // Assert: State is reset and invalidation deferral restored
+        EXPECT_FALSE(window.is_renaming());
+        EXPECT_TRUE(window.renaming_path().empty());
+        EXPECT_TRUE(window.rename_buffer().empty());
+        EXPECT_TRUE(window.rename_error().empty());
+        EXPECT_FALSE(window.get_model().is_invalidation_deferred());
+    }
+
+    /// @brief Verifies that commit_rename renames disk file, .tmeta sidecar, and updates model and selection.
+    TEST_F(project_view_window_test, commit_rename_renames_disk_files_and_sidecar_and_updates_model_and_selection)
+    {
+        // Setup: Create physical directory structure with file and sidecar
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_commit_rename";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto old_file_path = base_dir / "texture.png";
+        ASSERT_TRUE(write_dummy_file(old_file_path));
+
+        auto meta = assets::sidecar_meta{};
+        meta.source_guid = guid::generate_random_guid();
+        meta.importer = "texture_importer";
+        ASSERT_TRUE(meta.save_to_file((base_dir / "texture.png.tmeta").generic_string()));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Textures",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Setup: Select file and start rename
+        window.set_selected_path("texture.png");
+        EXPECT_EQ(window.selected_path(), "texture.png");
+
+        ASSERT_TRUE(window.start_rename("texture.png"));
+        window.set_rename_buffer("albedo_diffuse.png");
+
+        // Act: Commit rename
+        const auto commit_result = window.commit_rename();
+
+        // Assert: Rename committed cleanly
+        EXPECT_TRUE(commit_result);
+        EXPECT_FALSE(window.is_renaming());
+        EXPECT_FALSE(window.get_model().is_invalidation_deferred());
+
+        // Assert: Disk files and sidecars renamed
+        EXPECT_FALSE(fs::exists(base_dir / "texture.png"));
+        EXPECT_FALSE(fs::exists(base_dir / "texture.png.tmeta"));
+        EXPECT_TRUE(fs::exists(base_dir / "albedo_diffuse.png"));
+        EXPECT_TRUE(fs::exists(base_dir / "albedo_diffuse.png.tmeta"));
+
+        // Assert: Backing model reflects new path and removes old path
+        EXPECT_EQ(window.get_model().find_node_by_path("texture.png"), nullptr);
+        EXPECT_NE(window.get_model().find_node_by_path("albedo_diffuse.png"), nullptr);
+
+        // Assert: Active selection followed the renamed path
+        EXPECT_EQ(window.selected_path(), "albedo_diffuse.png");
+    }
+
+    /// @brief Verifies that commit_rename with unchanged name succeeds and preserves disk files.
+    TEST_F(project_view_window_test, commit_rename_with_same_name_cancels_and_succeeds)
+    {
+        // Setup: Create file and model
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_commit_same_name";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "unchanged.txt"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Root",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        ASSERT_TRUE(window.start_rename("unchanged.txt"));
+        EXPECT_EQ(window.rename_buffer(), "unchanged.txt");
+
+        // Act: Commit rename without changing buffer
+        const auto commit_res = window.commit_rename();
+
+        // Assert: Returns true and resets rename mode
+        EXPECT_TRUE(commit_res);
+        EXPECT_FALSE(window.is_renaming());
+        EXPECT_TRUE(fs::exists(base_dir / "unchanged.txt"));
+    }
+
+    /// @brief Verifies that commit_rename fails and sets error when validation fails on collision.
+    TEST_F(project_view_window_test, commit_rename_with_validation_error_fails_and_records_error)
+    {
+        // Setup: Create two sibling files
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_commit_error";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "alpha.txt"));
+        ASSERT_TRUE(write_dummy_file(base_dir / "beta.txt"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Letters",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        ASSERT_TRUE(window.start_rename("alpha.txt"));
+        window.set_rename_buffer("beta.txt"); // Conflicting name
+
+        // Act: Commit rename with conflict
+        const auto commit_res = window.commit_rename();
+
+        // Assert: Fails, remains in rename mode, records error
+        EXPECT_FALSE(commit_res);
+        EXPECT_TRUE(window.is_renaming());
+        EXPECT_EQ(window.rename_error(), "An item with this name already exists.");
+        EXPECT_TRUE(fs::exists(base_dir / "alpha.txt"));
+        EXPECT_TRUE(fs::exists(base_dir / "beta.txt"));
+    }
+
+    /// @brief Verifies headless ImGui draw execution during active rename with Escape cancellation.
+    TEST_F(project_view_window_test, headless_imgui_inline_rename_escape_cancels)
+    {
+        // Setup: Engine context, UI context, and window with test file
+        auto engine_ctx = editor_engine_context{};
+        const auto desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Rename Escape Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+
+        auto reg_info = engine_ctx.register_window(desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
+
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_ui_rename_escape";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "edit_file.txt"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Workspace",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        window.set_selected_path("edit_file.txt");
+        ASSERT_TRUE(window.start_rename("edit_file.txt"));
+        ASSERT_TRUE(window.is_renaming());
+
+        // Act: Render initial frame showing inline rename input widget
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+        EXPECT_TRUE(window.is_renaming());
+
+        // Act: Simulate Escape key press in next frame
+        auto& io = ImGui::GetIO();
+        io.AddKeyEvent(ImGuiKey_Escape, true);
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+        io.AddKeyEvent(ImGuiKey_Escape, false);
+
+        // Assert: Rename is cancelled and file unchanged
+        EXPECT_FALSE(window.is_renaming());
+        EXPECT_TRUE(fs::exists(base_dir / "edit_file.txt"));
+    }
+
+    /// @brief Verifies headless ImGui draw execution with F2 trigger and Enter commit.
+    TEST_F(project_view_window_test, headless_imgui_inline_rename_f2_shortcut_and_enter_commits)
+    {
+        // Setup: Engine context, UI context, and window with test file
+        auto engine_ctx = editor_engine_context{};
+        const auto desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Rename F2 and Enter Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+
+        auto reg_info = engine_ctx.register_window(desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
+
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_ui_rename_f2_enter";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "starting_name.txt"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Workspace",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        window.set_selected_path("starting_name.txt");
+
+        // Act: Simulate F2 shortcut to initiate rename
+        auto& io = ImGui::GetIO();
+        io.AddKeyEvent(ImGuiKey_F2, true);
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+        io.AddKeyEvent(ImGuiKey_F2, false);
+
+        // Assert: Inline rename started via F2
+        EXPECT_TRUE(window.is_renaming());
+        EXPECT_EQ(window.rename_buffer(), "starting_name.txt");
+
+        // Act: Update rename buffer with new name and settle focus
+        window.set_rename_buffer("completed_rename.txt");
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+
+        // Act: Press Enter to commit rename
+        io.AddKeyEvent(ImGuiKey_Enter, true);
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+        io.AddKeyEvent(ImGuiKey_Enter, false);
+
+        // Assert: Rename committed and disk reflects update
+        EXPECT_FALSE(window.is_renaming());
+        EXPECT_TRUE(fs::exists(base_dir / "completed_rename.txt"));
+        EXPECT_FALSE(fs::exists(base_dir / "starting_name.txt"));
+        EXPECT_EQ(window.selected_path(), "completed_rename.txt");
     }
 } // namespace tempest::editor::tests
