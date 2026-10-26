@@ -47,6 +47,28 @@ namespace tempest::editor
         static constexpr tree_node_kind default_selected_kind = tree_node_kind::directory;
         static constexpr bool default_show_dirty_dialog = false;
 
+        static constexpr string_view default_new_folder_name = "New Folder";
+        static constexpr string_view default_new_material_base_name = "New Material";
+        static constexpr string_view default_new_material_extension = ".tmaterial";
+        static constexpr string_view default_new_scene_base_name = "New Scene";
+        static constexpr string_view default_new_scene_extension = ".tscene";
+        static constexpr string_view default_material_importer = "material";
+        static constexpr size_t max_name_collision_attempts = 10000;
+
+        static constexpr string_view default_material_content =
+            "{\n"
+            "    \"shading_model\": \"openpbr\",\n"
+            "    \"base_color\": [1.0, 1.0, 1.0, 1.0],\n"
+            "    \"roughness\": 0.5,\n"
+            "    \"metallic\": 0.0\n"
+            "}\n";
+
+        static constexpr string_view default_scene_content =
+            "{\n"
+            "    \"version\": 1,\n"
+            "    \"entities\": []\n"
+            "}\n";
+
         /// @brief Constructs a project view window with required subsystem dependencies and optional asset database.
         /// @param in_scene_mgr Reference to the scene manager.
         /// @param in_selection Reference to the editor selection system.
@@ -341,6 +363,29 @@ namespace tempest::editor
         /// @return Error message string view if invalid, or nullopt if valid.
         [[nodiscard]] auto validate_rename_name(string_view new_name) const -> optional<string_view>;
 
+        // Asset & Folder Creation
+
+        /// @brief Creates a new folder on disk within the specified or inferred parent directory and activates inline rename.
+        /// @param parent_path Target directory or sibling item relative path. If empty, uses active selection or current directory.
+        /// @return True if folder was successfully created on disk and inline rename initiated, false on failure.
+        /// @pre If parent_path is non-empty, it must reference an existing path in the tree model; if empty, at least one mount root must be loaded.
+        /// @post Target folder is expanded, created on disk, added to model, selected, and inline rename active.
+        auto create_folder(string_view parent_path = {}) -> bool;
+
+        /// @brief Creates a new default material asset (.tmaterial and .tmeta) and activates inline rename.
+        /// @param parent_path Target directory or sibling item relative path. If empty, uses active selection or current directory.
+        /// @return True if material and sidecar metadata were successfully created and rename initiated, false on failure.
+        /// @pre If parent_path is non-empty, it must reference an existing path in the tree model; if empty, at least one mount root must be loaded.
+        /// @post Material and sidecar created on disk, added to model, selected, and inline rename active.
+        auto create_material(string_view parent_path = {}) -> bool;
+
+        /// @brief Creates a new default scene asset (.tscene) and activates inline rename.
+        /// @param parent_path Target directory or sibling item relative path. If empty, uses active selection or current directory.
+        /// @return True if scene document was successfully created on disk and inline rename initiated, false on failure.
+        /// @pre If parent_path is non-empty, it must reference an existing path in the tree model; if empty, at least one mount root must be loaded.
+        /// @post Scene document created on disk, added to model, selected, and inline rename active.
+        auto create_scene(string_view parent_path = {}) -> bool;
+
         // Dependency Accessors
 
         /// @brief Retrieves the mutable scene manager instance.
@@ -373,6 +418,10 @@ namespace tempest::editor
 
       private:
         [[nodiscard]] auto _find_target_node(string_view path) const -> const project_tree_node*;
+        [[nodiscard]] auto _resolve_target_folder_node(string_view parent_path) const -> const project_tree_node*;
+        auto _finish_creation(const project_tree_node& target_folder_node,
+                              const filesystem::path& new_disk_path,
+                              string_view unique_name) -> bool;
 
         project_tree_model _model;
         non_null<scene::scene_manager> _scene_mgr;

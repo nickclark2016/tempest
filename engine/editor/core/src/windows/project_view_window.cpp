@@ -8,11 +8,15 @@
 #include <tempest/editor_selection.hpp>
 #include <tempest/entity_hierarchy.hpp>
 #include <tempest/file_watcher.hpp>
+#include <tempest/files.hpp>
 #include <tempest/filesystem.hpp>
+#include <tempest/format.hpp>
 #include <tempest/material.hpp>
 #include <tempest/optional.hpp>
+#include <tempest/project_workspace.hpp>
 #include <tempest/render_target_asset.hpp>
 #include <tempest/scene/scene_manager.hpp>
+#include <tempest/span.hpp>
 #include <tempest/texture.hpp>
 #include <tempest/utility.hpp>
 #include <tempest/vertex.hpp>
@@ -189,6 +193,47 @@ namespace tempest::editor
 #else
             return lhs == rhs;
 #endif
+        }
+
+        auto generate_unique_item_name(const filesystem::path& target_disk_dir,
+                                       string_view base_name,
+                                       string_view extension = {}) -> string
+        {
+            auto candidate = string{base_name};
+            if (!extension.empty())
+            {
+                candidate.append(extension.data(), extension.size());
+            }
+
+            auto item_exists = [&](const string& name) -> bool {
+                if (filesystem::exists(target_disk_dir / filesystem::path{name}))
+                {
+                    return true;
+                }
+                auto meta_name = name;
+                meta_name.append(".tmeta");
+                if (filesystem::exists(target_disk_dir / filesystem::path{meta_name}))
+                {
+                    return true;
+                }
+                return false;
+            };
+
+            if (!item_exists(candidate))
+            {
+                return candidate;
+            }
+
+            for (auto counter = size_t{2}; counter < project_view_window::max_name_collision_attempts; ++counter)
+            {
+                candidate = tempest::format("{} {}{}", base_name, counter, extension);
+                if (!item_exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return candidate;
         }
     } // namespace
 
@@ -672,6 +717,24 @@ namespace tempest::editor
             }
         }
 
+        for (auto index = size_t{0}; index < path.size(); ++index)
+        {
+            if (path[index] == '/')
+            {
+                auto alt_path = string{path.data(), index};
+                alt_path.push_back(':');
+                if (index + 1 < path.size())
+                {
+                    alt_path.append(path.data() + index + 1, path.size() - index - 1);
+                }
+                const auto* alt_node = _model.find_node_by_path(alt_path);
+                if (alt_node != nullptr)
+                {
+                    return alt_node;
+                }
+            }
+        }
+
         return nullptr;
     }
 
@@ -937,6 +1000,220 @@ namespace tempest::editor
         return nullopt;
     }
 
+    auto project_view_window::_resolve_target_folder_node(string_view parent_path) const -> const project_tree_node*
+    {
+        auto climb_to_folder = [](const project_tree_node* start_node) -> const project_tree_node* {
+            auto* node = start_node;
+            while (node != nullptr && node->kind != tree_node_kind::directory &&
+                   node->kind != tree_node_kind::mount_root)
+            {
+                node = node->parent;
+            }
+            return node;
+        };
+
+        if (!parent_path.empty())
+        {
+            const auto* node = _find_target_node(parent_path);
+            if (node == nullptr)
+            {
+                return nullptr;
+            }
+            return climb_to_folder(node);
+        }
+
+        if (has_selection())
+        {
+            const auto* node = _find_target_node(_selected_path);
+            const auto* folder_node = climb_to_folder(node);
+            if (folder_node != nullptr)
+            {
+                return folder_node;
+            }
+        }
+
+        if (!_current_directory.empty())
+        {
+            const auto* node = _find_target_node(_current_directory);
+            const auto* folder_node = climb_to_folder(node);
+            if (folder_node != nullptr)
+            {
+                return folder_node;
+            }
+        }
+
+        for (const auto& root : _model.roots())
+        {
+            if (root)
+            {
+                return root.get();
+            }
+        }
+
+        return nullptr;
+    }
+
+    auto project_view_window::_finish_creation(const project_tree_node& target_folder_node,
+                                               const filesystem::path& new_disk_path,
+                                               string_view unique_name) -> bool
+    {
+        _model.set_expanded_by_path(target_folder_node.path, true);
+        _model.invalidate_path(new_disk_path);
+
+        auto new_relative_path = string{};
+        if (target_folder_node.kind == tree_node_kind::mount_root || target_folder_node.path.empty())
+        {
+            new_relative_path = string{unique_name};
+        }
+        else
+        {
+            new_relative_path = target_folder_node.path;
+            new_relative_path.push_back('/');
+            new_relative_path.append(unique_name.data(), unique_name.size());
+        }
+
+        set_selected_path(new_relative_path);
+        start_rename(new_relative_path);
+        return true;
+    }
+
+    auto project_view_window::create_folder(string_view parent_path) -> bool
+    {
+        if (_is_renaming)
+        {
+            cancel_rename();
+        }
+
+        const auto* target_folder_node = _resolve_target_folder_node(parent_path);
+        if (target_folder_node == nullptr)
+        {
+            return false;
+        }
+
+        auto target_disk_dir = filesystem::path{target_folder_node->disk_path};
+        if (target_disk_dir.empty())
+        {
+            target_disk_dir = filesystem::path{target_folder_node->path};
+        }
+        if (target_disk_dir.empty() || !filesystem::exists(target_disk_dir))
+        {
+            return false;
+        }
+        if (!filesystem::is_directory(target_disk_dir))
+        {
+            target_disk_dir = target_disk_dir.parent_path();
+        }
+
+        const auto unique_name = generate_unique_item_name(target_disk_dir, default_new_folder_name);
+        const auto new_disk_path = target_disk_dir / filesystem::path{unique_name};
+
+        if (!filesystem::create_directory(new_disk_path))
+        {
+            return false;
+        }
+
+        return _finish_creation(*target_folder_node, new_disk_path, unique_name);
+    }
+
+    auto project_view_window::create_material(string_view parent_path) -> bool
+    {
+        if (_is_renaming)
+        {
+            cancel_rename();
+        }
+
+        const auto* target_folder_node = _resolve_target_folder_node(parent_path);
+        if (target_folder_node == nullptr)
+        {
+            return false;
+        }
+
+        auto target_disk_dir = filesystem::path{target_folder_node->disk_path};
+        if (target_disk_dir.empty())
+        {
+            target_disk_dir = filesystem::path{target_folder_node->path};
+        }
+        if (target_disk_dir.empty() || !filesystem::exists(target_disk_dir))
+        {
+            return false;
+        }
+        if (!filesystem::is_directory(target_disk_dir))
+        {
+            target_disk_dir = target_disk_dir.parent_path();
+        }
+
+        const auto unique_name = generate_unique_item_name(target_disk_dir, default_new_material_base_name,
+                                                           default_new_material_extension);
+        const auto new_disk_path = target_disk_dir / filesystem::path{unique_name};
+
+        const auto mat_span = span<const byte>{
+            reinterpret_cast<const byte*>(default_material_content.data()),
+            default_material_content.size(),
+        };
+        const auto write_res = write_file_from_bytes(new_disk_path, mat_span);
+        if (!write_res.has_value())
+        {
+            return false;
+        }
+
+        auto meta = assets::sidecar_meta{};
+        meta.source_guid = guid::generate_random_guid();
+        meta.importer = default_material_importer;
+        auto meta_path_str = new_disk_path.generic_string();
+        meta_path_str.append(".tmeta");
+        if (!meta.save_to_file(meta_path_str))
+        {
+            filesystem::remove(new_disk_path);
+            return false;
+        }
+
+        return _finish_creation(*target_folder_node, new_disk_path, unique_name);
+    }
+
+    auto project_view_window::create_scene(string_view parent_path) -> bool
+    {
+        if (_is_renaming)
+        {
+            cancel_rename();
+        }
+
+        const auto* target_folder_node = _resolve_target_folder_node(parent_path);
+        if (target_folder_node == nullptr)
+        {
+            return false;
+        }
+
+        auto target_disk_dir = filesystem::path{target_folder_node->disk_path};
+        if (target_disk_dir.empty())
+        {
+            target_disk_dir = filesystem::path{target_folder_node->path};
+        }
+        if (target_disk_dir.empty() || !filesystem::exists(target_disk_dir))
+        {
+            return false;
+        }
+        if (!filesystem::is_directory(target_disk_dir))
+        {
+            target_disk_dir = target_disk_dir.parent_path();
+        }
+
+        const auto unique_name =
+            generate_unique_item_name(target_disk_dir, default_new_scene_base_name, default_new_scene_extension);
+        const auto new_disk_path = target_disk_dir / filesystem::path{unique_name};
+
+        const auto scene_span = span<const byte>{
+            reinterpret_cast<const byte*>(default_scene_content.data()),
+            default_scene_content.size(),
+        };
+        const auto write_res = write_file_from_bytes(new_disk_path, scene_span);
+        if (!write_res.has_value())
+        {
+            return false;
+        }
+
+        return _finish_creation(*target_folder_node, new_disk_path, unique_name);
+    }
+
     auto project_view_window::draw() -> void
     {
         if (!_open)
@@ -1020,6 +1297,7 @@ namespace tempest::editor
                 auto pending_toggle_open = false;
                 auto has_pending_toggle = false;
                 auto rename_committed = false;
+                auto action_triggered = false;
 
                 while (clipper.Step())
                 {
@@ -1168,6 +1446,48 @@ namespace tempest::editor
                             {
                                 activate_item(row);
                             }
+
+                            if (ImGui::BeginPopupContextItem())
+                            {
+                                if (_selected_path != row_path)
+                                {
+                                    set_selected_path(row_path);
+                                    if (row.kind == tree_node_kind::directory || row.kind == tree_node_kind::mount_root)
+                                    {
+                                        _current_directory = string{row_path};
+                                    }
+                                }
+
+                                if (ImGui::BeginMenu("Create"))
+                                {
+                                    if (ImGui::MenuItem("Folder"))
+                                    {
+                                        create_folder(row_path);
+                                        action_triggered = true;
+                                    }
+                                    if (ImGui::MenuItem("Material"))
+                                    {
+                                        create_material(row_path);
+                                        action_triggered = true;
+                                    }
+                                    if (ImGui::MenuItem("Scene"))
+                                    {
+                                        create_scene(row_path);
+                                        action_triggered = true;
+                                    }
+                                    ImGui::EndMenu();
+                                }
+
+                                if (row.kind != tree_node_kind::mount_root && row.kind != tree_node_kind::sub_asset)
+                                {
+                                    if (ImGui::MenuItem("Rename", "F2"))
+                                    {
+                                        start_rename(row_path);
+                                    }
+                                }
+
+                                ImGui::EndPopup();
+                            }
                         }
 
                         if (indent_px > 0.0F)
@@ -1177,13 +1497,13 @@ namespace tempest::editor
 
                         ImGui::PopID();
 
-                        if (rename_committed)
+                        if (rename_committed || action_triggered)
                         {
                             break;
                         }
                     }
 
-                    if (rename_committed)
+                    if (rename_committed || action_triggered)
                     {
                         break;
                     }
@@ -1193,6 +1513,28 @@ namespace tempest::editor
                 if (has_pending_toggle)
                 {
                     _model.set_expanded_by_path(pending_toggle_path, pending_toggle_open);
+                }
+
+                if (ImGui::BeginPopupContextWindow("##ProjectViewBackgroundContext",
+                                                   ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
+                {
+                    if (ImGui::BeginMenu("Create"))
+                    {
+                        if (ImGui::MenuItem("Folder"))
+                        {
+                            create_folder();
+                        }
+                        if (ImGui::MenuItem("Material"))
+                        {
+                            create_material();
+                        }
+                        if (ImGui::MenuItem("Scene"))
+                        {
+                            create_scene();
+                        }
+                        ImGui::EndMenu();
+                    }
+                    ImGui::EndPopup();
                 }
             }
             ImGui::EndChild();

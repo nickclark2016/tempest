@@ -12,6 +12,7 @@
 #include <tempest/files.hpp>
 #include <tempest/filesystem.hpp>
 #include <tempest/material.hpp>
+#include <tempest/project_workspace.hpp>
 #include <tempest/scene/scene_manager.hpp>
 #include <tempest/span.hpp>
 #include <tempest/texture.hpp>
@@ -1505,5 +1506,460 @@ namespace tempest::editor::tests
         EXPECT_TRUE(fs::exists(base_dir / "completed_rename.txt"));
         EXPECT_FALSE(fs::exists(base_dir / "starting_name.txt"));
         EXPECT_EQ(window.selected_path(), "completed_rename.txt");
+    }
+
+    // ============================================================================
+    // Asset & Folder Creation Tests
+    // ============================================================================
+
+    /// @brief Verifies that create_folder in mount root creates the directory on disk,
+    /// adds the node to the tree, selects it, and initiates inline rename.
+    TEST_F(project_view_window_test, create_folder_in_mount_root_creates_and_initiates_rename)
+    {
+        // Setup: Create directory hierarchy and mount point
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_create_folder_root";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Assets",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Create new folder in mount root
+        const auto create_res = window.create_folder();
+
+        // Assert: Folder created on disk and in tree, selected, and rename initiated
+        EXPECT_TRUE(create_res);
+        EXPECT_TRUE(fs::exists(base_dir / "New Folder"));
+        EXPECT_TRUE(fs::is_directory(base_dir / "New Folder"));
+
+        const auto* new_node = window.get_model().find_node_by_path("New Folder");
+        ASSERT_NE(new_node, nullptr);
+        EXPECT_EQ(new_node->kind, tree_node_kind::directory);
+        EXPECT_EQ(window.selected_path(), "New Folder");
+        EXPECT_TRUE(window.is_renaming());
+        EXPECT_EQ(window.renaming_path(), "New Folder");
+        EXPECT_EQ(window.rename_buffer(), "New Folder");
+    }
+
+    /// @brief Verifies that create_folder in a subfolder expands the parent directory,
+    /// creates the subdirectory on disk, selects it, and initiates inline rename.
+    TEST_F(project_view_window_test, create_folder_in_subfolder_expands_parent_and_initiates_rename)
+    {
+        // Setup: Create base directory with an existing subfolder
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_create_folder_subfolder";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        fs::create_directory(base_dir / "models");
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Workspace",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Setup: Confirm models directory is initially collapsed
+        const auto* parent_before = window.get_model().find_node_by_path("models");
+        ASSERT_NE(parent_before, nullptr);
+        EXPECT_FALSE(parent_before->is_expanded);
+
+        // Act: Create folder targeting models subdirectory
+        const auto create_res = window.create_folder("models");
+
+        // Assert: Parent expanded and child created under models
+        EXPECT_TRUE(create_res);
+        EXPECT_TRUE(fs::exists(base_dir / "models" / "New Folder"));
+        EXPECT_TRUE(fs::is_directory(base_dir / "models" / "New Folder"));
+
+        const auto* parent_after = window.get_model().find_node_by_path("models");
+        ASSERT_NE(parent_after, nullptr);
+        EXPECT_TRUE(parent_after->is_expanded);
+
+        const auto* new_node = window.get_model().find_node_by_path("models/New Folder");
+        ASSERT_NE(new_node, nullptr);
+        EXPECT_EQ(new_node->kind, tree_node_kind::directory);
+        EXPECT_EQ(window.selected_path(), "models/New Folder");
+        EXPECT_TRUE(window.is_renaming());
+        EXPECT_EQ(window.renaming_path(), "models/New Folder");
+        EXPECT_EQ(window.rename_buffer(), "New Folder");
+    }
+
+    /// @brief Verifies collision deduplication when creating a folder where "New Folder" already exists.
+    TEST_F(project_view_window_test, create_folder_collision_deduplication)
+    {
+        // Setup: Pre-create "New Folder" in target directory
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_create_folder_collision";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        fs::create_directory(base_dir / "New Folder");
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Root",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Create another folder in mount root
+        const auto create_res = window.create_folder();
+
+        // Assert: "New Folder 2" is created and selected
+        EXPECT_TRUE(create_res);
+        EXPECT_TRUE(fs::exists(base_dir / "New Folder"));
+        EXPECT_TRUE(fs::exists(base_dir / "New Folder 2"));
+        EXPECT_TRUE(fs::is_directory(base_dir / "New Folder 2"));
+
+        const auto* new_node = window.get_model().find_node_by_path("New Folder 2");
+        ASSERT_NE(new_node, nullptr);
+        EXPECT_EQ(window.selected_path(), "New Folder 2");
+        EXPECT_TRUE(window.is_renaming());
+        EXPECT_EQ(window.renaming_path(), "New Folder 2");
+        EXPECT_EQ(window.rename_buffer(), "New Folder 2");
+    }
+
+    /// @brief Verifies that calling create_folder with a file path creates the folder in the file's parent directory.
+    TEST_F(project_view_window_test, create_folder_with_file_parent_path_resolves_to_parent_directory)
+    {
+        // Setup: Create directory with subfolder and a file in the subfolder
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_create_folder_file_parent";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        fs::create_directory(base_dir / "textures");
+        ASSERT_TRUE(write_dummy_file(base_dir / "textures" / "albedo.png"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Project",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Call create_folder targeting the file path
+        const auto create_res = window.create_folder("textures/albedo.png");
+
+        // Assert: Folder created in "textures" directory (parent of albedo.png)
+        EXPECT_TRUE(create_res);
+        EXPECT_TRUE(fs::exists(base_dir / "textures" / "New Folder"));
+        EXPECT_EQ(window.selected_path(), "textures/New Folder");
+        EXPECT_TRUE(window.is_renaming());
+        EXPECT_EQ(window.renaming_path(), "textures/New Folder");
+    }
+
+    /// @brief Verifies that calling create_folder targeting a sub-asset path resolves
+    /// to the containing directory instead of creating a folder inside an imported file.
+    TEST_F(project_view_window_test, create_folder_with_sub_asset_parent_resolves_to_ancestor_directory)
+    {
+        // Setup: Create directory with model file and sub-asset metadata
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_create_folder_sub_asset";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto mesh_path = base_dir / "cube.mesh";
+        ASSERT_TRUE(write_dummy_file(mesh_path));
+
+        auto meta = assets::sidecar_meta{};
+        meta.source_guid = guid::generate_random_guid();
+        meta.importer = "mesh_importer";
+        meta.sub_assets["mesh/0"] = guid::generate_random_guid();
+        meta.sub_asset_types["mesh/0"] = assets::asset_type_id::of<core::mesh>();
+        ASSERT_TRUE(meta.save_to_file((base_dir / "cube.mesh.tmeta").generic_string()));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Project",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        model.expand_all();
+
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Call create_folder with sub-asset path
+        const auto create_res = window.create_folder("cube.mesh/mesh/0");
+
+        // Assert: Folder created in base_dir (directory containing cube.mesh), NOT inside cube.mesh
+        EXPECT_TRUE(create_res);
+        EXPECT_TRUE(fs::exists(base_dir / "New Folder"));
+        EXPECT_TRUE(fs::is_directory(base_dir / "New Folder"));
+        EXPECT_FALSE(fs::exists(base_dir / "cube.mesh" / "New Folder"));
+        EXPECT_EQ(window.selected_path(), "New Folder");
+        EXPECT_TRUE(window.is_renaming());
+        EXPECT_EQ(window.renaming_path(), "New Folder");
+    }
+
+    /// @brief Verifies that calling create_folder with a non-existent explicit parent path fails
+    /// and does not create folders in the root or any fallback directory.
+    TEST_F(project_view_window_test, create_folder_with_nonexistent_explicit_parent_path_fails)
+    {
+        // Setup: Create base directory and mount point
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_create_folder_nonexistent_parent";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Project",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Call create_folder with non-existent explicit path
+        const auto create_res = window.create_folder("invalid/non_existent_folder");
+
+        // Assert: Creation fails and nothing is created in the root
+        EXPECT_FALSE(create_res);
+        EXPECT_FALSE(fs::exists(base_dir / "New Folder"));
+        EXPECT_FALSE(fs::exists(base_dir / "invalid"));
+        EXPECT_FALSE(window.is_renaming());
+    }
+
+    /// @brief Verifies that create_material creates both the .tmaterial asset and .tmeta sidecar
+    /// with a valid GUID, adds the node to the tree, selects it, and initiates inline rename.
+    TEST_F(project_view_window_test, create_material_creates_asset_and_sidecar)
+    {
+        // Setup: Create base directory and mount point
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_create_material";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Materials",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Create new material
+        const auto create_res = window.create_material();
+
+        // Assert: .tmaterial and .tmeta exist on disk
+        EXPECT_TRUE(create_res);
+        const auto mat_disk_path = base_dir / "New Material.tmaterial";
+        const auto meta_disk_path = base_dir / "New Material.tmaterial.tmeta";
+        EXPECT_TRUE(fs::exists(mat_disk_path));
+        EXPECT_TRUE(fs::exists(meta_disk_path));
+
+        // Assert: Material content contains openpbr shading model
+        const auto mat_content = read_file_to_string(mat_disk_path);
+        ASSERT_TRUE(mat_content.has_value());
+        EXPECT_TRUE(tempest::contains(string_view{*mat_content}, "openpbr"));
+
+        // Assert: Sidecar metadata is valid with non-null GUID and material importer
+        const auto meta_opt = assets::sidecar_meta::load_from_file(meta_disk_path.generic_string());
+        ASSERT_TRUE(meta_opt.has_value());
+        EXPECT_NE(meta_opt->source_guid, guid{});
+        EXPECT_EQ(meta_opt->importer, "material");
+
+        // Assert: Model and window state
+        const auto* new_node = window.get_model().find_node_by_path("New Material.tmaterial");
+        ASSERT_NE(new_node, nullptr);
+        EXPECT_EQ(new_node->kind, tree_node_kind::imported_file);
+        EXPECT_EQ(new_node->asset_id, meta_opt->source_guid);
+        EXPECT_EQ(window.selected_path(), "New Material.tmaterial");
+        EXPECT_TRUE(window.is_renaming());
+        EXPECT_EQ(window.renaming_path(), "New Material.tmaterial");
+        EXPECT_EQ(window.rename_buffer(), "New Material.tmaterial");
+    }
+
+    /// @brief Verifies collision deduplication when creating a material where "New Material.tmaterial" exists.
+    TEST_F(project_view_window_test, create_material_collision_deduplication)
+    {
+        // Setup: Pre-create "New Material.tmaterial" and its sidecar
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_create_material_collision";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "New Material.tmaterial"));
+
+        auto existing_meta = assets::sidecar_meta{};
+        existing_meta.source_guid = guid::generate_random_guid();
+        existing_meta.importer = "material";
+        ASSERT_TRUE(existing_meta.save_to_file((base_dir / "New Material.tmaterial.tmeta").generic_string()));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Materials",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Create another material
+        const auto create_res = window.create_material();
+
+        // Assert: "New Material 2.tmaterial" and sidecar created
+        EXPECT_TRUE(create_res);
+        EXPECT_TRUE(fs::exists(base_dir / "New Material 2.tmaterial"));
+        EXPECT_TRUE(fs::exists(base_dir / "New Material 2.tmaterial.tmeta"));
+
+        const auto* new_node = window.get_model().find_node_by_path("New Material 2.tmaterial");
+        ASSERT_NE(new_node, nullptr);
+        EXPECT_EQ(window.selected_path(), "New Material 2.tmaterial");
+        EXPECT_TRUE(window.is_renaming());
+        EXPECT_EQ(window.renaming_path(), "New Material 2.tmaterial");
+        EXPECT_EQ(window.rename_buffer(), "New Material 2.tmaterial");
+    }
+
+    /// @brief Verifies that create_scene creates a .tscene file with valid JSON structure,
+    /// adds the node to the tree, selects it, and initiates inline rename.
+    TEST_F(project_view_window_test, create_scene_creates_valid_json_structure)
+    {
+        // Setup: Create base directory and mount point
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_create_scene";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Scenes",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Create new scene
+        const auto create_res = window.create_scene();
+
+        // Assert: .tscene exists on disk
+        EXPECT_TRUE(create_res);
+        const auto scene_disk_path = base_dir / "New Scene.tscene";
+        EXPECT_TRUE(fs::exists(scene_disk_path));
+
+        // Assert: Scene contains version and entities list
+        const auto scene_content = read_file_to_string(scene_disk_path);
+        ASSERT_TRUE(scene_content.has_value());
+        EXPECT_TRUE(tempest::contains(string_view{*scene_content}, "\"version\": 1"));
+        EXPECT_TRUE(tempest::contains(string_view{*scene_content}, "\"entities\": []"));
+
+        // Assert: Model and window state
+        const auto* new_node = window.get_model().find_node_by_path("New Scene.tscene");
+        ASSERT_NE(new_node, nullptr);
+        EXPECT_EQ(window.selected_path(), "New Scene.tscene");
+        EXPECT_TRUE(window.is_renaming());
+        EXPECT_EQ(window.renaming_path(), "New Scene.tscene");
+        EXPECT_EQ(window.rename_buffer(), "New Scene.tscene");
+    }
+
+    /// @brief Verifies collision deduplication when creating a scene where "New Scene.tscene" exists.
+    TEST_F(project_view_window_test, create_scene_collision_deduplication)
+    {
+        // Setup: Pre-create "New Scene.tscene"
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_create_scene_collision";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "New Scene.tscene"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Scenes",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Create another scene
+        const auto create_res = window.create_scene();
+
+        // Assert: "New Scene 2.tscene" created
+        EXPECT_TRUE(create_res);
+        EXPECT_TRUE(fs::exists(base_dir / "New Scene 2.tscene"));
+
+        const auto* new_node = window.get_model().find_node_by_path("New Scene 2.tscene");
+        ASSERT_NE(new_node, nullptr);
+        EXPECT_EQ(window.selected_path(), "New Scene 2.tscene");
+        EXPECT_TRUE(window.is_renaming());
+        EXPECT_EQ(window.renaming_path(), "New Scene 2.tscene");
+        EXPECT_EQ(window.rename_buffer(), "New Scene 2.tscene");
+    }
+
+    /// @brief Verifies that creation APIs return false when the tree model has no roots.
+    TEST_F(project_view_window_test, create_fails_when_no_roots_configured)
+    {
+        // Setup: Empty tree model with no mounts
+        auto model = project_tree_model{};
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act & Assert: All creation methods fail gracefully
+        EXPECT_FALSE(window.create_folder());
+        EXPECT_FALSE(window.create_material());
+        EXPECT_FALSE(window.create_scene());
+    }
+
+    /// @brief Verifies headless ImGui context menu execution and creation triggering.
+    TEST_F(project_view_window_test, headless_imgui_context_menu_rendering_and_creation)
+    {
+        // Setup: Engine context, UI context, and window with mount
+        auto engine_ctx = editor_engine_context{};
+        const auto desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Context Menu Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+
+        auto reg_info = engine_ctx.register_window(desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
+
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_ui_context_menu";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "existing_doc.txt"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Project",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Render initial frame
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+
+        // Act: Open empty-space context menu and render frame
+        ui_ctx.begin_ui_commands();
+        ImGui::OpenPopup("##ProjectViewBackgroundContext");
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+
+        // Act: Trigger folder creation via window API
+        const auto create_res = window.create_folder();
+        EXPECT_TRUE(create_res);
+        EXPECT_TRUE(window.is_renaming());
+
+        // Act: Render frame with inline rename active from creation
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+
+        // Assert: New Folder exists on disk and in selection
+        EXPECT_TRUE(fs::exists(base_dir / "New Folder"));
+        EXPECT_EQ(window.selected_path(), "New Folder");
     }
 } // namespace tempest::editor::tests
