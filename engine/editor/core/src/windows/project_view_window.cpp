@@ -13,6 +13,7 @@
 #include <tempest/format.hpp>
 #include <tempest/material.hpp>
 #include <tempest/optional.hpp>
+#include <tempest/payloads/asset_payload.hpp>
 #include <tempest/project_workspace.hpp>
 #include <tempest/render_target_asset.hpp>
 #include <tempest/scene/scene_manager.hpp>
@@ -1854,6 +1855,79 @@ namespace tempest::editor
                             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                             {
                                 activate_item(row);
+                            }
+
+                            if (row.kind != tree_node_kind::directory && row.kind != tree_node_kind::mount_root)
+                            {
+                                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+                                {
+                                    auto payload = asset_payload{};
+                                    payload.asset_guid = row.asset_id;
+                                    payload.type_hash = row.type.hash();
+                                    if (row.node != nullptr)
+                                    {
+                                        payload.set_path(row.node->disk_path.empty() ? row.relative_path
+                                                                                     : string_view{row.node->disk_path});
+                                        if (!row.node->sub_asset_key.empty())
+                                        {
+                                            payload.set_sub_asset_key(row.node->sub_asset_key);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        payload.set_path(row.relative_path);
+                                    }
+
+                                    const auto* asset_db = _resolve_asset_database();
+                                    if (payload.asset_guid == guid{} && asset_db != nullptr)
+                                    {
+                                        const auto* entry = asset_db->find_by_path(payload.path_view());
+                                        if (entry != nullptr)
+                                        {
+                                            payload.asset_guid = entry->id;
+                                            if (payload.type_hash == 0)
+                                            {
+                                                payload.type_hash = entry->type.hash();
+                                            }
+                                        }
+                                    }
+
+                                    if (asset_db != nullptr && asset_db->type_registry() != nullptr && row.type.hash() != 0)
+                                    {
+                                        const auto name_opt = asset_db->type_registry()->name_of(row.type);
+                                        if (name_opt.has_value())
+                                        {
+                                            payload.set_type_name(*name_opt);
+                                        }
+                                    }
+
+                                    if (payload.type_name_view().empty())
+                                    {
+                                        if (row.type == assets::asset_type_id::of<core::material>() ||
+                                            tempest::ends_with(row.relative_path, ".tmaterial") ||
+                                            (row.node != nullptr && tempest::ends_with(row.node->disk_path, ".tmaterial")) ||
+                                            (row.node != nullptr && tempest::starts_with(row.node->sub_asset_key, "material")))
+                                        {
+                                            payload.set_type_name("material");
+                                        }
+                                        else if (row.type == assets::asset_type_id::of<assets::entity_hierarchy>() ||
+                                                 tempest::ends_with(row.relative_path, ".tprefab") ||
+                                                 (row.node != nullptr && tempest::ends_with(row.node->disk_path, ".tprefab")) ||
+                                                 tempest::ends_with(row.relative_path, ".gltf") ||
+                                                 tempest::ends_with(row.relative_path, ".glb") ||
+                                                 (row.node != nullptr && tempest::starts_with(row.node->sub_asset_key, "prefab")))
+                                        {
+                                            payload.set_type_name("prefab");
+                                        }
+                                    }
+
+                                    ImGui::SetDragDropPayload(asset_payload_type, &payload, sizeof(payload));
+                                    const auto drag_label = (row.node != nullptr && !row.node->name.empty())
+                                                                ? string_view{row.node->name}
+                                                                : row.display_label;
+                                    ImGui::Text("%.*s", static_cast<int>(drag_label.size()), drag_label.data());
+                                    ImGui::EndDragDropSource();
+                                }
                             }
 
                             if (ImGui::BeginPopupContextItem())

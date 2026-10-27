@@ -217,10 +217,11 @@ namespace tempest::editor::tests
             const auto dyn1 = reg.create();
             reg.name(dyn1, "Dynamic Entity 1");
 
-            auto hierarchy = hierarchy_window{reg, &scene_mgr, &selection};
+            auto log = logger{};
+            auto hierarchy = hierarchy_window{reg, scene_mgr, selection, log};
             EXPECT_EQ(hierarchy.desired_initial_dock(), editor_window::dock_location::left);
             EXPECT_EQ(hierarchy.window_name(), "Hierarchy");
-            EXPECT_TRUE(hierarchy.selected_entity == ecs::null);
+            EXPECT_TRUE(hierarchy.get_selected_entity() == ecs::null);
 
             ui_ctx.begin_ui_commands();
             EXPECT_NO_THROW(hierarchy.draw());
@@ -724,7 +725,8 @@ namespace tempest::editor::tests
             const auto camera_ent = scene_mgr.create_entity(scene, "Camera");
             EXPECT_EQ(static_cast<uint32_t>(camera_ent), 0U);
 
-            auto hierarchy = hierarchy_window{reg, &scene_mgr, &selection};
+            auto log = logger{};
+            auto hierarchy = hierarchy_window{reg, scene_mgr, selection, log};
 
             // First verify that the ImGui IDs computed for the scene header and the camera entity differ inside "Hierarchy"
             ui_ctx.begin_ui_commands();

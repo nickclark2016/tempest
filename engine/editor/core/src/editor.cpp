@@ -53,7 +53,7 @@ namespace tempest::editor
             {
                 auto& entities = _ctx->get_entities();
                 const auto created = entities.create();
-                _hierarchy->selected_entity = created;
+                _hierarchy->set_selected_entity(created);
             }
 
           private:
@@ -350,7 +350,7 @@ namespace tempest::editor
               ctx.get_entities(), &ctx.get_scene_manager(), &_selection, &_history, nullptr,
               &ctx.get_events(), nullptr, &ctx.get_play_mode_controller().get_session_diff()))},
           _hierarchy_view{register_window(make_unique<hierarchy_window>(
-              ctx.get_entities(), &ctx.get_scene_manager(), &_selection, &_history,
+              ctx.get_entities(), ctx.get_scene_manager(), _selection, ctx.get_logger(), &_history,
               &ctx.get_play_mode_controller().get_session_diff()))},
           _viewport_view{register_window(make_unique<viewport_window>(ctx))},
           _log_view{register_window(make_unique<log_view_window>(ctx.get_log_store()))},

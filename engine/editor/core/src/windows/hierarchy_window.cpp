@@ -1,35 +1,49 @@
 #include <tempest/windows/hierarchy_window.hpp>
 
 #include <tempest/algorithm.hpp>
+#include <tempest/asset_database.hpp>
+#include <tempest/command_history.hpp>
+#include <tempest/commands/entity_commands.hpp>
+#include <tempest/editor_command.hpp>
+#include <tempest/entity_hierarchy.hpp>
 #include <tempest/format.hpp>
+#include <tempest/logger.hpp>
+#include <tempest/material.hpp>
 #include <tempest/math_utils.hpp>
+#include <tempest/payloads/asset_payload.hpp>
 #include <tempest/play_session_diff.hpp>
+#include <tempest/scene/prefab_cache.hpp>
+#include <tempest/scene/scene_entity_component.hpp>
 #include <tempest/utility.hpp>
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 namespace tempest::editor
 {
-    hierarchy_window::hierarchy_window(ecs::archetype_registry& registry, scene::scene_manager* in_scene_mgr,
-                                       editor_selection* in_selection, command_history* in_history,
-                                       const play_session_diff* in_session_diff)
-        : entity_registry{&registry}, scene_mgr{in_scene_mgr}, selection{in_selection}, history{in_history},
-          session_diff{in_session_diff}
+    hierarchy_window::hierarchy_window(ecs::archetype_registry& registry, scene::scene_manager& in_scene_mgr,
+                                       editor_selection& in_selection, logger& in_logger,
+                                       command_history* in_history,
+                                       const play_session_diff* in_session_diff,
+                                       scene::prefab_cache* in_prefab_cache,
+                                       assets::asset_database* in_asset_db)
+        : _entity_registry{registry}, _scene_mgr{in_scene_mgr}, _selection{in_selection}, _log{in_logger},
+          _history{in_history}, _session_diff{in_session_diff}, _prefab_cache{in_prefab_cache}, _asset_db{in_asset_db}
     {
-        if (scene_mgr == nullptr)
+        if (_prefab_cache == nullptr)
         {
-            _owned_scene_mgr = make_unique<scene::scene_manager>(registry);
-            scene_mgr = _owned_scene_mgr.get();
+            _owned_prefab_cache = make_unique<scene::prefab_cache>();
+            _prefab_cache = _owned_prefab_cache.get();
         }
 
-        _cache.attach_event_registry(registry.event_registry());
+        _cache.attach_event_registry(_entity_registry->event_registry());
 
         _entity_destroyed_sub =
-            registry.event_registry().dispatcher<ecs::entity_destroyed_event<ecs::entity>>().subscribe(
+            _entity_registry->event_registry().dispatcher<ecs::entity_destroyed_event<ecs::entity>>().subscribe(
                 [this](const ecs::entity_destroyed_event<ecs::entity>& evt) {
-                    if (selected_entity == evt.entity)
+                    if (_selected_entity == evt.entity)
                     {
-                        selected_entity = default_selected_entity;
+                        _selected_entity = default_selected_entity;
                     }
                     if (_anchor_entity == evt.entity)
                     {
@@ -45,11 +59,10 @@ namespace tempest::editor
 
     hierarchy_window::~hierarchy_window()
     {
-        if (entity_registry != nullptr &&
-            _entity_destroyed_sub != event::null_subscription<ecs::entity_destroyed_event<ecs::entity>>)
+        if (_entity_destroyed_sub != event::null_subscription<ecs::entity_destroyed_event<ecs::entity>>)
         {
             [[maybe_unused]] const auto unsub =
-                entity_registry->event_registry()
+                _entity_registry->event_registry()
                     .dispatcher<ecs::entity_destroyed_event<ecs::entity>>()
                     .unsubscribe(_entity_destroyed_sub);
             _entity_destroyed_sub = {};
@@ -66,17 +79,220 @@ namespace tempest::editor
         return "Hierarchy";
     }
 
+    auto hierarchy_window::_resolve_prefab_cache() noexcept -> scene::prefab_cache*
+    {
+        return _prefab_cache;
+    }
+
+    auto hierarchy_window::_resolve_asset_database() const noexcept -> assets::asset_database*
+    {
+        if (_asset_db != nullptr)
+        {
+            return _asset_db;
+        }
+        return _scene_mgr->get_asset_database();
+    }
+
+    auto hierarchy_window::_deduce_asset_kind(const asset_payload& payload) const noexcept -> dropped_asset_kind
+    {
+        const auto type_name = payload.type_name_view();
+        if (type_name == "prefab" || type_name == "model" || type_name == "entity_hierarchy")
+        {
+            return dropped_asset_kind::prefab;
+        }
+        if (type_name == "material")
+        {
+            return dropped_asset_kind::material;
+        }
+
+        if (payload.type_hash != 0)
+        {
+            if (payload.type_hash == assets::asset_type_id::of<assets::entity_hierarchy>().hash())
+            {
+                return dropped_asset_kind::prefab;
+            }
+            if (payload.type_hash == assets::asset_type_id::of<core::material>().hash())
+            {
+                return dropped_asset_kind::material;
+            }
+        }
+
+        const auto path = payload.path_view();
+        if (tempest::ends_with(path, ".tprefab") || tempest::ends_with(path, ".gltf") ||
+            tempest::ends_with(path, ".glb"))
+        {
+            return dropped_asset_kind::prefab;
+        }
+        if (tempest::ends_with(path, ".tmaterial") || tempest::ends_with(path, ".mat"))
+        {
+            return dropped_asset_kind::material;
+        }
+
+        const auto sub_key = payload.sub_asset_key_view();
+        if (tempest::starts_with(sub_key, "prefab") || tempest::starts_with(sub_key, "model"))
+        {
+            return dropped_asset_kind::prefab;
+        }
+        if (tempest::starts_with(sub_key, "material"))
+        {
+            return dropped_asset_kind::material;
+        }
+
+        const auto* const db = _resolve_asset_database();
+        if (db != nullptr)
+        {
+            const auto* entry = db->find_by_guid(payload.asset_guid);
+            if (entry == nullptr && !path.empty())
+            {
+                entry = db->find_by_path(path);
+            }
+            if (entry != nullptr)
+            {
+                if (entry->type == assets::asset_type_id::of<assets::entity_hierarchy>())
+                {
+                    return dropped_asset_kind::prefab;
+                }
+                if (entry->type == assets::asset_type_id::of<core::material>())
+                {
+                    return dropped_asset_kind::material;
+                }
+            }
+        }
+
+        if (_prefab_cache != nullptr && _prefab_cache->has_template(payload.asset_guid))
+        {
+            return dropped_asset_kind::prefab;
+        }
+
+        return dropped_asset_kind::unknown;
+    }
+
+    auto hierarchy_window::handle_asset_drop_on_entity(ecs::entity target_entity, const asset_payload& payload) -> bool
+    {
+        if (!_entity_registry->is_valid(target_entity))
+        {
+            return false;
+        }
+
+        const auto kind = _deduce_asset_kind(payload);
+        if (kind == dropped_asset_kind::prefab)
+        {
+            auto cmd_ctx = command_context{
+                .registry = *_entity_registry,
+                .scene_manager = *_scene_mgr,
+                .prefab_cache = _resolve_prefab_cache(),
+                .events = &_entity_registry->event_registry(),
+                .log = _log.get(),
+            };
+
+            const auto parent_addr = compute_entity_address(*_entity_registry, target_entity);
+            auto inst_cmd = make_unique<instantiate_prefab_command>(payload.asset_guid, parent_addr);
+            const auto* const cmd_ptr = inst_cmd.get();
+            if (_history != nullptr)
+            {
+                _history->execute(tempest::move(inst_cmd), cmd_ctx);
+            }
+            else
+            {
+                inst_cmd->apply(cmd_ctx);
+            }
+
+            if (!cmd_ptr->instantiated_address().id_path.empty())
+            {
+                const auto created_ent =
+                    resolve_entity_address(*_entity_registry, *_scene_mgr, cmd_ptr->instantiated_address());
+                if (created_ent != ecs::tombstone && _entity_registry->is_valid(created_ent))
+                {
+                    _selected_entity = created_ent;
+                    _selection->set_selection(cmd_ptr->instantiated_address(), created_ent);
+                }
+            }
+
+            _cache.mark_dirty();
+            return true;
+        }
+        if (kind == dropped_asset_kind::material)
+        {
+            auto cmd_ctx = command_context{
+                .registry = *_entity_registry,
+                .scene_manager = *_scene_mgr,
+                .prefab_cache = _resolve_prefab_cache(),
+                .events = &_entity_registry->event_registry(),
+                .log = _log.get(),
+            };
+
+            const auto target_addr = compute_entity_address(*_entity_registry, target_entity);
+            auto mat_cmd = make_unique<assign_material_command>(target_addr, payload.asset_guid);
+            if (_history != nullptr)
+            {
+                _history->execute(tempest::move(mat_cmd), cmd_ctx);
+            }
+            else
+            {
+                mat_cmd->apply(cmd_ctx);
+            }
+
+            _cache.mark_dirty();
+            return true;
+        }
+
+        return false;
+    }
+
+    auto hierarchy_window::handle_asset_drop_on_scene(scene::scene_handle target_scene,
+                                                     const asset_payload& payload) -> bool
+    {
+        const auto kind = _deduce_asset_kind(payload);
+        if (kind != dropped_asset_kind::prefab)
+        {
+            return false;
+        }
+
+        auto cmd_ctx = command_context{
+            .registry = *_entity_registry,
+            .scene_manager = *_scene_mgr,
+            .prefab_cache = _resolve_prefab_cache(),
+            .events = &_entity_registry->event_registry(),
+            .log = _log.get(),
+        };
+
+        auto inst_cmd = make_unique<instantiate_prefab_command>(payload.asset_guid, target_scene);
+        const auto* const cmd_ptr = inst_cmd.get();
+        if (_history != nullptr)
+        {
+            _history->execute(tempest::move(inst_cmd), cmd_ctx);
+        }
+        else
+        {
+            inst_cmd->apply(cmd_ctx);
+        }
+
+        if (!cmd_ptr->instantiated_address().id_path.empty())
+        {
+            const auto created_ent =
+                resolve_entity_address(*_entity_registry, *_scene_mgr, cmd_ptr->instantiated_address());
+            if (created_ent != ecs::tombstone && _entity_registry->is_valid(created_ent))
+            {
+                _selected_entity = created_ent;
+                _selection->set_selection(cmd_ptr->instantiated_address(), created_ent);
+            }
+        }
+
+        _cache.mark_dirty();
+        return true;
+    }
+
+    auto hierarchy_window::handle_asset_drop_on_empty_space(const asset_payload& payload) -> bool
+    {
+        const auto target_sc = _scene_mgr->get_active_scene();
+        return handle_asset_drop_on_scene(target_sc, payload);
+    }
+
     auto hierarchy_window::draw() -> void
     {
         const auto name = window_name();
         const auto name_str = string{name};
-        if (!ImGui::Begin(name_str.c_str(), &open))
-        {
-            ImGui::End();
-            return;
-        }
-
-        if (entity_registry == nullptr || scene_mgr == nullptr)
+        if (!ImGui::Begin(name_str.c_str(), &_open))
         {
             ImGui::End();
             return;
@@ -84,7 +300,7 @@ namespace tempest::editor
 
         _handle_shortcuts();
 
-        _cache.rebuild(*entity_registry, *scene_mgr, session_diff);
+        _cache.rebuild(*_entity_registry, *_scene_mgr, _session_diff);
         const auto visible_rows = _cache.get_visible_rows();
 
         auto clipper = ImGuiListClipper{};
@@ -92,12 +308,30 @@ namespace tempest::editor
 
         while (clipper.Step())
         {
-            for (auto i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i)
+            for (auto display_index = clipper.DisplayStart; display_index < clipper.DisplayEnd; ++display_index)
             {
-                _draw_row(static_cast<size_t>(i), visible_rows[static_cast<size_t>(i)]);
+                _draw_row(static_cast<size_t>(display_index), visible_rows[static_cast<size_t>(display_index)]);
             }
         }
         clipper.End();
+
+        const auto avail = ImGui::GetContentRegionAvail();
+        if (avail.y > 0.0F)
+        {
+            const auto cursor_pos = ImGui::GetCursorScreenPos();
+            const auto empty_rect = ImRect(cursor_pos, ImVec2(cursor_pos.x + avail.x, cursor_pos.y + avail.y));
+            const auto empty_target_id = ImGui::GetID("##HierarchyEmptyDropTarget");
+            if (ImGui::BeginDragDropTargetCustom(empty_rect, empty_target_id))
+            {
+                if (const auto* const payload = ImGui::AcceptDragDropPayload(asset_payload_type))
+                {
+                    const auto asset =
+                        asset_payload::from_raw_payload(payload->Data, static_cast<size_t>(payload->DataSize));
+                    handle_asset_drop_on_empty_space(asset);
+                }
+                ImGui::EndDragDropTarget();
+            }
+        }
 
         // Right click in empty window space
         if (ImGui::BeginPopupContextWindow("hierarchy_window_empty_context",
@@ -105,23 +339,20 @@ namespace tempest::editor
         {
             if (ImGui::MenuItem("Create Empty Entity"))
             {
-                const auto active_scene = scene_mgr->get_active_scene();
+                const auto active_scene = _scene_mgr->get_active_scene();
                 auto created = static_cast<ecs::entity>(ecs::tombstone);
                 if (active_scene.is_valid())
                 {
-                    created = scene_mgr->create_entity(active_scene, "Entity");
+                    created = _scene_mgr->create_entity(active_scene, "Entity");
                 }
                 else
                 {
-                    created = entity_registry->create();
-                    entity_registry->name(created, "Entity");
+                    created = _entity_registry->create();
+                    _entity_registry->name(created, "Entity");
                 }
 
-                selected_entity = created;
-                if (selection != nullptr)
-                {
-                    selection->set_selection(compute_entity_address(*entity_registry, created), created);
-                }
+                _selected_entity = created;
+                _selection->set_selection(compute_entity_address(*_entity_registry, created), created);
                 _cache.mark_dirty();
             }
             ImGui::EndPopup();
@@ -160,14 +391,7 @@ namespace tempest::editor
         auto is_selected = false;
         if (row.type == row_type::entity_node)
         {
-            if (selection != nullptr)
-            {
-                is_selected = selection->is_selected(row.entity);
-            }
-            else
-            {
-                is_selected = (selected_entity == row.entity);
-            }
+            is_selected = _selection->is_selected(row.entity);
         }
 
         char label_buffer[256] = {};
@@ -229,7 +453,7 @@ namespace tempest::editor
 
             if (enter_pressed || ImGui::IsItemDeactivatedAfterEdit())
             {
-                entity_registry->name(row.entity, string_view{static_cast<const char*>(_rename_buffer)});
+                _entity_registry->name(row.entity, string_view{static_cast<const char*>(_rename_buffer)});
                 _renaming_entity = default_selected_entity;
                 _cache.mark_dirty();
             }
@@ -321,22 +545,22 @@ namespace tempest::editor
                     if (payload->DataSize == sizeof(ecs::entity))
                     {
                         const auto dropped_entity = *reinterpret_cast<const ecs::entity*>(payload->Data);
-                        if (dropped_entity != ecs::tombstone && entity_registry->is_valid(dropped_entity))
+                        if (dropped_entity != ecs::tombstone && _entity_registry->is_valid(dropped_entity))
                         {
                             const auto* const old_sec =
-                                entity_registry->try_get<scene::scene_entity_component>(dropped_entity);
+                                _entity_registry->try_get<scene::scene_entity_component>(dropped_entity);
                             const auto old_scene = (old_sec != nullptr) ? old_sec->scene : scene::scene_handle{};
 
                             if (row.type == row_type::entity_node)
                             {
                                 auto is_cycle = (row.entity == dropped_entity);
-                                auto curr = row.entity;
-                                while (!is_cycle && curr != ecs::tombstone && entity_registry->is_valid(curr))
+                                auto current_ancestor = row.entity;
+                                while (!is_cycle && current_ancestor != ecs::tombstone && _entity_registry->is_valid(current_ancestor))
                                 {
-                                    const auto* const r =
-                                        entity_registry->try_get<ecs::relationship_component<ecs::entity>>(curr);
-                                    curr = (r != nullptr) ? r->parent : ecs::tombstone;
-                                    if (curr == dropped_entity)
+                                    const auto* const rel_parent =
+                                        _entity_registry->try_get<ecs::relationship_component<ecs::entity>>(current_ancestor);
+                                    current_ancestor = (rel_parent != nullptr) ? rel_parent->parent : ecs::tombstone;
+                                    if (current_ancestor == dropped_entity)
                                     {
                                         is_cycle = true;
                                         break;
@@ -345,29 +569,29 @@ namespace tempest::editor
 
                                 if (!is_cycle)
                                 {
-                                    if (scene_mgr != nullptr && old_scene.is_valid())
+                                    if (old_scene.is_valid())
                                     {
-                                        scene_mgr->remove_root_entity(old_scene, dropped_entity);
+                                        _scene_mgr->remove_root_entity(old_scene, dropped_entity);
                                     }
 
-                                    entity_registry->reparent(dropped_entity, row.entity);
+                                    _entity_registry->reparent(dropped_entity, row.entity);
 
                                     if (row.scene.is_valid())
                                     {
-                                        auto sync_scene = [&](auto&& self, ecs::entity e) -> void {
-                                            entity_registry->assign_or_replace(
-                                                 e, scene::scene_entity_component{.scene = row.scene});
+                                        auto sync_scene = [&](auto&& self, ecs::entity current_entity) -> void {
+                                            _entity_registry->assign_or_replace(
+                                                current_entity, scene::scene_entity_component{.scene = row.scene});
                                             const auto* const rel_c =
-                                                entity_registry
-                                                    ->try_get<ecs::relationship_component<ecs::entity>>(e);
+                                                _entity_registry
+                                                    ->try_get<ecs::relationship_component<ecs::entity>>(current_entity);
                                             if (rel_c != nullptr)
                                             {
                                                 auto child = rel_c->first_child;
-                                                while (child != ecs::tombstone && entity_registry->is_valid(child))
+                                                while (child != ecs::tombstone && _entity_registry->is_valid(child))
                                                 {
                                                     self(self, child);
                                                     const auto* const child_rel =
-                                                        entity_registry
+                                                        _entity_registry
                                                             ->try_get<ecs::relationship_component<ecs::entity>>(child);
                                                     child = (child_rel != nullptr) ? child_rel->next_sibling
                                                                                    : ecs::tombstone;
@@ -381,30 +605,30 @@ namespace tempest::editor
                             }
                             else if (row.type == row_type::scene_header)
                             {
-                                if (scene_mgr != nullptr && old_scene.is_valid())
+                                if (old_scene.is_valid())
                                 {
-                                    scene_mgr->remove_root_entity(old_scene, dropped_entity);
+                                    _scene_mgr->remove_root_entity(old_scene, dropped_entity);
                                 }
 
-                                entity_registry->reparent(dropped_entity, ecs::tombstone);
-                                if (scene_mgr != nullptr && scene_mgr->is_valid(row.scene))
+                                _entity_registry->reparent(dropped_entity, ecs::tombstone);
+                                if (_scene_mgr->is_valid(row.scene))
                                 {
-                                    scene_mgr->add_root_entity(row.scene, dropped_entity);
+                                    _scene_mgr->add_root_entity(row.scene, dropped_entity);
                                 }
 
-                                auto sync_scene = [&](auto&& self, ecs::entity e) -> void {
-                                    entity_registry->assign_or_replace(
-                                        e, scene::scene_entity_component{.scene = row.scene});
+                                auto sync_scene = [&](auto&& self, ecs::entity current_entity) -> void {
+                                    _entity_registry->assign_or_replace(
+                                        current_entity, scene::scene_entity_component{.scene = row.scene});
                                     const auto* const rel_c =
-                                        entity_registry->try_get<ecs::relationship_component<ecs::entity>>(e);
+                                        _entity_registry->try_get<ecs::relationship_component<ecs::entity>>(current_entity);
                                     if (rel_c != nullptr)
                                     {
                                         auto child = rel_c->first_child;
-                                        while (child != ecs::tombstone && entity_registry->is_valid(child))
+                                        while (child != ecs::tombstone && _entity_registry->is_valid(child))
                                         {
                                             self(self, child);
                                             const auto* const child_rel =
-                                                entity_registry
+                                                _entity_registry
                                                     ->try_get<ecs::relationship_component<ecs::entity>>(child);
                                             child = (child_rel != nullptr) ? child_rel->next_sibling : ecs::tombstone;
                                         }
@@ -415,25 +639,25 @@ namespace tempest::editor
                             }
                             else if (row.type == row_type::dynamic_header)
                             {
-                                if (scene_mgr != nullptr && old_scene.is_valid())
+                                if (old_scene.is_valid())
                                 {
-                                    scene_mgr->remove_root_entity(old_scene, dropped_entity);
+                                    _scene_mgr->remove_root_entity(old_scene, dropped_entity);
                                 }
 
-                                entity_registry->reparent(dropped_entity, ecs::tombstone);
+                                _entity_registry->reparent(dropped_entity, ecs::tombstone);
 
-                                auto remove_scene = [&](auto&& self, ecs::entity e) -> void {
-                                    entity_registry->remove<scene::scene_entity_component>(e);
+                                auto remove_scene = [&](auto&& self, ecs::entity current_entity) -> void {
+                                    _entity_registry->remove<scene::scene_entity_component>(current_entity);
                                     const auto* const rel_c =
-                                        entity_registry->try_get<ecs::relationship_component<ecs::entity>>(e);
+                                        _entity_registry->try_get<ecs::relationship_component<ecs::entity>>(current_entity);
                                     if (rel_c != nullptr)
                                     {
                                         auto child = rel_c->first_child;
-                                        while (child != ecs::tombstone && entity_registry->is_valid(child))
+                                        while (child != ecs::tombstone && _entity_registry->is_valid(child))
                                         {
                                             self(self, child);
                                             const auto* const child_rel =
-                                                entity_registry
+                                                _entity_registry
                                                     ->try_get<ecs::relationship_component<ecs::entity>>(child);
                                             child = (child_rel != nullptr) ? child_rel->next_sibling : ecs::tombstone;
                                         }
@@ -443,6 +667,25 @@ namespace tempest::editor
                                 _cache.mark_dirty();
                             }
                         }
+                    }
+                }
+
+                if (const auto* const payload = ImGui::AcceptDragDropPayload(asset_payload_type))
+                {
+                    const auto asset =
+                        asset_payload::from_raw_payload(payload->Data, static_cast<size_t>(payload->DataSize));
+
+                    if (row.type == row_type::entity_node)
+                    {
+                        handle_asset_drop_on_entity(row.entity, asset);
+                    }
+                    else if (row.type == row_type::scene_header)
+                    {
+                        handle_asset_drop_on_scene(row.scene, asset);
+                    }
+                    else if (row.type == row_type::dynamic_header)
+                    {
+                        handle_asset_drop_on_scene(scene::scene_handle{}, asset);
                     }
                 }
                 ImGui::EndDragDropTarget();
@@ -466,20 +709,15 @@ namespace tempest::editor
             return;
         }
 
-        selected_entity = row.entity;
-
-        if (selection == nullptr)
-        {
-            return;
-        }
+        _selected_entity = row.entity;
 
         const auto ctrl = ImGui::GetIO().KeyCtrl;
         const auto shift = ImGui::GetIO().KeyShift;
-        const auto addr = compute_entity_address(*entity_registry, row.entity);
+        const auto addr = compute_entity_address(*_entity_registry, row.entity);
 
         if (ctrl)
         {
-            selection->toggle_selection(addr, row.entity);
+            _selection->toggle_selection(addr, row.entity);
             _anchor_entity = row.entity;
             _anchor_index = static_cast<int>(index);
         }
@@ -491,11 +729,11 @@ namespace tempest::editor
                 auto effective_anchor = _anchor_index;
                 if (_anchor_entity != ecs::tombstone && _anchor_entity != ecs::null)
                 {
-                    for (size_t r = 0; r < rows.size(); ++r)
+                    for (size_t search_idx = 0; search_idx < rows.size(); ++search_idx)
                     {
-                        if (rows[r].entity == _anchor_entity)
+                        if (rows[search_idx].entity == _anchor_entity)
                         {
-                            effective_anchor = static_cast<int>(r);
+                            effective_anchor = static_cast<int>(search_idx);
                             break;
                         }
                     }
@@ -509,21 +747,21 @@ namespace tempest::editor
                 auto addrs = vector<entity_address>{};
                 auto ents = vector<ecs::entity>{};
 
-                for (auto r = start_idx; r <= end_idx; ++r)
+                for (auto row_index = start_idx; row_index <= end_idx; ++row_index)
                 {
-                    const auto& candidate = rows[static_cast<size_t>(r)];
+                    const auto& candidate = rows[static_cast<size_t>(row_index)];
                     if (candidate.type == row_type::entity_node)
                     {
-                        addrs.push_back(compute_entity_address(*entity_registry, candidate.entity));
+                        addrs.push_back(compute_entity_address(*_entity_registry, candidate.entity));
                         ents.push_back(candidate.entity);
                     }
                 }
-                selection->select_range(addrs, ents);
+                _selection->select_range(addrs, ents);
             }
         }
         else
         {
-            selection->set_selection(addr, row.entity);
+            _selection->set_selection(addr, row.entity);
             _anchor_entity = row.entity;
             _anchor_index = static_cast<int>(index);
         }
@@ -536,13 +774,13 @@ namespace tempest::editor
             return;
         }
 
-        auto active_ent = selected_entity;
-        if (selection != nullptr && selection->get_primary_entity() != ecs::tombstone)
+        auto active_ent = _selected_entity;
+        if (_selection->get_primary_entity() != ecs::tombstone)
         {
-            active_ent = selection->get_primary_entity();
+            active_ent = _selection->get_primary_entity();
         }
 
-        if (active_ent == ecs::null || active_ent == ecs::tombstone || !entity_registry->is_valid(active_ent))
+        if (active_ent == ecs::null || active_ent == ecs::tombstone || !_entity_registry->is_valid(active_ent))
         {
             return;
         }
@@ -551,7 +789,7 @@ namespace tempest::editor
         {
             _renaming_entity = active_ent;
             _focus_rename = true;
-            const auto name_opt = entity_registry->name(active_ent);
+            const auto name_opt = _entity_registry->name(active_ent);
             if (name_opt.has_value())
             {
                 const auto copy_len = tempest::min(sizeof(_rename_buffer) - 1, name_opt->size());
@@ -566,55 +804,52 @@ namespace tempest::editor
 
         if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D, false))
         {
-            const auto dup = entity_registry->duplicate(active_ent);
+            const auto dup = _entity_registry->duplicate(active_ent);
             if (dup != ecs::tombstone)
             {
-                selected_entity = dup;
-                if (selection != nullptr)
-                {
-                    selection->set_selection(compute_entity_address(*entity_registry, dup), dup);
-                }
+                _selected_entity = dup;
+                _selection->set_selection(compute_entity_address(*_entity_registry, dup), dup);
                 _cache.mark_dirty();
             }
         }
 
         if (ImGui::IsKeyPressed(ImGuiKey_Delete, false))
         {
-            if (selection != nullptr && !selection->is_empty())
+            if (!_selection->is_empty())
             {
-                const auto selected_ents = selection->get_selected_entities();
+                const auto selected_ents = _selection->get_selected_entities();
                 auto ents_to_delete = vector<ecs::entity>{};
                 for (const auto ent : selected_ents)
                 {
-                    if (ent != ecs::tombstone && entity_registry->is_valid(ent))
+                    if (ent != ecs::tombstone && _entity_registry->is_valid(ent))
                     {
                         ents_to_delete.push_back(ent);
                     }
                 }
                 for (const auto ent : ents_to_delete)
                 {
-                    const auto* const sec = entity_registry->try_get<scene::scene_entity_component>(ent);
-                    if (sec != nullptr && sec->scene.is_valid() && scene_mgr != nullptr)
+                    const auto* const sec = _entity_registry->try_get<scene::scene_entity_component>(ent);
+                    if (sec != nullptr && sec->scene.is_valid())
                     {
-                        scene_mgr->remove_root_entity(sec->scene, ent);
+                        _scene_mgr->remove_root_entity(sec->scene, ent);
                     }
-                    entity_registry->destroy_recursive(ent);
+                    _entity_registry->destroy_recursive(ent);
                 }
-                selection->clear_selection();
-                selected_entity = ecs::null;
+                _selection->clear_selection();
+                _selected_entity = ecs::null;
                 _cache.mark_dirty();
             }
-            else if (active_ent != ecs::null && active_ent != ecs::tombstone && entity_registry->is_valid(active_ent))
+            else if (active_ent != ecs::null && active_ent != ecs::tombstone && _entity_registry->is_valid(active_ent))
             {
-                const auto* const sec = entity_registry->try_get<scene::scene_entity_component>(active_ent);
-                if (sec != nullptr && sec->scene.is_valid() && scene_mgr != nullptr)
+                const auto* const sec = _entity_registry->try_get<scene::scene_entity_component>(active_ent);
+                if (sec != nullptr && sec->scene.is_valid())
                 {
-                    scene_mgr->remove_root_entity(sec->scene, active_ent);
+                    _scene_mgr->remove_root_entity(sec->scene, active_ent);
                 }
-                entity_registry->destroy_recursive(active_ent);
-                if (selected_entity == active_ent)
+                _entity_registry->destroy_recursive(active_ent);
+                if (_selected_entity == active_ent)
                 {
-                    selected_entity = ecs::null;
+                    _selected_entity = ecs::null;
                 }
                 _cache.mark_dirty();
             }
@@ -627,30 +862,27 @@ namespace tempest::editor
         {
             if (ImGui::MenuItem("Set Active Scene"))
             {
-                scene_mgr->set_active_scene(row.scene);
+                _scene_mgr->set_active_scene(row.scene);
             }
             if (ImGui::MenuItem("Save Scene"))
             {
-                const auto path_opt = scene_mgr->get_scene_path(row.scene);
+                const auto path_opt = _scene_mgr->get_scene_path(row.scene);
                 if (path_opt.has_value())
                 {
                     [[maybe_unused]] const auto save_res =
-                        scene_mgr->save_sync(row.scene, filesystem::path(string(*path_opt)));
+                        _scene_mgr->save_sync(row.scene, filesystem::path(string(*path_opt)));
                 }
             }
             if (ImGui::MenuItem("Create Entity"))
             {
-                const auto created = scene_mgr->create_entity(row.scene, "New Entity");
-                selected_entity = created;
-                if (selection != nullptr)
-                {
-                    selection->set_selection(compute_entity_address(*entity_registry, created), created);
-                }
+                const auto created = _scene_mgr->create_entity(row.scene, "New Entity");
+                _selected_entity = created;
+                _selection->set_selection(compute_entity_address(*_entity_registry, created), created);
                 _cache.mark_dirty();
             }
             if (ImGui::MenuItem("Unload Scene"))
             {
-                scene_mgr->unload(row.scene);
+                _scene_mgr->unload(row.scene);
                 _cache.mark_dirty();
             }
         }
@@ -661,18 +893,15 @@ namespace tempest::editor
                 auto created = static_cast<ecs::entity>(ecs::tombstone);
                 if (row.scene.is_valid())
                 {
-                    created = scene_mgr->create_entity(row.scene, "Entity");
+                    created = _scene_mgr->create_entity(row.scene, "Entity");
                 }
                 else
                 {
-                    created = entity_registry->create();
-                    entity_registry->name(created, "Entity");
+                    created = _entity_registry->create();
+                    _entity_registry->name(created, "Entity");
                 }
-                selected_entity = created;
-                if (selection != nullptr)
-                {
-                    selection->set_selection(compute_entity_address(*entity_registry, created), created);
-                }
+                _selected_entity = created;
+                _selection->set_selection(compute_entity_address(*_entity_registry, created), created);
                 _cache.mark_dirty();
             }
             if (ImGui::MenuItem("Create Child"))
@@ -680,33 +909,27 @@ namespace tempest::editor
                 auto child = static_cast<ecs::entity>(ecs::tombstone);
                 if (row.scene.is_valid())
                 {
-                    child = scene_mgr->create_entity(row.scene, "Child");
-                    scene_mgr->remove_root_entity(row.scene, child);
+                    child = _scene_mgr->create_entity(row.scene, "Child");
+                    _scene_mgr->remove_root_entity(row.scene, child);
                 }
                 else
                 {
-                    child = entity_registry->create();
-                    entity_registry->name(child, "Child");
+                    child = _entity_registry->create();
+                    _entity_registry->name(child, "Child");
                 }
-                entity_registry->reparent(child, row.entity);
+                _entity_registry->reparent(child, row.entity);
                 _cache.set_expanded(row.entity, true);
-                selected_entity = child;
-                if (selection != nullptr)
-                {
-                    selection->set_selection(compute_entity_address(*entity_registry, child), child);
-                }
+                _selected_entity = child;
+                _selection->set_selection(compute_entity_address(*_entity_registry, child), child);
                 _cache.mark_dirty();
             }
             if (ImGui::MenuItem("Duplicate", "Ctrl+D"))
             {
-                const auto dup = entity_registry->duplicate(row.entity);
+                const auto dup = _entity_registry->duplicate(row.entity);
                 if (dup != ecs::tombstone)
                 {
-                    selected_entity = dup;
-                    if (selection != nullptr)
-                    {
-                        selection->set_selection(compute_entity_address(*entity_registry, dup), dup);
-                    }
+                    _selected_entity = dup;
+                    _selection->set_selection(compute_entity_address(*_entity_registry, dup), dup);
                     _cache.mark_dirty();
                 }
             }
@@ -714,7 +937,7 @@ namespace tempest::editor
             {
                 _renaming_entity = row.entity;
                 _focus_rename = true;
-                const auto name_opt = entity_registry->name(row.entity);
+                const auto name_opt = _entity_registry->name(row.entity);
                 if (name_opt.has_value())
                 {
                     const auto copy_len = tempest::min(sizeof(_rename_buffer) - 1, name_opt->size());
@@ -728,18 +951,15 @@ namespace tempest::editor
             }
             if (ImGui::MenuItem("Delete", "Delete"))
             {
-                if (row.scene.is_valid() && scene_mgr != nullptr)
+                if (row.scene.is_valid())
                 {
-                    scene_mgr->remove_root_entity(row.scene, row.entity);
+                    _scene_mgr->remove_root_entity(row.scene, row.entity);
                 }
-                entity_registry->destroy_recursive(row.entity);
-                if (selection != nullptr)
+                _entity_registry->destroy_recursive(row.entity);
+                _selection->remove_from_selection(compute_entity_address(*_entity_registry, row.entity));
+                if (_selected_entity == row.entity)
                 {
-                    selection->remove_from_selection(compute_entity_address(*entity_registry, row.entity));
-                }
-                if (selected_entity == row.entity)
-                {
-                    selected_entity = ecs::null;
+                    _selected_entity = ecs::null;
                 }
                 _cache.mark_dirty();
             }

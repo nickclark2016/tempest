@@ -4,6 +4,8 @@
 #include <tempest/asset_database.hpp>
 #include <tempest/asset_type_id.hpp>
 #include <tempest/asset_type_registry.hpp>
+#include <tempest/command_history.hpp>
+#include <tempest/commands/entity_commands.hpp>
 #include <tempest/editor.hpp>
 #include <tempest/editor_engine_context.hpp>
 #include <tempest/editor_selection.hpp>
@@ -11,13 +13,18 @@
 #include <tempest/event.hpp>
 #include <tempest/files.hpp>
 #include <tempest/filesystem.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/material.hpp>
+#include <tempest/payloads/asset_payload.hpp>
 #include <tempest/project_workspace.hpp>
+#include <tempest/scene/prefab_cache.hpp>
+#include <tempest/scene/prefab_template.hpp>
 #include <tempest/scene/scene_manager.hpp>
 #include <tempest/span.hpp>
 #include <tempest/texture.hpp>
 #include <tempest/ui.hpp>
 #include <tempest/vertex.hpp>
+#include <tempest/windows/hierarchy_window.hpp>
 
 #include <gtest/gtest.h>
 #include <imgui.h>
@@ -70,6 +77,7 @@ namespace tempest::editor::tests
         ecs::archetype_registry registry{events, types};
         scene::scene_manager scene_mgr{registry};
         editor_selection selection{};
+        logger log{};
     };
 
     // ============================================================================
@@ -2382,5 +2390,370 @@ namespace tempest::editor::tests
         ImGui::OpenPopup("##ProjectViewBackgroundContext");
         EXPECT_NO_THROW(window.draw());
         ui_ctx.finish_ui_commands();
+    }
+
+    // ============================================================================
+    // Drag & Drop Payloads & Hierarchy Drop Target Tests
+    // ============================================================================
+
+    /// @brief Verifies that asset_payload satisfies memory layout invariants, binary compatibility
+    /// with guid pointer dereference at offset 0, and correct string view accessors.
+    TEST(asset_payload_test, layout_and_binary_compatibility)
+    {
+        // Setup: Check layout properties and static offset invariants
+        static_assert(offsetof(asset_payload, asset_guid) == 0,
+                      "asset_guid must reside at offset 0 for property_grid binary compatibility");
+
+        const auto test_guid = guid::generate_random_guid();
+        auto payload = asset_payload{};
+        payload.asset_guid = test_guid;
+        payload.type_hash = 12345;
+        payload.set_path("assets/prefabs/player.tprefab");
+        payload.set_type_name("prefab");
+        payload.set_sub_asset_key("sub_root");
+
+        // Act: Cast raw pointer to guid as property_grid does
+        const void* raw_data = &payload;
+        const auto extracted_guid = *static_cast<const guid*>(raw_data);
+
+        // Assert: Extracted GUID matches and accessors reflect written values
+        EXPECT_EQ(extracted_guid, test_guid);
+        EXPECT_EQ(payload.path_view(), "assets/prefabs/player.tprefab");
+        EXPECT_EQ(payload.type_name_view(), "prefab");
+        EXPECT_EQ(payload.sub_asset_key_view(), "sub_root");
+        EXPECT_EQ(payload.type_hash, 12345U);
+    }
+
+    /// @brief Verifies asset_payload truncation behavior and empty string views when uninitialized.
+    TEST(asset_payload_test, truncation_and_defaults)
+    {
+        // Setup: Default uninitialized payload
+        const auto payload = asset_payload{};
+
+        // Assert: Defaults are empty and zeroed
+        EXPECT_EQ(payload.asset_guid, guid{});
+        EXPECT_EQ(payload.type_hash, 0U);
+        EXPECT_TRUE(payload.path_view().empty());
+        EXPECT_TRUE(payload.type_name_view().empty());
+        EXPECT_TRUE(payload.sub_asset_key_view().empty());
+
+        // Act: Test truncation beyond maximum capacity
+        auto oversized = asset_payload{};
+        const auto huge_str = string(500, 'x');
+        oversized.set_path(huge_str);
+        oversized.set_type_name(huge_str);
+        oversized.set_sub_asset_key(huge_str);
+
+        // Assert: Strings truncated to max capacity - 1 and correctly terminated
+        EXPECT_EQ(oversized.path_view().size(), asset_payload::max_path_length - 1);
+        EXPECT_EQ(oversized.type_name_view().size(), asset_payload::max_type_name_length - 1);
+        EXPECT_EQ(oversized.sub_asset_key_view().size(), asset_payload::max_sub_asset_length - 1);
+    }
+
+    /// @brief Verifies that asset_payload::from_raw_payload unpacks full payloads, legacy guid-only payloads,
+    /// and safely rejects undersized or null buffers.
+    TEST(asset_payload_test, from_raw_payload_handling)
+    {
+        // Setup: Prepare full payload and raw guid
+        const auto test_guid = guid::generate_random_guid();
+        auto full_payload = asset_payload{};
+        full_payload.asset_guid = test_guid;
+        full_payload.type_hash = 98765;
+        full_payload.set_path("assets/prefabs/npc.tprefab");
+        full_payload.set_type_name("prefab");
+        full_payload.set_sub_asset_key("sub_root");
+
+        // Act & Assert: Unpack full payload
+        const auto unpacked_full =
+            asset_payload::from_raw_payload(&full_payload, sizeof(asset_payload));
+        EXPECT_EQ(unpacked_full.asset_guid, test_guid);
+        EXPECT_EQ(unpacked_full.type_hash, 98765U);
+        EXPECT_EQ(unpacked_full.path_view(), "assets/prefabs/npc.tprefab");
+        EXPECT_EQ(unpacked_full.type_name_view(), "prefab");
+        EXPECT_EQ(unpacked_full.sub_asset_key_view(), "sub_root");
+
+        // Act & Assert: Unpack legacy guid-only buffer
+        const auto unpacked_legacy =
+            asset_payload::from_raw_payload(&test_guid, sizeof(guid));
+        EXPECT_EQ(unpacked_legacy.asset_guid, test_guid);
+        EXPECT_EQ(unpacked_legacy.type_hash, 0U);
+        EXPECT_TRUE(unpacked_legacy.path_view().empty());
+        EXPECT_TRUE(unpacked_legacy.type_name_view().empty());
+        EXPECT_TRUE(unpacked_legacy.sub_asset_key_view().empty());
+
+        // Act & Assert: Null buffer or undersized buffer yields default payload
+        const auto unpacked_null = asset_payload::from_raw_payload(nullptr, sizeof(asset_payload));
+        EXPECT_EQ(unpacked_null.asset_guid, guid{});
+
+        const auto small_buffer = uint32_t{42};
+        const auto unpacked_small = asset_payload::from_raw_payload(&small_buffer, sizeof(small_buffer));
+        EXPECT_EQ(unpacked_small.asset_guid, guid{});
+    }
+
+    /// @brief Verifies that dropping a prefab asset payload onto empty space or a scene header
+    /// executes instantiate_prefab_command as a root entity in the target scene, updates selection,
+    /// and supports undo/redo via command_history.
+    TEST_F(project_view_window_test, hierarchy_drop_prefab_root_instantiation)
+    {
+        // Setup: Active scene and registered prefab template in prefab cache
+        const auto scene_res = scene_mgr.load_from_string_sync(
+            R"({"schema_version":1,"generator":"test","entities":[]})", "SceneDropRoot.tscene");
+        ASSERT_TRUE(scene_res.has_value());
+        const auto scene = *scene_res;
+        scene_mgr.set_active_scene(scene);
+
+        auto p_cache = scene::prefab_cache{};
+        auto t_reg = ecs::archetype_registry{events, types};
+        const auto tmpl_root = t_reg.create();
+        t_reg.name(tmpl_root, "DroppedRootPrefab");
+        const auto tmpl_child = t_reg.create();
+        t_reg.name(tmpl_child, "DroppedChildPrefab");
+        t_reg.reparent(tmpl_child, tmpl_root);
+
+        auto tmpl = scene::prefab_template::from_entity(t_reg, tmpl_root);
+        const auto prefab_guid = guid::generate_random_guid();
+        ASSERT_TRUE(p_cache.register_template(prefab_guid, tempest::move(tmpl)));
+
+        auto history = command_history{};
+        auto hierarchy = hierarchy_window{registry, scene_mgr, selection, log, &history, nullptr, &p_cache};
+
+        auto payload = asset_payload{};
+        payload.asset_guid = prefab_guid;
+        payload.set_type_name("prefab");
+        payload.set_path("assets/prefabs/test.tprefab");
+
+        // Act: Drop prefab payload on empty window space
+        const auto drop_success = hierarchy.handle_asset_drop_on_empty_space(payload);
+
+        // Assert: Drop succeeded, root entity was created in the scene, and selection updated
+        EXPECT_TRUE(drop_success);
+        EXPECT_FALSE(hierarchy.get_selected_entity() == ecs::null);
+        EXPECT_NE(hierarchy.get_selected_entity(), static_cast<ecs::entity>(ecs::tombstone));
+        EXPECT_TRUE(registry.is_valid(hierarchy.get_selected_entity()));
+        const auto name_opt = registry.name(hierarchy.get_selected_entity());
+        ASSERT_TRUE(name_opt.has_value());
+        EXPECT_EQ(*name_opt, "DroppedRootPrefab");
+        EXPECT_TRUE(scene_mgr.is_dirty(scene));
+        EXPECT_TRUE(history.can_undo(scene));
+
+        // Act: Undo prefab instantiation via command_history
+        auto cmd_ctx = command_context{
+            .registry = registry,
+            .scene_manager = scene_mgr,
+            .prefab_cache = &p_cache,
+            .events = &events,
+            .log = &log,
+        };
+        EXPECT_TRUE(history.undo(cmd_ctx, scene));
+
+        // Assert: Instantiated entity is reverted/destroyed
+        EXPECT_FALSE(registry.is_valid(hierarchy.get_selected_entity()));
+        EXPECT_TRUE(history.can_redo(scene));
+
+        // Act: Redo prefab instantiation
+        EXPECT_TRUE(history.redo(cmd_ctx, scene));
+
+        // Assert: Root entity restored and registered in scene roots
+        const auto roots_opt = scene_mgr.get_root_entities(scene);
+        ASSERT_TRUE(roots_opt.has_value());
+        EXPECT_EQ(roots_opt->size(), 1U);
+    }
+
+    /// @brief Verifies that dropping a prefab asset payload onto an entity row
+    /// executes instantiate_prefab_command parented under that entity.
+    TEST_F(project_view_window_test, hierarchy_drop_prefab_parented_instantiation)
+    {
+        // Setup: Scene with an existing parent entity and registered prefab template
+        const auto scene_res = scene_mgr.load_from_string_sync(
+            R"({"schema_version":1,"generator":"test","entities":[]})", "SceneDropParented.tscene");
+        ASSERT_TRUE(scene_res.has_value());
+        const auto scene = *scene_res;
+
+        const auto parent_entity = scene_mgr.create_entity(scene, "HierarchyParent");
+        ASSERT_TRUE(registry.is_valid(parent_entity));
+
+        auto p_cache = scene::prefab_cache{};
+        auto t_reg = ecs::archetype_registry{events, types};
+        const auto tmpl_root = t_reg.create();
+        t_reg.name(tmpl_root, "ParentedPrefabRoot");
+        auto tmpl = scene::prefab_template::from_entity(t_reg, tmpl_root);
+        const auto prefab_guid = guid::generate_random_guid();
+        ASSERT_TRUE(p_cache.register_template(prefab_guid, tempest::move(tmpl)));
+
+        auto history = command_history{};
+        auto hierarchy = hierarchy_window{registry, scene_mgr, selection, log, &history, nullptr, &p_cache};
+
+        auto payload = asset_payload{};
+        payload.asset_guid = prefab_guid;
+        payload.set_type_name("prefab");
+
+        // Act: Drop prefab payload onto the existing parent entity
+        const auto drop_success = hierarchy.handle_asset_drop_on_entity(parent_entity, payload);
+
+        // Assert: Drop succeeded and instantiated root entity has parent_entity as its relationship parent
+        EXPECT_TRUE(drop_success);
+        EXPECT_FALSE(hierarchy.get_selected_entity() == ecs::null);
+        EXPECT_TRUE(registry.is_valid(hierarchy.get_selected_entity()));
+        const auto* const rel_c =
+            registry.try_get<ecs::relationship_component<ecs::entity>>(hierarchy.get_selected_entity());
+        ASSERT_NE(rel_c, nullptr);
+        EXPECT_EQ(rel_c->parent, parent_entity);
+    }
+
+    /// @brief Verifies that dropping a material asset payload onto an entity executes
+    /// assign_material_command, updating the target's core::material_component,
+    /// and correctly undoing and redoing the assignment.
+    TEST_F(project_view_window_test, hierarchy_drop_material_assignment)
+    {
+        // Setup: Scene with a target entity and initial material component
+        const auto scene_res = scene_mgr.load_from_string_sync(
+            R"({"schema_version":1,"generator":"test","entities":[]})", "SceneDropMaterial.tscene");
+        ASSERT_TRUE(scene_res.has_value());
+        const auto scene = *scene_res;
+
+        const auto target_entity = scene_mgr.create_entity(scene, "MeshRenderer");
+        const auto initial_mat = guid::generate_random_guid();
+        registry.assign(target_entity, core::material_component{.material_id = initial_mat});
+
+        auto history = command_history{};
+        auto hierarchy = hierarchy_window{registry, scene_mgr, selection, log, &history};
+
+        const auto dropped_mat = guid::generate_random_guid();
+        auto payload = asset_payload{};
+        payload.asset_guid = dropped_mat;
+        payload.set_type_name("material");
+        payload.set_path("assets/materials/rust.tmaterial");
+
+        // Act: Drop material payload onto target entity
+        const auto drop_success = hierarchy.handle_asset_drop_on_entity(target_entity, payload);
+
+        // Assert: Drop succeeded and target entity now has the new material GUID
+        EXPECT_TRUE(drop_success);
+        ASSERT_TRUE(registry.has<core::material_component>(target_entity));
+        EXPECT_EQ(registry.get<core::material_component>(target_entity).material_id, dropped_mat);
+        EXPECT_TRUE(history.can_undo(scene));
+
+        // Act: Undo material assignment
+        auto cmd_ctx = command_context{
+            .registry = registry,
+            .scene_manager = scene_mgr,
+            .events = &events,
+            .log = &log,
+        };
+        EXPECT_TRUE(history.undo(cmd_ctx, scene));
+
+        // Assert: Entity reverted back to initial material
+        EXPECT_EQ(registry.get<core::material_component>(target_entity).material_id, initial_mat);
+
+        // Act: Redo material assignment
+        EXPECT_TRUE(history.redo(cmd_ctx, scene));
+
+        // Assert: Entity reapplies dropped material
+        EXPECT_EQ(registry.get<core::material_component>(target_entity).material_id, dropped_mat);
+    }
+
+    /// @brief Verifies that dropping an invalid or mismatched payload (e.g. material onto empty space
+    /// or unknown asset type onto an entity) is rejected without mutating the registry.
+    TEST_F(project_view_window_test, hierarchy_drop_invalid_or_unknown_rejected)
+    {
+        // Setup: Scene with an entity
+        const auto scene_res = scene_mgr.load_from_string_sync(
+            R"({"schema_version":1,"generator":"test","entities":[]})", "SceneDropInvalid.tscene");
+        ASSERT_TRUE(scene_res.has_value());
+        const auto scene = *scene_res;
+
+        const auto entity = scene_mgr.create_entity(scene, "Target");
+        auto hierarchy = hierarchy_window{registry, scene_mgr, selection, log};
+
+        // Act: Drop material on empty space (materials cannot be scene roots)
+        auto mat_payload = asset_payload{};
+        mat_payload.asset_guid = guid::generate_random_guid();
+        mat_payload.set_type_name("material");
+        const auto empty_drop_res = hierarchy.handle_asset_drop_on_empty_space(mat_payload);
+
+        // Assert: Material dropped on empty space rejected
+        EXPECT_FALSE(empty_drop_res);
+
+        // Act: Drop unknown asset payload onto entity
+        auto unknown_payload = asset_payload{};
+        unknown_payload.asset_guid = guid::generate_random_guid();
+        unknown_payload.set_type_name("unknown_sound");
+        const auto entity_drop_res = hierarchy.handle_asset_drop_on_entity(entity, unknown_payload);
+
+        // Assert: Unknown payload rejected
+        EXPECT_FALSE(entity_drop_res);
+    }
+
+    /// @brief Verifies that _deduce_asset_kind resolves asset types through asset_database
+    /// when type_name is omitted from the payload, validating GUID-only lookup and path fallback.
+    TEST_F(project_view_window_test, hierarchy_drop_deduce_asset_kind_via_asset_database)
+    {
+        // Setup: Active scene, prefab cache, and asset database
+        const auto scene_res = scene_mgr.load_from_string_sync(
+            R"({"schema_version":1,"generator":"test","entities":[]})", "SceneDeduceDb.tscene");
+        ASSERT_TRUE(scene_res.has_value());
+        const auto scene = *scene_res;
+        scene_mgr.set_active_scene(scene);
+
+        auto p_cache = scene::prefab_cache{};
+        auto asset_db = assets::asset_database{};
+
+        // Register prefab asset in database and template in prefab cache
+        const auto prefab_guid = guid::generate_random_guid();
+        asset_db.register_asset_with_guid(
+            prefab_guid, assets::asset_type_id::of<assets::entity_hierarchy>(), "assets/prefabs/custom.dat");
+
+        auto t_reg = ecs::archetype_registry{events, types};
+        const auto tmpl_root = t_reg.create();
+        t_reg.name(tmpl_root, "DbResolvedPrefab");
+        auto tmpl = scene::prefab_template::from_entity(t_reg, tmpl_root);
+        ASSERT_TRUE(p_cache.register_template(prefab_guid, tempest::move(tmpl)));
+
+        // Register material in database with specific path but different GUID
+        const auto registered_mat_guid = guid::generate_random_guid();
+        const auto custom_mat_path = "assets/materials/custom_surface.dat";
+        asset_db.register_asset_with_guid(
+            registered_mat_guid, assets::asset_type_id::of<core::material>(), custom_mat_path);
+
+        const auto target_entity = scene_mgr.create_entity(scene, "MaterialEntity");
+        const auto initial_mat = guid::generate_random_guid();
+        registry.assign(target_entity, core::material_component{.material_id = initial_mat});
+
+        auto history = command_history{};
+        auto hierarchy = hierarchy_window{registry,  scene_mgr, selection, log,
+                                          &history,  nullptr,   &p_cache,  &asset_db};
+
+        // Act: Test GUID-only lookup without type_name, type_hash, or path
+        auto guid_payload = asset_payload{};
+        guid_payload.asset_guid = prefab_guid;
+        const auto guid_drop_success = hierarchy.handle_asset_drop_on_empty_space(guid_payload);
+
+        // Assert: GUID-only lookup successfully resolved prefab kind and instantiated entity
+        EXPECT_TRUE(guid_drop_success);
+        EXPECT_TRUE(registry.is_valid(hierarchy.get_selected_entity()));
+        const auto name_opt = registry.name(hierarchy.get_selected_entity());
+        ASSERT_TRUE(name_opt.has_value());
+        EXPECT_EQ(*name_opt, "DbResolvedPrefab");
+
+        // Act: Test path fallback lookup when asset_guid is unknown to the database
+        const auto dropped_mat_guid = guid::generate_random_guid();
+        auto path_payload = asset_payload{};
+        path_payload.asset_guid = dropped_mat_guid;
+        path_payload.set_path(custom_mat_path);
+        const auto path_drop_success = hierarchy.handle_asset_drop_on_entity(target_entity, path_payload);
+
+        // Assert: Path fallback lookup resolved material kind and assigned material component
+        EXPECT_TRUE(path_drop_success);
+        ASSERT_TRUE(registry.has<core::material_component>(target_entity));
+        EXPECT_EQ(registry.get<core::material_component>(target_entity).material_id, dropped_mat_guid);
+
+        // Act: Test unknown asset payload with neither valid GUID nor registered path
+        auto unresolvable_payload = asset_payload{};
+        unresolvable_payload.asset_guid = guid::generate_random_guid();
+        unresolvable_payload.set_path("assets/misc/unregistered.dat");
+        const auto unresolvable_drop = hierarchy.handle_asset_drop_on_entity(target_entity, unresolvable_payload);
+
+        // Assert: Unresolvable payload is rejected without mutations
+        EXPECT_FALSE(unresolvable_drop);
     }
 } // namespace tempest::editor::tests
