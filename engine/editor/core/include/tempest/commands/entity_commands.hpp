@@ -376,6 +376,88 @@ namespace tempest::editor
         bool _had_prev_field_override = default_had_prev_override;
     };
 
+    /// @brief Command assigning or replacing a material on an entity with automatic prefab override tracking.
+    class TEMPEST_EDITOR_API assign_material_command : public editor_command
+    {
+      public:
+        static constexpr bool default_had_material = false;
+        static constexpr bool default_captured = false;
+        static constexpr bool default_is_in_prefab = false;
+        static constexpr bool default_was_added_component = false;
+        static constexpr bool default_had_prev_override = false;
+
+        /// @brief Constructs a command to assign a material to an entity.
+        /// @param target Persistent address of the target entity.
+        /// @param material_guid GUID of the material to assign.
+        assign_material_command(entity_address target, guid material_guid);
+        ~assign_material_command() override = default;
+
+        assign_material_command(const assign_material_command&) = default;
+        assign_material_command(assign_material_command&&) noexcept = default;
+        auto operator=(const assign_material_command&) -> assign_material_command& = default;
+        auto operator=(assign_material_command&&) noexcept -> assign_material_command& = default;
+
+        /// @brief Applies the material assignment, updating live components and prefab overrides.
+        /// @param ctx Command context providing access to registry, scenes, and loggers.
+        /// @pre Target entity must exist in the registry or scene.
+        /// @post Target entity has core::material_component with material_guid.
+        auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the material assignment, restoring previous material or removing component.
+        /// @param ctx Command context providing access to registry, scenes, and loggers.
+        /// @post Target entity material state is restored.
+        auto revert(command_context& ctx) -> void override;
+
+        /// @brief Returns the user-facing command label.
+        /// @return Command label string.
+        [[nodiscard]] auto label() const noexcept -> string_view override
+        {
+            return "Assign Material";
+        }
+
+        /// @brief Returns the target scene handle for this command.
+        /// @return Target scene handle.
+        [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override
+        {
+            return _target_addr.scene;
+        }
+
+        /// @brief Returns the target entity address.
+        /// @return Persistent entity address reference.
+        [[nodiscard]] auto target_address() const noexcept -> const entity_address&
+        {
+            return _target_addr;
+        }
+
+        /// @brief Returns the new material GUID to assign.
+        /// @return GUID of the material.
+        [[nodiscard]] auto material_guid() const noexcept -> const guid&
+        {
+            return _new_material;
+        }
+
+        /// @brief Returns the previous material GUID if the entity had a material before assignment.
+        /// @return Optional previous material GUID.
+        [[nodiscard]] auto prev_material_guid() const noexcept -> optional<guid>
+        {
+            return _prev_material;
+        }
+
+      private:
+        entity_address _target_addr;
+        guid _new_material;
+        optional<guid> _prev_material;
+        bool _had_material = default_had_material;
+        bool _captured = default_captured;
+        bool _is_in_prefab = default_is_in_prefab;
+        bool _was_added_component = default_was_added_component;
+
+        entity_address _prefab_root_addr;
+        scene::id_path _override_target_path;
+        optional<scene::field_override> _prev_field_override;
+        bool _had_prev_field_override = default_had_prev_override;
+    };
+
     //==============================================================================
     // Prefab Authoring Commands
     //==============================================================================
@@ -514,6 +596,85 @@ namespace tempest::editor
         guid _prefab_guid;
         string _file_path;
         bool _saved = default_saved;
+    };
+
+    /// @brief Command instantiating a prefab template into an active scene or dynamic session.
+    class TEMPEST_EDITOR_API instantiate_prefab_command : public editor_command
+    {
+      public:
+        static constexpr bool default_was_root = false;
+        static constexpr bool default_executed = false;
+
+        /// @brief Constructs an instantiation command targeting an optional scene or parent.
+        /// @param prefab_guid GUID of the prefab template to instantiate.
+        /// @param target_scene Optional scene handle to instantiate into.
+        /// @param parent Optional persistent entity address of the parent entity.
+        /// @param position Optional world position override for the root entity.
+        instantiate_prefab_command(guid prefab_guid, scene::scene_handle target_scene = {},
+                                   optional<entity_address> parent = nullopt,
+                                   optional<math::vec3<float>> position = nullopt);
+
+        /// @brief Constructs an instantiation command parented under a target entity.
+        /// @param prefab_guid GUID of the prefab template to instantiate.
+        /// @param parent Persistent entity address of the parent entity.
+        /// @param position Optional world position override for the root entity.
+        instantiate_prefab_command(guid prefab_guid, entity_address parent,
+                                   optional<math::vec3<float>> position = nullopt);
+        ~instantiate_prefab_command() override = default;
+
+        instantiate_prefab_command(const instantiate_prefab_command&) = default;
+        instantiate_prefab_command(instantiate_prefab_command&&) noexcept = default;
+        auto operator=(const instantiate_prefab_command&) -> instantiate_prefab_command& = default;
+        auto operator=(instantiate_prefab_command&&) noexcept -> instantiate_prefab_command& = default;
+
+        /// @brief Instantiates the prefab into the registry/scene.
+        /// @param ctx Command context providing access to registry, scenes, and loggers.
+        /// @pre ctx.prefab_cache must not be null.
+        /// @post Instantiated entity hierarchy exists with scene local IDs and registered root or parent.
+        auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts prefab instantiation, destroying the instantiated hierarchy.
+        /// @param ctx Command context providing access to registry, scenes, and loggers.
+        /// @post Instantiated entity hierarchy is destroyed and removed from scene roots.
+        auto revert(command_context& ctx) -> void override;
+
+        /// @brief Returns the user-facing command label.
+        /// @return Command label string.
+        [[nodiscard]] auto label() const noexcept -> string_view override
+        {
+            return "Instantiate Prefab";
+        }
+
+        /// @brief Returns the target scene handle for this command.
+        /// @return Target scene handle.
+        [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override
+        {
+            return _scene;
+        }
+
+        /// @brief Returns the persistent address of the instantiated root entity.
+        /// @return Persistent entity address reference.
+        [[nodiscard]] auto instantiated_address() const noexcept -> const entity_address&
+        {
+            return _created_address;
+        }
+
+        /// @brief Returns the GUID of the instantiated prefab template.
+        /// @return Prefab GUID reference.
+        [[nodiscard]] auto prefab_guid() const noexcept -> const guid&
+        {
+            return _prefab_guid;
+        }
+
+      private:
+        guid _prefab_guid;
+        scene::scene_handle _scene = {};
+        optional<entity_address> _parent_addr;
+        optional<math::vec3<float>> _position;
+        entity_address _created_address;
+        destroy_entity_command::entity_snapshot _snapshot;
+        bool _was_root = default_was_root;
+        bool _executed = default_executed;
     };
 
     //==============================================================================

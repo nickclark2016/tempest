@@ -3,10 +3,12 @@
 #include <tempest/algorithm.hpp>
 #include <tempest/archetype.hpp>
 #include <tempest/checked.hpp>
+#include <tempest/command_history.hpp>
 #include <tempest/commands/entity_commands.hpp>
 #include <tempest/dynamic_entity_id_component.hpp>
 #include <tempest/editor_command.hpp>
 #include <tempest/int.hpp>
+#include <tempest/material.hpp>
 #include <tempest/math.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/reflection.hpp>
@@ -14,6 +16,7 @@
 #include <tempest/scene/prefab_cache.hpp>
 #include <tempest/scene/prefab_instance_component.hpp>
 #include <tempest/scene/prefab_overrides.hpp>
+#include <tempest/scene/prefab_template.hpp>
 #include <tempest/scene/scene_entity_component.hpp>
 #include <tempest/scene/scene_manager.hpp>
 #include <tempest/render_system/render_components.hpp>
@@ -69,6 +72,7 @@ namespace tempest_entity_cmd_test
         uint32_t test_sec_comp_idx = 0;
         uint32_t transform_comp_idx = 0;
         uint32_t point_light_idx = 0;
+        uint32_t material_comp_idx = 0;
 
         entity_commands_fixture()
         {
@@ -80,11 +84,13 @@ namespace tempest_entity_cmd_test
             type_reg.ensure<scene::prefab_member_component>();
             type_reg.ensure<scene::scene_entity_component>();
             type_reg.ensure<dynamic_entity_id_component>();
+            material_comp_idx = type_reg.ensure<core::material_component>();
 
             type_reg.add_alias("test_component", type_reg.type_info(test_comp_idx).name);
             type_reg.add_alias("test_secondary_component", type_reg.type_info(test_sec_comp_idx).name);
             type_reg.add_alias("transform_component", type_reg.type_info(transform_comp_idx).name);
             type_reg.add_alias("point_light_component", type_reg.type_info(point_light_idx).name);
+            type_reg.add_alias("material_component", type_reg.type_info(material_comp_idx).name);
         }
     };
 } // namespace tempest_entity_cmd_test
@@ -641,19 +647,19 @@ TEST(entity_commands_test, set_field_records_prefab_override)
 
     // Assert: Member field mutated and override recorded in root instance
     EXPECT_EQ(fix.registry.get<test_component>(member_ent).val, 99);
-    const auto* pic = fix.registry.try_get<scene::prefab_instance_component>(root_ent);
-    ASSERT_NE(pic, nullptr);
-    EXPECT_FALSE(pic->overrides.field_overrides.empty());
-    EXPECT_EQ(pic->overrides.field_overrides[0].field_name, "val");
+    const auto* instance_comp = fix.registry.try_get<scene::prefab_instance_component>(root_ent);
+    ASSERT_NE(instance_comp, nullptr);
+    EXPECT_FALSE(instance_comp->overrides.field_overrides.empty());
+    EXPECT_EQ(instance_comp->overrides.field_overrides[0].field_name, "val");
 
     // Act: Revert field mutation
     set_cmd.revert(fix.ctx);
 
     // Assert: Field restored and override removed
     EXPECT_EQ(fix.registry.get<test_component>(member_ent).val, 50);
-    const auto* pic_reverted = fix.registry.try_get<scene::prefab_instance_component>(root_ent);
-    ASSERT_NE(pic_reverted, nullptr);
-    EXPECT_TRUE(pic_reverted->overrides.field_overrides.empty());
+    const auto* instance_comp_reverted = fix.registry.try_get<scene::prefab_instance_component>(root_ent);
+    ASSERT_NE(instance_comp_reverted, nullptr);
+    EXPECT_TRUE(instance_comp_reverted->overrides.field_overrides.empty());
 }
 
 /// @brief Verifies that adding and removing components on a prefab member records added/removed overrides.
@@ -686,16 +692,16 @@ TEST(entity_commands_test, add_and_remove_component_records_prefab_overrides)
 
     // Assert: Component added and added_component override tracked
     EXPECT_TRUE(fix.registry.has<test_secondary_component>(member_ent));
-    const auto* pic = fix.registry.try_get<scene::prefab_instance_component>(root_ent);
-    ASSERT_NE(pic, nullptr);
-    EXPECT_FALSE(pic->overrides.added_components.empty());
+    const auto* instance_comp = fix.registry.try_get<scene::prefab_instance_component>(root_ent);
+    ASSERT_NE(instance_comp, nullptr);
+    EXPECT_FALSE(instance_comp->overrides.added_components.empty());
 
     // Act: Revert addition
     add_cmd.revert(fix.ctx);
     EXPECT_FALSE(fix.registry.has<test_secondary_component>(member_ent));
-    const auto* pic_reverted = fix.registry.try_get<scene::prefab_instance_component>(root_ent);
-    ASSERT_NE(pic_reverted, nullptr);
-    EXPECT_TRUE(pic_reverted->overrides.added_components.empty());
+    const auto* instance_comp_reverted = fix.registry.try_get<scene::prefab_instance_component>(root_ent);
+    ASSERT_NE(instance_comp_reverted, nullptr);
+    EXPECT_TRUE(instance_comp_reverted->overrides.added_components.empty());
 
     // Act: Remove test_component from member (pre-assigned)
     fix.registry.assign(member_ent, test_component{.val = 123, .speed = 2.0F});
@@ -1115,6 +1121,586 @@ TEST(entity_commands_test, point_light_command_lifecycle_events)
     EXPECT_TRUE(fix.registry.has<render_system::point_light_component>(target_entity));
     const auto& restored_pl = fix.registry.get<render_system::point_light_component>(target_entity);
     EXPECT_FLOAT_EQ(restored_pl.intensity, 25.0F);
+}
+
+//==============================================================================
+// Prefab Instantiation & Material Assignment Commands Tests
+//==============================================================================
+
+/// @brief Verifies that instantiate_prefab_command creates scene entities, records stable address,
+/// registers in scene roots, and supports lossless undo and redo operations.
+TEST(entity_commands_test, instantiate_prefab_command_root_undo_redo)
+{
+    // Setup: Scene and registered multi-entity prefab template in cache
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneInstantiatePrefab");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    auto t_reg = ecs::archetype_registry{fix.event_reg, fix.type_reg};
+    const auto tmpl_root = t_reg.create();
+    t_reg.name(tmpl_root, "PrefabRoot");
+    t_reg.assign(tmpl_root, test_component{.val = 42, .speed = 2.5F});
+
+    const auto tmpl_child = t_reg.create();
+    t_reg.name(tmpl_child, "PrefabChild");
+    t_reg.assign(tmpl_child, test_secondary_component{.tag = 100});
+    t_reg.reparent(tmpl_child, tmpl_root);
+
+    auto tmpl = scene::prefab_template::from_entity(t_reg, tmpl_root);
+    const auto prefab_guid = guid{array<byte, 16>{byte{11}, byte{22}, byte{33}, byte{44}}};
+    ASSERT_TRUE(fix.prefab_cache.register_template(prefab_guid, tempest::move(tmpl)));
+
+    // Act: Instantiate prefab as root entity in scene
+    auto inst_cmd = instantiate_prefab_command{prefab_guid, scene};
+    inst_cmd.apply(fix.ctx);
+
+    // Assert: Verify command properties, created address, and entities
+    EXPECT_EQ(inst_cmd.label(), "Instantiate Prefab");
+    EXPECT_EQ(inst_cmd.target_scene(), scene);
+    EXPECT_EQ(inst_cmd.prefab_guid(), prefab_guid);
+    EXPECT_EQ(inst_cmd.instantiated_address().scene, scene);
+    EXPECT_FALSE(inst_cmd.instantiated_address().id_path.empty());
+
+    const auto root_ent = resolve_entity_address(fix.registry, fix.scene_mgr, inst_cmd.instantiated_address());
+    ASSERT_NE(root_ent, tombstone_entity);
+    EXPECT_TRUE(fix.registry.is_valid(root_ent));
+    EXPECT_TRUE(fix.scene_mgr.is_dirty(scene));
+
+    const auto roots_opt = fix.scene_mgr.get_root_entities(scene);
+    ASSERT_TRUE(roots_opt.has_value());
+    auto found_in_roots = false;
+    for (const auto cand : *roots_opt)
+    {
+        if (cand == root_ent)
+        {
+            found_in_roots = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_in_roots);
+
+    const auto* comp = fix.registry.try_get<test_component>(root_ent);
+    ASSERT_NE(comp, nullptr);
+    EXPECT_EQ(comp->val, 42);
+
+    const auto* rel = fix.registry.try_get<ecs::relationship_component<ecs::entity>>(root_ent);
+    ASSERT_NE(rel, nullptr);
+    const auto child_ent = rel->first_child;
+    ASSERT_NE(child_ent, tombstone_entity);
+    EXPECT_TRUE(fix.registry.is_valid(child_ent));
+
+    const auto* child_comp = fix.registry.try_get<test_secondary_component>(child_ent);
+    ASSERT_NE(child_comp, nullptr);
+    EXPECT_EQ(child_comp->tag, 100);
+
+    // Act: Revert instantiation command
+    inst_cmd.revert(fix.ctx);
+
+    // Assert: Root and child destroyed, root removed from scene roots
+    EXPECT_EQ(resolve_entity_address(fix.registry, fix.scene_mgr, inst_cmd.instantiated_address()), tombstone_entity);
+    EXPECT_FALSE(fix.registry.is_valid(root_ent));
+    EXPECT_FALSE(fix.registry.is_valid(child_ent));
+
+    const auto roots_after_undo = fix.scene_mgr.get_root_entities(scene);
+    ASSERT_TRUE(roots_after_undo.has_value());
+    auto found_after_undo = false;
+    for (const auto cand : *roots_after_undo)
+    {
+        if (cand == root_ent)
+        {
+            found_after_undo = true;
+            break;
+        }
+    }
+    EXPECT_FALSE(found_after_undo);
+
+    // Act: Reapply instantiation command (redo)
+    inst_cmd.apply(fix.ctx);
+
+    // Assert: Entities restored and registered in scene roots
+    const auto restored_root = resolve_entity_address(fix.registry, fix.scene_mgr, inst_cmd.instantiated_address());
+    ASSERT_NE(restored_root, tombstone_entity);
+    EXPECT_TRUE(fix.registry.is_valid(restored_root));
+
+    const auto* restored_comp = fix.registry.try_get<test_component>(restored_root);
+    ASSERT_NE(restored_comp, nullptr);
+    EXPECT_EQ(restored_comp->val, 42);
+
+    const auto* restored_rel = fix.registry.try_get<ecs::relationship_component<ecs::entity>>(restored_root);
+    ASSERT_NE(restored_rel, nullptr);
+    const auto restored_child = restored_rel->first_child;
+    ASSERT_NE(restored_child, tombstone_entity);
+    EXPECT_TRUE(fix.registry.is_valid(restored_child));
+    EXPECT_EQ(fix.registry.get<test_secondary_component>(restored_child).tag, 100);
+
+    const auto roots_after_redo = fix.scene_mgr.get_root_entities(scene);
+    ASSERT_TRUE(roots_after_redo.has_value());
+    auto found_after_redo = false;
+    for (const auto cand : *roots_after_redo)
+    {
+        if (cand == restored_root)
+        {
+            found_after_redo = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_after_redo);
+}
+
+/// @brief Verifies that instantiate_prefab_command parented under an existing entity establishes hierarchy
+/// without registering as a scene root, and preserves hierarchy through undo and redo.
+TEST(entity_commands_test, instantiate_prefab_command_parented)
+{
+    // Setup: Scene with an existing parent entity and registered prefab template
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneInstantiateParented");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    auto create_parent = create_entity_command{scene, "ParentEntity"};
+    create_parent.apply(fix.ctx);
+    const auto parent_addr = create_parent.created_address();
+    const auto parent_ent = resolve_entity_address(fix.registry, fix.scene_mgr, parent_addr);
+    ASSERT_NE(parent_ent, tombstone_entity);
+
+    auto t_reg = ecs::archetype_registry{fix.event_reg, fix.type_reg};
+    const auto tmpl_root = t_reg.create();
+    t_reg.name(tmpl_root, "ChildPrefabRoot");
+    t_reg.assign(tmpl_root, test_component{.val = 77});
+
+    auto tmpl = scene::prefab_template::from_entity(t_reg, tmpl_root);
+    const auto prefab_guid = guid{array<byte, 16>{byte{55}, byte{66}, byte{77}, byte{88}}};
+    ASSERT_TRUE(fix.prefab_cache.register_template(prefab_guid, tempest::move(tmpl)));
+
+    // Act: Instantiate prefab parented under existing entity
+    auto inst_cmd = instantiate_prefab_command{prefab_guid, parent_addr};
+    inst_cmd.apply(fix.ctx);
+
+    // Assert: Instantiated entity parented under parent_ent and not in scene roots
+    const auto inst_ent = resolve_entity_address(fix.registry, fix.scene_mgr, inst_cmd.instantiated_address());
+    ASSERT_NE(inst_ent, tombstone_entity);
+
+    const auto* rel = fix.registry.try_get<ecs::relationship_component<ecs::entity>>(inst_ent);
+    ASSERT_NE(rel, nullptr);
+    EXPECT_EQ(rel->parent, parent_ent);
+
+    const auto roots_opt = fix.scene_mgr.get_root_entities(scene);
+    ASSERT_TRUE(roots_opt.has_value());
+    for (const auto cand : *roots_opt)
+    {
+        EXPECT_NE(cand, inst_ent);
+    }
+
+    // Act: Revert command
+    inst_cmd.revert(fix.ctx);
+
+    // Assert: Instantiated entity destroyed, parent entity still intact
+    EXPECT_EQ(resolve_entity_address(fix.registry, fix.scene_mgr, inst_cmd.instantiated_address()), tombstone_entity);
+    EXPECT_TRUE(fix.registry.is_valid(parent_ent));
+
+    // Act: Redo command
+    inst_cmd.apply(fix.ctx);
+
+    // Assert: Instantiated entity restored and reparented under parent_ent
+    const auto restored_ent = resolve_entity_address(fix.registry, fix.scene_mgr, inst_cmd.instantiated_address());
+    ASSERT_NE(restored_ent, tombstone_entity);
+    const auto* restored_rel = fix.registry.try_get<ecs::relationship_component<ecs::entity>>(restored_ent);
+    ASSERT_NE(restored_rel, nullptr);
+    EXPECT_EQ(restored_rel->parent, parent_ent);
+}
+
+/// @brief Verifies that instantiate_prefab_command with an initial position assigns transform_component
+/// with the specified position and preserves it through undo and redo.
+TEST(entity_commands_test, instantiate_prefab_command_with_initial_position)
+{
+    // Setup: Scene and registered prefab template
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneInstantiatePosition");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    auto t_reg = ecs::archetype_registry{fix.event_reg, fix.type_reg};
+    const auto tmpl_root = t_reg.create();
+    t_reg.name(tmpl_root, "PosPrefabRoot");
+
+    auto tmpl = scene::prefab_template::from_entity(t_reg, tmpl_root);
+    const auto prefab_guid = guid{array<byte, 16>{byte{10}, byte{20}, byte{30}, byte{40}}};
+    ASSERT_TRUE(fix.prefab_cache.register_template(prefab_guid, tempest::move(tmpl)));
+
+    // Act: Instantiate prefab with explicit initial position
+    const auto init_pos = math::vec3<float>{10.0F, 20.0F, 30.0F};
+    auto inst_cmd = instantiate_prefab_command{prefab_guid, scene, nullopt, init_pos};
+    inst_cmd.apply(fix.ctx);
+
+    // Assert: Instantiated root has transform_component with matching position
+    const auto inst_ent = resolve_entity_address(fix.registry, fix.scene_mgr, inst_cmd.instantiated_address());
+    ASSERT_NE(inst_ent, tombstone_entity);
+
+    const auto* tf = fix.registry.try_get<ecs::transform_component>(inst_ent);
+    ASSERT_NE(tf, nullptr);
+    EXPECT_FLOAT_EQ(tf->position().x, 10.0F);
+    EXPECT_FLOAT_EQ(tf->position().y, 20.0F);
+    EXPECT_FLOAT_EQ(tf->position().z, 30.0F);
+
+    // Act: Revert and redo
+    inst_cmd.revert(fix.ctx);
+    inst_cmd.apply(fix.ctx);
+
+    // Assert: Position preserved on restored entity
+    const auto restored_ent = resolve_entity_address(fix.registry, fix.scene_mgr, inst_cmd.instantiated_address());
+    ASSERT_NE(restored_ent, tombstone_entity);
+    const auto* restored_tf = fix.registry.try_get<ecs::transform_component>(restored_ent);
+    ASSERT_NE(restored_tf, nullptr);
+    EXPECT_FLOAT_EQ(restored_tf->position().x, 10.0F);
+    EXPECT_FLOAT_EQ(restored_tf->position().y, 20.0F);
+    EXPECT_FLOAT_EQ(restored_tf->position().z, 30.0F);
+}
+
+/// @brief Verifies that instantiate_prefab_command fails gracefully without crashing when executed with a null prefab cache.
+TEST(entity_commands_test, instantiate_prefab_command_null_cache_fails_gracefully)
+{
+    // Setup: Scene and command context with null prefab cache
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneInstantiateNullCache");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    fix.ctx.prefab_cache = nullptr;
+    const auto dummy_guid = guid{array<byte, 16>{byte{11}, byte{22}, byte{33}, byte{44}}};
+
+    // Act: Apply instantiate_prefab_command with null prefab cache
+    auto inst_cmd = instantiate_prefab_command{dummy_guid, scene};
+    inst_cmd.apply(fix.ctx);
+
+    // Assert: No entity was instantiated
+    const auto inst_addr = inst_cmd.instantiated_address();
+    EXPECT_EQ(resolve_entity_address(fix.registry, fix.scene_mgr, inst_addr), tombstone_entity);
+
+    // Act: Revert command
+    inst_cmd.revert(fix.ctx);
+
+    // Assert: State remains consistent and no entity exists
+    EXPECT_EQ(resolve_entity_address(fix.registry, fix.scene_mgr, inst_addr), tombstone_entity);
+}
+
+/// @brief Verifies that assign_material_command assigns a material GUID to an entity lacking material_component,
+/// replaces existing material GUIDs, and restores previous states upon undo and redo.
+TEST(entity_commands_test, assign_material_command_lifecycle)
+{
+    // Setup: Scene with an entity lacking material_component
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneAssignMaterial");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    auto create_cmd = create_entity_command{scene, "MaterialTargetEntity"};
+    create_cmd.apply(fix.ctx);
+    const auto addr = create_cmd.created_address();
+    const auto ent = resolve_entity_address(fix.registry, fix.scene_mgr, addr);
+    ASSERT_NE(ent, tombstone_entity);
+
+    const auto mat_a = guid{array<byte, 16>{byte{1}, byte{2}, byte{3}, byte{4}}};
+    const auto mat_b = guid{array<byte, 16>{byte{5}, byte{6}, byte{7}, byte{8}}};
+
+    // Act: Assign initial material
+    auto cmd_a = assign_material_command{addr, mat_a};
+    cmd_a.apply(fix.ctx);
+
+    // Assert: Component added with mat_a, prev_material is nullopt
+    EXPECT_EQ(cmd_a.label(), "Assign Material");
+    EXPECT_EQ(cmd_a.target_scene(), scene);
+    EXPECT_EQ(cmd_a.target_address(), addr);
+    EXPECT_EQ(cmd_a.material_guid(), mat_a);
+    EXPECT_FALSE(cmd_a.prev_material_guid().has_value());
+    ASSERT_TRUE(fix.registry.has<core::material_component>(ent));
+    EXPECT_EQ(fix.registry.get<core::material_component>(ent).material_id, mat_a);
+
+    // Act: Revert initial material assignment
+    cmd_a.revert(fix.ctx);
+
+    // Assert: Component removed
+    EXPECT_FALSE(fix.registry.has<core::material_component>(ent));
+
+    // Act: Redo initial material assignment
+    cmd_a.apply(fix.ctx);
+
+    // Assert: Component restored with mat_a
+    ASSERT_TRUE(fix.registry.has<core::material_component>(ent));
+    EXPECT_EQ(fix.registry.get<core::material_component>(ent).material_id, mat_a);
+
+    // Act: Replace material with mat_b
+    auto cmd_b = assign_material_command{addr, mat_b};
+    cmd_b.apply(fix.ctx);
+
+    // Assert: Component replaced with mat_b, prev_material records mat_a
+    EXPECT_EQ(cmd_b.material_guid(), mat_b);
+    ASSERT_TRUE(cmd_b.prev_material_guid().has_value());
+    EXPECT_EQ(*cmd_b.prev_material_guid(), mat_a);
+    EXPECT_EQ(fix.registry.get<core::material_component>(ent).material_id, mat_b);
+
+    // Act: Revert replacement
+    cmd_b.revert(fix.ctx);
+
+    // Assert: Previous material mat_a restored
+    EXPECT_EQ(fix.registry.get<core::material_component>(ent).material_id, mat_a);
+
+    // Act: Redo replacement
+    cmd_b.apply(fix.ctx);
+
+    // Assert: Replacement mat_b reapplied
+    EXPECT_EQ(fix.registry.get<core::material_component>(ent).material_id, mat_b);
+}
+
+/// @brief Verifies that assign_material_command on an entity in a prefab instance records
+/// the corresponding prefab override, and restores or reverts the override upon undo and redo.
+TEST(entity_commands_test, assign_material_command_prefab_override)
+{
+    // Setup: Scene with an instantiated prefab containing a material_component
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneAssignMatPrefab");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    const auto orig_mat = guid{array<byte, 16>{byte{100}, byte{101}, byte{102}}};
+    const auto new_mat = guid{array<byte, 16>{byte{200}, byte{201}, byte{202}}};
+
+    auto t_reg = ecs::archetype_registry{fix.event_reg, fix.type_reg};
+    const auto tmpl_root = t_reg.create();
+    t_reg.name(tmpl_root, "PrefabWithMaterial");
+    t_reg.assign(tmpl_root, core::material_component{.material_id = orig_mat});
+
+    auto tmpl = scene::prefab_template::from_entity(t_reg, tmpl_root);
+    const auto prefab_guid = guid{array<byte, 16>{byte{90}, byte{91}, byte{92}, byte{93}}};
+    ASSERT_TRUE(fix.prefab_cache.register_template(prefab_guid, tempest::move(tmpl)));
+
+    auto inst_cmd = instantiate_prefab_command{prefab_guid, scene};
+    inst_cmd.apply(fix.ctx);
+    const auto inst_addr = inst_cmd.instantiated_address();
+    const auto inst_ent = resolve_entity_address(fix.registry, fix.scene_mgr, inst_addr);
+    ASSERT_NE(inst_ent, tombstone_entity);
+
+    // Act: Assign new material to prefab instance entity
+    auto mat_cmd = assign_material_command{inst_addr, new_mat};
+    mat_cmd.apply(fix.ctx);
+
+    // Assert: Entity has new material and prefab instance records field override
+    EXPECT_EQ(fix.registry.get<core::material_component>(inst_ent).material_id, new_mat);
+    const auto* instance_comp = fix.registry.try_get<scene::prefab_instance_component>(inst_ent);
+    ASSERT_NE(instance_comp, nullptr);
+    EXPECT_FALSE(instance_comp->overrides.field_overrides.empty());
+    auto found_override = false;
+    for (const auto& field_override : instance_comp->overrides.field_overrides)
+    {
+        if (field_override.field_name == "material_id")
+        {
+            found_override = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_override);
+
+    // Act: Revert material assignment
+    mat_cmd.revert(fix.ctx);
+
+    // Assert: Original material restored and field override removed
+    EXPECT_EQ(fix.registry.get<core::material_component>(inst_ent).material_id, orig_mat);
+    const auto* instance_comp_undone = fix.registry.try_get<scene::prefab_instance_component>(inst_ent);
+    ASSERT_NE(instance_comp_undone, nullptr);
+    auto found_after_undo = false;
+    for (const auto& field_override : instance_comp_undone->overrides.field_overrides)
+    {
+        if (field_override.field_name == "material_id")
+        {
+            found_after_undo = true;
+            break;
+        }
+    }
+    EXPECT_FALSE(found_after_undo);
+
+    // Act: Redo material assignment
+    mat_cmd.apply(fix.ctx);
+
+    // Assert: New material restored and field override restored
+    EXPECT_EQ(fix.registry.get<core::material_component>(inst_ent).material_id, new_mat);
+    const auto* instance_comp_redone = fix.registry.try_get<scene::prefab_instance_component>(inst_ent);
+    ASSERT_NE(instance_comp_redone, nullptr);
+    auto found_after_redo = false;
+    for (const auto& field_override : instance_comp_redone->overrides.field_overrides)
+    {
+        if (field_override.field_name == "material_id")
+        {
+            found_after_redo = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_after_redo);
+}
+
+/// @brief Verifies that assign_material_command on an entity in a prefab instance that initially lacked a material
+/// correctly records an added_component override, removes it on undo, and restores it on redo.
+TEST(entity_commands_test, assign_material_command_prefab_override_added_component)
+{
+    // Setup: Scene with an instantiated prefab lacking material_component
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneAssignMatAddedComp");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    const auto new_mat = guid{array<byte, 16>{byte{201}, byte{202}, byte{203}, byte{204}}};
+
+    auto t_reg = ecs::archetype_registry{fix.event_reg, fix.type_reg};
+    const auto tmpl_root = t_reg.create();
+    t_reg.name(tmpl_root, "PrefabWithoutMaterial");
+    t_reg.assign(tmpl_root, test_component{.val = 55});
+
+    auto tmpl = scene::prefab_template::from_entity(t_reg, tmpl_root);
+    const auto prefab_guid = guid{array<byte, 16>{byte{88}, byte{77}, byte{66}, byte{55}}};
+    ASSERT_TRUE(fix.prefab_cache.register_template(prefab_guid, tempest::move(tmpl)));
+
+    auto inst_cmd = instantiate_prefab_command{prefab_guid, scene};
+    inst_cmd.apply(fix.ctx);
+    const auto inst_addr = inst_cmd.instantiated_address();
+    const auto inst_ent = resolve_entity_address(fix.registry, fix.scene_mgr, inst_addr);
+    ASSERT_NE(inst_ent, tombstone_entity);
+    ASSERT_FALSE(fix.registry.has<core::material_component>(inst_ent));
+
+    // Act: Assign material to prefab instance entity lacking material_component
+    auto mat_cmd = assign_material_command{inst_addr, new_mat};
+    mat_cmd.apply(fix.ctx);
+
+    // Assert: Entity has new material and prefab instance records added_component override
+    ASSERT_TRUE(fix.registry.has<core::material_component>(inst_ent));
+    EXPECT_EQ(fix.registry.get<core::material_component>(inst_ent).material_id, new_mat);
+    const auto* instance_comp = fix.registry.try_get<scene::prefab_instance_component>(inst_ent);
+    ASSERT_NE(instance_comp, nullptr);
+    EXPECT_FALSE(instance_comp->overrides.added_components.empty());
+    auto found_added = false;
+    for (const auto& added : instance_comp->overrides.added_components)
+    {
+        if (added.component.type_info != nullptr &&
+            added.component.type_info->name == fix.type_reg.type_info(fix.material_comp_idx).name)
+        {
+            found_added = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_added);
+
+    // Act: Revert material assignment
+    mat_cmd.revert(fix.ctx);
+
+    // Assert: Material component removed and added_component override removed
+    EXPECT_FALSE(fix.registry.has<core::material_component>(inst_ent));
+    const auto* instance_comp_undone = fix.registry.try_get<scene::prefab_instance_component>(inst_ent);
+    ASSERT_NE(instance_comp_undone, nullptr);
+    auto found_after_undo = false;
+    for (const auto& added : instance_comp_undone->overrides.added_components)
+    {
+        if (added.component.type_info != nullptr &&
+            added.component.type_info->name == fix.type_reg.type_info(fix.material_comp_idx).name)
+        {
+            found_after_undo = true;
+            break;
+        }
+    }
+    EXPECT_FALSE(found_after_undo);
+
+    // Act: Redo material assignment
+    mat_cmd.apply(fix.ctx);
+
+    // Assert: Material component restored and added_component override restored
+    ASSERT_TRUE(fix.registry.has<core::material_component>(inst_ent));
+    EXPECT_EQ(fix.registry.get<core::material_component>(inst_ent).material_id, new_mat);
+    const auto* instance_comp_redone = fix.registry.try_get<scene::prefab_instance_component>(inst_ent);
+    ASSERT_NE(instance_comp_redone, nullptr);
+    auto found_after_redo = false;
+    for (const auto& added : instance_comp_redone->overrides.added_components)
+    {
+        if (added.component.type_info != nullptr &&
+            added.component.type_info->name == fix.type_reg.type_info(fix.material_comp_idx).name)
+        {
+            found_after_redo = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_after_redo);
+}
+
+/// @brief Verifies integration of instantiate_prefab_command and assign_material_command
+/// executed through command_history, ensuring end-to-end multi-step undo and redo.
+TEST(entity_commands_test, command_history_integration_prefab_and_material)
+{
+    // Setup: Scene and command history with registered prefab template
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneHistoryIntegration");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    const auto orig_mat = guid{array<byte, 16>{byte{1}, byte{1}, byte{1}}};
+    const auto new_mat = guid{array<byte, 16>{byte{2}, byte{2}, byte{2}}};
+
+    auto t_reg = ecs::archetype_registry{fix.event_reg, fix.type_reg};
+    const auto tmpl_root = t_reg.create();
+    t_reg.name(tmpl_root, "HistoryPrefabRoot");
+    t_reg.assign(tmpl_root, core::material_component{.material_id = orig_mat});
+
+    auto tmpl = scene::prefab_template::from_entity(t_reg, tmpl_root);
+    const auto prefab_guid = guid{array<byte, 16>{byte{71}, byte{72}, byte{73}, byte{74}}};
+    ASSERT_TRUE(fix.prefab_cache.register_template(prefab_guid, tempest::move(tmpl)));
+
+    auto history = command_history{};
+
+    // Act: Execute instantiate_prefab_command via command_history
+    auto inst_cmd = make_unique<instantiate_prefab_command>(prefab_guid, scene);
+    const auto inst_ptr = inst_cmd.get();
+    history.execute(tempest::move(inst_cmd), fix.ctx);
+
+    const auto inst_addr = inst_ptr->instantiated_address();
+    const auto inst_ent = resolve_entity_address(fix.registry, fix.scene_mgr, inst_addr);
+    ASSERT_NE(inst_ent, tombstone_entity);
+    EXPECT_EQ(fix.registry.get<core::material_component>(inst_ent).material_id, orig_mat);
+
+    // Act: Execute assign_material_command via command_history
+    auto mat_cmd = make_unique<assign_material_command>(inst_addr, new_mat);
+    history.execute(tempest::move(mat_cmd), fix.ctx);
+
+    // Assert: New material applied
+    EXPECT_EQ(fix.registry.get<core::material_component>(inst_ent).material_id, new_mat);
+
+    // Act: Undo material assignment
+    EXPECT_TRUE(history.undo(fix.ctx, scene));
+
+    // Assert: Material reverted to original
+    EXPECT_EQ(fix.registry.get<core::material_component>(inst_ent).material_id, orig_mat);
+
+    // Act: Undo prefab instantiation
+    EXPECT_TRUE(history.undo(fix.ctx, scene));
+
+    // Assert: Prefab instance destroyed
+    EXPECT_EQ(resolve_entity_address(fix.registry, fix.scene_mgr, inst_addr), tombstone_entity);
+
+    // Act: Redo prefab instantiation
+    EXPECT_TRUE(history.redo(fix.ctx, scene));
+
+    // Assert: Prefab instance restored with original material
+    const auto restored_ent = resolve_entity_address(fix.registry, fix.scene_mgr, inst_addr);
+    ASSERT_NE(restored_ent, tombstone_entity);
+    EXPECT_EQ(fix.registry.get<core::material_component>(restored_ent).material_id, orig_mat);
+
+    // Act: Redo material assignment
+    EXPECT_TRUE(history.redo(fix.ctx, scene));
+
+    // Assert: New material reapplied to restored entity
+    EXPECT_EQ(fix.registry.get<core::material_component>(restored_ent).material_id, new_mat);
 }
 
 

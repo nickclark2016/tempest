@@ -2,10 +2,13 @@
 
 #include <tempest/algorithm.hpp>
 #include <tempest/dynamic_entity_id_component.hpp>
+#include <tempest/hash.hpp>
 #include <tempest/logger.hpp>
+#include <tempest/material.hpp>
 #include <tempest/math.hpp>
 #include <tempest/random.hpp>
 #include <tempest/relationship_component.hpp>
+#include <tempest/scene/prefab_instantiator.hpp>
 #include <tempest/utility.hpp>
 
 namespace tempest::editor
@@ -2014,6 +2017,218 @@ namespace tempest::editor
     }
 
     //==============================================================================
+    // assign_material_command
+    //==============================================================================
+
+    assign_material_command::assign_material_command(entity_address target, guid material_guid)
+        : _target_addr{tempest::move(target)}, _new_material{material_guid}
+    {
+    }
+
+    auto assign_material_command::apply(command_context& ctx) -> void
+    {
+        const auto target_entity = resolve_entity_address(*ctx.registry, *ctx.scene_manager, _target_addr);
+        if (target_entity == ecs::tombstone || !ctx.registry->is_valid(target_entity))
+        {
+            return;
+        }
+
+        const auto opt_idx = ctx.registry->type_registry().type_index<core::material_component>();
+        const auto comp_name = opt_idx.has_value() ? ctx.registry->type_registry().type_info(*opt_idx).name
+                                                    : string_view{"tempest::core::material_component"};
+
+        if (!_captured)
+        {
+            if (const auto* mat_comp = ctx.registry->try_get<core::material_component>(target_entity);
+                mat_comp != nullptr)
+            {
+                _had_material = true;
+                _prev_material = mat_comp->material_id;
+            }
+            else
+            {
+                _had_material = false;
+                _prev_material = nullopt;
+            }
+
+            const auto root_entity = find_prefab_instance_root(*ctx.registry, target_entity);
+            if (root_entity != ecs::tombstone)
+            {
+                _is_in_prefab = true;
+                _prefab_root_addr = compute_entity_address(*ctx.registry, root_entity);
+                _override_target_path = compute_prefab_id_path(*ctx.registry, root_entity, target_entity);
+                _was_added_component = !_had_material;
+
+                if (!_was_added_component)
+                {
+                    const auto& instance_comp = ctx.registry->get<scene::prefab_instance_component>(root_entity);
+                    for (const auto& field_override : instance_comp.overrides.field_overrides)
+                    {
+                        if (field_override.target == _override_target_path &&
+                            field_override.component_name == comp_name &&
+                            field_override.field_name == "material_id")
+                        {
+                            _prev_field_override = field_override;
+                            break;
+                        }
+                    }
+                    _had_prev_field_override = true;
+                }
+            }
+
+            _captured = true;
+        }
+
+        ctx.registry->assign_or_replace(target_entity, core::material_component{.material_id = _new_material});
+
+        if (_is_in_prefab)
+        {
+            const auto root_entity = resolve_entity_address(*ctx.registry, *ctx.scene_manager, _prefab_root_addr);
+            if (root_entity != ecs::tombstone && ctx.registry->is_valid(root_entity))
+            {
+                auto instance_comp = ctx.registry->get<scene::prefab_instance_component>(root_entity);
+
+                if (_was_added_component)
+                {
+                    if (opt_idx.has_value())
+                    {
+                        const auto& info = ctx.registry->type_registry().type_info(*opt_idx);
+                        auto staged = scene::staged_component{.type_info = &info};
+                        staged.data.resize(sizeof(core::material_component));
+                        const auto mat_comp_val = core::material_component{.material_id = _new_material};
+                        tempest::memcpy(staged.data.data(), &mat_comp_val, sizeof(core::material_component));
+                        instance_comp.overrides.added_components.push_back(scene::added_component{
+                            .target = _override_target_path,
+                            .component = tempest::move(staged),
+                        });
+                    }
+                }
+                else
+                {
+                    auto val_bytes = vector<byte>(sizeof(guid));
+                    tempest::memcpy(val_bytes.data(), &_new_material, sizeof(guid));
+
+                    auto* existing_override_iter = instance_comp.overrides.field_overrides.end();
+                    for (auto* field_iter = instance_comp.overrides.field_overrides.begin();
+                         field_iter != instance_comp.overrides.field_overrides.end(); ++field_iter)
+                    {
+                        if (field_iter->target == _override_target_path && field_iter->component_name == comp_name &&
+                            field_iter->field_name == "material_id")
+                        {
+                            existing_override_iter = field_iter;
+                            break;
+                        }
+                    }
+
+                    if (existing_override_iter != instance_comp.overrides.field_overrides.end())
+                    {
+                        existing_override_iter->value_bytes = tempest::move(val_bytes);
+                    }
+                    else
+                    {
+                        instance_comp.overrides.field_overrides.push_back(scene::field_override{
+                            .target = _override_target_path,
+                            .component_name = string{comp_name},
+                            .field_name = "material_id",
+                            .value_bytes = tempest::move(val_bytes),
+                        });
+                    }
+                }
+                ctx.registry->assign_or_replace(root_entity, tempest::move(instance_comp));
+            }
+        }
+
+        if (_target_addr.scene.is_valid())
+        {
+            ctx.scene_manager->set_dirty(_target_addr.scene, true);
+        }
+    }
+
+    auto assign_material_command::revert(command_context& ctx) -> void
+    {
+        const auto target_entity = resolve_entity_address(*ctx.registry, *ctx.scene_manager, _target_addr);
+        if (target_entity == ecs::tombstone || !ctx.registry->is_valid(target_entity))
+        {
+            return;
+        }
+
+        if (_had_material && _prev_material.has_value())
+        {
+            ctx.registry->assign_or_replace(target_entity, core::material_component{.material_id = *_prev_material});
+        }
+        else if (ctx.registry->has<core::material_component>(target_entity))
+        {
+            ctx.registry->remove<core::material_component>(target_entity);
+        }
+
+        if (_is_in_prefab)
+        {
+            const auto root_entity = resolve_entity_address(*ctx.registry, *ctx.scene_manager, _prefab_root_addr);
+            if (root_entity != ecs::tombstone && ctx.registry->is_valid(root_entity))
+            {
+                auto instance_comp = ctx.registry->get<scene::prefab_instance_component>(root_entity);
+                const auto opt_idx = ctx.registry->type_registry().type_index<core::material_component>();
+                const auto comp_name =
+                    opt_idx.has_value() ? ctx.registry->type_registry().type_info(*opt_idx).name
+                                        : string_view{"tempest::core::material_component"};
+
+                if (_was_added_component)
+                {
+                    for (auto* added_iter = instance_comp.overrides.added_components.begin();
+                         added_iter != instance_comp.overrides.added_components.end(); ++added_iter)
+                    {
+                        if (added_iter->target == _override_target_path && added_iter->component.type_info != nullptr &&
+                            added_iter->component.type_info->name == comp_name)
+                        {
+                            instance_comp.overrides.added_components.erase(added_iter);
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    auto* existing_override_iter = instance_comp.overrides.field_overrides.end();
+                    for (auto* field_iter = instance_comp.overrides.field_overrides.begin();
+                         field_iter != instance_comp.overrides.field_overrides.end(); ++field_iter)
+                    {
+                        if (field_iter->target == _override_target_path && field_iter->component_name == comp_name &&
+                            field_iter->field_name == "material_id")
+                        {
+                            existing_override_iter = field_iter;
+                            break;
+                        }
+                    }
+
+                    if (_prev_field_override.has_value())
+                    {
+                        if (existing_override_iter != instance_comp.overrides.field_overrides.end())
+                        {
+                            *existing_override_iter = *_prev_field_override;
+                        }
+                        else
+                        {
+                            instance_comp.overrides.field_overrides.push_back(*_prev_field_override);
+                        }
+                    }
+                    else
+                    {
+                        if (existing_override_iter != instance_comp.overrides.field_overrides.end())
+                        {
+                            instance_comp.overrides.field_overrides.erase(existing_override_iter);
+                        }
+                    }
+                }
+                ctx.registry->assign_or_replace(root_entity, tempest::move(instance_comp));
+            }
+        }
+
+        if (_target_addr.scene.is_valid())
+        {
+            ctx.scene_manager->set_dirty(_target_addr.scene, true);
+        }
+    }
+
+    //==============================================================================
     // revert_override_command
     //==============================================================================
 
@@ -2457,6 +2672,199 @@ namespace tempest::editor
     auto save_as_prefab_command::target_scene() const noexcept -> scene::scene_handle
     {
         return _root_addr.scene;
+    }
+
+    //==============================================================================
+    // instantiate_prefab_command
+    //==============================================================================
+
+    instantiate_prefab_command::instantiate_prefab_command(guid prefab_guid, scene::scene_handle target_scene,
+                                                           optional<entity_address> parent,
+                                                           optional<math::vec3<float>> position)
+        : _prefab_guid{prefab_guid},
+          _scene{target_scene.is_valid() ? target_scene
+                                         : (parent.has_value() ? parent->scene : scene::scene_handle{})},
+          _parent_addr{tempest::move(parent)}, _position{position}
+    {
+    }
+
+    instantiate_prefab_command::instantiate_prefab_command(guid prefab_guid, entity_address parent,
+                                                           optional<math::vec3<float>> position)
+        : instantiate_prefab_command{prefab_guid, parent.scene, parent, position}
+    {
+    }
+
+    auto instantiate_prefab_command::apply(command_context& ctx) -> void
+    {
+        if (!_executed)
+        {
+            if (ctx.prefab_cache == nullptr)
+            {
+                if (ctx.log != nullptr)
+                {
+                    ctx.log->error("Cannot instantiate prefab: prefab_cache is null");
+                }
+                return;
+            }
+
+            auto inst_res = scene::prefab_instantiator::instantiate(_prefab_guid, *ctx.prefab_cache, *ctx.registry);
+            if (!inst_res.has_value() || !inst_res->success)
+            {
+                if (ctx.log != nullptr)
+                {
+                    ctx.log->error("Failed to instantiate prefab");
+                }
+                return;
+            }
+
+            const auto root_entity = inst_res->root_entity;
+            const auto instance_local_id = generate_local_id();
+
+            if (auto* instance_comp = ctx.registry->try_get<scene::prefab_instance_component>(root_entity);
+                instance_comp != nullptr)
+            {
+                instance_comp->instance_local_id = instance_local_id;
+            }
+
+            if (!_scene.is_valid() && _parent_addr.has_value() && _parent_addr->scene.is_valid())
+            {
+                _scene = _parent_addr->scene;
+            }
+            else if (!_scene.is_valid() && ctx.scene_manager->get_active_scene().is_valid())
+            {
+                _scene = ctx.scene_manager->get_active_scene();
+            }
+
+            if (_scene.is_valid())
+            {
+                ctx.registry->assign_or_replace(root_entity, scene::scene_entity_component{
+                                                                 .scene = _scene,
+                                                                 .local_id = instance_local_id,
+                                                             });
+            }
+            else
+            {
+                ctx.registry->assign_or_replace(root_entity, dynamic_entity_id_component{
+                                                                 .local_id = instance_local_id,
+                                                             });
+            }
+
+            for (const auto member_entity : inst_res->all_entities)
+            {
+                if (member_entity == root_entity)
+                {
+                    continue;
+                }
+
+                const auto* member = ctx.registry->try_get<scene::prefab_member_component>(member_entity);
+                const auto derived_val = (member != nullptr && member->template_local_id.is_valid())
+                                             ? static_cast<uint64_t>(tempest::hash_combine(
+                                                   instance_local_id.value, member->template_local_id.value))
+                                             : generate_local_id().value;
+                const auto member_local_id = scene::entity_local_id{derived_val == 0 ? 1 : derived_val};
+
+                if (_scene.is_valid())
+                {
+                    ctx.registry->assign_or_replace(member_entity, scene::scene_entity_component{
+                                                                       .scene = _scene,
+                                                                       .local_id = member_local_id,
+                                                                   });
+                }
+                else
+                {
+                    ctx.registry->assign_or_replace(member_entity, dynamic_entity_id_component{
+                                                                       .local_id = member_local_id,
+                                                                   });
+                }
+            }
+
+            if (_position.has_value())
+            {
+                auto transform = ctx.registry->has<ecs::transform_component>(root_entity)
+                                     ? ctx.registry->get<ecs::transform_component>(root_entity)
+                                     : ecs::transform_component{};
+                transform.position(*_position);
+                ctx.registry->assign_or_replace(root_entity, transform);
+            }
+
+            if (_parent_addr.has_value())
+            {
+                const auto parent_entity = resolve_entity_address(*ctx.registry, *ctx.scene_manager, *_parent_addr);
+                if (parent_entity != ecs::tombstone && ctx.registry->is_valid(parent_entity))
+                {
+                    ctx.registry->reparent(root_entity, parent_entity);
+                    _was_root = false;
+                }
+                else if (_scene.is_valid())
+                {
+                    ctx.scene_manager->add_root_entity(_scene, root_entity);
+                    _was_root = true;
+                }
+                else
+                {
+                    _was_root = false;
+                }
+            }
+            else
+            {
+                if (_scene.is_valid())
+                {
+                    ctx.scene_manager->add_root_entity(_scene, root_entity);
+                    _was_root = true;
+                }
+                else
+                {
+                    _was_root = false;
+                }
+            }
+
+            _created_address = compute_entity_address(*ctx.registry, root_entity);
+            _snapshot = capture_snapshot(*ctx.registry, root_entity, true);
+            _executed = true;
+
+            if (_scene.is_valid())
+            {
+                ctx.scene_manager->set_dirty(_scene, true);
+            }
+        }
+        else
+        {
+            const auto restored_entity = restore_snapshot(*ctx.registry, _snapshot);
+            if (_was_root && _scene.is_valid())
+            {
+                ctx.scene_manager->add_root_entity(_scene, restored_entity);
+            }
+            else if (_parent_addr.has_value())
+            {
+                const auto parent_entity = resolve_entity_address(*ctx.registry, *ctx.scene_manager, *_parent_addr);
+                if (parent_entity != ecs::tombstone && ctx.registry->is_valid(parent_entity))
+                {
+                    ctx.registry->reparent(restored_entity, parent_entity);
+                }
+            }
+
+            if (_scene.is_valid())
+            {
+                ctx.scene_manager->set_dirty(_scene, true);
+            }
+        }
+    }
+
+    auto instantiate_prefab_command::revert(command_context& ctx) -> void
+    {
+        const auto root_entity = resolve_entity_address(*ctx.registry, *ctx.scene_manager, _created_address);
+        if (root_entity != ecs::tombstone && ctx.registry->is_valid(root_entity))
+        {
+            if (_was_root && _scene.is_valid())
+            {
+                ctx.scene_manager->remove_root_entity(_scene, root_entity);
+            }
+            destroy_subtree(*ctx.registry, root_entity);
+            if (_scene.is_valid())
+            {
+                ctx.scene_manager->set_dirty(_scene, true);
+            }
+        }
     }
 
     //==============================================================================
