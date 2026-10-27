@@ -243,12 +243,18 @@ namespace tempest::editor::tests
         EXPECT_EQ(project_view_window::get_node_badge(root_row), "[Folder]");
         EXPECT_EQ(project_view_window::get_node_badge(dir_row), "[Folder]");
 
-        // Setup: Loose file row
-        const auto loose_row = project_tree_row{
+        // Setup: Loose file rows (unimportable file vs importable asset)
+        const auto loose_file_row = project_tree_row{
             .display_label = "untracked.dat",
             .kind = tree_node_kind::loose_file,
         };
-        EXPECT_EQ(project_view_window::get_node_badge(loose_row), "[Loose]");
+        EXPECT_EQ(project_view_window::get_node_badge(loose_file_row), "[File]");
+
+        const auto loose_asset_row = project_tree_row{
+            .display_label = "texture.png",
+            .kind = tree_node_kind::loose_file,
+        };
+        EXPECT_EQ(project_view_window::get_node_badge(loose_asset_row), "[Loose]");
 
         // Setup & Assert: Imported files procedural extension badge
         const auto gltf_row = project_tree_row{
@@ -1961,5 +1967,420 @@ namespace tempest::editor::tests
         // Assert: New Folder exists on disk and in selection
         EXPECT_TRUE(fs::exists(base_dir / "New Folder"));
         EXPECT_EQ(window.selected_path(), "New Folder");
+    }
+
+    // ============================================================================
+    // Asset Import, Reimport, Additive Loading & Explorer Actions Tests
+    // ============================================================================
+
+    /// @brief Verifies that importing a single loose file generates a .tmeta sidecar and converts the node to imported_file.
+    TEST_F(project_view_window_test, import_asset_loose_file_creates_meta_and_converts_node)
+    {
+        // Setup: Create loose file without sidecar
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_import_single_loose";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto loose_file = base_dir / "texture.png";
+        ASSERT_TRUE(write_dummy_file(loose_file));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Textures",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Assert initial state: loose_file node without asset GUID
+        const auto* initial_node = window.get_model().find_node_by_path("texture.png");
+        ASSERT_NE(initial_node, nullptr);
+        EXPECT_EQ(initial_node->kind, tree_node_kind::loose_file);
+        EXPECT_EQ(initial_node->asset_id, guid{});
+
+        // Act: Import loose file
+        const auto import_result = window.import_asset("texture.png");
+
+        // Assert: Succeeded, sidecar created on disk with valid GUID and texture importer
+        EXPECT_TRUE(import_result);
+        const auto meta_path = base_dir / "texture.png.tmeta";
+        EXPECT_TRUE(fs::exists(meta_path));
+
+        const auto loaded_meta = assets::sidecar_meta::load_from_file(meta_path.generic_string());
+        ASSERT_TRUE(loaded_meta.has_value());
+        EXPECT_NE(loaded_meta->source_guid, guid{});
+        EXPECT_EQ(loaded_meta->importer, "texture");
+
+        // Assert: Model updated node to imported_file with matching GUID
+        const auto* updated_node = window.get_model().find_node_by_path("texture.png");
+        ASSERT_NE(updated_node, nullptr);
+        EXPECT_EQ(updated_node->kind, tree_node_kind::imported_file);
+        EXPECT_EQ(updated_node->asset_id, loaded_meta->source_guid);
+    }
+
+    /// @brief Verifies that unimportable loose files (e.g. unsupported .dds, .txt) cannot be imported,
+    /// report false from is_importable, and do not generate .tmeta sidecars.
+    TEST_F(project_view_window_test, import_asset_unsupported_file_format_fails_without_creating_sidecar)
+    {
+        // Setup: Create loose file with unsupported format
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_import_unsupported";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto dds_file = base_dir / "compressed.dds";
+        const auto txt_file = base_dir / "notes.txt";
+        ASSERT_TRUE(write_dummy_file(dds_file));
+        ASSERT_TRUE(write_dummy_file(txt_file));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Files",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Assert: Unrecognized files are not importable and have no deduced importer
+        EXPECT_FALSE(window.is_importable("compressed.dds"));
+        EXPECT_FALSE(window.deduce_importer("compressed.dds").has_value());
+        EXPECT_FALSE(window.is_importable("notes.txt"));
+        EXPECT_FALSE(window.deduce_importer("notes.txt").has_value());
+
+        // Act: Attempt to import unsupported file format
+        const auto dds_import_result = window.import_asset("compressed.dds");
+        const auto txt_import_result = window.import_asset("notes.txt");
+
+        // Assert: Both imports fail and no .tmeta files are generated on disk
+        EXPECT_FALSE(dds_import_result);
+        EXPECT_FALSE(txt_import_result);
+        EXPECT_FALSE(fs::exists(base_dir / "compressed.dds.tmeta"));
+        EXPECT_FALSE(fs::exists(base_dir / "notes.txt.tmeta"));
+
+        // Assert: Tree node remains a loose_file without asset GUID
+        const auto* dds_node = window.get_model().find_node_by_path("compressed.dds");
+        ASSERT_NE(dds_node, nullptr);
+        EXPECT_EQ(dds_node->kind, tree_node_kind::loose_file);
+        EXPECT_EQ(dds_node->asset_id, guid{});
+    }
+
+    /// @brief Verifies that calling import_asset on a directory recursively scans and imports all loose files.
+    TEST_F(project_view_window_test, import_asset_directory_recursive_imports_all_loose_files)
+    {
+        // Setup: Create directory hierarchy with loose files and one existing imported file
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_import_dir_recursive";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto sub_dir = base_dir / "models";
+        const auto nested_dir = sub_dir / "props";
+        fs::create_directories(nested_dir);
+
+        ASSERT_TRUE(write_dummy_file(sub_dir / "character.gltf"));
+        ASSERT_TRUE(write_dummy_file(nested_dir / "sword.glb"));
+        ASSERT_TRUE(write_dummy_file(nested_dir / "material.tmaterial"));
+
+        // Existing imported file with assigned GUID
+        const auto existing_guid = guid::generate_random_guid();
+        ASSERT_TRUE(write_dummy_file(sub_dir / "shield.model"));
+        auto existing_meta = assets::sidecar_meta{};
+        existing_meta.source_guid = existing_guid;
+        existing_meta.importer = "model";
+        ASSERT_TRUE(existing_meta.save_to_file((sub_dir / "shield.model.tmeta").generic_string()));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Assets",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Import all loose files within "models" directory
+        const auto import_res = window.import_asset("models");
+
+        // Assert: Directory import succeeded
+        EXPECT_TRUE(import_res);
+
+        // Assert: Sidecars created with appropriate importers
+        EXPECT_TRUE(fs::exists(sub_dir / "character.gltf.tmeta"));
+        const auto char_meta = assets::sidecar_meta::load_from_file((sub_dir / "character.gltf.tmeta").generic_string());
+        ASSERT_TRUE(char_meta.has_value());
+        EXPECT_NE(char_meta->source_guid, guid{});
+        EXPECT_EQ(char_meta->importer, "model");
+
+        EXPECT_TRUE(fs::exists(nested_dir / "sword.glb.tmeta"));
+        const auto sword_meta = assets::sidecar_meta::load_from_file((nested_dir / "sword.glb.tmeta").generic_string());
+        ASSERT_TRUE(sword_meta.has_value());
+        EXPECT_NE(sword_meta->source_guid, guid{});
+        EXPECT_EQ(sword_meta->importer, "model");
+
+        EXPECT_TRUE(fs::exists(nested_dir / "material.tmaterial.tmeta"));
+        const auto mat_meta = assets::sidecar_meta::load_from_file((nested_dir / "material.tmaterial.tmeta").generic_string());
+        ASSERT_TRUE(mat_meta.has_value());
+        EXPECT_NE(mat_meta->source_guid, guid{});
+        EXPECT_EQ(mat_meta->importer, "material");
+
+        // Assert: Existing imported file preserved its original GUID
+        const auto reloaded_existing = assets::sidecar_meta::load_from_file((sub_dir / "shield.model.tmeta").generic_string());
+        ASSERT_TRUE(reloaded_existing.has_value());
+        EXPECT_EQ(reloaded_existing->source_guid, existing_guid);
+
+        // Act: Importing a directory with no loose files returns false
+        EXPECT_FALSE(window.import_asset("models"));
+    }
+
+    /// @brief Verifies that reimport_asset on an imported file preserves existing source GUID and sub-asset keys.
+    TEST_F(project_view_window_test, reimport_asset_single_file_preserves_guid_and_sub_assets)
+    {
+        // Setup: Create imported asset with existing GUID and sub-assets
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_reimport_single";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto asset_path = base_dir / "character.gltf";
+        ASSERT_TRUE(write_dummy_file(asset_path));
+
+        const auto original_source_guid = guid::generate_random_guid();
+        const auto sub_mesh_guid = guid::generate_random_guid();
+        const auto sub_mat_guid = guid::generate_random_guid();
+
+        auto meta = assets::sidecar_meta{};
+        meta.source_guid = original_source_guid;
+        meta.importer = "model";
+        meta.sub_assets["mesh/0"] = sub_mesh_guid;
+        meta.sub_assets["material/0"] = sub_mat_guid;
+        ASSERT_TRUE(meta.save_to_file((base_dir / "character.gltf.tmeta").generic_string()));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Content",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Assert: Node is imported_file initially
+        const auto* node = window.get_model().find_node_by_path("character.gltf");
+        ASSERT_NE(node, nullptr);
+        EXPECT_EQ(node->kind, tree_node_kind::imported_file);
+        EXPECT_EQ(node->asset_id, original_source_guid);
+
+        // Act: Reimport asset
+        const auto reimport_res = window.reimport_asset("character.gltf");
+
+        // Assert: Succeeded, GUID and sub-assets preserved in sidecar metadata
+        EXPECT_TRUE(reimport_res);
+        const auto reloaded_meta = assets::sidecar_meta::load_from_file((base_dir / "character.gltf.tmeta").generic_string());
+        ASSERT_TRUE(reloaded_meta.has_value());
+        EXPECT_EQ(reloaded_meta->source_guid, original_source_guid);
+        const auto mesh_it = reloaded_meta->sub_assets.find("mesh/0");
+        ASSERT_NE(mesh_it, reloaded_meta->sub_assets.end());
+        EXPECT_EQ(mesh_it->second, sub_mesh_guid);
+        const auto mat_it = reloaded_meta->sub_assets.find("material/0");
+        ASSERT_NE(mat_it, reloaded_meta->sub_assets.end());
+        EXPECT_EQ(mat_it->second, sub_mat_guid);
+
+        // Assert: Reimporting a loose file without .tmeta fails
+        ASSERT_TRUE(write_dummy_file(base_dir / "loose.png"));
+        EXPECT_FALSE(window.reimport_asset("loose.png"));
+    }
+
+    /// @brief Verifies that calling reimport_asset on a directory recursively reimports all assets while preserving GUIDs.
+    TEST_F(project_view_window_test, reimport_asset_directory_recursive_preserves_all_guids)
+    {
+        // Setup: Create directory hierarchy with two imported files
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_reimport_dir_recursive";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto dir1 = base_dir / "folder_a";
+        const auto dir2 = base_dir / "folder_b";
+        fs::create_directories(dir1);
+        fs::create_directories(dir2);
+
+        ASSERT_TRUE(write_dummy_file(dir1 / "diffuse.png"));
+        const auto guid_a = guid::generate_random_guid();
+        auto meta_a = assets::sidecar_meta{};
+        meta_a.source_guid = guid_a;
+        meta_a.importer = "texture";
+        ASSERT_TRUE(meta_a.save_to_file((dir1 / "diffuse.png.tmeta").generic_string()));
+
+        ASSERT_TRUE(write_dummy_file(dir2 / "normal.png"));
+        const auto guid_b = guid::generate_random_guid();
+        auto meta_b = assets::sidecar_meta{};
+        meta_b.source_guid = guid_b;
+        meta_b.importer = "texture";
+        ASSERT_TRUE(meta_b.save_to_file((dir2 / "normal.png.tmeta").generic_string()));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Textures",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act: Reimport directory
+        const auto reimport_res = window.reimport_asset();
+
+        // Assert: Reimport succeeded and preserved both GUIDs
+        EXPECT_TRUE(reimport_res);
+
+        const auto reloaded_a = assets::sidecar_meta::load_from_file((dir1 / "diffuse.png.tmeta").generic_string());
+        ASSERT_TRUE(reloaded_a.has_value());
+        EXPECT_EQ(reloaded_a->source_guid, guid_a);
+
+        const auto reloaded_b = assets::sidecar_meta::load_from_file((dir2 / "normal.png.tmeta").generic_string());
+        ASSERT_TRUE(reloaded_b.has_value());
+        EXPECT_EQ(reloaded_b->source_guid, guid_b);
+    }
+
+    /// @brief Verifies that open_scene_additive loads a scene additively alongside active dirty scenes without save prompt.
+    TEST_F(project_view_window_test, open_scene_additive_loads_without_dirty_dialog)
+    {
+        // Setup: Initialize scene manager with a dirty active scene
+        const auto active_scene = scene_mgr.load_from_string_sync(
+            R"({"schema_version":1,"generator":"test","entities":[]})", "active_dirty.tscene");
+        ASSERT_TRUE(active_scene.has_value());
+        scene_mgr.set_dirty(*active_scene, true);
+
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_open_scene_additive";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto additive_scene_path = base_dir / "additive_overlay.tscene";
+        ASSERT_TRUE(write_dummy_file(additive_scene_path, R"({"schema_version":1,"generator":"test","entities":[]})"));
+
+        auto window = project_view_window{scene_mgr, selection};
+        auto invoked_callback_path = string{};
+        window.set_on_open_scene_additive([&](string_view path) {
+            invoked_callback_path = string{path};
+        });
+        EXPECT_TRUE(window.get_on_open_scene_additive() != nullptr);
+
+        // Act: Open scene additively
+        const auto load_res = window.open_scene_additive(additive_scene_path.generic_string());
+
+        // Assert: Succeeded, callback invoked, dirty dialog not opened, and both scenes loaded
+        EXPECT_TRUE(load_res);
+        EXPECT_EQ(invoked_callback_path, additive_scene_path.generic_string());
+        EXPECT_FALSE(window.is_dirty_dialog_open());
+        EXPECT_TRUE(scene_mgr.is_dirty(*active_scene));
+        EXPECT_EQ(scene_mgr.get_scene_count(), 2u);
+    }
+
+    /// @brief Verifies that reveal_in_explorer resolves explicit, selected, and fallback targets and invokes the callback.
+    TEST_F(project_view_window_test, reveal_in_explorer_resolves_targets_and_invokes_callback)
+    {
+        // Setup: Create test files and window with mount
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_reveal_explorer";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto doc_path = base_dir / "document.txt";
+        ASSERT_TRUE(write_dummy_file(doc_path));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Workspace",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        auto revealed_path = string{};
+        window.set_on_reveal_in_explorer([&](string_view path) {
+            revealed_path = string{path};
+        });
+        EXPECT_TRUE(window.get_on_reveal_in_explorer() != nullptr);
+
+        // Act & Assert: Explicit path resolves to document disk path
+        const auto explicit_res = window.reveal_in_explorer("document.txt");
+        EXPECT_TRUE(explicit_res);
+        EXPECT_EQ(revealed_path, doc_path.generic_string());
+
+        // Act & Assert: Selected path resolves when path argument is empty
+        window.set_selected_path("document.txt");
+        revealed_path.clear();
+        const auto selected_res = window.reveal_in_explorer();
+        EXPECT_TRUE(selected_res);
+        EXPECT_EQ(revealed_path, doc_path.generic_string());
+
+        // Act & Assert: Empty fallback with no selection resolves to mount root disk path
+        window.clear_selection();
+        revealed_path.clear();
+        const auto fallback_res = window.reveal_in_explorer();
+        EXPECT_TRUE(fallback_res);
+        EXPECT_EQ(revealed_path, base_dir.generic_string());
+
+        // Act & Assert: Invalid path returns false
+        revealed_path.clear();
+        const auto invalid_res = window.reveal_in_explorer("non_existent_item.tmp");
+        EXPECT_FALSE(invalid_res);
+        EXPECT_TRUE(revealed_path.empty());
+    }
+
+    /// @brief Verifies headless ImGui context menu item rendering for scenes, loose files, imported files, and explorer reveal.
+    TEST_F(project_view_window_test, headless_imgui_context_menu_rendering_actions)
+    {
+        // Setup: Engine context, UI context, and window with mixed node types
+        auto engine_ctx = editor_engine_context{};
+        const auto desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Context Actions Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+
+        auto reg_info = engine_ctx.register_window(desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
+
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_ui_context_actions";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "level.tscene", R"({"schema_version":1,"generator":"test","entities":[]})"));
+        ASSERT_TRUE(write_dummy_file(base_dir / "loose.png"));
+        ASSERT_TRUE(write_dummy_file(base_dir / "imported.png"));
+
+        auto meta = assets::sidecar_meta{};
+        meta.source_guid = guid::generate_random_guid();
+        meta.importer = "texture";
+        ASSERT_TRUE(meta.save_to_file((base_dir / "imported.png.tmeta").generic_string()));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Project",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Render frame with scene selected
+        window.set_selected_path("level.tscene");
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+
+        // Render frame with loose file selected
+        window.set_selected_path("loose.png");
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+
+        // Render frame with imported file selected
+        window.set_selected_path("imported.png");
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+
+        // Render background context menu popup
+        ui_ctx.begin_ui_commands();
+        ImGui::OpenPopup("##ProjectViewBackgroundContext");
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
     }
 } // namespace tempest::editor::tests

@@ -5,6 +5,7 @@
 #include <tempest/array.hpp>
 #include <tempest/checked.hpp>
 #include <tempest/editor_selection.hpp>
+#include <tempest/filesystem.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/guid.hpp>
 #include <tempest/int.hpp>
@@ -37,6 +38,8 @@ namespace tempest::editor
       public:
         using inspect_asset_callback = function<void(const guid&, assets::asset_type_id, string_view)>;
         using open_external_callback = function<void(string_view)>;
+        using reveal_callback = function<void(string_view)>;
+        using open_scene_additive_callback = function<void(string_view)>;
 
         static constexpr bool default_open = true;
         static constexpr assets::asset_database* default_asset_database = nullptr;
@@ -270,6 +273,36 @@ namespace tempest::editor
             return _on_open_external_file;
         }
 
+        /// @brief Sets the callback invoked when revealing an item in the platform file explorer.
+        /// @param callback Callback receiving disk path string view.
+        /// @post The callback is installed and will be invoked during explorer reveal operations.
+        auto set_on_reveal_in_explorer(reveal_callback callback) -> void
+        {
+            _on_reveal_in_explorer = tempest::move(callback);
+        }
+
+        /// @brief Retrieves the callback invoked when revealing in explorer.
+        /// @return Const reference to the reveal callback.
+        [[nodiscard]] auto get_on_reveal_in_explorer() const noexcept -> const reveal_callback&
+        {
+            return _on_reveal_in_explorer;
+        }
+
+        /// @brief Sets the callback invoked when opening a scene additively.
+        /// @param callback Callback receiving scene disk path string view.
+        /// @post The callback is installed and will be invoked when scenes are loaded additively.
+        auto set_on_open_scene_additive(open_scene_additive_callback callback) -> void
+        {
+            _on_open_scene_additive = tempest::move(callback);
+        }
+
+        /// @brief Retrieves the callback invoked when opening a scene additively.
+        /// @return Const reference to the additive scene load callback.
+        [[nodiscard]] auto get_on_open_scene_additive() const noexcept -> const open_scene_additive_callback&
+        {
+            return _on_open_scene_additive;
+        }
+
         // Dirty Scene Protection Confirmation Dialog
 
         /// @brief Checks whether the unsaved scene protection dialog is currently open.
@@ -386,6 +419,43 @@ namespace tempest::editor
         /// @post Scene document created on disk, added to model, selected, and inline rename active.
         auto create_scene(string_view parent_path = {}) -> bool;
 
+        // Asset Import, Reimport, Additive Loading & Explorer Actions
+
+        /// @brief Imports a loose file or recursively imports all loose files in a directory.
+        /// @param path Relative or disk path of the loose file or directory. If empty, uses active selection or current directory.
+        /// @return True if at least one asset was successfully imported, false on failure or if path is invalid.
+        /// @post Generates .tmeta sidecars for loose files, notifies the asset database, and invalidates the model path.
+        auto import_asset(string_view path = {}) -> bool;
+
+        /// @brief Reimports an existing imported asset or recursively reimports all assets in a directory.
+        /// @param path Relative or disk path of the imported asset or directory. If empty, uses active selection or current directory.
+        /// @return True if at least one asset was successfully reimported, false on failure or if path is invalid.
+        /// @post Preserves source GUID and sub-asset keys, notifies the asset database, and invalidates the model path.
+        auto reimport_asset(string_view path = {}) -> bool;
+
+        /// @brief Loads a scene document additively alongside currently loaded scenes without prompting for save confirmation.
+        /// @param disk_path Filesystem path or relative path to the scene document to load additively.
+        /// @return True if scene was successfully loaded additively, false on failure.
+        /// @pre disk_path must not be empty and must reference an existing scene document.
+        /// @post Scene document is loaded into scene manager additively and on_open_scene_additive callback invoked if set.
+        auto open_scene_additive(string_view disk_path) -> bool;
+
+        /// @brief Reveals the item in the native platform file explorer (or shell).
+        /// @param path Relative or disk path of the item to reveal. If empty, uses active selection or current directory.
+        /// @return True if the item was resolved and revealed, false otherwise.
+        /// @post Invokes the registered reveal callback or opens the native platform file manager.
+        auto reveal_in_explorer(string_view path = {}) -> bool;
+
+        /// @brief Deduces the importer identifier for the specified file or extension.
+        /// @param path_or_extension Filename, file path, or extension to inspect.
+        /// @return Importer identifier string view if importable, or nullopt if unsupported.
+        [[nodiscard]] auto deduce_importer(string_view path_or_extension) const -> optional<string_view>;
+
+        /// @brief Checks whether the specified file or extension is recognized as an importable asset.
+        /// @param path_or_extension Filename, file path, or extension to inspect.
+        /// @return True if an asset importer is registered or recognized for this file format, false otherwise.
+        [[nodiscard]] auto is_importable(string_view path_or_extension) const -> bool;
+
         // Dependency Accessors
 
         /// @brief Retrieves the mutable scene manager instance.
@@ -419,6 +489,8 @@ namespace tempest::editor
       private:
         [[nodiscard]] auto _find_target_node(string_view path) const -> const project_tree_node*;
         [[nodiscard]] auto _resolve_target_folder_node(string_view parent_path) const -> const project_tree_node*;
+        [[nodiscard]] auto _resolve_disk_path(string_view path) const -> filesystem::path;
+        [[nodiscard]] auto _resolve_asset_database() const noexcept -> const assets::asset_database*;
         auto _finish_creation(const project_tree_node& target_folder_node,
                               const filesystem::path& new_disk_path,
                               string_view unique_name) -> bool;
@@ -437,6 +509,8 @@ namespace tempest::editor
 
         inspect_asset_callback _on_inspect_asset;
         open_external_callback _on_open_external_file;
+        reveal_callback _on_reveal_in_explorer;
+        open_scene_additive_callback _on_open_scene_additive;
 
         bool _show_dirty_dialog = default_show_dirty_dialog;
         string _pending_scene_path;

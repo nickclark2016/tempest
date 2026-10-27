@@ -1843,6 +1843,98 @@ namespace tempest::assets
         return {};
     }
 
+    auto asset_database::has_importer(string_view extension) const -> bool
+    {
+        return find_importer(extension) != nullptr;
+    }
+
+    auto asset_database::find_importer(string_view extension) const -> const asset_importer*
+    {
+        if (extension.empty())
+        {
+            return nullptr;
+        }
+
+        auto it = _importers.find(string{extension});
+        if (it != _importers.end())
+        {
+            return it->second.get();
+        }
+
+        if (!tempest::starts_with(extension, '.'))
+        {
+            auto with_dot = string{"."};
+            with_dot.append(extension.data(), extension.size());
+            it = _importers.find(with_dot);
+            if (it != _importers.end())
+            {
+                return it->second.get();
+            }
+        }
+
+        return nullptr;
+    }
+
+    auto asset_database::deduce_importer_name(string_view extension) const -> optional<string_view>
+    {
+        const auto* importer = find_importer(extension);
+        if (importer != nullptr)
+        {
+            const auto name = importer->importer_name();
+            if (!name.empty())
+            {
+                return name;
+            }
+            return string_view{"default"};
+        }
+
+        return default_importer_name_for_extension(extension);
+    }
+
+    auto asset_database::supported_importer_extensions() const -> vector<string_view>
+    {
+        auto result = vector<string_view>{};
+        result.reserve(_importers.size());
+        for (const auto& pair : _importers)
+        {
+            result.push_back(pair.first);
+        }
+        return result;
+    }
+
+    auto asset_database::default_importer_name_for_extension(string_view extension) noexcept -> optional<string_view>
+    {
+        auto ext = extension;
+        if (tempest::starts_with(ext, '.'))
+        {
+            ext = string_view{ext.data() + 1, ext.size() - 1};
+        }
+
+        if (ext == "gltf" || ext == "glb")
+        {
+            return string_view{"model"};
+        }
+        if (ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "tga" || ext == "bmp" || ext == "hdr" || ext == "exr")
+        {
+            return string_view{"texture"};
+        }
+        if (ext == "tmaterial")
+        {
+            return string_view{"material"};
+        }
+        if (ext == "trendertarget")
+        {
+            return string_view{"render_target"};
+        }
+
+        return nullopt;
+    }
+
+    auto asset_database::is_default_supported_extension(string_view extension) noexcept -> bool
+    {
+        return default_importer_name_for_extension(extension).has_value();
+    }
+
     auto asset_database::register_importer(unique_ptr<asset_importer> importer, string_view extension) -> void
     {
         _importers[string(extension)] = move(importer);

@@ -16,6 +16,11 @@ namespace tempest::assets
         glb_importer(core::mesh_registry* mesh_reg, core::texture_registry* texture_reg,
                      core::material_registry* material_reg) noexcept;
 
+        [[nodiscard]] auto importer_name() const noexcept -> string_view override
+        {
+            return "model";
+        }
+
         auto import(asset_database& asset_db, span<const byte> bytes, ecs::archetype_registry& registry,
                     optional<string_view> path) -> ecs::entity override;
 

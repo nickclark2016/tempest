@@ -193,6 +193,13 @@ namespace tempest::assets
         [[nodiscard]] auto is_transient_asset(const guid& id) const -> bool;
 
         auto register_importer(unique_ptr<asset_importer> importer, string_view extension) -> void;
+        [[nodiscard]] auto has_importer(string_view extension) const -> bool;
+        [[nodiscard]] auto find_importer(string_view extension) const -> const asset_importer*;
+        [[nodiscard]] auto deduce_importer_name(string_view extension) const -> optional<string_view>;
+        [[nodiscard]] auto supported_importer_extensions() const -> vector<string_view>;
+
+        [[nodiscard]] static auto default_importer_name_for_extension(string_view extension) noexcept -> optional<string_view>;
+        [[nodiscard]] static auto is_default_supported_extension(string_view extension) noexcept -> bool;
 
         /// Register an ECS component type for entity hierarchy serialization.
         /// The component is serialized/deserialized via memcpy.

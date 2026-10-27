@@ -39,22 +39,31 @@ namespace tempest::editor
     namespace
     {
 #if defined(_WIN32)
+        auto to_wide_string(string_view text) -> vector<wchar_t>
+        {
+            if (text.empty())
+            {
+                return vector<wchar_t>{L'\0'};
+            }
+            const auto length =
+                MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
+            if (length <= 0)
+            {
+                return vector<wchar_t>{L'\0'};
+            }
+            auto wide_str = vector<wchar_t>(static_cast<size_t>(length + 1), L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), wide_str.data(), length);
+            wide_str[length] = L'\0';
+            return wide_str;
+        }
+
         auto open_file_in_shell(string_view file_path) -> void
         {
             if (file_path.empty())
             {
                 return;
             }
-            const auto path_length =
-                MultiByteToWideChar(CP_UTF8, 0, file_path.data(), static_cast<int>(file_path.size()), nullptr, 0);
-            if (path_length <= 0)
-            {
-                return;
-            }
-            auto wide_path = vector<wchar_t>(static_cast<size_t>(path_length + 1), L'\0');
-            MultiByteToWideChar(CP_UTF8, 0, file_path.data(), static_cast<int>(file_path.size()), wide_path.data(),
-                                path_length);
-            wide_path[path_length] = L'\0';
+            auto wide_path = to_wide_string(file_path);
 
             auto* shell32 = LoadLibraryA("shell32.dll");
             if (shell32 != nullptr)
@@ -68,11 +77,83 @@ namespace tempest::editor
                 FreeLibrary(shell32);
             }
         }
+
+        auto open_in_file_manager(string_view disk_path) -> void
+        {
+            if (disk_path.empty())
+            {
+                return;
+            }
+
+            auto fs_path = filesystem::path{disk_path};
+            auto native_path = fs_path.make_preferred().string();
+
+            auto* shell32 = LoadLibraryA("shell32.dll");
+            if (shell32 == nullptr)
+            {
+                return;
+            }
+
+            using PFN_ShellExecuteW = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, INT);
+            auto shell_execute_fn = reinterpret_cast<PFN_ShellExecuteW>(GetProcAddress(shell32, "ShellExecuteW"));
+            if (shell_execute_fn != nullptr)
+            {
+                if (filesystem::is_directory(fs_path))
+                {
+                    auto wide_dir = to_wide_string(native_path);
+                    shell_execute_fn(nullptr, L"open", wide_dir.data(), nullptr, nullptr, SW_SHOWNORMAL);
+                }
+                else
+                {
+                    const auto select_arg = tempest::format("/select,\"{}\"", native_path);
+                    auto wide_arg = to_wide_string(select_arg);
+                    shell_execute_fn(nullptr, L"open", L"explorer.exe", wide_arg.data(), nullptr, SW_SHOWNORMAL);
+                }
+            }
+            FreeLibrary(shell32);
+        }
 #else
         auto open_file_in_shell(string_view) -> void
         {
         }
+
+        auto open_in_file_manager(string_view) -> void
+        {
+        }
 #endif
+
+        auto is_importable_extension(string_view ext, const assets::asset_database* asset_db) noexcept -> bool
+        {
+            if (ext.empty())
+            {
+                return false;
+            }
+            if (asset_db != nullptr)
+            {
+                return asset_db->has_importer(ext);
+            }
+            return assets::asset_database::is_default_supported_extension(ext);
+        }
+
+        template <typename Callback>
+        auto scan_directory_recursive(const filesystem::path& root_dir, Callback&& callback) -> void
+        {
+            if (!filesystem::exists(root_dir) || !filesystem::is_directory(root_dir))
+            {
+                return;
+            }
+            for (const auto& entry : filesystem::directory_iterator{root_dir})
+            {
+                if (entry.is_directory())
+                {
+                    scan_directory_recursive(entry.path(), callback);
+                }
+                else
+                {
+                    callback(entry.path());
+                }
+            }
+        }
 
         auto find_last_scope(string_view text) noexcept -> string_view
         {
@@ -306,7 +387,12 @@ namespace tempest::editor
 
         if (row.kind == tree_node_kind::loose_file)
         {
-            return "[Loose]";
+            const auto ext = find_extension(row.display_label);
+            if (!ext.empty() && is_importable_extension(ext, asset_db))
+            {
+                return "[Loose]";
+            }
+            return "[File]";
         }
 
         // Procedurally resolve registered type if present
@@ -1214,6 +1300,320 @@ namespace tempest::editor
         return _finish_creation(*target_folder_node, new_disk_path, unique_name);
     }
 
+    auto project_view_window::_resolve_disk_path(string_view path) const -> filesystem::path
+    {
+        auto target_path = path;
+        if (target_path.empty())
+        {
+            if (has_selection())
+            {
+                target_path = _selected_path;
+            }
+            else if (!_current_directory.empty())
+            {
+                target_path = _current_directory;
+            }
+            else if (!_model.roots().empty() && _model.roots().front())
+            {
+                target_path = _model.roots().front()->path;
+            }
+        }
+
+        if (target_path.empty())
+        {
+            return {};
+        }
+
+        const auto* node = _find_target_node(target_path);
+        if (node != nullptr && !node->disk_path.empty())
+        {
+            return filesystem::path{node->disk_path};
+        }
+
+        const auto direct_fs_path = filesystem::path{target_path};
+        if (filesystem::exists(direct_fs_path))
+        {
+            return direct_fs_path;
+        }
+
+        for (const auto& root : _model.roots())
+        {
+            if (root && !root->disk_path.empty())
+            {
+                const auto candidate = filesystem::path{root->disk_path} / direct_fs_path;
+                if (filesystem::exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return {};
+    }
+
+    auto project_view_window::_resolve_asset_database() const noexcept -> const assets::asset_database*
+    {
+        if (_model.asset_database() != nullptr)
+        {
+            return _model.asset_database();
+        }
+        if (_scene_mgr != nullptr)
+        {
+            return _scene_mgr->get_asset_database();
+        }
+        return nullptr;
+    }
+
+    auto project_view_window::deduce_importer(string_view path_or_extension) const -> optional<string_view>
+    {
+        const auto ext = find_extension(path_or_extension);
+        const auto target_ext = ext.empty() ? path_or_extension : ext;
+        const auto* db = _resolve_asset_database();
+        if (db != nullptr)
+        {
+            return db->deduce_importer_name(target_ext);
+        }
+        return assets::asset_database::default_importer_name_for_extension(target_ext);
+    }
+
+    auto project_view_window::is_importable(string_view path_or_extension) const -> bool
+    {
+        return deduce_importer(path_or_extension).has_value();
+    }
+
+    auto project_view_window::import_asset(string_view path) -> bool
+    {
+        const auto disk_path = _resolve_disk_path(path);
+        if (disk_path.empty() || !filesystem::exists(disk_path))
+        {
+            return false;
+        }
+
+        if (filesystem::is_directory(disk_path))
+        {
+            auto imported_any = false;
+            scan_directory_recursive(disk_path, [&](const filesystem::path& file_path) {
+                const auto file_str = file_path.generic_string();
+                if (tempest::ends_with(file_str, ".tmeta"))
+                {
+                    return;
+                }
+
+                auto meta_str = file_str;
+                meta_str.append(".tmeta");
+                if (filesystem::exists(filesystem::path{meta_str}))
+                {
+                    return;
+                }
+
+                const auto importer_opt = deduce_importer(file_str);
+                if (!importer_opt.has_value())
+                {
+                    return;
+                }
+
+                auto meta = assets::sidecar_meta{};
+                meta.source_guid = guid::generate_random_guid();
+                meta.importer = string{*importer_opt};
+                if (!meta.save_to_file(meta_str))
+                {
+                    return;
+                }
+
+                if (_model.asset_database() != nullptr)
+                {
+                    _model.asset_database()->notify_file_changed(file_str);
+                }
+                imported_any = true;
+            });
+
+            if (imported_any)
+            {
+                _model.invalidate_path(disk_path);
+                return true;
+            }
+            return false;
+        }
+
+        const auto file_str = disk_path.generic_string();
+        if (tempest::ends_with(file_str, ".tmeta"))
+        {
+            return false;
+        }
+
+        auto meta_str = file_str;
+        meta_str.append(".tmeta");
+        if (filesystem::exists(filesystem::path{meta_str}))
+        {
+            return false;
+        }
+
+        const auto importer_opt = deduce_importer(file_str);
+        if (!importer_opt.has_value())
+        {
+            return false;
+        }
+
+        auto meta = assets::sidecar_meta{};
+        meta.source_guid = guid::generate_random_guid();
+        meta.importer = string{*importer_opt};
+        if (!meta.save_to_file(meta_str))
+        {
+            return false;
+        }
+
+        if (_model.asset_database() != nullptr)
+        {
+            _model.asset_database()->notify_file_changed(file_str);
+        }
+
+        _model.invalidate_path(disk_path);
+        return true;
+    }
+
+    auto project_view_window::reimport_asset(string_view path) -> bool
+    {
+        const auto disk_path = _resolve_disk_path(path);
+        if (disk_path.empty() || !filesystem::exists(disk_path))
+        {
+            return false;
+        }
+
+        if (filesystem::is_directory(disk_path))
+        {
+            auto reimported_any = false;
+            scan_directory_recursive(disk_path, [&](const filesystem::path& file_path) {
+                const auto file_str = file_path.generic_string();
+                if (tempest::ends_with(file_str, ".tmeta"))
+                {
+                    return;
+                }
+
+                auto meta_str = file_str;
+                meta_str.append(".tmeta");
+                if (!filesystem::exists(filesystem::path{meta_str}))
+                {
+                    return;
+                }
+
+                auto loaded_meta = assets::sidecar_meta::load_from_file(meta_str);
+                if (!loaded_meta.has_value())
+                {
+                    return;
+                }
+
+                if (loaded_meta->importer.empty())
+                {
+                    const auto importer_opt = deduce_importer(file_str);
+                    if (importer_opt.has_value())
+                    {
+                        loaded_meta->importer = string{*importer_opt};
+                    }
+                }
+                if (!loaded_meta->save_to_file(meta_str))
+                {
+                    return;
+                }
+
+                if (_model.asset_database() != nullptr)
+                {
+                    _model.asset_database()->notify_file_changed(file_str);
+                }
+                reimported_any = true;
+            });
+
+            if (reimported_any)
+            {
+                _model.invalidate_path(disk_path);
+                return true;
+            }
+            return false;
+        }
+
+        const auto file_str = disk_path.generic_string();
+        if (tempest::ends_with(file_str, ".tmeta"))
+        {
+            return false;
+        }
+
+        auto meta_str = file_str;
+        meta_str.append(".tmeta");
+        if (!filesystem::exists(filesystem::path{meta_str}))
+        {
+            return false;
+        }
+
+        auto loaded_meta = assets::sidecar_meta::load_from_file(meta_str);
+        if (!loaded_meta.has_value())
+        {
+            return false;
+        }
+
+        if (loaded_meta->importer.empty())
+        {
+            const auto importer_opt = deduce_importer(file_str);
+            if (importer_opt.has_value())
+            {
+                loaded_meta->importer = string{*importer_opt};
+            }
+        }
+        if (!loaded_meta->save_to_file(meta_str))
+        {
+            return false;
+        }
+
+        if (_model.asset_database() != nullptr)
+        {
+            _model.asset_database()->notify_file_changed(file_str);
+        }
+
+        _model.invalidate_path(disk_path);
+        return true;
+    }
+
+    auto project_view_window::open_scene_additive(string_view disk_path) -> bool
+    {
+        const auto resolved_path = _resolve_disk_path(disk_path);
+        if (resolved_path.empty() || !filesystem::exists(resolved_path))
+        {
+            return false;
+        }
+
+        const auto load_result = _scene_mgr->load_sync(
+            resolved_path, scene::scene_load_options{.mode = scene::scene_load_mode::additive});
+
+        if (!load_result.has_value())
+        {
+            return false;
+        }
+
+        if (_on_open_scene_additive)
+        {
+            _on_open_scene_additive(resolved_path.generic_string());
+        }
+
+        return true;
+    }
+
+    auto project_view_window::reveal_in_explorer(string_view path) -> bool
+    {
+        const auto disk_path = _resolve_disk_path(path);
+        if (disk_path.empty() || !filesystem::exists(disk_path))
+        {
+            return false;
+        }
+
+        const auto disk_str = disk_path.generic_string();
+        if (_on_reveal_in_explorer)
+        {
+            _on_reveal_in_explorer(disk_str);
+            return true;
+        }
+
+        open_in_file_manager(disk_str);
+        return true;
+    }
+
     auto project_view_window::draw() -> void
     {
         if (!_open)
@@ -1400,7 +1800,16 @@ namespace tempest::editor
                             const auto is_loose = (row.kind == tree_node_kind::loose_file);
                             if (is_loose)
                             {
-                                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6F, 0.6F, 0.6F, 1.0F));
+                                const auto ext = find_extension(row.display_label);
+                                const auto importable = !ext.empty() && is_importable_extension(ext, _resolve_asset_database());
+                                if (importable)
+                                {
+                                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65F, 0.65F, 0.65F, 1.0F));
+                                }
+                                else
+                                {
+                                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.42F, 0.42F, 0.42F, 1.0F));
+                                }
                             }
 
                             auto node_open = false;
@@ -1458,6 +1867,39 @@ namespace tempest::editor
                                     }
                                 }
 
+                                const auto is_scene_file = tempest::ends_with(row.relative_path, ".tscene") ||
+                                                           tempest::ends_with(row.display_label, ".tscene") ||
+                                                           (row.node != nullptr && tempest::ends_with(row.node->disk_path, ".tscene"));
+
+                                if (is_scene_file)
+                                {
+                                    auto row_disk_path = string_view{row_path};
+                                    if (row.node != nullptr && !row.node->disk_path.empty())
+                                    {
+                                        row_disk_path = row.node->disk_path;
+                                    }
+                                    else
+                                    {
+                                        const auto* found_node = _model.find_node_by_path(row_path);
+                                        if (found_node != nullptr && !found_node->disk_path.empty())
+                                        {
+                                            row_disk_path = found_node->disk_path;
+                                        }
+                                    }
+
+                                    if (ImGui::MenuItem("Open Scene (Single)"))
+                                    {
+                                        open_scene_requested(row_disk_path);
+                                        action_triggered = true;
+                                    }
+                                    if (ImGui::MenuItem("Open Scene (Additive)"))
+                                    {
+                                        open_scene_additive(row_disk_path);
+                                        action_triggered = true;
+                                    }
+                                    ImGui::Separator();
+                                }
+
                                 if (ImGui::BeginMenu("Create"))
                                 {
                                     if (ImGui::MenuItem("Folder"))
@@ -1478,12 +1920,55 @@ namespace tempest::editor
                                     ImGui::EndMenu();
                                 }
 
+                                if (row.kind == tree_node_kind::loose_file)
+                                {
+                                    const auto importable = is_importable(row_path);
+                                    if (ImGui::MenuItem("Import", nullptr, false, importable))
+                                    {
+                                        import_asset(row_path);
+                                        action_triggered = true;
+                                    }
+                                    if (!importable && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                                    {
+                                        ImGui::SetTooltip("No asset importer is registered for this file type.");
+                                    }
+                                }
+                                else if (row.kind == tree_node_kind::imported_file)
+                                {
+                                    if (ImGui::MenuItem("Reimport"))
+                                    {
+                                        reimport_asset(row_path);
+                                        action_triggered = true;
+                                    }
+                                }
+                                else if (row.kind == tree_node_kind::directory || row.kind == tree_node_kind::mount_root)
+                                {
+                                    if (ImGui::MenuItem("Import All Loose Files"))
+                                    {
+                                        import_asset(row_path);
+                                        action_triggered = true;
+                                    }
+                                    if (ImGui::MenuItem("Reimport All"))
+                                    {
+                                        reimport_asset(row_path);
+                                        action_triggered = true;
+                                    }
+                                }
+
                                 if (row.kind != tree_node_kind::mount_root && row.kind != tree_node_kind::sub_asset)
                                 {
                                     if (ImGui::MenuItem("Rename", "F2"))
                                     {
                                         start_rename(row_path);
                                     }
+                                }
+
+                                ImGui::Separator();
+
+                                if (ImGui::MenuItem("Reveal in Explorer"))
+                                {
+                                    reveal_in_explorer(row_path);
+                                    action_triggered = true;
                                 }
 
                                 ImGui::EndPopup();
@@ -1533,6 +2018,19 @@ namespace tempest::editor
                             create_scene();
                         }
                         ImGui::EndMenu();
+                    }
+                    if (ImGui::MenuItem("Import All Loose Files"))
+                    {
+                        import_asset();
+                    }
+                    if (ImGui::MenuItem("Reimport All"))
+                    {
+                        reimport_asset();
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Reveal in Explorer"))
+                    {
+                        reveal_in_explorer();
                     }
                     ImGui::EndPopup();
                 }

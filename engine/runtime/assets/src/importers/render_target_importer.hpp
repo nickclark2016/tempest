@@ -10,6 +10,12 @@ namespace tempest::assets
     {
       public:
         explicit render_target_importer(core::texture_registry* tex_reg);
+
+        [[nodiscard]] auto importer_name() const noexcept -> string_view override
+        {
+            return "render_target";
+        }
+
         auto import(asset_database& db, span<const byte> data, ecs::archetype_registry& registry,
                     optional<string_view> path) -> ecs::entity override;
 

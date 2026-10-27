@@ -11,8 +11,14 @@ namespace tempest::assets
     {
       public:
         explicit exr_importer(core::texture_registry* tex_reg);
+
+        [[nodiscard]] auto importer_name() const noexcept -> string_view override
+        {
+            return "texture";
+        }
+
         ecs::entity import(asset_database& db, span<const byte> data, ecs::archetype_registry& registry,
-                                     optional<string_view> path) override;
+                           optional<string_view> path) override;
 
       private:
         core::texture_registry* _texture_reg;
