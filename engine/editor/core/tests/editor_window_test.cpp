@@ -9,7 +9,12 @@
 #include <tempest/logger.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/command_history.hpp>
 #include <tempest/commands/entity_commands.hpp>
+#include <tempest/material.hpp>
+#include <tempest/payloads/asset_payload.hpp>
+#include <tempest/scene/prefab_cache.hpp>
+#include <tempest/scene/prefab_template.hpp>
 #include <tempest/physics/box_collider_component.hpp>
 #include <tempest/physics/physics_scene_system.hpp>
 #include <tempest/physics/physics_world.hpp>
@@ -762,5 +767,332 @@ namespace tempest::editor::tests
         }
 
         env.win_mgr.destroy_window(env.win);
+    }
+
+    //==============================================================================
+    // Viewport Window Drop Target & Raycast Tests
+    //==============================================================================
+
+    /// @brief Verifies camera ray unprojection and normalization across viewport center,
+    /// corners, and safe fallback for non-positive viewport sizes.
+    TEST(editor_window_test, viewport_camera_ray_calculation)
+    {
+        // Setup: Engine context in headless mode with editor camera at known position and orientation
+        auto engine_ctx = editor_engine_context{};
+        auto& cam = engine_ctx.get_editor_camera();
+        cam.set_position(math::vec3<float>{0.0F, 2.0F, -5.0F});
+        cam.set_rotation(0.0F, 0.0F);
+        cam.set_vertical_fov(math::as_radians(60.0F));
+        cam.set_aspect_ratio(800.0F / 600.0F);
+
+        const auto viewport = viewport_window{engine_ctx};
+        const auto vp_size = math::vec2<float>{800.0F, 600.0F};
+
+        // Act: Compute ray at viewport center
+        const auto center_mouse = math::vec2<float>{400.0F, 300.0F};
+        const auto ray_center = viewport.compute_camera_ray(center_mouse, vp_size);
+
+        // Assert: Ray origin matches camera position and ray direction points straight forward
+        constexpr auto float_epsilon = 1e-3F;
+        EXPECT_NEAR(ray_center.origin.x, 0.0F, float_epsilon);
+        EXPECT_NEAR(ray_center.origin.y, 2.0F, float_epsilon);
+        EXPECT_NEAR(ray_center.origin.z, -5.0F, float_epsilon);
+        EXPECT_NEAR(ray_center.direction.x, 0.0F, float_epsilon);
+        EXPECT_NEAR(ray_center.direction.y, 0.0F, float_epsilon);
+        EXPECT_NEAR(ray_center.direction.z, 1.0F, float_epsilon);
+        EXPECT_NEAR(math::length(ray_center.direction), 1.0F, float_epsilon);
+
+        // Act: Compute ray at top-left corner
+        const auto top_left_mouse = math::vec2<float>{0.0F, 0.0F};
+        const auto ray_top_left = viewport.compute_camera_ray(top_left_mouse, vp_size);
+
+        // Assert: Top-left ray points left, up, and forward with unit length
+        EXPECT_LT(ray_top_left.direction.x, -0.1F);
+        EXPECT_GT(ray_top_left.direction.y, 0.1F);
+        EXPECT_GT(ray_top_left.direction.z, 0.5F);
+        EXPECT_NEAR(math::length(ray_top_left.direction), 1.0F, float_epsilon);
+
+        // Act: Compute ray at bottom-right corner
+        const auto bottom_right_mouse = math::vec2<float>{800.0F, 600.0F};
+        const auto ray_bottom_right = viewport.compute_camera_ray(bottom_right_mouse, vp_size);
+
+        // Assert: Bottom-right ray points right, down, and forward with unit length
+        EXPECT_GT(ray_bottom_right.direction.x, 0.1F);
+        EXPECT_LT(ray_bottom_right.direction.y, -0.1F);
+        EXPECT_GT(ray_bottom_right.direction.z, 0.5F);
+        EXPECT_NEAR(math::length(ray_bottom_right.direction), 1.0F, float_epsilon);
+
+        // Act: Compute ray with zero-sized viewport dimensions
+        const auto zero_size = math::vec2<float>{0.0F, 0.0F};
+        const auto ray_zero = viewport.compute_camera_ray(center_mouse, zero_size);
+
+        // Assert: Safely falls back to camera forward vector without division by zero
+        EXPECT_NEAR(ray_zero.direction.x, 0.0F, float_epsilon);
+        EXPECT_NEAR(ray_zero.direction.y, 0.0F, float_epsilon);
+        EXPECT_NEAR(ray_zero.direction.z, 1.0F, float_epsilon);
+    }
+
+    /// @brief Verifies scene placement position calculation against the ground plane (Y = 0),
+    /// an entity with box collider, and the 5.0m forward fallback when no surface is intersected.
+    TEST(editor_window_test, viewport_placement_ground_entity_and_fallback)
+    {
+        // Setup: Engine context with camera at (0, 2, -5) looking slightly downward
+        auto engine_ctx = editor_engine_context{};
+        auto& cam = engine_ctx.get_editor_camera();
+        cam.set_position(math::vec3<float>{0.0F, 2.0F, -5.0F});
+        cam.set_rotation(0.0F, 0.0F);
+        cam.set_vertical_fov(math::as_radians(60.0F));
+        cam.set_aspect_ratio(800.0F / 600.0F);
+
+        const auto viewport = viewport_window{engine_ctx};
+        const auto vp_size = math::vec2<float>{800.0F, 600.0F};
+
+        // Act: Cursor at bottom center of viewport where downward ray intersects ground plane Y = 0
+        const auto bottom_mouse = math::vec2<float>{400.0F, 600.0F};
+        const auto ground_hit = viewport.calculate_placement_position(bottom_mouse, vp_size);
+
+        // Assert: Hits ground plane with Y = 0.0 and tombstone hit entity
+        constexpr auto float_epsilon = 1e-3F;
+        EXPECT_TRUE(ground_hit.has_hit);
+        EXPECT_FLOAT_EQ(ground_hit.position.y, 0.0F);
+        EXPECT_GT(ground_hit.position.z, -5.0F);
+        EXPECT_EQ(ground_hit.hit_entity, static_cast<ecs::entity>(ecs::tombstone));
+
+        // Setup: Create a target entity directly in front of the camera with transform and box collider
+        auto& reg = engine_ctx.get_entities();
+        const auto target_ent = reg.create();
+        reg.name(target_ent, "TargetCube");
+        auto transform = ecs::transform_component{};
+        transform.position(math::vec3<float>{0.0F, 2.0F, 0.0F});
+        reg.assign(target_ent, transform);
+        reg.assign(target_ent, physics::box_collider_component{
+            .half_extents = math::vec3<float>{0.5F, 0.5F, 0.5F},
+            .offset = math::vec3<float>{0.0F, 0.0F, 0.0F},
+        });
+
+        // Act: Cursor at center of viewport aimed straight at the target entity at (0, 2, 0)
+        const auto center_mouse = math::vec2<float>{400.0F, 300.0F};
+        const auto entity_hit = viewport.calculate_placement_position(center_mouse, vp_size);
+
+        // Assert: Ray intersects the target entity bounds at front face Z = -0.5
+        EXPECT_TRUE(entity_hit.has_hit);
+        EXPECT_EQ(entity_hit.hit_entity, target_ent);
+        EXPECT_NEAR(entity_hit.position.x, 0.0F, float_epsilon);
+        EXPECT_NEAR(entity_hit.position.y, 2.0F, float_epsilon);
+        EXPECT_NEAR(entity_hit.position.z, -0.5F, float_epsilon);
+
+        // Setup: Remove target entity and aim upward so neither entity nor ground is hit
+        reg.destroy(target_ent);
+        const auto top_mouse = math::vec2<float>{400.0F, 0.0F};
+
+        // Act: Calculate placement position for ray aimed into the sky
+        const auto sky_placement = viewport.calculate_placement_position(top_mouse, vp_size);
+
+        // Assert: Falls back to 5.0m along ray direction with has_hit = false
+        EXPECT_FALSE(sky_placement.has_hit);
+        EXPECT_EQ(sky_placement.hit_entity, static_cast<ecs::entity>(ecs::tombstone));
+        const auto sky_ray = viewport.compute_camera_ray(top_mouse, vp_size);
+        const auto expected_fallback = sky_ray.origin + (sky_ray.direction * 5.0F);
+        EXPECT_NEAR(sky_placement.position.x, expected_fallback.x, float_epsilon);
+        EXPECT_NEAR(sky_placement.position.y, expected_fallback.y, float_epsilon);
+        EXPECT_NEAR(sky_placement.position.z, expected_fallback.z, float_epsilon);
+    }
+
+    /// @brief Verifies that dropping a prefab asset payload into the viewport executes
+    /// instantiate_prefab_command placing the instance at the hit position, with undo and redo.
+    TEST(editor_window_test, viewport_drop_prefab_instantiation_undo_redo)
+    {
+        // Setup: Engine context, active scene, prefab cache, and command history
+        auto engine_ctx = editor_engine_context{};
+        auto& scene_mgr = engine_ctx.get_scene_manager();
+        const auto scene_res = scene_mgr.load_from_string_sync(
+            R"({"schema_version":1,"generator":"test","entities":[]})", "ViewportDropScene.tscene");
+        ASSERT_TRUE(scene_res.has_value());
+        const auto active_scene = *scene_res;
+        scene_mgr.set_active_scene(active_scene);
+
+        auto& cam = engine_ctx.get_editor_camera();
+        cam.set_position(math::vec3<float>{0.0F, 2.0F, -5.0F});
+        cam.set_rotation(0.0F, 0.0F);
+
+        auto p_cache = scene::prefab_cache{};
+        auto& reg = engine_ctx.get_entities();
+        const auto template_root = reg.create();
+        reg.name(template_root, "ViewportPrefabRoot");
+        auto tmpl = scene::prefab_template::from_entity(reg, template_root);
+        reg.destroy(template_root);
+
+        const auto prefab_id = guid::generate_random_guid();
+        ASSERT_TRUE(p_cache.register_template(prefab_id, tempest::move(tmpl)));
+
+        auto history = command_history{};
+        auto viewport = viewport_window{engine_ctx, &history, &p_cache};
+        const auto vp_size = math::vec2<float>{800.0F, 600.0F};
+
+        // Downward ray hitting ground plane Y = 0
+        const auto mouse_pos = math::vec2<float>{400.0F, 600.0F};
+        const auto expected_placement = viewport.calculate_placement_position(mouse_pos, vp_size);
+        ASSERT_TRUE(expected_placement.has_hit);
+        ASSERT_FLOAT_EQ(expected_placement.position.y, 0.0F);
+
+        auto payload = asset_payload{};
+        payload.asset_guid = prefab_id;
+        payload.set_type_name("prefab");
+        payload.set_path("assets/prefabs/prop.tprefab");
+
+        // Act: Drop prefab payload into viewport
+        const auto drop_success = viewport.handle_asset_drop(payload, mouse_pos, vp_size);
+
+        // Assert: Instantiation command succeeded and entity exists at placement position
+        EXPECT_TRUE(drop_success);
+        EXPECT_TRUE(history.can_undo(active_scene));
+
+        const auto roots_opt = scene_mgr.get_root_entities(active_scene);
+        ASSERT_TRUE(roots_opt.has_value());
+        ASSERT_EQ(roots_opt->size(), 1U);
+        const auto spawned_ent = roots_opt->front();
+        EXPECT_TRUE(reg.is_valid(spawned_ent));
+
+        const auto* const spawned_transform = reg.try_get<ecs::transform_component>(spawned_ent);
+        ASSERT_NE(spawned_transform, nullptr);
+        constexpr auto float_epsilon = 1e-3F;
+        EXPECT_NEAR(spawned_transform->position().x, expected_placement.position.x, float_epsilon);
+        EXPECT_NEAR(spawned_transform->position().y, expected_placement.position.y, float_epsilon);
+        EXPECT_NEAR(spawned_transform->position().z, expected_placement.position.z, float_epsilon);
+
+        // Act: Undo prefab instantiation
+        auto cmd_ctx = command_context{
+            .registry = reg,
+            .scene_manager = scene_mgr,
+            .prefab_cache = &p_cache,
+            .events = &engine_ctx.get_events(),
+            .log = &engine_ctx.get_logger(),
+        };
+        EXPECT_TRUE(history.undo(cmd_ctx, active_scene));
+
+        // Assert: Spawned entity hierarchy is removed
+        EXPECT_FALSE(reg.is_valid(spawned_ent));
+        EXPECT_TRUE(history.can_redo(active_scene));
+
+        // Act: Redo prefab instantiation
+        EXPECT_TRUE(history.redo(cmd_ctx, active_scene));
+
+        // Assert: Spawned entity hierarchy is restored
+        const auto redo_roots = scene_mgr.get_root_entities(active_scene);
+        ASSERT_TRUE(redo_roots.has_value());
+        EXPECT_EQ(redo_roots->size(), 1U);
+    }
+
+    /// @brief Verifies that dropping a material asset payload onto an entity visible under the
+    /// viewport cursor assigns the material via assign_material_command, with undo and redo.
+    TEST(editor_window_test, viewport_drop_material_assignment_undo_redo)
+    {
+        // Setup: Engine context, active scene, target entity with existing material, and command history
+        auto engine_ctx = editor_engine_context{};
+        auto& scene_mgr = engine_ctx.get_scene_manager();
+        const auto scene_res = scene_mgr.load_from_string_sync(
+            R"({"schema_version":1,"generator":"test","entities":[]})", "ViewportMatScene.tscene");
+        ASSERT_TRUE(scene_res.has_value());
+        const auto active_scene = *scene_res;
+        scene_mgr.set_active_scene(active_scene);
+
+        auto& reg = engine_ctx.get_entities();
+        const auto target_ent = scene_mgr.create_entity(active_scene, "MaterialTarget");
+        auto transform = ecs::transform_component{};
+        transform.position(math::vec3<float>{0.0F, 1.0F, 0.0F});
+        reg.assign(target_ent, transform);
+        reg.assign(target_ent, physics::box_collider_component{
+            .half_extents = math::vec3<float>{0.5F, 0.5F, 0.5F},
+        });
+        const auto initial_material = guid::generate_random_guid();
+        reg.assign(target_ent, core::material_component{.material_id = initial_material});
+
+        auto& cam = engine_ctx.get_editor_camera();
+        cam.set_position(math::vec3<float>{0.0F, 1.0F, -5.0F});
+        cam.set_rotation(0.0F, 0.0F);
+
+        auto history = command_history{};
+        auto viewport = viewport_window{engine_ctx, &history};
+        const auto vp_size = math::vec2<float>{800.0F, 600.0F};
+        const auto center_mouse = math::vec2<float>{400.0F, 300.0F};
+
+        const auto hit_check = viewport.calculate_placement_position(center_mouse, vp_size);
+        ASSERT_TRUE(hit_check.has_hit);
+        ASSERT_EQ(hit_check.hit_entity, target_ent);
+
+        const auto dropped_material = guid::generate_random_guid();
+        auto payload = asset_payload{};
+        payload.asset_guid = dropped_material;
+        payload.set_type_name("material");
+        payload.set_path("assets/materials/stone.tmaterial");
+
+        // Act: Drop material payload onto the entity in the viewport
+        const auto drop_success = viewport.handle_asset_drop(payload, center_mouse, vp_size);
+
+        // Assert: Material assignment command executed and target has new material GUID
+        EXPECT_TRUE(drop_success);
+        ASSERT_TRUE(reg.has<core::material_component>(target_ent));
+        EXPECT_EQ(reg.get<core::material_component>(target_ent).material_id, dropped_material);
+        EXPECT_TRUE(history.can_undo(active_scene));
+
+        // Act: Undo material assignment
+        auto cmd_ctx = command_context{
+            .registry = reg,
+            .scene_manager = scene_mgr,
+            .events = &engine_ctx.get_events(),
+            .log = &engine_ctx.get_logger(),
+        };
+        EXPECT_TRUE(history.undo(cmd_ctx, active_scene));
+
+        // Assert: Entity reverted to initial material
+        EXPECT_EQ(reg.get<core::material_component>(target_ent).material_id, initial_material);
+        EXPECT_TRUE(history.can_redo(active_scene));
+
+        // Act: Redo material assignment
+        EXPECT_TRUE(history.redo(cmd_ctx, active_scene));
+
+        // Assert: Entity restored to dropped material
+        EXPECT_EQ(reg.get<core::material_component>(target_ent).material_id, dropped_material);
+    }
+
+    /// @brief Verifies that dropping invalid or mismatched asset payloads (e.g. material dropped
+    /// onto ground or empty sky, or unknown payload type) is cleanly rejected without side effects.
+    TEST(editor_window_test, viewport_drop_invalid_or_unknown_rejected)
+    {
+        // Setup: Engine context with camera looking horizontally into empty air
+        auto engine_ctx = editor_engine_context{};
+        auto& cam = engine_ctx.get_editor_camera();
+        cam.set_position(math::vec3<float>{0.0F, 2.0F, -5.0F});
+        cam.set_rotation(0.0F, 0.0F);
+
+        auto history = command_history{};
+        auto viewport = viewport_window{engine_ctx, &history};
+        const auto vp_size = math::vec2<float>{800.0F, 600.0F};
+
+        // Act: Drop material payload where ray hits sky (no entity hit)
+        const auto center_mouse = math::vec2<float>{400.0F, 300.0F};
+        auto material_payload = asset_payload{};
+        material_payload.asset_guid = guid::generate_random_guid();
+        material_payload.set_type_name("material");
+        const auto sky_material_drop = viewport.handle_asset_drop(material_payload, center_mouse, vp_size);
+
+        // Assert: Rejected because material requires a hovered entity
+        EXPECT_FALSE(sky_material_drop);
+
+        // Act: Drop material payload where ray hits ground plane (not an entity)
+        const auto ground_mouse = math::vec2<float>{400.0F, 600.0F};
+        const auto ground_material_drop = viewport.handle_asset_drop(material_payload, ground_mouse, vp_size);
+
+        // Assert: Rejected because ground plane is a surface, not an entity
+        EXPECT_FALSE(ground_material_drop);
+
+        // Act: Drop unknown / non-asset payload type
+        auto unknown_payload = asset_payload{};
+        unknown_payload.asset_guid = guid::generate_random_guid();
+        unknown_payload.set_type_name("unsupported_asset");
+        const auto unknown_drop = viewport.handle_asset_drop(unknown_payload, ground_mouse, vp_size);
+
+        // Assert: Rejected due to unhandled asset kind
+        EXPECT_FALSE(unknown_drop);
     }
 } // namespace tempest::editor::tests

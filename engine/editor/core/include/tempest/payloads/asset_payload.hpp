@@ -18,6 +18,14 @@ namespace tempest::editor
 {
     inline constexpr const char* asset_payload_type = "TEMPEST_ASSET_PAYLOAD";
 
+    /// @brief Classification of dropped asset payloads for editor drop target routing.
+    enum class dropped_asset_kind : uint8_t
+    {
+        unknown = 0,
+        prefab,
+        material,
+    };
+
     /// @brief Trivially-copyable drag-and-drop payload transferred via ImGui drag-and-drop.
     /// @details The first field is guaranteed to be guid asset_guid at offset 0, preserving 100%
     /// binary compatibility with legacy property grid receivers expecting raw guid data.

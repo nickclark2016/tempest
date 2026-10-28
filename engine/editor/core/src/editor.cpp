@@ -352,7 +352,7 @@ namespace tempest::editor
           _hierarchy_view{register_window(make_unique<hierarchy_window>(
               ctx.get_entities(), ctx.get_scene_manager(), _selection, ctx.get_logger(), &_history,
               &ctx.get_play_mode_controller().get_session_diff()))},
-          _viewport_view{register_window(make_unique<viewport_window>(ctx))},
+          _viewport_view{register_window(make_unique<viewport_window>(ctx, &_history))},
           _log_view{register_window(make_unique<log_view_window>(ctx.get_log_store()))},
           _project_view{register_window(make_unique<project_view_window>(
               ctx.get_scene_manager(), _selection, ctx.get_scene_manager().get_asset_database()))}

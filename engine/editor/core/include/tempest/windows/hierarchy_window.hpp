@@ -26,14 +26,6 @@ namespace tempest::editor
     class command_history;
     class play_session_diff;
 
-    /// @brief Classification of dropped asset payloads for hierarchy routing.
-    enum class dropped_asset_kind : uint8_t
-    {
-        unknown = 0,
-        prefab,
-        material,
-    };
-
     /// @brief Interactive virtualized scene and entity hierarchy window for the Tempest editor.
     struct TEMPEST_EDITOR_API hierarchy_window final : public editor_window
     {
