@@ -2429,31 +2429,6 @@ namespace tempest::editor
     }
 
     //==============================================================================
-    // assign_material_command
-    //==============================================================================
-
-    assign_material_command::assign_material_command(entity_address target, guid material_guid)
-        : assign_asset_command{tempest::move(target), "tempest::core::material_component", "material_id",
-                               material_guid}
-    {
-    }
-
-    auto assign_material_command::label() const noexcept -> string_view
-    {
-        return "Assign Material";
-    }
-
-    auto assign_material_command::material_guid() const noexcept -> const guid&
-    {
-        return asset_guid();
-    }
-
-    auto assign_material_command::prev_material_guid() const noexcept -> optional<guid>
-    {
-        return prev_asset_guid();
-    }
-
-    //==============================================================================
     // revert_override_command
     //==============================================================================
 

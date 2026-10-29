@@ -477,41 +477,6 @@ namespace tempest::editor
         bool _had_prev_field_override = default_had_prev_override;
     };
 
-    /// @brief Command assigning or replacing a material on an entity with automatic prefab override tracking.
-    /// @note Facade over assign_asset_command maintaining backward compatibility.
-    class TEMPEST_EDITOR_API assign_material_command : public assign_asset_command
-    {
-      public:
-        static constexpr bool default_had_material = false;
-        static constexpr bool default_captured = false;
-        static constexpr bool default_is_in_prefab = false;
-        static constexpr bool default_was_added_component = false;
-        static constexpr bool default_had_prev_override = false;
-
-        /// @brief Constructs a command to assign a material to an entity.
-        /// @param target Persistent address of the target entity.
-        /// @param material_guid GUID of the material to assign.
-        assign_material_command(entity_address target, guid material_guid);
-        ~assign_material_command() override = default;
-
-        assign_material_command(const assign_material_command&) = default;
-        assign_material_command(assign_material_command&&) noexcept = default;
-        auto operator=(const assign_material_command&) -> assign_material_command& = default;
-        auto operator=(assign_material_command&&) noexcept -> assign_material_command& = default;
-
-        /// @brief Returns the user-facing command label.
-        /// @return Command label string.
-        [[nodiscard]] auto label() const noexcept -> string_view override;
-
-        /// @brief Returns the new material GUID to assign.
-        /// @return GUID of the material.
-        [[nodiscard]] auto material_guid() const noexcept -> const guid&;
-
-        /// @brief Returns the previous material GUID if the entity had a material before assignment.
-        /// @return Optional previous material GUID.
-        [[nodiscard]] auto prev_material_guid() const noexcept -> optional<guid>;
-    };
-
     //==============================================================================
     // Prefab Authoring Commands
     //==============================================================================

@@ -2601,7 +2601,7 @@ namespace tempest::editor::tests
     }
 
     /// @brief Verifies that dropping a material asset payload onto an entity executes
-    /// assign_material_command, updating the target's core::material_component,
+    /// assign_asset_command, updating the target's core::material_component,
     /// and correctly undoing and redoing the assignment.
     TEST_F(project_view_window_test, hierarchy_drop_material_assignment)
     {

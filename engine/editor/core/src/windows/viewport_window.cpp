@@ -377,7 +377,8 @@ namespace tempest::editor
             };
 
             const auto target_address = compute_entity_address(_ctx->get_entities(), placement.hit_entity);
-            auto mat_cmd = make_unique<assign_material_command>(target_address, payload.asset_guid);
+            auto mat_cmd = make_unique<assign_asset_command>(
+                assign_asset_command::for_material(target_address, payload.asset_guid));
 
             if (_history != nullptr)
             {

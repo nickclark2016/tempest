@@ -222,7 +222,8 @@ namespace tempest::editor
             };
 
             const auto target_addr = compute_entity_address(*_entity_registry, target_entity);
-            auto mat_cmd = make_unique<assign_material_command>(target_addr, payload.asset_guid);
+            auto mat_cmd = make_unique<assign_asset_command>(
+                assign_asset_command::for_material(target_addr, payload.asset_guid));
             if (_history != nullptr)
             {
                 _history->execute(tempest::move(mat_cmd), cmd_ctx);

@@ -1392,9 +1392,9 @@ TEST(entity_commands_test, instantiate_prefab_command_null_cache_fails_gracefull
     EXPECT_EQ(resolve_entity_address(fix.registry, fix.scene_mgr, inst_addr), tombstone_entity);
 }
 
-/// @brief Verifies that assign_material_command assigns a material GUID to an entity lacking material_component,
+/// @brief Verifies that assign_asset_command assigns a material GUID to an entity lacking material_component,
 /// replaces existing material GUIDs, and restores previous states upon undo and redo.
-TEST(entity_commands_test, assign_material_command_lifecycle)
+TEST(entity_commands_test, assign_asset_command_material_lifecycle)
 {
     // Setup: Scene with an entity lacking material_component
     constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
@@ -1413,15 +1413,15 @@ TEST(entity_commands_test, assign_material_command_lifecycle)
     const auto mat_b = guid{array<byte, 16>{byte{5}, byte{6}, byte{7}, byte{8}}};
 
     // Act: Assign initial material
-    auto cmd_a = assign_material_command{addr, mat_a};
+    auto cmd_a = assign_asset_command::for_material(addr, mat_a);
     cmd_a.apply(fix.ctx);
 
-    // Assert: Component added with mat_a, prev_material is nullopt
-    EXPECT_EQ(cmd_a.label(), "Assign Material");
+    // Assert: Component added with mat_a, prev_asset is nullopt
+    EXPECT_EQ(cmd_a.label(), "Assign Asset");
     EXPECT_EQ(cmd_a.target_scene(), scene);
     EXPECT_EQ(cmd_a.target_address(), addr);
-    EXPECT_EQ(cmd_a.material_guid(), mat_a);
-    EXPECT_FALSE(cmd_a.prev_material_guid().has_value());
+    EXPECT_EQ(cmd_a.asset_guid(), mat_a);
+    EXPECT_FALSE(cmd_a.prev_asset_guid().has_value());
     ASSERT_TRUE(fix.registry.has<core::material_component>(ent));
     EXPECT_EQ(fix.registry.get<core::material_component>(ent).material_id, mat_a);
 
@@ -1439,13 +1439,13 @@ TEST(entity_commands_test, assign_material_command_lifecycle)
     EXPECT_EQ(fix.registry.get<core::material_component>(ent).material_id, mat_a);
 
     // Act: Replace material with mat_b
-    auto cmd_b = assign_material_command{addr, mat_b};
+    auto cmd_b = assign_asset_command::for_material(addr, mat_b);
     cmd_b.apply(fix.ctx);
 
-    // Assert: Component replaced with mat_b, prev_material records mat_a
-    EXPECT_EQ(cmd_b.material_guid(), mat_b);
-    ASSERT_TRUE(cmd_b.prev_material_guid().has_value());
-    EXPECT_EQ(*cmd_b.prev_material_guid(), mat_a);
+    // Assert: Component replaced with mat_b, prev_asset records mat_a
+    EXPECT_EQ(cmd_b.asset_guid(), mat_b);
+    ASSERT_TRUE(cmd_b.prev_asset_guid().has_value());
+    EXPECT_EQ(*cmd_b.prev_asset_guid(), mat_a);
     EXPECT_EQ(fix.registry.get<core::material_component>(ent).material_id, mat_b);
 
     // Act: Revert replacement
@@ -1461,9 +1461,9 @@ TEST(entity_commands_test, assign_material_command_lifecycle)
     EXPECT_EQ(fix.registry.get<core::material_component>(ent).material_id, mat_b);
 }
 
-/// @brief Verifies that assign_material_command on an entity in a prefab instance records
+/// @brief Verifies that assign_asset_command on an entity in a prefab instance records
 /// the corresponding prefab override, and restores or reverts the override upon undo and redo.
-TEST(entity_commands_test, assign_material_command_prefab_override)
+TEST(entity_commands_test, assign_asset_command_material_prefab_override)
 {
     // Setup: Scene with an instantiated prefab containing a material_component
     constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
@@ -1491,7 +1491,7 @@ TEST(entity_commands_test, assign_material_command_prefab_override)
     ASSERT_NE(inst_ent, tombstone_entity);
 
     // Act: Assign new material to prefab instance entity
-    auto mat_cmd = assign_material_command{inst_addr, new_mat};
+    auto mat_cmd = assign_asset_command::for_material(inst_addr, new_mat);
     mat_cmd.apply(fix.ctx);
 
     // Assert: Entity has new material and prefab instance records field override
@@ -1547,9 +1547,9 @@ TEST(entity_commands_test, assign_material_command_prefab_override)
     EXPECT_TRUE(found_after_redo);
 }
 
-/// @brief Verifies that assign_material_command on an entity in a prefab instance that initially lacked a material
+/// @brief Verifies that assign_asset_command on an entity in a prefab instance that initially lacked a material
 /// correctly records an added_component override, removes it on undo, and restores it on redo.
-TEST(entity_commands_test, assign_material_command_prefab_override_added_component)
+TEST(entity_commands_test, assign_asset_command_material_prefab_override_added_component)
 {
     // Setup: Scene with an instantiated prefab lacking material_component
     constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
@@ -1577,7 +1577,7 @@ TEST(entity_commands_test, assign_material_command_prefab_override_added_compone
     ASSERT_FALSE(fix.registry.has<core::material_component>(inst_ent));
 
     // Act: Assign material to prefab instance entity lacking material_component
-    auto mat_cmd = assign_material_command{inst_addr, new_mat};
+    auto mat_cmd = assign_asset_command::for_material(inst_addr, new_mat);
     mat_cmd.apply(fix.ctx);
 
     // Assert: Entity has new material and prefab instance records added_component override
@@ -1638,7 +1638,7 @@ TEST(entity_commands_test, assign_material_command_prefab_override_added_compone
     EXPECT_TRUE(found_after_redo);
 }
 
-/// @brief Verifies integration of instantiate_prefab_command and assign_material_command
+/// @brief Verifies integration of instantiate_prefab_command and assign_asset_command
 /// executed through command_history, ensuring end-to-end multi-step undo and redo.
 TEST(entity_commands_test, command_history_integration_prefab_and_material)
 {
@@ -1673,8 +1673,8 @@ TEST(entity_commands_test, command_history_integration_prefab_and_material)
     ASSERT_NE(inst_ent, tombstone_entity);
     EXPECT_EQ(fix.registry.get<core::material_component>(inst_ent).material_id, orig_mat);
 
-    // Act: Execute assign_material_command via command_history
-    auto mat_cmd = make_unique<assign_material_command>(inst_addr, new_mat);
+    // Act: Execute assign_asset_command via command_history
+    auto mat_cmd = make_unique<assign_asset_command>(assign_asset_command::for_material(inst_addr, new_mat));
     history.execute(tempest::move(mat_cmd), fix.ctx);
 
     // Assert: New material applied

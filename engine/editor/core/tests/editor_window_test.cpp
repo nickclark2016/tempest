@@ -984,7 +984,7 @@ namespace tempest::editor::tests
     }
 
     /// @brief Verifies that dropping a material asset payload onto an entity visible under the
-    /// viewport cursor assigns the material via assign_material_command, with undo and redo.
+    /// viewport cursor assigns the material via assign_asset_command, with undo and redo.
     TEST(editor_window_test, viewport_drop_material_assignment_undo_redo)
     {
         // Setup: Engine context, active scene, target entity with existing material, and command history
