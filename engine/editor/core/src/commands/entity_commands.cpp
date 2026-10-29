@@ -2017,15 +2017,17 @@ namespace tempest::editor
     }
 
     //==============================================================================
-    // assign_material_command
+    // assign_asset_command
     //==============================================================================
 
-    assign_material_command::assign_material_command(entity_address target, guid material_guid)
-        : _target_addr{tempest::move(target)}, _new_material{material_guid}
+    assign_asset_command::assign_asset_command(entity_address target, string_view component_name,
+                                               string_view field_name, guid asset_guid)
+        : _target_addr{tempest::move(target)}, _component_name{component_name}, _field_name{field_name},
+          _new_asset{asset_guid}
     {
     }
 
-    auto assign_material_command::apply(command_context& ctx) -> void
+    auto assign_asset_command::apply(command_context& ctx) -> void
     {
         const auto target_entity = resolve_entity_address(*ctx.registry, *ctx.scene_manager, _target_addr);
         if (target_entity == ecs::tombstone || !ctx.registry->is_valid(target_entity))
@@ -2033,23 +2035,58 @@ namespace tempest::editor
             return;
         }
 
-        const auto opt_idx = ctx.registry->type_registry().type_index<core::material_component>();
-        const auto comp_name = opt_idx.has_value() ? ctx.registry->type_registry().type_info(*opt_idx).name
-                                                    : string_view{"tempest::core::material_component"};
+        const auto opt_idx = ctx.registry->type_registry().type_index(_component_name);
+        if (!opt_idx.has_value())
+        {
+            return;
+        }
+
+        const auto& info = ctx.registry->type_registry().type_info(*opt_idx);
+        if (!info.descriptor.has_value())
+        {
+            return;
+        }
+
+        const auto* field = info.descriptor->find_field(_field_name);
+        if (field == nullptr ||
+            (field->kind != ecs::field_kind::asset_ref && field->kind != ecs::field_kind::guid) ||
+            (field->size != 0 && field->size != sizeof(guid)))
+        {
+            return;
+        }
+
+        const auto comp_name = info.name;
 
         if (!_captured)
         {
-            if (const auto* mat_comp = ctx.registry->try_get<core::material_component>(target_entity);
-                mat_comp != nullptr)
+            auto* raw_ptr = ecs::raw_registry_access::get_component_raw(*ctx.registry, target_entity, *opt_idx);
+            if (raw_ptr != nullptr)
             {
-                _had_material = true;
-                _prev_material = mat_comp->material_id;
+                _had_component = true;
+                auto prev_val = guid{};
+                if (field->get != nullptr)
+                {
+                    field->get(raw_ptr, &prev_val);
+                }
+                else if (field->offset != ecs::field_descriptor::no_offset)
+                {
+                    tempest::memcpy(&prev_val, static_cast<const byte*>(raw_ptr) + field->offset, sizeof(guid));
+                }
+                _prev_asset = prev_val;
+
+                if (info.size > 0)
+                {
+                    _prev_component_bytes.resize(info.size);
+                    tempest::memcpy(_prev_component_bytes.data(), raw_ptr, info.size);
+                }
             }
             else
             {
-                _had_material = false;
-                _prev_material = nullopt;
+                _had_component = false;
+                _prev_asset = nullopt;
             }
+
+            _was_added_component = !_had_component;
 
             const auto root_entity = find_prefab_instance_root(*ctx.registry, target_entity);
             if (root_entity != ecs::tombstone)
@@ -2057,7 +2094,6 @@ namespace tempest::editor
                 _is_in_prefab = true;
                 _prefab_root_addr = compute_entity_address(*ctx.registry, root_entity);
                 _override_target_path = compute_prefab_id_path(*ctx.registry, root_entity, target_entity);
-                _was_added_component = !_had_material;
 
                 if (!_was_added_component)
                 {
@@ -2065,8 +2101,9 @@ namespace tempest::editor
                     for (const auto& field_override : instance_comp.overrides.field_overrides)
                     {
                         if (field_override.target == _override_target_path &&
-                            field_override.component_name == comp_name &&
-                            field_override.field_name == "material_id")
+                            (field_override.component_name == comp_name ||
+                             field_override.component_name == _component_name) &&
+                            field_override.field_name == _field_name)
                         {
                             _prev_field_override = field_override;
                             break;
@@ -2079,7 +2116,44 @@ namespace tempest::editor
             _captured = true;
         }
 
-        ctx.registry->assign_or_replace(target_entity, core::material_component{.material_id = _new_material});
+        if (_was_added_component)
+        {
+            auto* comp_ptr = ecs::raw_registry_access::assign_raw(*ctx.registry, target_entity, info);
+            if (comp_ptr == nullptr)
+            {
+                comp_ptr = ecs::raw_registry_access::get_component_raw(*ctx.registry, target_entity, *opt_idx);
+            }
+            if (comp_ptr != nullptr)
+            {
+                set_field_value(*field, comp_ptr, _new_asset);
+                if (info.descriptor.has_value() && info.descriptor->post_load != nullptr)
+                {
+                    info.descriptor->post_load(comp_ptr);
+                }
+                if (ctx.registry->has_event_registry() && info.publish_added != nullptr)
+                {
+                    info.publish_added(ctx.registry->event_registry(), target_entity, comp_ptr);
+                }
+            }
+        }
+        else
+        {
+            auto* comp_ptr = ecs::raw_registry_access::get_component_raw(*ctx.registry, target_entity, *opt_idx);
+            if (comp_ptr != nullptr)
+            {
+                set_field_value(*field, comp_ptr, _new_asset);
+                if (info.descriptor.has_value() && info.descriptor->post_load != nullptr)
+                {
+                    info.descriptor->post_load(comp_ptr);
+                }
+                if (ctx.registry->has_event_registry() && info.publish_replaced != nullptr &&
+                    !_prev_component_bytes.empty())
+                {
+                    info.publish_replaced(ctx.registry->event_registry(), target_entity, _prev_component_bytes.data(),
+                                          comp_ptr);
+                }
+            }
+        }
 
         if (_is_in_prefab)
         {
@@ -2090,13 +2164,37 @@ namespace tempest::editor
 
                 if (_was_added_component)
                 {
-                    if (opt_idx.has_value())
+                    auto* comp_ptr =
+                        ecs::raw_registry_access::get_component_raw(*ctx.registry, target_entity, *opt_idx);
+                    auto staged = scene::staged_component{.type_info = &info};
+                    if (info.size > 0 && comp_ptr != nullptr)
                     {
-                        const auto& info = ctx.registry->type_registry().type_info(*opt_idx);
-                        auto staged = scene::staged_component{.type_info = &info};
-                        staged.data.resize(sizeof(core::material_component));
-                        const auto mat_comp_val = core::material_component{.material_id = _new_material};
-                        tempest::memcpy(staged.data.data(), &mat_comp_val, sizeof(core::material_component));
+                        staged.data.resize(info.size);
+                        tempest::memcpy(staged.data.data(), comp_ptr, info.size);
+                    }
+
+                    auto* existing_added_iter = instance_comp.overrides.added_components.end();
+                    for (auto* iter = instance_comp.overrides.added_components.begin();
+                         iter != instance_comp.overrides.added_components.end(); ++iter)
+                    {
+                        if (iter->target == _override_target_path && iter->component.type_info != nullptr &&
+                            (iter->component.type_info->name == comp_name ||
+                             iter->component.type_info->name == _component_name))
+                        {
+                            existing_added_iter = iter;
+                            break;
+                        }
+                    }
+
+                    if (existing_added_iter != instance_comp.overrides.added_components.end())
+                    {
+                        *existing_added_iter = scene::added_component{
+                            .target = _override_target_path,
+                            .component = tempest::move(staged),
+                        };
+                    }
+                    else
+                    {
                         instance_comp.overrides.added_components.push_back(scene::added_component{
                             .target = _override_target_path,
                             .component = tempest::move(staged),
@@ -2106,14 +2204,16 @@ namespace tempest::editor
                 else
                 {
                     auto val_bytes = vector<byte>(sizeof(guid));
-                    tempest::memcpy(val_bytes.data(), &_new_material, sizeof(guid));
+                    tempest::memcpy(val_bytes.data(), &_new_asset, sizeof(guid));
 
                     auto* existing_override_iter = instance_comp.overrides.field_overrides.end();
                     for (auto* field_iter = instance_comp.overrides.field_overrides.begin();
                          field_iter != instance_comp.overrides.field_overrides.end(); ++field_iter)
                     {
-                        if (field_iter->target == _override_target_path && field_iter->component_name == comp_name &&
-                            field_iter->field_name == "material_id")
+                        if (field_iter->target == _override_target_path &&
+                            (field_iter->component_name == comp_name ||
+                             field_iter->component_name == _component_name) &&
+                            field_iter->field_name == _field_name)
                         {
                             existing_override_iter = field_iter;
                             break;
@@ -2129,11 +2229,12 @@ namespace tempest::editor
                         instance_comp.overrides.field_overrides.push_back(scene::field_override{
                             .target = _override_target_path,
                             .component_name = string{comp_name},
-                            .field_name = "material_id",
+                            .field_name = string{_field_name},
                             .value_bytes = tempest::move(val_bytes),
                         });
                     }
                 }
+
                 ctx.registry->assign_or_replace(root_entity, tempest::move(instance_comp));
             }
         }
@@ -2144,7 +2245,7 @@ namespace tempest::editor
         }
     }
 
-    auto assign_material_command::revert(command_context& ctx) -> void
+    auto assign_asset_command::revert(command_context& ctx) -> void
     {
         const auto target_entity = resolve_entity_address(*ctx.registry, *ctx.scene_manager, _target_addr);
         if (target_entity == ecs::tombstone || !ctx.registry->is_valid(target_entity))
@@ -2152,13 +2253,56 @@ namespace tempest::editor
             return;
         }
 
-        if (_had_material && _prev_material.has_value())
+        const auto opt_idx = ctx.registry->type_registry().type_index(_component_name);
+        if (!opt_idx.has_value())
         {
-            ctx.registry->assign_or_replace(target_entity, core::material_component{.material_id = *_prev_material});
+            return;
         }
-        else if (ctx.registry->has<core::material_component>(target_entity))
+
+        const auto& info = ctx.registry->type_registry().type_info(*opt_idx);
+        if (!info.descriptor.has_value())
         {
-            ctx.registry->remove<core::material_component>(target_entity);
+            return;
+        }
+
+        const auto* field = info.descriptor->find_field(_field_name);
+        if (field == nullptr ||
+            (field->kind != ecs::field_kind::asset_ref && field->kind != ecs::field_kind::guid) ||
+            (field->size != 0 && field->size != sizeof(guid)))
+        {
+            return;
+        }
+
+        const auto comp_name = info.name;
+
+        if (_was_added_component)
+        {
+            ecs::raw_registry_access::remove_raw(*ctx.registry, target_entity, *opt_idx);
+        }
+        else if (_prev_asset.has_value())
+        {
+            auto* comp_ptr = ecs::raw_registry_access::get_component_raw(*ctx.registry, target_entity, *opt_idx);
+            if (comp_ptr != nullptr)
+            {
+                auto current_bytes = vector<byte>(info.size);
+                if (info.size > 0)
+                {
+                    tempest::memcpy(current_bytes.data(), comp_ptr, info.size);
+                }
+
+                set_field_value(*field, comp_ptr, *_prev_asset);
+
+                if (info.descriptor->post_load != nullptr)
+                {
+                    info.descriptor->post_load(comp_ptr);
+                }
+
+                if (ctx.registry->has_event_registry() && info.publish_replaced != nullptr && !current_bytes.empty())
+                {
+                    info.publish_replaced(ctx.registry->event_registry(), target_entity, current_bytes.data(),
+                                          comp_ptr);
+                }
+            }
         }
 
         if (_is_in_prefab)
@@ -2167,10 +2311,6 @@ namespace tempest::editor
             if (root_entity != ecs::tombstone && ctx.registry->is_valid(root_entity))
             {
                 auto instance_comp = ctx.registry->get<scene::prefab_instance_component>(root_entity);
-                const auto opt_idx = ctx.registry->type_registry().type_index<core::material_component>();
-                const auto comp_name =
-                    opt_idx.has_value() ? ctx.registry->type_registry().type_info(*opt_idx).name
-                                        : string_view{"tempest::core::material_component"};
 
                 if (_was_added_component)
                 {
@@ -2178,7 +2318,8 @@ namespace tempest::editor
                          added_iter != instance_comp.overrides.added_components.end(); ++added_iter)
                     {
                         if (added_iter->target == _override_target_path && added_iter->component.type_info != nullptr &&
-                            added_iter->component.type_info->name == comp_name)
+                            (added_iter->component.type_info->name == comp_name ||
+                             added_iter->component.type_info->name == _component_name))
                         {
                             instance_comp.overrides.added_components.erase(added_iter);
                             break;
@@ -2191,15 +2332,17 @@ namespace tempest::editor
                     for (auto* field_iter = instance_comp.overrides.field_overrides.begin();
                          field_iter != instance_comp.overrides.field_overrides.end(); ++field_iter)
                     {
-                        if (field_iter->target == _override_target_path && field_iter->component_name == comp_name &&
-                            field_iter->field_name == "material_id")
+                        if (field_iter->target == _override_target_path &&
+                            (field_iter->component_name == comp_name ||
+                             field_iter->component_name == _component_name) &&
+                            field_iter->field_name == _field_name)
                         {
                             existing_override_iter = field_iter;
                             break;
                         }
                     }
 
-                    if (_prev_field_override.has_value())
+                    if (_had_prev_field_override && _prev_field_override.has_value())
                     {
                         if (existing_override_iter != instance_comp.overrides.field_overrides.end())
                         {
@@ -2218,6 +2361,7 @@ namespace tempest::editor
                         }
                     }
                 }
+
                 ctx.registry->assign_or_replace(root_entity, tempest::move(instance_comp));
             }
         }
@@ -2226,6 +2370,87 @@ namespace tempest::editor
         {
             ctx.scene_manager->set_dirty(_target_addr.scene, true);
         }
+    }
+
+    auto assign_asset_command::label() const noexcept -> string_view
+    {
+        return "Assign Asset";
+    }
+
+    auto assign_asset_command::target_scene() const noexcept -> scene::scene_handle
+    {
+        return _target_addr.scene;
+    }
+
+    auto assign_asset_command::target_address() const noexcept -> const entity_address&
+    {
+        return _target_addr;
+    }
+
+    auto assign_asset_command::component_name() const noexcept -> string_view
+    {
+        return string_view{_component_name};
+    }
+
+    auto assign_asset_command::field_name() const noexcept -> string_view
+    {
+        return string_view{_field_name};
+    }
+
+    auto assign_asset_command::asset_guid() const noexcept -> const guid&
+    {
+        return _new_asset;
+    }
+
+    auto assign_asset_command::prev_asset_guid() const noexcept -> optional<guid>
+    {
+        return _prev_asset;
+    }
+
+    auto assign_asset_command::was_added_component() const noexcept -> bool
+    {
+        return _was_added_component;
+    }
+
+    auto assign_asset_command::is_in_prefab() const noexcept -> bool
+    {
+        return _is_in_prefab;
+    }
+
+    auto assign_asset_command::for_material(entity_address target, guid material_guid) -> assign_asset_command
+    {
+        return assign_asset_command{tempest::move(target), "tempest::core::material_component", "material_id",
+                                    material_guid};
+    }
+
+    auto assign_asset_command::for_mesh(entity_address target, guid mesh_guid) -> assign_asset_command
+    {
+        return assign_asset_command{tempest::move(target), "tempest::core::mesh_component", "mesh_id", mesh_guid};
+    }
+
+    //==============================================================================
+    // assign_material_command
+    //==============================================================================
+
+    assign_material_command::assign_material_command(entity_address target, guid material_guid)
+        : assign_asset_command{tempest::move(target), "tempest::core::material_component", "material_id",
+                               material_guid}
+    {
+    }
+
+    auto assign_material_command::label() const noexcept -> string_view
+    {
+        return "Assign Material";
+    }
+
+    auto assign_material_command::material_guid() const noexcept -> const guid&
+    {
+        return asset_guid();
+    }
+
+    auto assign_material_command::prev_material_guid() const noexcept -> optional<guid>
+    {
+        return prev_asset_guid();
     }
 
     //==============================================================================

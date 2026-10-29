@@ -376,8 +376,110 @@ namespace tempest::editor
         bool _had_prev_field_override = default_had_prev_override;
     };
 
+    /// @brief Command assigning or replacing an asset reference field on an entity component with automatic prefab override tracking.
+    class TEMPEST_EDITOR_API assign_asset_command : public editor_command
+    {
+      public:
+        static constexpr bool default_had_component = false;
+        static constexpr bool default_captured = false;
+        static constexpr bool default_is_in_prefab = false;
+        static constexpr bool default_was_added_component = false;
+        static constexpr bool default_had_prev_override = false;
+
+        /// @brief Constructs a command to assign an asset reference to an entity component field.
+        /// @param target Persistent address of the target entity.
+        /// @param component_name Reflected component type name or alias.
+        /// @param field_name Reflected field name within the component.
+        /// @param asset_guid GUID of the asset to assign.
+        assign_asset_command(entity_address target, string_view component_name, string_view field_name,
+                             guid asset_guid);
+        ~assign_asset_command() override = default;
+
+        assign_asset_command(const assign_asset_command&) = default;
+        assign_asset_command(assign_asset_command&&) noexcept = default;
+        auto operator=(const assign_asset_command&) -> assign_asset_command& = default;
+        auto operator=(assign_asset_command&&) noexcept -> assign_asset_command& = default;
+
+        /// @brief Applies the asset assignment, updating live components and prefab overrides.
+        /// @param ctx Command context providing access to registry, scenes, and loggers.
+        /// @pre Target entity must exist in the registry or scene.
+        /// @post Target entity has the specified component with field set to asset_guid.
+        auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the asset assignment, restoring previous asset GUID or removing component.
+        /// @param ctx Command context providing access to registry, scenes, and loggers.
+        /// @post Target entity component field is restored or component is removed.
+        auto revert(command_context& ctx) -> void override;
+
+        /// @brief Returns the user-facing command label.
+        /// @return Command label string.
+        [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Returns the target scene handle for this command.
+        /// @return Target scene handle.
+        [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
+
+        /// @brief Returns the target entity address.
+        /// @return Persistent entity address reference.
+        [[nodiscard]] auto target_address() const noexcept -> const entity_address&;
+
+        /// @brief Returns the target component name.
+        /// @return Component name string view.
+        [[nodiscard]] auto component_name() const noexcept -> string_view;
+
+        /// @brief Returns the target field name.
+        /// @return Field name string view.
+        [[nodiscard]] auto field_name() const noexcept -> string_view;
+
+        /// @brief Returns the new asset GUID to assign.
+        /// @return GUID of the asset.
+        [[nodiscard]] auto asset_guid() const noexcept -> const guid&;
+
+        /// @brief Returns the previous asset GUID if the component existed prior to execution.
+        /// @return Optional previous asset GUID.
+        [[nodiscard]] auto prev_asset_guid() const noexcept -> optional<guid>;
+
+        /// @brief Returns whether the component was added by this command.
+        /// @return True if component was absent and added, false otherwise.
+        [[nodiscard]] auto was_added_component() const noexcept -> bool;
+
+        /// @brief Returns whether the target entity resides within a prefab instance.
+        /// @return True if entity is part of a prefab instance, false otherwise.
+        [[nodiscard]] auto is_in_prefab() const noexcept -> bool;
+
+        /// @brief Creates an asset assignment command targeted at core::material_component material_id.
+        /// @param target Persistent address of the target entity.
+        /// @param material_guid GUID of the material to assign.
+        /// @return Configured assign_asset_command instance.
+        static auto for_material(entity_address target, guid material_guid) -> assign_asset_command;
+
+        /// @brief Creates an asset assignment command targeted at core::mesh_component mesh_id.
+        /// @param target Persistent address of the target entity.
+        /// @param mesh_guid GUID of the mesh to assign.
+        /// @return Configured assign_asset_command instance.
+        static auto for_mesh(entity_address target, guid mesh_guid) -> assign_asset_command;
+
+      private:
+        entity_address _target_addr;
+        string _component_name;
+        string _field_name;
+        guid _new_asset;
+        optional<guid> _prev_asset;
+        vector<byte> _prev_component_bytes;
+        bool _had_component = default_had_component;
+        bool _captured = default_captured;
+        bool _is_in_prefab = default_is_in_prefab;
+        bool _was_added_component = default_was_added_component;
+
+        entity_address _prefab_root_addr;
+        scene::id_path _override_target_path;
+        optional<scene::field_override> _prev_field_override;
+        bool _had_prev_field_override = default_had_prev_override;
+    };
+
     /// @brief Command assigning or replacing a material on an entity with automatic prefab override tracking.
-    class TEMPEST_EDITOR_API assign_material_command : public editor_command
+    /// @note Facade over assign_asset_command maintaining backward compatibility.
+    class TEMPEST_EDITOR_API assign_material_command : public assign_asset_command
     {
       public:
         static constexpr bool default_had_material = false;
@@ -397,65 +499,17 @@ namespace tempest::editor
         auto operator=(const assign_material_command&) -> assign_material_command& = default;
         auto operator=(assign_material_command&&) noexcept -> assign_material_command& = default;
 
-        /// @brief Applies the material assignment, updating live components and prefab overrides.
-        /// @param ctx Command context providing access to registry, scenes, and loggers.
-        /// @pre Target entity must exist in the registry or scene.
-        /// @post Target entity has core::material_component with material_guid.
-        auto apply(command_context& ctx) -> void override;
-
-        /// @brief Reverts the material assignment, restoring previous material or removing component.
-        /// @param ctx Command context providing access to registry, scenes, and loggers.
-        /// @post Target entity material state is restored.
-        auto revert(command_context& ctx) -> void override;
-
         /// @brief Returns the user-facing command label.
         /// @return Command label string.
-        [[nodiscard]] auto label() const noexcept -> string_view override
-        {
-            return "Assign Material";
-        }
-
-        /// @brief Returns the target scene handle for this command.
-        /// @return Target scene handle.
-        [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override
-        {
-            return _target_addr.scene;
-        }
-
-        /// @brief Returns the target entity address.
-        /// @return Persistent entity address reference.
-        [[nodiscard]] auto target_address() const noexcept -> const entity_address&
-        {
-            return _target_addr;
-        }
+        [[nodiscard]] auto label() const noexcept -> string_view override;
 
         /// @brief Returns the new material GUID to assign.
         /// @return GUID of the material.
-        [[nodiscard]] auto material_guid() const noexcept -> const guid&
-        {
-            return _new_material;
-        }
+        [[nodiscard]] auto material_guid() const noexcept -> const guid&;
 
         /// @brief Returns the previous material GUID if the entity had a material before assignment.
         /// @return Optional previous material GUID.
-        [[nodiscard]] auto prev_material_guid() const noexcept -> optional<guid>
-        {
-            return _prev_material;
-        }
-
-      private:
-        entity_address _target_addr;
-        guid _new_material;
-        optional<guid> _prev_material;
-        bool _had_material = default_had_material;
-        bool _captured = default_captured;
-        bool _is_in_prefab = default_is_in_prefab;
-        bool _was_added_component = default_was_added_component;
-
-        entity_address _prefab_root_addr;
-        scene::id_path _override_target_path;
-        optional<scene::field_override> _prev_field_override;
-        bool _had_prev_field_override = default_had_prev_override;
+        [[nodiscard]] auto prev_material_guid() const noexcept -> optional<guid>;
     };
 
     //==============================================================================

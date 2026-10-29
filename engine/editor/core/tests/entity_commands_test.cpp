@@ -24,6 +24,7 @@
 #include <tempest/string_view.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/vector.hpp>
+#include <tempest/vertex.hpp>
 
 #if defined(_MSC_VER)
 #pragma warning(disable : 4324) // structure was padded due to alignment specifier
@@ -73,6 +74,7 @@ namespace tempest_entity_cmd_test
         uint32_t transform_comp_idx = 0;
         uint32_t point_light_idx = 0;
         uint32_t material_comp_idx = 0;
+        uint32_t mesh_comp_idx = 0;
 
         entity_commands_fixture()
         {
@@ -85,12 +87,14 @@ namespace tempest_entity_cmd_test
             type_reg.ensure<scene::scene_entity_component>();
             type_reg.ensure<dynamic_entity_id_component>();
             material_comp_idx = type_reg.ensure<core::material_component>();
+            mesh_comp_idx = type_reg.ensure<core::mesh_component>();
 
             type_reg.add_alias("test_component", type_reg.type_info(test_comp_idx).name);
             type_reg.add_alias("test_secondary_component", type_reg.type_info(test_sec_comp_idx).name);
             type_reg.add_alias("transform_component", type_reg.type_info(transform_comp_idx).name);
             type_reg.add_alias("point_light_component", type_reg.type_info(point_light_idx).name);
             type_reg.add_alias("material_component", type_reg.type_info(material_comp_idx).name);
+            type_reg.add_alias("mesh_component", type_reg.type_info(mesh_comp_idx).name);
         }
     };
 } // namespace tempest_entity_cmd_test
@@ -1702,5 +1706,380 @@ TEST(entity_commands_test, command_history_integration_prefab_and_material)
     // Assert: New material reapplied to restored entity
     EXPECT_EQ(fix.registry.get<core::material_component>(restored_ent).material_id, new_mat);
 }
+
+//==============================================================================
+// assign_asset_command Tests
+//==============================================================================
+
+/// @brief Verifies that assign_asset_command assigns an asset GUID to an entity lacking the component,
+/// replaces existing asset GUIDs, and restores previous states upon undo and redo.
+TEST(entity_commands_test, assign_asset_command_lifecycle)
+{
+    // Setup: Scene with an entity lacking mesh_component
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneAssignAssetLifecycle");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    auto create_cmd = create_entity_command{scene, "MeshTargetEntity"};
+    create_cmd.apply(fix.ctx);
+    const auto addr = create_cmd.created_address();
+    const auto ent = resolve_entity_address(fix.registry, fix.scene_mgr, addr);
+    ASSERT_NE(ent, tombstone_entity);
+
+    const auto mesh_a = guid{array<byte, 16>{byte{10}, byte{11}, byte{12}, byte{13}}};
+    const auto mesh_b = guid{array<byte, 16>{byte{20}, byte{21}, byte{22}, byte{23}}};
+
+    // Act: Assign initial mesh asset
+    auto cmd_a = assign_asset_command{addr, "mesh_component", "mesh_id", mesh_a};
+    cmd_a.apply(fix.ctx);
+
+    // Assert: Component added with mesh_a, prev_asset is nullopt, was_added_component is true
+    EXPECT_EQ(cmd_a.label(), "Assign Asset");
+    EXPECT_EQ(cmd_a.target_scene(), scene);
+    EXPECT_EQ(cmd_a.target_address(), addr);
+    EXPECT_EQ(cmd_a.component_name(), "mesh_component");
+    EXPECT_EQ(cmd_a.field_name(), "mesh_id");
+    EXPECT_EQ(cmd_a.asset_guid(), mesh_a);
+    EXPECT_FALSE(cmd_a.prev_asset_guid().has_value());
+    EXPECT_TRUE(cmd_a.was_added_component());
+    EXPECT_FALSE(cmd_a.is_in_prefab());
+    ASSERT_TRUE(fix.registry.has<core::mesh_component>(ent));
+    EXPECT_EQ(fix.registry.get<core::mesh_component>(ent).mesh_id, mesh_a);
+
+    // Act: Revert initial mesh assignment
+    cmd_a.revert(fix.ctx);
+
+    // Assert: Component removed
+    EXPECT_FALSE(fix.registry.has<core::mesh_component>(ent));
+
+    // Act: Redo initial mesh assignment
+    cmd_a.apply(fix.ctx);
+
+    // Assert: Component restored with mesh_a
+    ASSERT_TRUE(fix.registry.has<core::mesh_component>(ent));
+    EXPECT_EQ(fix.registry.get<core::mesh_component>(ent).mesh_id, mesh_a);
+
+    // Act: Replace mesh with mesh_b
+    auto cmd_b = assign_asset_command{addr, "mesh_component", "mesh_id", mesh_b};
+    cmd_b.apply(fix.ctx);
+
+    // Assert: Component replaced with mesh_b, prev_asset records mesh_a, was_added_component is false
+    EXPECT_EQ(cmd_b.asset_guid(), mesh_b);
+    ASSERT_TRUE(cmd_b.prev_asset_guid().has_value());
+    EXPECT_EQ(*cmd_b.prev_asset_guid(), mesh_a);
+    EXPECT_FALSE(cmd_b.was_added_component());
+    EXPECT_EQ(fix.registry.get<core::mesh_component>(ent).mesh_id, mesh_b);
+
+    // Act: Revert replacement
+    cmd_b.revert(fix.ctx);
+
+    // Assert: Previous mesh mesh_a restored
+    EXPECT_EQ(fix.registry.get<core::mesh_component>(ent).mesh_id, mesh_a);
+
+    // Act: Redo replacement
+    cmd_b.apply(fix.ctx);
+
+    // Assert: Replacement mesh_b reapplied
+    EXPECT_EQ(fix.registry.get<core::mesh_component>(ent).mesh_id, mesh_b);
+}
+
+/// @brief Verifies that assign_asset_command on an entity in a prefab instance records
+/// the corresponding field override, and restores or reverts the override upon undo and redo.
+TEST(entity_commands_test, assign_asset_command_prefab_override)
+{
+    // Setup: Scene with an instantiated prefab containing a mesh_component
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneAssignAssetPrefab");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    const auto orig_mesh = guid{array<byte, 16>{byte{30}, byte{31}, byte{32}}};
+    const auto new_mesh = guid{array<byte, 16>{byte{40}, byte{41}, byte{42}}};
+
+    auto t_reg = ecs::archetype_registry{fix.event_reg, fix.type_reg};
+    const auto tmpl_root = t_reg.create();
+    t_reg.name(tmpl_root, "PrefabWithMesh");
+    t_reg.assign(tmpl_root, core::mesh_component{.mesh_id = orig_mesh});
+
+    auto tmpl = scene::prefab_template::from_entity(t_reg, tmpl_root);
+    const auto prefab_guid = guid{array<byte, 16>{byte{60}, byte{61}, byte{62}, byte{63}}};
+    ASSERT_TRUE(fix.prefab_cache.register_template(prefab_guid, tempest::move(tmpl)));
+
+    auto inst_cmd = instantiate_prefab_command{prefab_guid, scene};
+    inst_cmd.apply(fix.ctx);
+    const auto inst_addr = inst_cmd.instantiated_address();
+    const auto inst_ent = resolve_entity_address(fix.registry, fix.scene_mgr, inst_addr);
+    ASSERT_NE(inst_ent, tombstone_entity);
+
+    // Act: Assign new mesh to prefab instance entity
+    auto mesh_cmd = assign_asset_command{inst_addr, "tempest::core::mesh_component", "mesh_id", new_mesh};
+    mesh_cmd.apply(fix.ctx);
+
+    // Assert: Entity has new mesh and prefab instance records field override
+    EXPECT_TRUE(mesh_cmd.is_in_prefab());
+    EXPECT_FALSE(mesh_cmd.was_added_component());
+    EXPECT_EQ(fix.registry.get<core::mesh_component>(inst_ent).mesh_id, new_mesh);
+    const auto* instance_comp = fix.registry.try_get<scene::prefab_instance_component>(inst_ent);
+    ASSERT_NE(instance_comp, nullptr);
+    EXPECT_FALSE(instance_comp->overrides.field_overrides.empty());
+    auto found_override = false;
+    for (const auto& field_override : instance_comp->overrides.field_overrides)
+    {
+        if (field_override.field_name == "mesh_id")
+        {
+            found_override = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_override);
+
+    // Act: Revert mesh assignment
+    mesh_cmd.revert(fix.ctx);
+
+    // Assert: Original mesh restored and field override removed
+    EXPECT_EQ(fix.registry.get<core::mesh_component>(inst_ent).mesh_id, orig_mesh);
+    const auto* instance_comp_undone = fix.registry.try_get<scene::prefab_instance_component>(inst_ent);
+    ASSERT_NE(instance_comp_undone, nullptr);
+    auto found_after_undo = false;
+    for (const auto& field_override : instance_comp_undone->overrides.field_overrides)
+    {
+        if (field_override.field_name == "mesh_id")
+        {
+            found_after_undo = true;
+            break;
+        }
+    }
+    EXPECT_FALSE(found_after_undo);
+
+    // Act: Redo mesh assignment
+    mesh_cmd.apply(fix.ctx);
+
+    // Assert: New mesh restored and field override restored
+    EXPECT_EQ(fix.registry.get<core::mesh_component>(inst_ent).mesh_id, new_mesh);
+    const auto* instance_comp_redone = fix.registry.try_get<scene::prefab_instance_component>(inst_ent);
+    ASSERT_NE(instance_comp_redone, nullptr);
+    auto found_after_redo = false;
+    for (const auto& field_override : instance_comp_redone->overrides.field_overrides)
+    {
+        if (field_override.field_name == "mesh_id")
+        {
+            found_after_redo = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_after_redo);
+}
+
+/// @brief Verifies that assign_asset_command on an entity in a prefab instance that initially lacked a component
+/// correctly records an added_component override, removes it on undo, and restores it on redo.
+TEST(entity_commands_test, assign_asset_command_prefab_override_added_component)
+{
+    // Setup: Scene with an instantiated prefab lacking mesh_component
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneAssignAssetAddedComp");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    const auto new_mesh = guid{array<byte, 16>{byte{51}, byte{52}, byte{53}, byte{54}}};
+
+    auto t_reg = ecs::archetype_registry{fix.event_reg, fix.type_reg};
+    const auto tmpl_root = t_reg.create();
+    t_reg.name(tmpl_root, "PrefabWithoutMesh");
+    t_reg.assign(tmpl_root, test_component{.val = 77});
+
+    auto tmpl = scene::prefab_template::from_entity(t_reg, tmpl_root);
+    const auto prefab_guid = guid{array<byte, 16>{byte{81}, byte{82}, byte{83}, byte{84}}};
+    ASSERT_TRUE(fix.prefab_cache.register_template(prefab_guid, tempest::move(tmpl)));
+
+    auto inst_cmd = instantiate_prefab_command{prefab_guid, scene};
+    inst_cmd.apply(fix.ctx);
+    const auto inst_addr = inst_cmd.instantiated_address();
+    const auto inst_ent = resolve_entity_address(fix.registry, fix.scene_mgr, inst_addr);
+    ASSERT_NE(inst_ent, tombstone_entity);
+    ASSERT_FALSE(fix.registry.has<core::mesh_component>(inst_ent));
+
+    // Act: Assign mesh to prefab instance entity lacking mesh_component
+    auto mesh_cmd = assign_asset_command{inst_addr, "mesh_component", "mesh_id", new_mesh};
+    mesh_cmd.apply(fix.ctx);
+
+    // Assert: Entity has new mesh, is_in_prefab is true, was_added_component is true, records added_component override
+    EXPECT_TRUE(mesh_cmd.is_in_prefab());
+    EXPECT_TRUE(mesh_cmd.was_added_component());
+    ASSERT_TRUE(fix.registry.has<core::mesh_component>(inst_ent));
+    EXPECT_EQ(fix.registry.get<core::mesh_component>(inst_ent).mesh_id, new_mesh);
+    const auto* instance_comp = fix.registry.try_get<scene::prefab_instance_component>(inst_ent);
+    ASSERT_NE(instance_comp, nullptr);
+    EXPECT_FALSE(instance_comp->overrides.added_components.empty());
+    auto found_added = false;
+    for (const auto& added : instance_comp->overrides.added_components)
+    {
+        if (added.component.type_info != nullptr &&
+            added.component.type_info->name == fix.type_reg.type_info(fix.mesh_comp_idx).name)
+        {
+            found_added = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_added);
+
+    // Act: Revert mesh assignment
+    mesh_cmd.revert(fix.ctx);
+
+    // Assert: Mesh component removed and added_component override removed
+    EXPECT_FALSE(fix.registry.has<core::mesh_component>(inst_ent));
+    const auto* instance_comp_undone = fix.registry.try_get<scene::prefab_instance_component>(inst_ent);
+    ASSERT_NE(instance_comp_undone, nullptr);
+    auto found_added_after_undo = false;
+    for (const auto& added : instance_comp_undone->overrides.added_components)
+    {
+        if (added.component.type_info != nullptr &&
+            added.component.type_info->name == fix.type_reg.type_info(fix.mesh_comp_idx).name)
+        {
+            found_added_after_undo = true;
+            break;
+        }
+    }
+    EXPECT_FALSE(found_added_after_undo);
+
+    // Act: Redo mesh assignment
+    mesh_cmd.apply(fix.ctx);
+
+    // Assert: Mesh component restored and added_component override restored
+    ASSERT_TRUE(fix.registry.has<core::mesh_component>(inst_ent));
+    EXPECT_EQ(fix.registry.get<core::mesh_component>(inst_ent).mesh_id, new_mesh);
+    const auto* instance_comp_redone = fix.registry.try_get<scene::prefab_instance_component>(inst_ent);
+    ASSERT_NE(instance_comp_redone, nullptr);
+    auto found_added_after_redo = false;
+    for (const auto& added : instance_comp_redone->overrides.added_components)
+    {
+        if (added.component.type_info != nullptr &&
+            added.component.type_info->name == fix.type_reg.type_info(fix.mesh_comp_idx).name)
+        {
+            found_added_after_redo = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_added_after_redo);
+}
+
+/// @brief Verifies that assign_asset_command factory helpers correctly configure commands for material and mesh.
+TEST(entity_commands_test, assign_asset_command_factories)
+{
+    // Setup: Scene with target entity
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneAssignAssetFactories");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    auto create_cmd = create_entity_command{scene, "FactoryTargetEntity"};
+    create_cmd.apply(fix.ctx);
+    const auto addr = create_cmd.created_address();
+    const auto ent = resolve_entity_address(fix.registry, fix.scene_mgr, addr);
+    ASSERT_NE(ent, tombstone_entity);
+
+    const auto mat_guid = guid{array<byte, 16>{byte{101}, byte{102}}};
+    const auto mesh_guid = guid{array<byte, 16>{byte{201}, byte{202}}};
+
+    // Act: Create commands via factory helpers
+    auto mat_cmd = assign_asset_command::for_material(addr, mat_guid);
+    auto mesh_cmd = assign_asset_command::for_mesh(addr, mesh_guid);
+
+    // Assert: Helper properties configured accurately
+    EXPECT_EQ(mat_cmd.component_name(), "tempest::core::material_component");
+    EXPECT_EQ(mat_cmd.field_name(), "material_id");
+    EXPECT_EQ(mat_cmd.asset_guid(), mat_guid);
+
+    EXPECT_EQ(mesh_cmd.component_name(), "tempest::core::mesh_component");
+    EXPECT_EQ(mesh_cmd.field_name(), "mesh_id");
+    EXPECT_EQ(mesh_cmd.asset_guid(), mesh_guid);
+
+    // Act: Apply factory commands
+    mat_cmd.apply(fix.ctx);
+    mesh_cmd.apply(fix.ctx);
+
+    // Assert: Both components assigned with expected asset GUIDs
+    ASSERT_TRUE(fix.registry.has<core::material_component>(ent));
+    EXPECT_EQ(fix.registry.get<core::material_component>(ent).material_id, mat_guid);
+    ASSERT_TRUE(fix.registry.has<core::mesh_component>(ent));
+    EXPECT_EQ(fix.registry.get<core::mesh_component>(ent).mesh_id, mesh_guid);
+
+    // Act: Revert both
+    mesh_cmd.revert(fix.ctx);
+    mat_cmd.revert(fix.ctx);
+
+    // Assert: Both components removed
+    EXPECT_FALSE(fix.registry.has<core::mesh_component>(ent));
+    EXPECT_FALSE(fix.registry.has<core::material_component>(ent));
+}
+
+/// @brief Verifies that assign_asset_command rejects fields whose kind is neither asset_ref
+/// nor guid, or whose size does not match sizeof(guid), leaving the entity and component intact.
+TEST(entity_commands_test, assign_asset_command_invalid_field_kind_rejected)
+{
+    // Setup: Scene with an entity containing test_component
+    constexpr auto tombstone_entity = static_cast<ecs::entity>(ecs::tombstone);
+    auto fix = entity_commands_fixture{};
+    const auto scene_res = fix.scene_mgr.load_from_string_sync(empty_scene_json, "SceneAssignAssetInvalidKind");
+    ASSERT_TRUE(scene_res.has_value());
+    const auto scene = *scene_res;
+
+    auto create_cmd = create_entity_command{scene, "InvalidKindTargetEntity"};
+    create_cmd.apply(fix.ctx);
+    const auto addr = create_cmd.created_address();
+    const auto ent = resolve_entity_address(fix.registry, fix.scene_mgr, addr);
+    ASSERT_NE(ent, tombstone_entity);
+
+    // Setup: Assign test_component with known scalar values
+    constexpr auto initial_val = int32_t{42};
+    constexpr auto initial_speed = 3.5F;
+    fix.registry.assign(ent, test_component{.val = initial_val, .speed = initial_speed});
+
+    const auto dummy_guid = guid{array<byte, 16>{byte{1}, byte{2}, byte{3}, byte{4}}};
+
+    // Act: Attempt to assign asset to non-asset integer field 'val'
+    auto invalid_cmd = assign_asset_command{addr, "test_component", "val", dummy_guid};
+    invalid_cmd.apply(fix.ctx);
+
+    // Assert: Component is unchanged and memory is not corrupted
+    ASSERT_TRUE(fix.registry.has<test_component>(ent));
+    const auto& comp_after_apply = fix.registry.get<test_component>(ent);
+    EXPECT_EQ(comp_after_apply.val, initial_val);
+    EXPECT_FLOAT_EQ(comp_after_apply.speed, initial_speed);
+
+    // Act: Revert the invalid command
+    invalid_cmd.revert(fix.ctx);
+
+    // Assert: Component remains intact and unchanged
+    ASSERT_TRUE(fix.registry.has<test_component>(ent));
+    const auto& comp_after_revert = fix.registry.get<test_component>(ent);
+    EXPECT_EQ(comp_after_revert.val, initial_val);
+    EXPECT_FLOAT_EQ(comp_after_revert.speed, initial_speed);
+
+    // Setup: Second entity without test_component
+    auto create_cmd_b = create_entity_command{scene, "InvalidKindTargetEntityB"};
+    create_cmd_b.apply(fix.ctx);
+    const auto addr_b = create_cmd_b.created_address();
+    const auto ent_b = resolve_entity_address(fix.registry, fix.scene_mgr, addr_b);
+    ASSERT_NE(ent_b, tombstone_entity);
+
+    // Act: Attempt to assign asset to non-asset field on entity lacking the component
+    auto invalid_cmd_b = assign_asset_command{addr_b, "test_component", "val", dummy_guid};
+    invalid_cmd_b.apply(fix.ctx);
+
+    // Assert: Component was not added
+    EXPECT_FALSE(fix.registry.has<test_component>(ent_b));
+
+    // Act: Revert
+    invalid_cmd_b.revert(fix.ctx);
+
+    // Assert: Component still not present
+    EXPECT_FALSE(fix.registry.has<test_component>(ent_b));
+}
+
 
 
