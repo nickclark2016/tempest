@@ -2403,7 +2403,7 @@ namespace tempest::editor::tests
     TEST(asset_payload_test, layout_and_binary_compatibility)
     {
         // Setup: Check layout properties and static offset invariants
-        static_assert(offsetof(asset_payload, asset_guid) == 0,
+        static_assert(TEMPEST_OFFSETOF(asset_payload, asset_guid) == 0,
                       "asset_guid must reside at offset 0 for property_grid binary compatibility");
 
         const auto test_guid = guid::generate_random_guid();

@@ -222,4 +222,7 @@ namespace tempest
     }
 } // namespace tempest
 
+/// @brief Computes the byte offset of a member within a class or struct type.
+#define TEMPEST_OFFSETOF(type, member) __builtin_offsetof(type, member)
+
 #endif

@@ -135,7 +135,7 @@ namespace tempest::editor
         }
     };
 
-    static_assert(offsetof(asset_payload, asset_guid) == 0,
+    static_assert(TEMPEST_OFFSETOF(asset_payload, asset_guid) == 0,
                   "asset_payload::asset_guid must be at offset 0 for property_grid compatibility");
 
     static_assert(is_trivially_copyable_v<asset_payload>,
