@@ -12,6 +12,11 @@
 #include <tempest/tempest.hpp>
 #include <tempest/vector.hpp>
 
+namespace tempest::scene
+{
+    class reverse_dependency_index;
+} // namespace tempest::scene
+
 namespace tempest::editor
 {
     class ui_context;
@@ -28,6 +33,7 @@ namespace tempest::editor
     {
       public:
         static constexpr simulation_state default_simulation_state = simulation_state::edit;
+        static constexpr scene::reverse_dependency_index* default_reverse_dependency_index = nullptr;
 
         explicit editor_engine_context(const engine_config& config = {});
         ~editor_engine_context() override;
@@ -77,6 +83,16 @@ namespace tempest::editor
         [[nodiscard]] auto get_editor_camera() const noexcept -> const editor_camera&
         {
             return _editor_camera;
+        }
+
+        [[nodiscard]] auto get_reverse_dependency_index() noexcept -> scene::reverse_dependency_index*
+        {
+            return _reverse_deps.get();
+        }
+
+        [[nodiscard]] auto get_reverse_dependency_index() const noexcept -> const scene::reverse_dependency_index*
+        {
+            return _reverse_deps.get();
         }
 
         [[nodiscard]] auto get_web_server() noexcept -> profiler::web_server*
@@ -207,6 +223,7 @@ namespace tempest::editor
         unique_ptr<play_mode_controller> _play_mode_controller;
         ui_context* _ui_ctx{nullptr};
         editor_camera _editor_camera{};
+        unique_ptr<scene::reverse_dependency_index> _reverse_deps = nullptr;
 
         editor_log_sink _log_sink{};
         log_store _log_store{};

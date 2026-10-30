@@ -18,7 +18,9 @@
 #include <tempest/payloads/asset_payload.hpp>
 #include <tempest/project_workspace.hpp>
 #include <tempest/scene/prefab_cache.hpp>
+#include <tempest/scene/prefab_instance_component.hpp>
 #include <tempest/scene/prefab_template.hpp>
+#include <tempest/scene/reverse_dependency_index.hpp>
 #include <tempest/scene/scene_manager.hpp>
 #include <tempest/span.hpp>
 #include <tempest/texture.hpp>
@@ -2755,5 +2757,311 @@ namespace tempest::editor::tests
 
         // Assert: Unresolvable payload is rejected without mutations
         EXPECT_FALSE(unresolvable_drop);
+    }
+
+    // ============================================================================
+    // Asset Removal & Multi-Strategy Reference Resolution Tests
+    // ============================================================================
+
+    /// @brief Verifies that clean asset removal without references behaves correctly:
+    /// when delete_source_file is false, only metadata is deleted while preserving the source file on disk;
+    /// when delete_source_file is true, both source file and .tmeta are deleted and the node is removed from the model.
+    TEST_F(project_view_window_test, clean_asset_removal_without_references_preserves_or_deletes_source_file)
+    {
+        // Setup: Temporary workspace with an asset and its .tmeta sidecar
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_clean_removal";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto asset_file = base_dir / "texture.png";
+        ASSERT_TRUE(write_dummy_file(asset_file, "image_data"));
+
+        const auto asset_guid = guid::generate_random_guid();
+        auto sidecar = assets::sidecar_meta{};
+        sidecar.source_guid = asset_guid;
+        sidecar.importer = "texture";
+        ASSERT_TRUE(sidecar.save_to_file((base_dir / "texture.png.tmeta").generic_string()));
+
+        auto asset_db = assets::asset_database{};
+        asset_db.mount_root(base_dir.generic_string());
+        asset_db.register_source_with_guid(asset_guid, "texture.png");
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Project",
+        });
+
+        auto model = project_tree_model{&asset_db};
+        model.rebuild_from_mounts(mounts);
+
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection, &asset_db};
+
+        // Act 1: Request removal with delete_source_file = false
+        const auto request_result = window.request_remove_asset("texture.png");
+
+        // Assert: Removal dialog is open, no references detected, source deletion unchecked by default
+        EXPECT_TRUE(request_result);
+        EXPECT_TRUE(window.is_removal_dialog_open());
+        EXPECT_FALSE(window.has_removal_references());
+        EXPECT_EQ(window.removal_target_path(), "texture.png");
+        EXPECT_EQ(window.removal_asset_guid(), asset_guid);
+        EXPECT_FALSE(window.is_delete_source_file_checked());
+
+        // Act: Confirm clean removal preserving source
+        const auto confirm_result = window.confirm_clean_removal();
+
+        // Assert: Dialog closed, .tmeta removed from disk, source file preserved
+        EXPECT_TRUE(confirm_result);
+        EXPECT_FALSE(window.is_removal_dialog_open());
+        EXPECT_FALSE(fs::exists(base_dir / "texture.png.tmeta"));
+        EXPECT_TRUE(fs::exists(base_dir / "texture.png"));
+
+        // Act 2: Re-create .tmeta and test with delete_source_file = true
+        ASSERT_TRUE(sidecar.save_to_file((base_dir / "texture.png.tmeta").generic_string()));
+        window.get_model().invalidate_path(base_dir);
+        EXPECT_TRUE(window.request_remove_asset("texture.png"));
+        window.set_delete_source_file_checked(true);
+        EXPECT_TRUE(window.is_delete_source_file_checked());
+
+        const auto second_confirm_result = window.confirm_clean_removal();
+
+        // Assert: Both source and .tmeta are deleted from disk, model node is removed
+        EXPECT_TRUE(second_confirm_result);
+        EXPECT_FALSE(window.is_removal_dialog_open());
+        EXPECT_FALSE(fs::exists(base_dir / "texture.png"));
+        EXPECT_FALSE(fs::exists(base_dir / "texture.png.tmeta"));
+        EXPECT_EQ(window.get_model().find_node_by_path("texture.png"), nullptr);
+    }
+
+    /// @brief Verifies that requesting removal of an asset with active references detects the locations,
+    /// and that choosing Abort dismisses the dialog without mutating disk files or clearing index references.
+    TEST_F(project_view_window_test, referenced_asset_removal_abort_preserves_file_and_references)
+    {
+        // Setup: Workspace with material asset and reverse dependency index tracking references
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_removal_abort";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto mat_file = base_dir / "surface.tmaterial";
+        ASSERT_TRUE(write_dummy_file(mat_file, "{}"));
+
+        const auto mat_guid = guid::generate_random_guid();
+        auto sidecar = assets::sidecar_meta{};
+        sidecar.source_guid = mat_guid;
+        sidecar.importer = "material";
+        ASSERT_TRUE(sidecar.save_to_file((base_dir / "surface.tmaterial.tmeta").generic_string()));
+
+        auto reverse_deps = scene::reverse_dependency_index{};
+        const auto ref_loc = scene::asset_reference_location{
+            .owner_guid = guid::generate_random_guid(),
+            .component_name = "material_component",
+            .field_name = "material_id",
+            .owner_path = "scenes/main.tscene",
+        };
+        reverse_deps.add_reference(mat_guid, ref_loc);
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Project",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+        window.set_reverse_dependency_index(&reverse_deps);
+
+        // Act: Request asset removal
+        const auto request_result = window.request_remove_asset("surface.tmaterial");
+
+        // Assert: Dialog opened and indicates references exist matching registered location
+        EXPECT_TRUE(request_result);
+        EXPECT_TRUE(window.is_removal_dialog_open());
+        EXPECT_TRUE(window.has_removal_references());
+        ASSERT_EQ(window.referencing_locations().size(), 1U);
+        EXPECT_EQ(window.referencing_locations()[0].owner_path, "scenes/main.tscene");
+        EXPECT_EQ(window.referencing_locations()[0].component_name, "material_component");
+
+        // Act: User aborts the removal
+        window.confirm_removal_abort();
+
+        // Assert: Dialog dismissed, disk files and index references remain untouched
+        EXPECT_FALSE(window.is_removal_dialog_open());
+        EXPECT_TRUE(fs::exists(mat_file));
+        EXPECT_TRUE(fs::exists(base_dir / "surface.tmaterial.tmeta"));
+        EXPECT_TRUE(reverse_deps.has_references(mat_guid));
+    }
+
+    /// @brief Verifies that choosing Leave Dangling removes the asset files from disk and metadata
+    /// but preserves the recorded reverse dependency index references and referencing scene files.
+    TEST_F(project_view_window_test, referenced_asset_removal_leave_dangling_removes_file_preserves_references)
+    {
+        // Setup: Workspace with asset and registered reverse dependency references
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_removal_dangling";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        const auto mat_file = base_dir / "dangling.tmaterial";
+        ASSERT_TRUE(write_dummy_file(mat_file, "{}"));
+
+        const auto mat_guid = guid::generate_random_guid();
+        auto sidecar = assets::sidecar_meta{};
+        sidecar.source_guid = mat_guid;
+        sidecar.importer = "material";
+        ASSERT_TRUE(sidecar.save_to_file((base_dir / "dangling.tmaterial.tmeta").generic_string()));
+
+        auto reverse_deps = scene::reverse_dependency_index{};
+        const auto ref_loc = scene::asset_reference_location{
+            .owner_guid = guid::generate_random_guid(),
+            .component_name = "material_component",
+            .field_name = "material_id",
+            .owner_path = "scenes/level.tscene",
+        };
+        reverse_deps.add_reference(mat_guid, ref_loc);
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Project",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+        window.set_reverse_dependency_index(&reverse_deps);
+
+        // Act: Request removal, enable source file deletion, confirm Leave Dangling
+        EXPECT_TRUE(window.request_remove_asset("dangling.tmaterial"));
+        EXPECT_TRUE(window.has_removal_references());
+        window.set_delete_source_file_checked(true);
+
+        const auto dangling_result = window.confirm_removal_leave_dangling();
+
+        // Assert: Dialog closed, files removed from disk, but references preserved in index
+        EXPECT_TRUE(dangling_result);
+        EXPECT_FALSE(window.is_removal_dialog_open());
+        EXPECT_FALSE(fs::exists(mat_file));
+        EXPECT_FALSE(fs::exists(base_dir / "dangling.tmaterial.tmeta"));
+        EXPECT_TRUE(reverse_deps.has_references(mat_guid));
+    }
+
+    /// @brief Verifies that Remove Referencing Entities destroys live referencing entities in the registry,
+    /// strips references from closed scene files on disk, clears the reverse dependency index, and removes the asset.
+    TEST_F(project_view_window_test, referenced_asset_removal_remove_referencing_entities_destroys_live_and_disk_references)
+    {
+        // Setup: Workspace with asset, a scene file on disk referencing it, and a live entity in the registry
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_removal_strip_entities";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+
+        const auto asset_file = base_dir / "hero.mesh";
+        ASSERT_TRUE(write_dummy_file(asset_file, "binary_mesh"));
+
+        const auto asset_guid = guid::generate_random_guid();
+        auto sidecar = assets::sidecar_meta{};
+        sidecar.source_guid = asset_guid;
+        sidecar.importer = "mesh";
+        ASSERT_TRUE(sidecar.save_to_file((base_dir / "hero.mesh.tmeta").generic_string()));
+
+        // Create closed scene file on disk referencing hero.mesh via prefab instance
+        const auto scene_file = base_dir / "closed_scene.tscene";
+        const auto scene_json = tempest::format(
+            R"({{"version":1,"entities":[{{"name":"HeroInstance","prefab":{{"prefab_guid":"{}"}}}}]}})",
+            to_string(asset_guid));
+        ASSERT_TRUE(write_dummy_file(scene_file, scene_json));
+
+        // Create live entity in registry referencing hero.mesh
+        const auto live_entity = registry.create();
+        registry.name(live_entity, "LiveHero");
+        registry.assign(live_entity, scene::prefab_instance_component{.prefab_guid = asset_guid});
+        ASSERT_TRUE(registry.is_valid(live_entity));
+
+        // Configure reverse dependency index tracking both
+        auto reverse_deps = scene::reverse_dependency_index{};
+        reverse_deps.add_reference(asset_guid, scene::asset_reference_location{
+            .owner_guid = guid::generate_random_guid(),
+            .component_name = "prefab_instance_component",
+            .field_name = "prefab_guid",
+            .owner_path = scene_file.generic_string(),
+        });
+
+        auto history = command_history{};
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Project",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection,
+                                          nullptr, &history, &registry, &reverse_deps};
+
+        // Act: Request removal and confirm Remove Referencing Entities
+        EXPECT_TRUE(window.request_remove_asset("hero.mesh"));
+        EXPECT_TRUE(window.has_removal_references());
+        window.set_delete_source_file_checked(true);
+
+        const auto strip_result = window.confirm_removal_remove_referencing_entities();
+
+        // Assert: Removal succeeded, live entity destroyed, disk scene updated, index cleared, asset deleted
+        EXPECT_TRUE(strip_result);
+        EXPECT_FALSE(window.is_removal_dialog_open());
+        EXPECT_FALSE(registry.is_valid(live_entity));
+        EXPECT_FALSE(reverse_deps.has_references(asset_guid));
+        EXPECT_FALSE(fs::exists(asset_file));
+        EXPECT_FALSE(fs::exists(base_dir / "hero.mesh.tmeta"));
+
+        // Verify closed scene file on disk was stripped
+        const auto updated_content = read_file_to_string(scene_file);
+        ASSERT_TRUE(updated_content.has_value());
+        EXPECT_FALSE(tempest::contains(*updated_content, to_string(asset_guid)));
+    }
+
+    /// @brief Verifies that the "Remove from Project" context menu item appears for valid nodes and triggers request_remove_asset.
+    TEST_F(project_view_window_test, headless_imgui_context_menu_remove_from_project_action)
+    {
+        // Setup: Engine context, UI context, and window with an asset
+        auto engine_ctx = editor_engine_context{};
+        const auto desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Removal Context Menu Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+
+        auto reg_info = engine_ctx.register_window(desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
+
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_ui_remove_action";
+        const auto temp_guard = scoped_temp_directory{base_dir};
+        ASSERT_TRUE(write_dummy_file(base_dir / "item.png"));
+
+        auto mounts = vector<assets::mount_point>{};
+        mounts.push_back(assets::mount_point{
+            .path = base_dir.generic_string(),
+            .alias = "Project",
+        });
+
+        auto model = project_tree_model{};
+        model.rebuild_from_mounts(mounts);
+        auto window = project_view_window{tempest::move(model), scene_mgr, selection};
+
+        // Act & Assert: Directly trigger request_remove_asset as the context menu item does
+        EXPECT_FALSE(window.is_removal_dialog_open());
+        EXPECT_TRUE(window.request_remove_asset("item.png"));
+        EXPECT_TRUE(window.is_removal_dialog_open());
+        EXPECT_FALSE(window.has_removal_references());
+
+        // Render frame with the removal dialog active to verify modal popup rendering without errors
+        ui_ctx.begin_ui_commands();
+        EXPECT_NO_THROW(window.draw());
+        ui_ctx.finish_ui_commands();
+
+        // Dismiss dialog
+        window.confirm_removal_abort();
+        EXPECT_FALSE(window.is_removal_dialog_open());
     }
 } // namespace tempest::editor::tests

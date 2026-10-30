@@ -1678,6 +1678,33 @@ namespace tempest::assets
         return any_updated;
     }
 
+    auto asset_database::notify_file_removed(string_view disk_path) -> bool
+    {
+        auto* const source_entry_ptr = _find_source_entry_by_disk_path(disk_path);
+        if (source_entry_ptr == nullptr)
+        {
+            return false;
+        }
+        _remove_source(source_entry_ptr->id);
+        return true;
+    }
+
+    auto asset_database::unregister_source(const guid& source_id) -> bool
+    {
+        if (!_source_id_to_index.contains(source_id))
+        {
+            const auto* const asset_entry_ptr = find_by_guid(source_id);
+            if (asset_entry_ptr != nullptr)
+            {
+                _remove_source(asset_entry_ptr->source_id);
+                return true;
+            }
+            return false;
+        }
+        _remove_source(source_id);
+        return true;
+    }
+
     auto asset_database::register_asset(asset_type_id type, string_view source_path) -> guid
     {
         auto& src = _get_or_create_source(source_path);

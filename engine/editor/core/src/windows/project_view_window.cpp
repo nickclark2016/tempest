@@ -1,10 +1,15 @@
 #include <tempest/windows/project_view_window.hpp>
 
 #include <tempest/algorithm.hpp>
+#include <tempest/archetype.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/asset_type_id.hpp>
 #include <tempest/asset_type_registry.hpp>
 #include <tempest/checked.hpp>
+#include <tempest/command_history.hpp>
+#include <tempest/commands/entity_commands.hpp>
+#include <tempest/component_type_registry.hpp>
+#include <tempest/editor_command.hpp>
 #include <tempest/editor_selection.hpp>
 #include <tempest/entity_hierarchy.hpp>
 #include <tempest/file_watcher.hpp>
@@ -16,7 +21,10 @@
 #include <tempest/payloads/asset_payload.hpp>
 #include <tempest/project_workspace.hpp>
 #include <tempest/render_target_asset.hpp>
+#include <tempest/scene/prefab_instance_component.hpp>
+#include <tempest/scene/reverse_dependency_index.hpp>
 #include <tempest/scene/scene_manager.hpp>
+#include <tempest/scene/scene_reference_stripper.hpp>
 #include <tempest/span.hpp>
 #include <tempest/texture.hpp>
 #include <tempest/utility.hpp>
@@ -321,15 +329,25 @@ namespace tempest::editor
 
     project_view_window::project_view_window(scene::scene_manager& in_scene_mgr,
                                              editor_selection& in_selection,
-                                             assets::asset_database* asset_db)
-        : _model{asset_db}, _scene_mgr{in_scene_mgr}, _selection{in_selection}
+                                             assets::asset_database* asset_db,
+                                             command_history* history,
+                                             ecs::basic_archetype_registry* registry,
+                                             scene::reverse_dependency_index* reverse_deps)
+        : _model{asset_db}, _scene_mgr{in_scene_mgr}, _selection{in_selection},
+          _asset_db{asset_db}, _history{history}, _registry{registry}, _reverse_deps{reverse_deps}
     {
     }
 
     project_view_window::project_view_window(project_tree_model model,
                                              scene::scene_manager& in_scene_mgr,
-                                             editor_selection& in_selection)
-        : _model{tempest::move(model)}, _scene_mgr{in_scene_mgr}, _selection{in_selection}
+                                             editor_selection& in_selection,
+                                             assets::asset_database* asset_db,
+                                             command_history* history,
+                                             ecs::basic_archetype_registry* registry,
+                                             scene::reverse_dependency_index* reverse_deps)
+        : _model{tempest::move(model)}, _scene_mgr{in_scene_mgr}, _selection{in_selection},
+          _asset_db{asset_db != nullptr ? asset_db : _model.asset_database()},
+          _history{history}, _registry{registry}, _reverse_deps{reverse_deps}
     {
     }
 
@@ -1354,6 +1372,10 @@ namespace tempest::editor
 
     auto project_view_window::_resolve_asset_database() const noexcept -> const assets::asset_database*
     {
+        if (_asset_db != nullptr)
+        {
+            return _asset_db;
+        }
         if (_model.asset_database() != nullptr)
         {
             return _model.asset_database();
@@ -1361,6 +1383,36 @@ namespace tempest::editor
         if (_scene_mgr != nullptr)
         {
             return _scene_mgr->get_asset_database();
+        }
+        return nullptr;
+    }
+
+    auto project_view_window::_resolve_mutable_asset_database() noexcept -> assets::asset_database*
+    {
+        if (_asset_db != nullptr)
+        {
+            return _asset_db;
+        }
+        if (_model.asset_database() != nullptr)
+        {
+            return _model.asset_database();
+        }
+        if (_scene_mgr != nullptr)
+        {
+            return _scene_mgr->get_asset_database();
+        }
+        return nullptr;
+    }
+
+    auto project_view_window::reverse_dependency_index() const noexcept -> scene::reverse_dependency_index*
+    {
+        if (_reverse_deps != nullptr)
+        {
+            return _reverse_deps;
+        }
+        if (_scene_mgr != nullptr)
+        {
+            return _scene_mgr->get_reverse_dependency_index();
         }
         return nullptr;
     }
@@ -1613,6 +1665,252 @@ namespace tempest::editor
 
         open_in_file_manager(disk_str);
         return true;
+    }
+
+    auto project_view_window::request_remove_asset(string_view target_path) -> bool
+    {
+        if (target_path.empty())
+        {
+            return false;
+        }
+
+        const auto* const node = _find_target_node(target_path);
+        if (node == nullptr || node->kind == tree_node_kind::mount_root)
+        {
+            return false;
+        }
+
+        _removal_target_path = node->path.empty() ? string{target_path} : node->path;
+        _removal_item_name = node->name;
+        _removal_disk_path = node->disk_path;
+        if (_removal_disk_path.empty())
+        {
+            _removal_disk_path = _resolve_disk_path(target_path).generic_string();
+        }
+
+        _removal_asset_guid = node->asset_id;
+        if (_removal_asset_guid == guid{})
+        {
+            auto meta_path = _removal_disk_path;
+            meta_path.append(".tmeta");
+            if (filesystem::exists(filesystem::path{meta_path}))
+            {
+                const auto loaded_meta = assets::sidecar_meta::load_from_file(meta_path);
+                if (loaded_meta.has_value() && loaded_meta->source_guid != guid{})
+                {
+                    _removal_asset_guid = loaded_meta->source_guid;
+                }
+            }
+
+            if (_removal_asset_guid == guid{})
+            {
+                const auto* const asset_db = _resolve_asset_database();
+                if (asset_db != nullptr)
+                {
+                    const auto* const entry = asset_db->find_by_path(_removal_target_path);
+                    if (entry != nullptr && entry->id != guid{})
+                    {
+                        _removal_asset_guid = entry->id;
+                    }
+                }
+            }
+        }
+
+        _removal_references.clear();
+        const auto* const rev_deps = reverse_dependency_index();
+        if (_removal_asset_guid != guid{} && rev_deps != nullptr)
+        {
+            const auto refs = rev_deps->find_references(_removal_asset_guid);
+            _removal_references.reserve(refs.size());
+            for (const auto& loc : refs)
+            {
+                _removal_references.push_back(loc);
+            }
+        }
+
+        _show_removal_dialog = true;
+        _delete_source_file = false;
+        return true;
+    }
+
+    auto project_view_window::confirm_clean_removal() -> bool
+    {
+        const auto disk_path = filesystem::path{_removal_disk_path};
+        if (_delete_source_file && !disk_path.empty() && filesystem::exists(disk_path))
+        {
+            if (filesystem::is_directory(disk_path))
+            {
+                static_cast<void>(filesystem::remove_all(disk_path));
+            }
+            else
+            {
+                static_cast<void>(filesystem::remove(disk_path));
+            }
+        }
+
+        if (!disk_path.empty())
+        {
+            auto meta_path = disk_path;
+            meta_path += ".tmeta";
+            if (filesystem::exists(meta_path))
+            {
+                static_cast<void>(filesystem::remove(meta_path));
+            }
+        }
+
+        auto* const asset_db = _resolve_mutable_asset_database();
+        if (asset_db != nullptr)
+        {
+            if (_removal_asset_guid != guid{})
+            {
+                static_cast<void>(asset_db->unregister_source(_removal_asset_guid));
+            }
+            if (!disk_path.empty())
+            {
+                static_cast<void>(asset_db->notify_file_removed(disk_path.generic_string()));
+            }
+        }
+
+        if (!disk_path.empty())
+        {
+            _model.invalidate_path(disk_path.parent_path());
+            _model.invalidate_path(disk_path);
+        }
+
+        if (_selected_path == _removal_target_path || tempest::starts_with(_selected_path, _removal_target_path))
+        {
+            clear_selection();
+        }
+
+        _show_removal_dialog = false;
+        _removal_references.clear();
+        return true;
+    }
+
+    auto project_view_window::confirm_removal_abort() -> void
+    {
+        _show_removal_dialog = false;
+        _removal_references.clear();
+    }
+
+    auto project_view_window::confirm_removal_leave_dangling() -> bool
+    {
+        return confirm_clean_removal();
+    }
+
+    auto project_view_window::confirm_removal_remove_referencing_entities() -> bool
+    {
+        auto* const rev_deps = reverse_dependency_index();
+        auto fallback_types = ecs::component_type_registry{};
+        const auto& comp_types = _registry != nullptr ? _registry->type_registry() : fallback_types;
+
+        if (_removal_asset_guid != guid{})
+        {
+            if (_history != nullptr && _registry != nullptr)
+            {
+                auto matching_entities = vector<ecs::entity>{};
+                for (const auto [self] : _registry->with<ecs::self_component>())
+                {
+                    const auto entity = self.entity;
+                    if (!_registry->is_valid(entity))
+                    {
+                        continue;
+                    }
+
+                    auto is_match = false;
+                    const auto* const prefab_comp = _registry->try_get<scene::prefab_instance_component>(entity);
+                    if (prefab_comp != nullptr && prefab_comp->prefab_guid == _removal_asset_guid)
+                    {
+                        is_match = true;
+                    }
+
+                    if (!is_match)
+                    {
+                        const auto entity_comp_types = ecs::raw_registry_access::get_component_types(*_registry, entity);
+                        for (const auto& info : entity_comp_types)
+                        {
+                            if (!info.descriptor.has_value())
+                            {
+                                continue;
+                            }
+
+                            const auto* const comp_ptr =
+                                ecs::raw_registry_access::get_component_raw(*_registry, entity, info.index);
+                            if (comp_ptr == nullptr)
+                            {
+                                continue;
+                            }
+
+                            for (const auto& field : info.descriptor->fields)
+                            {
+                                if (field.kind == ecs::field_kind::asset_ref)
+                                {
+                                    auto field_guid = guid{};
+                                    if (field.get != nullptr)
+                                    {
+                                        field.get(comp_ptr, &field_guid);
+                                    }
+                                    else if (field.offset != ecs::field_descriptor::no_offset)
+                                    {
+                                        tempest::memcpy(&field_guid, static_cast<const byte*>(comp_ptr) + field.offset,
+                                                        sizeof(guid));
+                                    }
+
+                                    if (field_guid == _removal_asset_guid)
+                                    {
+                                        is_match = true;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (is_match)
+                            {
+                                break;
+                            }
+                        }
+                    }
+
+                    if (is_match)
+                    {
+                        matching_entities.push_back(entity);
+                    }
+                }
+
+                auto cmd_ctx = command_context{
+                    .registry = *_registry,
+                    .scene_manager = *_scene_mgr,
+                };
+
+                for (const auto entity : matching_entities)
+                {
+                    if (_registry->is_valid(entity))
+                    {
+                        const auto addr = compute_entity_address(*_registry, entity);
+                        auto cmd = make_unique<destroy_entity_command>(addr, destroy_entity_command::mode::recursive);
+                        _history->execute(tempest::move(cmd), cmd_ctx);
+                    }
+                }
+
+                if (rev_deps != nullptr)
+                {
+                    static_cast<void>(scene::strip_asset_references(*rev_deps, _removal_asset_guid, comp_types, nullptr));
+                }
+            }
+            else
+            {
+                if (rev_deps != nullptr)
+                {
+                    static_cast<void>(scene::strip_asset_references(*rev_deps, _removal_asset_guid, comp_types, _registry));
+                }
+                else if (_registry != nullptr)
+                {
+                    static_cast<void>(scene::strip_references_from_registry(*_registry, _removal_asset_guid));
+                }
+            }
+        }
+
+        return confirm_clean_removal();
     }
 
     auto project_view_window::draw() -> void
@@ -2037,6 +2335,15 @@ namespace tempest::editor
                                     }
                                 }
 
+                                if (row.kind != tree_node_kind::mount_root)
+                                {
+                                    if (ImGui::MenuItem("Remove from Project"))
+                                    {
+                                        request_remove_asset(row_path);
+                                        action_triggered = true;
+                                    }
+                                }
+
                                 ImGui::Separator();
 
                                 if (ImGui::MenuItem("Reveal in Explorer"))
@@ -2137,6 +2444,86 @@ namespace tempest::editor
                 if (ImGui::Button("Cancel"))
                 {
                     cancel_open_scene();
+                    ImGui::CloseCurrentPopup();
+                }
+
+                ImGui::EndPopup();
+            }
+
+            if (_show_removal_dialog)
+            {
+                if (has_removal_references())
+                {
+                    ImGui::OpenPopup("Referenced Asset Removal");
+                }
+                else
+                {
+                    ImGui::OpenPopup("Remove from Project?");
+                }
+            }
+
+            if (ImGui::BeginPopupModal("Remove from Project?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                ImGui::Text("Remove '%s' from the project?",
+                            _removal_item_name.empty() ? _removal_target_path.c_str() : _removal_item_name.c_str());
+                ImGui::Separator();
+
+                ImGui::Checkbox("Delete source file from disk", &_delete_source_file);
+                ImGui::Separator();
+
+                if (ImGui::Button("Remove"))
+                {
+                    confirm_clean_removal();
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel"))
+                {
+                    confirm_removal_abort();
+                    ImGui::CloseCurrentPopup();
+                }
+
+                ImGui::EndPopup();
+            }
+
+            if (ImGui::BeginPopupModal("Referenced Asset Removal", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                ImGui::Text("Asset '%s' is referenced by %zu location(s):",
+                            _removal_item_name.empty() ? _removal_target_path.c_str() : _removal_item_name.c_str(),
+                            _removal_references.size());
+                ImGui::Separator();
+
+                if (ImGui::BeginChild("ReferencesList", ImVec2(400, 150), true))
+                {
+                    for (const auto& loc : _removal_references)
+                    {
+                        ImGui::Text("%s: %s.%s", loc.owner_path.c_str(), loc.component_name.c_str(),
+                                    loc.field_name.c_str());
+                    }
+                }
+                ImGui::EndChild();
+
+                ImGui::Separator();
+                ImGui::Checkbox("Delete source file from disk", &_delete_source_file);
+                ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f),
+                                   "Note: Disk rewrites for closed scenes cannot be undone.");
+                ImGui::Separator();
+
+                if (ImGui::Button("Abort"))
+                {
+                    confirm_removal_abort();
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Leave Dangling"))
+                {
+                    confirm_removal_leave_dangling();
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Remove Referencing Entities"))
+                {
+                    confirm_removal_remove_referencing_entities();
                     ImGui::CloseCurrentPopup();
                 }
 

@@ -12,7 +12,9 @@
 #include <tempest/optional.hpp>
 #include <tempest/project_tree_model.hpp>
 #include <tempest/scene/scene_manager.hpp>
+#include <tempest/scene/reverse_dependency_index.hpp>
 #include <tempest/scene/scene_types.hpp>
+#include <tempest/span.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/vector.hpp>
@@ -23,8 +25,14 @@ namespace tempest::assets
     class asset_database;
 } // namespace tempest::assets
 
+namespace tempest::ecs
+{
+    class basic_archetype_registry;
+} // namespace tempest::ecs
+
 namespace tempest::editor
 {
+    class command_history;
     /// @brief Segment in the breadcrumb navigation bar.
     struct TEMPEST_EDITOR_API breadcrumb_item
     {
@@ -43,12 +51,17 @@ namespace tempest::editor
 
         static constexpr bool default_open = true;
         static constexpr assets::asset_database* default_asset_database = nullptr;
+        static constexpr command_history* default_command_history = nullptr;
+        static constexpr ecs::basic_archetype_registry* default_registry = nullptr;
+        static constexpr scene::reverse_dependency_index* default_reverse_dependency_index = nullptr;
         static constexpr size_t search_buffer_capacity = 256;
         static constexpr size_t rename_buffer_capacity = 256;
         static constexpr bool default_is_renaming = false;
         static constexpr bool default_rename_first_frame = false;
         static constexpr tree_node_kind default_selected_kind = tree_node_kind::directory;
         static constexpr bool default_show_dirty_dialog = false;
+        static constexpr bool default_show_removal_dialog = false;
+        static constexpr bool default_delete_source_file = false;
 
         static constexpr string_view default_new_folder_name = "New Folder";
         static constexpr string_view default_new_material_base_name = "New Material";
@@ -72,21 +85,35 @@ namespace tempest::editor
             "    \"entities\": []\n"
             "}\n";
 
-        /// @brief Constructs a project view window with required subsystem dependencies and optional asset database.
+        /// @brief Constructs a project view window with required subsystem dependencies and optional services.
         /// @param in_scene_mgr Reference to the scene manager.
         /// @param in_selection Reference to the editor selection system.
         /// @param asset_db Optional pointer to the asset database.
+        /// @param history Optional pointer to the command history system for undoable operations.
+        /// @param registry Optional pointer to the live archetype registry.
+        /// @param reverse_deps Optional pointer to the reverse dependency index.
         project_view_window(scene::scene_manager& in_scene_mgr,
                             editor_selection& in_selection,
-                            assets::asset_database* asset_db = default_asset_database);
+                            assets::asset_database* asset_db = default_asset_database,
+                            command_history* history = default_command_history,
+                            ecs::basic_archetype_registry* registry = default_registry,
+                            scene::reverse_dependency_index* reverse_deps = default_reverse_dependency_index);
 
-        /// @brief Constructs a project view window initialized with a preconfigured tree model and required dependencies.
+        /// @brief Constructs a project view window initialized with a preconfigured tree model and dependencies.
         /// @param model Project tree model providing tree hierarchy data.
         /// @param in_scene_mgr Reference to the scene manager.
         /// @param in_selection Reference to the editor selection system.
+        /// @param asset_db Optional pointer to the asset database.
+        /// @param history Optional pointer to the command history system for undoable operations.
+        /// @param registry Optional pointer to the live archetype registry.
+        /// @param reverse_deps Optional pointer to the reverse dependency index.
         project_view_window(project_tree_model model,
                             scene::scene_manager& in_scene_mgr,
-                            editor_selection& in_selection);
+                            editor_selection& in_selection,
+                            assets::asset_database* asset_db = default_asset_database,
+                            command_history* history = default_command_history,
+                            ecs::basic_archetype_registry* registry = default_registry,
+                            scene::reverse_dependency_index* reverse_deps = default_reverse_dependency_index);
 
         ~project_view_window() override = default;
 
@@ -456,7 +483,122 @@ namespace tempest::editor
         /// @return True if an asset importer is registered or recognized for this file format, false otherwise.
         [[nodiscard]] auto is_importable(string_view path_or_extension) const -> bool;
 
+        // Asset Removal & Dependency Resolution
+
+        /// @brief Requests initiating the removal flow for the asset or folder at target_path.
+        /// @param target_path Relative path, display label, or disk path of the item to remove.
+        /// @return True if target was resolved and removal modal queued, false if invalid or mount root.
+        /// @post If true, is_removal_dialog_open() returns true and referencing_locations() reflects dependencies.
+        auto request_remove_asset(string_view target_path) -> bool;
+
+        /// @brief Checks whether the asset removal modal dialog is currently open.
+        /// @return True if removal confirmation or resolution dialog is visible, false otherwise.
+        [[nodiscard]] auto is_removal_dialog_open() const noexcept -> bool
+        {
+            return _show_removal_dialog;
+        }
+
+        /// @brief Checks whether the pending removal target has any recorded reverse dependencies.
+        /// @return True if at least one reference was found, false otherwise.
+        [[nodiscard]] auto has_removal_references() const noexcept -> bool
+        {
+            return !_removal_references.empty();
+        }
+
+        /// @brief Retrieves the relative path of the item targeted for removal.
+        /// @return Target path string view, or empty if no removal is pending.
+        [[nodiscard]] auto removal_target_path() const noexcept -> string_view
+        {
+            return _removal_target_path;
+        }
+
+        /// @brief Retrieves the resolved asset GUID of the item targeted for removal.
+        /// @return Asset GUID, or empty GUID if unassigned.
+        [[nodiscard]] auto removal_asset_guid() const noexcept -> const guid&
+        {
+            return _removal_asset_guid;
+        }
+
+        /// @brief Returns the collection of locations actively referencing the pending removal asset.
+        /// @return Non-owning contiguous span of reference locations.
+        [[nodiscard]] auto referencing_locations() const noexcept -> span<const scene::asset_reference_location>
+        {
+            return span<const scene::asset_reference_location>{_removal_references.data(), _removal_references.size()};
+        }
+
+        /// @brief Checks whether the "Delete source file from disk" option is currently checked.
+        /// @return True if source file deletion is enabled, false if preserving on disk.
+        [[nodiscard]] auto is_delete_source_file_checked() const noexcept -> bool
+        {
+            return _delete_source_file;
+        }
+
+        /// @brief Configures whether the source file on disk will be deleted during clean removal.
+        /// @param checked True to delete source file, false to preserve.
+        auto set_delete_source_file_checked(bool checked) noexcept -> void
+        {
+            _delete_source_file = checked;
+        }
+
+        /// @brief Confirms clean asset removal without references, deleting metadata and updating model.
+        /// @return True if removal succeeded, false on error.
+        /// @post Removal dialog is closed, sidecars deleted, source file deleted if checked, and model updated.
+        auto confirm_clean_removal() -> bool;
+
+        /// @brief Aborts the pending asset removal operation without making any changes.
+        /// @post is_removal_dialog_open() returns false and queued references are cleared.
+        auto confirm_removal_abort() -> void;
+
+        /// @brief Confirms removing the asset while leaving referencing locations intact as placeholders.
+        /// @return True if asset was cleanly removed, false on failure.
+        /// @post Target asset is removed from disk/database, references preserved, and dialog closed.
+        auto confirm_removal_leave_dangling() -> bool;
+
+        /// @brief Confirms removing the asset and destroying all live and on-disk referencing entities.
+        /// @return True if references were stripped and asset cleanly removed, false on failure.
+        /// @post Live referencing entities destroyed, disk scene files stripped, index cleared, and asset deleted.
+        auto confirm_removal_remove_referencing_entities() -> bool;
+
         // Dependency Accessors
+
+        /// @brief Injects the command history instance used for transactional operations.
+        /// @param history Pointer to the command history, or nullptr to disable undo/redo tracking.
+        auto set_command_history(command_history* history) noexcept -> void
+        {
+            _history = history;
+        }
+
+        /// @brief Retrieves the injected command history instance.
+        /// @return Pointer to command history, or nullptr if unset.
+        [[nodiscard]] auto get_command_history() const noexcept -> command_history*
+        {
+            return _history;
+        }
+
+        /// @brief Injects the live archetype registry used for resolving active scene entities.
+        /// @param registry Pointer to the archetype registry, or nullptr if unset.
+        auto set_registry(ecs::basic_archetype_registry* registry) noexcept -> void
+        {
+            _registry = registry;
+        }
+
+        /// @brief Retrieves the injected archetype registry instance.
+        /// @return Pointer to archetype registry, or nullptr if unset.
+        [[nodiscard]] auto registry() const noexcept -> ecs::basic_archetype_registry*
+        {
+            return _registry;
+        }
+
+        /// @brief Injects an explicit reverse dependency index instance.
+        /// @param reverse_deps Pointer to the index, or nullptr to fall back to the scene manager.
+        auto set_reverse_dependency_index(scene::reverse_dependency_index* reverse_deps) noexcept -> void
+        {
+            _reverse_deps = reverse_deps;
+        }
+
+        /// @brief Resolves the effective reverse dependency index, falling back to scene_manager if not explicitly set.
+        /// @return Pointer to reverse dependency index, or nullptr if unavailable.
+        [[nodiscard]] auto reverse_dependency_index() const noexcept -> scene::reverse_dependency_index*;
 
         /// @brief Retrieves the mutable scene manager instance.
         /// @return Reference to the scene manager.
@@ -491,6 +633,7 @@ namespace tempest::editor
         [[nodiscard]] auto _resolve_target_folder_node(string_view parent_path) const -> const project_tree_node*;
         [[nodiscard]] auto _resolve_disk_path(string_view path) const -> filesystem::path;
         [[nodiscard]] auto _resolve_asset_database() const noexcept -> const assets::asset_database*;
+        [[nodiscard]] auto _resolve_mutable_asset_database() noexcept -> assets::asset_database*;
         auto _finish_creation(const project_tree_node& target_folder_node,
                               const filesystem::path& new_disk_path,
                               string_view unique_name) -> bool;
@@ -498,6 +641,19 @@ namespace tempest::editor
         project_tree_model _model;
         non_null<scene::scene_manager> _scene_mgr;
         non_null<editor_selection> _selection;
+
+        assets::asset_database* _asset_db = default_asset_database;
+        command_history* _history = default_command_history;
+        ecs::basic_archetype_registry* _registry = default_registry;
+        scene::reverse_dependency_index* _reverse_deps = default_reverse_dependency_index;
+
+        bool _show_removal_dialog = default_show_removal_dialog;
+        bool _delete_source_file = default_delete_source_file;
+        string _removal_target_path = {};
+        string _removal_item_name = {};
+        string _removal_disk_path = {};
+        guid _removal_asset_guid = {};
+        vector<scene::asset_reference_location> _removal_references = {};
 
         bool _open = default_open;
         string _current_directory;

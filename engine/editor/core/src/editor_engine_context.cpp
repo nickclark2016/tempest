@@ -10,6 +10,7 @@
 #include <tempest/optional.hpp>
 #include <tempest/profiler/serialization.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/scene/reverse_dependency_index.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
@@ -129,6 +130,9 @@ namespace tempest::editor
     {
         _log_sink.attach(get_logger());
         get_assets().set_logger(&get_logger());
+
+        _reverse_deps = make_unique<scene::reverse_dependency_index>();
+        get_scene_manager().set_reverse_dependency_index(_reverse_deps.get());
 
         _profiler_session.set_thread_name("Main Thread");
         auto server_config = profiler::web_server_config{

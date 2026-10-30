@@ -170,6 +170,18 @@ namespace tempest::assets
         auto tick_file_watcher() -> size_t;
         auto notify_file_changed(string_view disk_path) -> bool;
 
+        /// @brief Notifies the asset database that a file was removed from disk, deregistering its source and any associated assets.
+        /// @param disk_path Absolute or relative filesystem path of the removed source file.
+        /// @return True if a matching source entry was found and removed; false otherwise.
+        /// @post If true, the source and all associated asset entries, cached blobs, and registry items are unregistered, and any orphan .tmeta file is removed.
+        auto notify_file_removed(string_view disk_path) -> bool;
+
+        /// @brief Unregisters a source or asset entry by GUID from the asset database.
+        /// @param source_id GUID of the source entry (or an asset belonging to the source) to remove.
+        /// @return True if a matching source or asset entry was found and removed; false otherwise.
+        /// @post If true, the source and all associated asset entries, cached blobs, and registry items are unregistered, and any orphan .tmeta file is removed.
+        auto unregister_source(const guid& source_id) -> bool;
+
         // Resource Registry Associations
         auto set_mesh_registry(core::mesh_registry* mesh_reg) noexcept -> void;
         auto set_texture_registry(core::texture_registry* texture_reg) noexcept -> void;
