@@ -1,5 +1,7 @@
 #include <tempest/asset_database.hpp>
 #include <tempest/asset_serializers.hpp>
+#include <tempest/builtin_assets.hpp>
+#include <tempest/default_importers.hpp>
 #include <tempest/entity_hierarchy.hpp>
 #include <tempest/event.hpp>
 #include <tempest/files.hpp>
@@ -2409,6 +2411,9 @@ namespace tempest::assets
             }
             mount_root(mount_disk_path.generic_string(), mount.priority, mount.alias);
         }
+
+        mount_default_shader_roots(*this);
+        builtin::register_builtin_assets(*this, _mesh_reg, _texture_reg, _material_reg);
 
         // Scan mounts and discover assets & sidecars
         for (const auto& mount_point_entry : _mount_roots)

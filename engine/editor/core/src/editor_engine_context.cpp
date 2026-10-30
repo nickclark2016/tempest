@@ -1,8 +1,11 @@
 #include <tempest/editor_engine_context.hpp>
 #include <tempest/play_mode_controller.hpp>
+#include <tempest/recent_projects.hpp>
 
 #include <tempest/array.hpp>
 #include <tempest/asset_database.hpp>
+#include <tempest/builtin_assets.hpp>
+#include <tempest/default_importers.hpp>
 #include <tempest/filesystem.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/memory.hpp>
@@ -479,11 +482,6 @@ namespace tempest::editor
             return false;
         }
 
-        if (filesystem::exists(".cache/editor_session.json"))
-        {
-            return false;
-        }
-
         const auto candidates = array<filesystem::path, 2>{
             filesystem::path{"game/assets/scenes/main.tscene"},
             filesystem::path{"assets/scenes/main.tscene"},
@@ -503,5 +501,64 @@ namespace tempest::editor
         }
 
         return false;
+    }
+
+    auto editor_engine_context::open_project(string_view tproject_path) -> bool
+    {
+        if (tproject_path.empty())
+        {
+            get_logger().error("Cannot open project: empty path specified.");
+            return false;
+        }
+
+        auto workspace = assets::project_workspace{};
+        if (!workspace.load_from_file(tproject_path))
+        {
+            get_logger().error(format("Failed to load project workspace from: {}", tproject_path));
+            return false;
+        }
+
+        if (!get_assets().rebuild_from_workspace(workspace, true))
+        {
+            get_logger().error(format("Failed to rebuild asset database from workspace: {}", tproject_path));
+            return false;
+        }
+
+        assets::builtin::register_builtin_assets(get_assets(), &_mesh_reg, &_texture_reg, &_material_reg);
+        assets::mount_default_shader_roots(get_assets());
+
+        add_recent_project(tproject_path, workspace.name, _session_file_path);
+
+        if (!workspace.startup_scene.scene_path.empty())
+        {
+            auto scene_path = filesystem::path(workspace.startup_scene.scene_path);
+            if (scene_path.is_relative())
+            {
+                scene_path = filesystem::path(workspace.root_directory) / scene_path;
+            }
+
+            if (filesystem::exists(scene_path))
+            {
+                const auto load_result = get_scene_manager().load_sync(scene_path);
+                if (load_result.has_value())
+                {
+                    get_logger().info(format("Loaded project startup scene: {}", scene_path.generic_string()));
+                }
+                else
+                {
+                    get_logger().warn(format("Failed to load project startup scene: {}", scene_path.generic_string()));
+                }
+            }
+            else
+            {
+                get_logger().warn(format("Startup scene does not exist: {}", scene_path.generic_string()));
+            }
+        }
+
+        _current_project = tempest::move(workspace);
+        _current_project_path = string(tproject_path);
+
+        get_logger().info(format("Successfully opened project: {} ({})", _current_project->name, _current_project_path));
+        return true;
     }
 } // namespace tempest::editor

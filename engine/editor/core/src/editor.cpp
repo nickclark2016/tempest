@@ -3,6 +3,7 @@
 #include <tempest/editor.hpp>
 
 #include <tempest/editor_engine_context.hpp>
+#include <tempest/filesystem.hpp>
 #include <tempest/play_mode_controller.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/memory.hpp>
@@ -25,6 +26,50 @@ namespace tempest::editor
 {
     namespace
     {
+        class open_project_menu_item final : public menu_item
+        {
+          public:
+            explicit open_project_menu_item(project_launcher_dialog& launcher)
+                : menu_item("File", "Open Project..."), _launcher{launcher}
+            {
+            }
+
+            [[nodiscard]] auto get_shortcut() const noexcept -> string_view override
+            {
+                return "Ctrl+O";
+            }
+
+            auto on_press() noexcept -> void override
+            {
+                _launcher->open(launcher_tab::open_browse);
+            }
+
+          private:
+            non_null<project_launcher_dialog> _launcher;
+        };
+
+        class new_project_menu_item final : public menu_item
+        {
+          public:
+            explicit new_project_menu_item(project_launcher_dialog& launcher)
+                : menu_item("File", "New Project..."), _launcher{launcher}
+            {
+            }
+
+            [[nodiscard]] auto get_shortcut() const noexcept -> string_view override
+            {
+                return "Ctrl+Shift+N";
+            }
+
+            auto on_press() noexcept -> void override
+            {
+                _launcher->open(launcher_tab::create_project);
+            }
+
+          private:
+            non_null<project_launcher_dialog> _launcher;
+        };
+
         class exit_menu_item final : public menu_item
         {
           public:
@@ -361,6 +406,27 @@ namespace tempest::editor
         ctx.set_ui_context(&ui_ctx);
         _selection.attach_event_registry(ctx.get_events());
 
+        _launcher_dialog.set_session_file_path(ctx.get_session_file_path());
+
+        _launcher_dialog.set_on_open_project([this](string_view path) -> bool {
+            return open_project(path);
+        });
+
+        _launcher_dialog.set_on_create_project([this](string_view name, string_view parent_dir) -> bool {
+            return create_project(name, parent_dir);
+        });
+
+        _launcher_dialog.set_on_exit([this]() -> void {
+            if (_engine_ctx != nullptr)
+            {
+                _engine_ctx->request_close(true);
+            }
+        });
+
+        _launcher_dialog.set_has_active_project([this]() -> bool {
+            return _engine_ctx != nullptr && _engine_ctx->has_project();
+        });
+
         register_on_paint_callback([&, this](engine_context& engine_ctx) -> void {
             // Sync aspect ratio to editor camera
             const auto current_aspect = _viewport_view->aspect_ratio();
@@ -388,6 +454,8 @@ namespace tempest::editor
             _ui_ctx->finish_ui_commands();
         });
 
+        register_menu_item(make_unique<new_project_menu_item>(_launcher_dialog));
+        register_menu_item(make_unique<open_project_menu_item>(_launcher_dialog));
         register_menu_item(make_unique<exit_menu_item>(ctx));
         register_menu_item(make_unique<undo_menu_item>(_history, ctx));
         register_menu_item(make_unique<redo_menu_item>(_history, ctx));
@@ -958,6 +1026,7 @@ namespace tempest::editor
         }
 
         _draw_status_bar();
+        _launcher_dialog.draw();
     }
 
     auto editor_context::register_on_paint_callback(function<void(engine_context&)> callback) -> void
@@ -973,5 +1042,144 @@ namespace tempest::editor
     auto editor_context::register_menu_item(unique_ptr<menu_item> menu) -> void
     {
         _menus.add_menu_item(tempest::move(menu));
+    }
+
+    auto editor_context::open_project(string_view tproject_path) -> bool
+    {
+        if (_engine_ctx == nullptr)
+        {
+            return false;
+        }
+
+        const auto success = _engine_ctx->open_project(tproject_path);
+        if (success && _project_view != nullptr)
+        {
+            const auto& workspace_opt = _engine_ctx->get_current_project();
+            if (workspace_opt.has_value())
+            {
+                _project_view->get_model().rebuild_from_workspace(*workspace_opt);
+            }
+        }
+        return success;
+    }
+
+    auto editor_context::create_project(string_view project_name, string_view directory_path) -> bool
+    {
+        if (project_name.empty() || directory_path.empty())
+        {
+            return false;
+        }
+
+        const auto parent_path = filesystem::path(directory_path);
+        const auto project_dir =
+            (parent_path.filename() == project_name) ? parent_path : (parent_path / project_name);
+
+        if (!filesystem::exists(project_dir))
+        {
+            if (!filesystem::create_directories(project_dir))
+            {
+                if (_engine_ctx != nullptr)
+                {
+                    _engine_ctx->get_logger().error(
+                        format("Failed to create project directory: {}", project_dir.generic_string()));
+                }
+                return false;
+            }
+        }
+
+        const auto assets_dir = project_dir / "assets";
+        if (!filesystem::exists(assets_dir))
+        {
+            if (!filesystem::create_directories(assets_dir))
+            {
+                if (_engine_ctx != nullptr)
+                {
+                    _engine_ctx->get_logger().error(
+                        format("Failed to create assets directory: {}", assets_dir.generic_string()));
+                }
+                return false;
+            }
+        }
+
+        auto workspace = assets::project_workspace{};
+        workspace.name = string(project_name);
+        workspace.root_directory = project_dir.generic_string();
+
+        auto default_mount = assets::mount_point{
+            .path = "assets",
+            .priority = 0,
+            .alias = "assets",
+        };
+        workspace.mounts.push_back(tempest::move(default_mount));
+
+        const auto project_file_name = tempest::format("{}.tproject", project_name);
+        const auto tproject_file_path = (project_dir / project_file_name).generic_string();
+
+        if (!workspace.save_to_file(tproject_file_path))
+        {
+            if (_engine_ctx != nullptr)
+            {
+                _engine_ctx->get_logger().error(
+                    format("Failed to save project file: {}", tproject_file_path));
+            }
+            return false;
+        }
+
+        return open_project(tproject_file_path);
+    }
+
+    auto editor_context::initialize_project_from_startup(span<const string_view> args) -> bool
+    {
+        static constexpr string_view project_prefix = "--project=";
+        for (size_t index = 0; index < args.size(); ++index)
+        {
+            const auto arg = args[index];
+            if (arg.size() > project_prefix.size() &&
+                string_view{arg.data(), project_prefix.size()} == project_prefix)
+            {
+                const auto candidate_path =
+                    string_view{arg.data() + project_prefix.size(), arg.size() - project_prefix.size()};
+                if (!candidate_path.empty() && filesystem::exists(candidate_path))
+                {
+                    if (open_project(candidate_path))
+                    {
+                        return true;
+                    }
+                }
+            }
+            else if (arg == "--project" && (index + 1) < args.size())
+            {
+                const auto candidate_path = args[index + 1];
+                if (!candidate_path.empty() && filesystem::exists(candidate_path))
+                {
+                    if (open_project(candidate_path))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        const auto current_working_dir = filesystem::current_path();
+        auto discovered_projects = vector<filesystem::path>{};
+
+        for (const auto& entry : filesystem::directory_iterator{current_working_dir})
+        {
+            if (!entry.is_directory() && entry.path().extension() == ".tproject")
+            {
+                discovered_projects.push_back(entry.path());
+            }
+        }
+
+        if (discovered_projects.size() == 1)
+        {
+            if (open_project(discovered_projects.front().generic_string()))
+            {
+                return true;
+            }
+        }
+
+        _launcher_dialog.open(launcher_tab::recent_projects);
+        return false;
     }
 } // namespace tempest::editor

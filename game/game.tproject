@@ -1,0 +1,18 @@
+{
+  "name": "game",
+  "root_directory": "D:/Code/tempest/game",
+  "mounts": [
+    {
+      "path": "assets",
+      "priority": 0,
+      "alias": "assets"
+    }
+  ],
+  "startup_scene": {
+    "path": ""
+  },
+  "bake_settings": {
+    "output_directory": "baked",
+    "compress_textures": false
+  }
+}

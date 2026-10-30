@@ -8,6 +8,8 @@
 #include <tempest/log_store.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/profiler/profiler.hpp>
+#include <tempest/project_workspace.hpp>
+#include <tempest/recent_projects.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/vector.hpp>
@@ -193,6 +195,42 @@ namespace tempest::editor
         auto collect_and_broadcast_telemetry() -> void;
         auto load_startup_scene_if_needed() -> bool;
 
+        /// @brief Attempts to open a project workspace from a .tproject file on disk, rebuilding asset database.
+        /// @param tproject_path Path to the .tproject file.
+        /// @return True if project was successfully loaded and initialized, false otherwise.
+        [[nodiscard]] auto open_project(string_view tproject_path) -> bool;
+
+        /// @brief Retrieves the currently loaded project workspace, if any.
+        [[nodiscard]] auto get_current_project() const noexcept -> const optional<assets::project_workspace>&
+        {
+            return _current_project;
+        }
+
+        /// @brief Retrieves the filesystem path to the currently loaded .tproject file.
+        [[nodiscard]] auto get_current_project_path() const noexcept -> string_view
+        {
+            return _current_project_path;
+        }
+
+        /// @brief Indicates whether a project is currently open in the editor.
+        [[nodiscard]] auto has_project() const noexcept -> bool
+        {
+            return _current_project.has_value();
+        }
+
+        /// @brief Overrides the filesystem path used for persisting editor session data and recents.
+        /// @param path Filesystem path to the session JSON file.
+        auto set_session_file_path(string_view path) -> void
+        {
+            _session_file_path = string(path);
+        }
+
+        /// @brief Retrieves the filesystem path used for session persistence.
+        [[nodiscard]] auto get_session_file_path() const noexcept -> string_view
+        {
+            return _session_file_path;
+        }
+
         [[nodiscard]] auto get_log_sink() noexcept -> editor_log_sink&
         {
             return _log_sink;
@@ -237,6 +275,10 @@ namespace tempest::editor
         bool _capture_gpu_stats{true};
         bool _live_stream_enabled{true};
         bool _is_recording{false};
+
+        optional<assets::project_workspace> _current_project = nullopt;
+        string _current_project_path = {};
+        string _session_file_path = string(default_session_file_path);
 
         struct
         {

@@ -17,6 +17,7 @@
 #include <tempest/windows/hierarchy_window.hpp>
 #include <tempest/windows/inspector_window.hpp>
 #include <tempest/windows/log_view_window.hpp>
+#include <tempest/windows/project_launcher_dialog.hpp>
 #include <tempest/windows/project_view_window.hpp>
 #include <tempest/windows/viewport_window.hpp>
 
@@ -109,6 +110,34 @@ namespace tempest::editor
             return _history;
         }
 
+        /// @brief Opens an existing project workspace from disk.
+        /// @param tproject_path Path to the .tproject file.
+        /// @return True if project was successfully opened and views updated.
+        [[nodiscard]] auto open_project(string_view tproject_path) -> bool;
+
+        /// @brief Creates a new project structure and opens it.
+        /// @param project_name Friendly name for the project.
+        /// @param directory_path Parent directory in which project folder is created.
+        /// @return True if creation and opening succeeded.
+        [[nodiscard]] auto create_project(string_view project_name, string_view directory_path) -> bool;
+
+        /// @brief Discovers or prompts for a project at application startup.
+        /// @param args Command-line arguments.
+        /// @return True if a project was loaded immediately without showing launcher, false if launcher was opened.
+        [[nodiscard]] auto initialize_project_from_startup(span<const string_view> args = {}) -> bool;
+
+        /// @brief Retrieves the project launcher modal dialog.
+        [[nodiscard]] auto get_project_launcher_dialog() noexcept -> project_launcher_dialog&
+        {
+            return _launcher_dialog;
+        }
+
+        /// @brief Retrieves the project launcher modal dialog (read-only).
+        [[nodiscard]] auto get_project_launcher_dialog() const noexcept -> const project_launcher_dialog&
+        {
+            return _launcher_dialog;
+        }
+
       private:
         auto _process_shortcuts() -> void;
         auto _draw_status_bar() -> void;
@@ -132,6 +161,7 @@ namespace tempest::editor
 
         command_history _history;
         editor_selection _selection;
+        project_launcher_dialog _launcher_dialog{};
         vector<unique_ptr<editor_window>> _windows;
         inspector_window* _inspector_view = default_inspector_view;
         hierarchy_window* _hierarchy_view = default_hierarchy_view;

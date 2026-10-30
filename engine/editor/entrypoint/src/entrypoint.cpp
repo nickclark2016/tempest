@@ -134,6 +134,8 @@ namespace
 
             (*game_editor_on_load_result)(&tempest_engine, &ui_editor, args);
 
+            [[maybe_unused]] const auto project_initialized = ui_editor.initialize_project_from_startup(args);
+
             tempest_engine.load_startup_scene_if_needed();
 
             tempest_engine.run();
