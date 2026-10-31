@@ -18,7 +18,7 @@ This directory contains architectural and mathematical design documents for the 
 
 ### Editor & Scene System
 
-* **[Editor & Scene System (Umbrella)](proposals/editor_and_scene_system.md)**: The shared foundation, key decisions, pre-existing defects fixed, risks, verification matrix and the M1–M9 roadmap for scene saves, prefabs, multi-scene loading, baking, editor authoring with undo, play mode, and the Log and Project panes.
+* **[Editor & Scene System (Umbrella)](proposals/editor_and_scene_system.md)**: The shared foundation, key decisions, pre-existing defects fixed, risks, verification matrix and the M1–M10 roadmap for scene saves, prefabs, multi-scene loading, baking, editor authoring with undo, play mode, the Log and Project panes, and shader distribution / mount isolation.
 * **[Component Reflection & Injected Type Registry](proposals/component_reflection_type_registry.md)**: A dependency-injected `component_type_registry` that replaces the static type-index map; `reflect<T>` field descriptors; MSVC/Clang type-name normalization; the shape-test and golden-manifest type-identity gate; migration hooks.
 * **[Scene & Prefab Format, Prefab Instancing, Baking](proposals/scene_prefab_format_and_bake.md)**: Deterministic `.tscene` / `.tprefab` JSON behind an opaque yyjson writer, file-local entity ids, live-linked per-field prefab overrides with nesting, glTF model prefabs, load/save validation, and the versioned `.tscenebin` bake.
 * **[Scene Manager & Multi-Scene Loading](proposals/scene_manager_multi_scene_loading.md)**: One world registry holding many scenes, additive and single loading and unloading, a three-stage decode/resolve/time-sliced-commit pipeline for sync and async loads, and a main-thread executor.

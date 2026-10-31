@@ -130,4 +130,5 @@ Execute one milestone per turn, and stop for review after each one (AGENTS.md §
 | **M6** | editor | Editing: `command_history` and undo, `editor_selection`, hierarchy cache and pane, reflected inspector | Authoring |
 | **M7** | ecs / engine / game | Play mode: `registry_snapshot`, three-state machine, Persist to Scene, `game_module` contract, `main.tscene` migration, network play | Authoring |
 | **M8** | editor | Project View, reverse dependency index, asset removal flow, drag-to-instantiate | Panes, Workspace |
-| **M9** | bake / runner | Bake: `bake` library, `tempest-bake`, `.tscenebin`, baked asset database, runner startup-scene loading | Format |
+| **M9** | assets / render / editor | Engine shader distribution & asset mount isolation: binary-adjacent shader compilation (`bin/<targetdir>/shaders/`), immutable `@builtin` asset layer, removal of root `assets/` mount, incremental mount scanning | Workspace, Format |
+| **M10** | bake / runner | Bake: `bake` library, `tempest-bake`, `.tscenebin`, baked asset database, runner startup-scene loading | Format |

@@ -1,7 +1,7 @@
 # Proposal: Scene & Prefab Source Format, Prefab Instancing, and Scene Baking
 
 ## Status
-Proposed. Child of [Editor & Scene System](editor_and_scene_system.md), Milestones M1 (JSON writer), M4 (scenes), M5 (prefabs) and M9 (bake).
+Proposed. Child of [Editor & Scene System](editor_and_scene_system.md), Milestones M1 (JSON writer), M4 (scenes), M5 (prefabs) and M10 (bake).
 
 ## Context
 All world content is currently built procedurally (`game/game/src/entrypoint.cpp:624-748`). The only persisted entity data is the glTF importer's `entity_hierarchy` blob, which has these limitations:
@@ -243,4 +243,4 @@ ASSETS      [ guid ]  (every asset_ref in the scene, for streaming/preload)
 | M1 | core | Opaque `json_writer`, plus making the read wrapper opaque |
 | M4 | scene | `.tscene` codec, local ids, validation report, unresolved-data preservation |
 | M5 | scene / assets | `prefab_template`, `prefab_cache`, `.tprefab`, overrides, nesting, model prefabs, removal of `prefab_tag` |
-| M9 | bake | `bake` library, `tempest-bake`, `.tscenebin` writer and loader, baked asset database |
+| M10 | bake | `bake` library, `tempest-bake`, `.tscenebin` writer and loader, baked asset database |
