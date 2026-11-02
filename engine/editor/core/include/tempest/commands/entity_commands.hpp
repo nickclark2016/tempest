@@ -38,9 +38,18 @@ namespace tempest::editor
       public:
         static constexpr bool default_executed = false;
 
+        /// @brief Constructs a command to create a new entity.
         create_entity_command() = default;
+
+        /// @brief Constructs a command to create a new entity with the specified name.
+        /// @param name The name of the new entity.
         explicit create_entity_command(string_view name);
+
+        /// @brief Constructs a command to create a new entity in the specified scene.
+        /// @param target_scene The scene in which to create the new entity.
+        /// @param name The name of the new entity.
         create_entity_command(scene::scene_handle target_scene, string_view name = {});
+
         ~create_entity_command() override = default;
 
         create_entity_command(const create_entity_command&) = default;
@@ -48,11 +57,24 @@ namespace tempest::editor
         auto operator=(const create_entity_command&) -> create_entity_command& = default;
         auto operator=(create_entity_command&&) noexcept -> create_entity_command& = default;
 
+        /// @brief Applies the command in the given context.
+        /// @param ctx The command context to apply the command in.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Returns the label of the command.
+        /// @return The label as a string view.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Returns the target scene of the command.
+        /// @return The target scene handle.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
+
+        /// @brief Returns the address of the created entity.
+        /// @return The entity address.
         [[nodiscard]] auto created_address() const noexcept -> const entity_address&;
 
       private:
@@ -66,9 +88,13 @@ namespace tempest::editor
     class TEMPEST_EDITOR_API destroy_entity_command : public editor_command
     {
       public:
+        /// @brief Modes for destroying an entity.
         enum class mode : uint8_t
         {
+            /// @brief Recursively destroy the entity and all its children.
             recursive,
+
+            /// @brief Reparent the children of the entity to its parent instead of destroying them.
             reparent_children,
         };
 
@@ -76,31 +102,58 @@ namespace tempest::editor
         static constexpr bool default_was_root = false;
         static constexpr bool default_captured = false;
 
+        /// @brief Data for a component within an entity snapshot.
         struct component_data
         {
+            /// @brief The type index of the component.
             uint32_t type_index = 0;
+            /// @brief The raw bytes of the component data.
             vector<byte> bytes;
         };
 
+        /// @brief Node representing an entity within a snapshot.
         struct entity_node
         {
+            /// @brief The name of the entity.
             string name;
+
+            /// @brief The scene the entity belongs to.
             scene::scene_handle scene = {};
+
+            /// @brief The local ID of the entity within the scene.
             optional<scene::entity_local_id> scene_local_id;
+
+            /// @brief The dynamic local ID of the entity, if applicable.
             optional<scene::entity_local_id> dynamic_local_id;
+
+            /// @brief The local ID of the prefab template, if applicable.
             optional<scene::entity_local_id> prefab_template_local_id;
+
+            /// @brief The prefab instance component of the entity, if applicable.
             optional<scene::prefab_instance_component> prefab_instance;
+
+            /// @brief The components of the entity.
             vector<component_data> components;
+
+            /// @brief The indices of the child entities within the snapshot.
             vector<size_t> children;
         };
 
+        /// @brief Snapshot of the entity and its hierarchy.
         struct entity_snapshot
         {
+            /// @brief The nodes representing the entities in the snapshot.
             vector<entity_node> nodes;
+
+            /// @brief The index of the root entity within the snapshot.
             size_t root_index = 0;
         };
 
+        /// @brief Constructs a command to destroy an entity.
+        /// @param target The address of the entity to destroy.
+        /// @param destroy_mode The mode in which to destroy the entity.
         explicit destroy_entity_command(entity_address target, mode destroy_mode = default_mode);
+
         ~destroy_entity_command() override = default;
 
         destroy_entity_command(const destroy_entity_command&) = default;
@@ -108,18 +161,33 @@ namespace tempest::editor
         auto operator=(const destroy_entity_command&) -> destroy_entity_command& = default;
         auto operator=(destroy_entity_command&&) noexcept -> destroy_entity_command& = default;
 
+        /// @brief Applies the command to the given context.
+        /// @param ctx The command context to apply the command to.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Retrieves the label of the command.
+        /// @return The label of the command.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Retrieves the target scene of the command.
+        /// @return The target scene of the command.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
 
+        /// @brief Represents a child entity that has been reparented as part of the destroy operation.
         struct reparented_child
         {
+            /// @brief The address of the reparented child entity.
             entity_address addr;
+
+            /// @brief The entity ID of the reparented child entity.
             ecs::entity entity = ecs::tombstone;
         };
 
+      private:
         entity_address _target_addr;
         mode _mode = default_mode;
         entity_snapshot _snapshot;
@@ -138,7 +206,10 @@ namespace tempest::editor
         static constexpr bool default_executed = false;
         static constexpr bool default_was_root = false;
 
+        /// @brief Constructs a command to duplicate an entity.
+        /// @param target The address of the entity to duplicate.
         explicit duplicate_entity_command(entity_address target);
+
         ~duplicate_entity_command() override = default;
 
         duplicate_entity_command(const duplicate_entity_command&) = default;
@@ -146,11 +217,24 @@ namespace tempest::editor
         auto operator=(const duplicate_entity_command&) -> duplicate_entity_command& = default;
         auto operator=(duplicate_entity_command&&) noexcept -> duplicate_entity_command& = default;
 
+        /// @brief Applies the command to the given context.
+        /// @param ctx The command context to apply the command to.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Retrieves the label of the command.
+        /// @return The label of the command.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Retrieves the target scene of the command.
+        /// @return The target scene of the command.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
+
+        /// @brief Retrieves the address of the cloned entity.
+        /// @return The address of the cloned entity.
         [[nodiscard]] auto cloned_address() const noexcept -> const entity_address&;
 
       private:
@@ -169,7 +253,11 @@ namespace tempest::editor
       public:
         static constexpr bool default_captured_old_name = false;
 
+        /// @brief Constructs a command to rename an entity.
+        /// @param target The address of the entity to rename.
+        /// @param new_name The new name for the entity.
         rename_entity_command(entity_address target, string_view new_name);
+
         ~rename_entity_command() override = default;
 
         rename_entity_command(const rename_entity_command&) = default;
@@ -177,12 +265,28 @@ namespace tempest::editor
         auto operator=(const rename_entity_command&) -> rename_entity_command& = default;
         auto operator=(rename_entity_command&&) noexcept -> rename_entity_command& = default;
 
+        /// @brief Applies the command to the given context.
+        /// @param ctx The command context to apply the command to.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Retrieves the label of the command.
+        /// @return The label of the command.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Retrieves the target scene of the command.
+        /// @return The target scene of the command.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
+
+        /// @brief Retrieves the old name of the entity.
+        /// @return The old name of the entity.
         [[nodiscard]] auto old_name() const noexcept -> string_view;
+
+        /// @brief Retrieves the new name of the entity.
+        /// @return The new name of the entity.
         [[nodiscard]] auto new_name() const noexcept -> string_view;
 
       private:
@@ -201,6 +305,11 @@ namespace tempest::editor
         static constexpr bool default_has_transform = false;
         static constexpr bool default_was_root = false;
 
+        /// @brief Constructs a command to reparent an entity.
+        /// @param child The address of the child entity to reparent.
+        /// @param new_parent The optional new parent entity address.
+        /// @param insert_before The optional entity address to insert before.
+        /// @param preserve_world_transform Whether to preserve the world transform of the entity.
         reparent_entity_command(entity_address child, optional<entity_address> new_parent = nullopt,
                                 optional<entity_address> insert_before = nullopt,
                                 bool preserve_world_transform = default_preserve_world);
@@ -211,10 +320,20 @@ namespace tempest::editor
         auto operator=(const reparent_entity_command&) -> reparent_entity_command& = default;
         auto operator=(reparent_entity_command&&) noexcept -> reparent_entity_command& = default;
 
+        /// @brief Applies the command to the given context.
+        /// @param ctx The command context to apply the command to.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Retrieves the label of the command.
+        /// @return The label of the command.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Retrieves the target scene of the command.
+        /// @return The target scene of the command.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
 
       private:
@@ -244,8 +363,16 @@ namespace tempest::editor
         static constexpr uint32_t invalid_type_index = ~uint32_t{0};
         static constexpr bool default_added_override = false;
 
+        /// @brief Constructs a command to add a component to an entity.
+        /// @param target The address of the target entity.
+        /// @param type_index The type index of the component to add.
         add_component_command(entity_address target, uint32_t type_index);
+
+        /// @brief Constructs a command to add a component to an entity.
+        /// @param target The address of the target entity.
+        /// @param type_name The name of the component type to add.
         add_component_command(entity_address target, string_view type_name);
+
         ~add_component_command() override = default;
 
         add_component_command(const add_component_command&) = default;
@@ -253,10 +380,20 @@ namespace tempest::editor
         auto operator=(const add_component_command&) -> add_component_command& = default;
         auto operator=(add_component_command&&) noexcept -> add_component_command& = default;
 
+        /// @brief Applies the command to the given context.
+        /// @param ctx The command context to apply the command to.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Retrieves the label of the command.
+        /// @return The label of the command.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Retrieves the target scene of the command.
+        /// @return The target scene of the command.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
 
       private:
@@ -275,8 +412,16 @@ namespace tempest::editor
         static constexpr uint32_t invalid_type_index = ~uint32_t{0};
         static constexpr bool default_added_override = false;
 
+        /// @brief Constructs a command to remove a component from an entity.
+        /// @param target The address of the target entity.
+        /// @param type_index The type index of the component to remove.
         remove_component_command(entity_address target, uint32_t type_index);
+
+        /// @brief Constructs a command to remove a component from an entity.
+        /// @param target The address of the target entity.
+        /// @param type_name The name of the component type to remove.
         remove_component_command(entity_address target, string_view type_name);
+
         ~remove_component_command() override = default;
 
         remove_component_command(const remove_component_command&) = default;
@@ -284,10 +429,20 @@ namespace tempest::editor
         auto operator=(const remove_component_command&) -> remove_component_command& = default;
         auto operator=(remove_component_command&&) noexcept -> remove_component_command& = default;
 
+        /// @brief Applies the command to the given context.
+        /// @param ctx The command context to apply the command to.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Retrieves the label of the command.
+        /// @return The label of the command.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Retrieves the target scene of the command.
+        /// @return The target scene of the command.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
 
       private:
@@ -306,8 +461,16 @@ namespace tempest::editor
       public:
         static constexpr uint32_t invalid_type_index = ~uint32_t{0};
 
+        /// @brief Constructs a command to reset a component's fields to default values.
+        /// @param target The address of the target entity.
+        /// @param type_index The type index of the component to reset.
         reset_component_command(entity_address target, uint32_t type_index);
+
+        /// @brief Constructs a command to reset a component's fields to default values.
+        /// @param target The address of the target entity.
+        /// @param type_name The name of the component to reset.
         reset_component_command(entity_address target, string_view type_name);
+
         ~reset_component_command() override = default;
 
         reset_component_command(const reset_component_command&) = default;
@@ -315,10 +478,20 @@ namespace tempest::editor
         auto operator=(const reset_component_command&) -> reset_component_command& = default;
         auto operator=(reset_component_command&&) noexcept -> reset_component_command& = default;
 
+        /// @brief Applies the command to the given context.
+        /// @param ctx The command context to apply the command to.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Retrieves the label of the command.
+        /// @return The label of the command.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Retrieves the target scene of the command.
+        /// @return The target scene of the command.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
 
       private:
@@ -338,8 +511,14 @@ namespace tempest::editor
         static constexpr bool default_is_in_prefab = false;
         static constexpr bool default_had_prev_override = false;
 
+        /// @brief Constructs a command to set a field on a component of an entity.
+        /// @param target The address of the target entity.
+        /// @param component_name The name of the component containing the field.
+        /// @param field_name The name of the field to set.
+        /// @param new_value_bytes The new value for the field as a byte array.
         set_field_command(entity_address target, string_view component_name, string_view field_name,
                           vector<byte> new_value_bytes);
+
         ~set_field_command() override = default;
 
         set_field_command(const set_field_command&) = default;
@@ -347,17 +526,45 @@ namespace tempest::editor
         auto operator=(const set_field_command&) -> set_field_command& = default;
         auto operator=(set_field_command&&) noexcept -> set_field_command& = default;
 
+        /// @brief Applies the command to the given context.
+        /// @param ctx The command context to apply the command to.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command, restoring the previous state.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Returns the label for the command.
+        /// @return The label as a string view.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Returns the target scene for the command.
+        /// @return The target scene handle.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
+
+        /// @brief Attempts to merge this command with the next command.
+        /// @param next The next command to merge with.
+        /// @return True if the commands were successfully merged, false otherwise.
         [[nodiscard]] auto merge_with(const editor_command& next) -> bool override;
 
+        /// @brief Returns the target entity address for the command.
+        /// @return The target entity address.
         [[nodiscard]] auto target_address() const noexcept -> const entity_address&;
+
+        /// @brief Returns the name of the component targeted by the command.
+        /// @return The component name.
         [[nodiscard]] auto component_name() const noexcept -> string_view;
+
+        /// @brief Returns the name of the field targeted by the command.
+        /// @return The field name.
         [[nodiscard]] auto field_name() const noexcept -> string_view;
+
+        /// @brief Returns the new value of the field as bytes.
+        /// @return The new value bytes.
         [[nodiscard]] auto new_value_bytes() const noexcept -> span<const byte>;
+
+        /// @brief Returns the previous value of the field as bytes.
+        /// @return The previous value bytes.
         [[nodiscard]] auto prev_value_bytes() const noexcept -> span<const byte>;
 
       private:
@@ -376,7 +583,8 @@ namespace tempest::editor
         bool _had_prev_field_override = default_had_prev_override;
     };
 
-    /// @brief Command assigning or replacing an asset reference field on an entity component with automatic prefab override tracking.
+    /// @brief Command assigning or replacing an asset reference field on an entity component with automatic prefab
+    /// override tracking.
     class TEMPEST_EDITOR_API assign_asset_command : public editor_command
     {
       public:
@@ -393,6 +601,7 @@ namespace tempest::editor
         /// @param asset_guid GUID of the asset to assign.
         assign_asset_command(entity_address target, string_view component_name, string_view field_name,
                              guid asset_guid);
+
         ~assign_asset_command() override = default;
 
         assign_asset_command(const assign_asset_command&) = default;
@@ -485,20 +694,36 @@ namespace tempest::editor
     class TEMPEST_EDITOR_API revert_override_command : public editor_command
     {
       public:
+        /// @brief Represents the kind of override being reverted.
         enum class override_kind : uint8_t
         {
+            /// @brief Field override.
             field,
+            /// @brief Added component override.
             added_component,
+            /// @brief Removed component override.
             removed_component,
         };
 
         static constexpr override_kind default_kind = override_kind::field;
         static constexpr bool default_captured = false;
 
+        /// @brief Constructs a command to revert a prefab override.
+        /// @param instance_root The root entity address of the prefab instance.
+        /// @param target The target path of the override.
+        /// @param component_name The name of the component containing the override.
+        /// @param field_name The name of the field being overridden.
         revert_override_command(entity_address instance_root, scene::id_path target, string_view component_name,
                                 string_view field_name);
+
+        /// @brief Constructs a command to revert a prefab override.
+        /// @param instance_root The root entity address of the prefab instance.
+        /// @param target The target path of the override.
+        /// @param component_name The name of the component containing the override.
+        /// @param kind The kind of override being reverted.
         revert_override_command(entity_address instance_root, scene::id_path target, string_view component_name,
                                 override_kind kind);
+
         ~revert_override_command() override = default;
 
         revert_override_command(const revert_override_command&) = default;
@@ -506,10 +731,20 @@ namespace tempest::editor
         auto operator=(const revert_override_command&) -> revert_override_command& = default;
         auto operator=(revert_override_command&&) noexcept -> revert_override_command& = default;
 
+        /// @brief Applies the command to the given context.
+        /// @param ctx The command context to apply the command to.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Returns the label of the command.
+        /// @return The label as a string view.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Returns the target scene of the command.
+        /// @return The target scene handle.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
 
       private:
@@ -532,7 +767,11 @@ namespace tempest::editor
       public:
         static constexpr bool default_applied = false;
 
+        /// @brief Constructs a command to apply all instance overrides to the backing prefab template file.
+        /// @param instance_root The root entity address of the prefab instance.
+        /// @param file_path The path to the prefab template file.
         apply_override_command(entity_address instance_root, string_view file_path);
+
         ~apply_override_command() override = default;
 
         apply_override_command(const apply_override_command&) = default;
@@ -540,10 +779,20 @@ namespace tempest::editor
         auto operator=(const apply_override_command&) -> apply_override_command& = default;
         auto operator=(apply_override_command&&) noexcept -> apply_override_command& = default;
 
+        /// @brief Applies the command to the given context.
+        /// @param ctx The command context to apply the command to.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Returns the label of the command.
+        /// @return The label as a string view.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Returns the target scene of the command.
+        /// @return The target scene handle.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
 
       private:
@@ -560,7 +809,11 @@ namespace tempest::editor
         static constexpr bool default_completely = false;
         static constexpr bool default_captured = false;
 
+        /// @brief Constructs a command to unpack a prefab instance into independent scene entities.
+        /// @param instance_root The root entity address of the prefab instance.
+        /// @param completely Whether to completely unpack the instance.
         explicit unpack_prefab_command(entity_address instance_root, bool completely = default_completely);
+
         ~unpack_prefab_command() override = default;
 
         unpack_prefab_command(const unpack_prefab_command&) = default;
@@ -568,10 +821,20 @@ namespace tempest::editor
         auto operator=(const unpack_prefab_command&) -> unpack_prefab_command& = default;
         auto operator=(unpack_prefab_command&&) noexcept -> unpack_prefab_command& = default;
 
+        /// @brief Applies the command to the given context.
+        /// @param ctx The command context to apply the command to.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Returns the label of the command.
+        /// @return The label as a string view.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Returns the target scene of the command.
+        /// @return The target scene handle.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
 
       private:
@@ -596,7 +859,13 @@ namespace tempest::editor
       public:
         static constexpr bool default_saved = false;
 
+        /// @brief Constructs a command to save an entity hierarchy as a prefab template and convert live entities into
+        /// an instance.
+        /// @param root The root entity address of the hierarchy to save.
+        /// @param prefab_guid The GUID of the prefab template.
+        /// @param file_path The file path to save the prefab template to.
         save_as_prefab_command(entity_address root, guid prefab_guid, string_view file_path);
+
         ~save_as_prefab_command() override = default;
 
         save_as_prefab_command(const save_as_prefab_command&) = default;
@@ -604,10 +873,19 @@ namespace tempest::editor
         auto operator=(const save_as_prefab_command&) -> save_as_prefab_command& = default;
         auto operator=(save_as_prefab_command&&) noexcept -> save_as_prefab_command& = default;
 
+        /// @brief Applies the command to the given context.
+        /// @param ctx The command context to apply the command to.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Returns the label of the command.
+        /// @return The label as a string view.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Returns the target scene of the command.
+        /// @return The target scene handle.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
 
       private:
@@ -639,6 +917,7 @@ namespace tempest::editor
         /// @param position Optional world position override for the root entity.
         instantiate_prefab_command(guid prefab_guid, entity_address parent,
                                    optional<math::vec3<float>> position = nullopt);
+
         ~instantiate_prefab_command() override = default;
 
         instantiate_prefab_command(const instantiate_prefab_command&) = default;
@@ -707,8 +986,13 @@ namespace tempest::editor
         static constexpr uint64_t default_entity_local_id = 0;
         static constexpr bool default_captured = false;
 
+        /// @brief Constructs a command to remove an unknown component from a scene.
+        /// @param scene The target scene handle.
+        /// @param entity_local_id The local ID of the entity.
+        /// @param component_name The name of the unknown component.
         remove_unknown_component_command(scene::scene_handle scene, uint64_t entity_local_id,
                                          string_view component_name);
+
         ~remove_unknown_component_command() override = default;
 
         remove_unknown_component_command(const remove_unknown_component_command&) = default;
@@ -716,10 +1000,20 @@ namespace tempest::editor
         auto operator=(const remove_unknown_component_command&) -> remove_unknown_component_command& = default;
         auto operator=(remove_unknown_component_command&&) noexcept -> remove_unknown_component_command& = default;
 
+        /// @brief Applies the command in the given context.
+        /// @param ctx The command context to apply the command in.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Returns the label of the command.
+        /// @return The label as a string view.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Returns the target scene of the command.
+        /// @return The target scene handle.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
 
       private:
@@ -737,10 +1031,20 @@ namespace tempest::editor
         static constexpr uint32_t invalid_type_index = ~uint32_t{0};
         static constexpr bool default_captured = false;
 
+        /// @brief Constructs a command to map an unknown component to a concrete type.
+        /// @param target The target entity address.
+        /// @param unknown_component_name The name of the unknown component.
+        /// @param target_type_index The type index of the target component.
         map_unknown_component_command(entity_address target, string_view unknown_component_name,
                                       uint32_t target_type_index);
+
+        /// @brief Constructs a command to map an unknown component to a concrete type.
+        /// @param target The target entity address.
+        /// @param unknown_component_name The name of the unknown component.
+        /// @param target_type_name The name of the target component type.
         map_unknown_component_command(entity_address target, string_view unknown_component_name,
                                       string_view target_type_name);
+
         ~map_unknown_component_command() override = default;
 
         map_unknown_component_command(const map_unknown_component_command&) = default;
@@ -748,10 +1052,20 @@ namespace tempest::editor
         auto operator=(const map_unknown_component_command&) -> map_unknown_component_command& = default;
         auto operator=(map_unknown_component_command&&) noexcept -> map_unknown_component_command& = default;
 
+        /// @brief Applies the command in the given context.
+        /// @param ctx The command context to apply the command in.
         auto apply(command_context& ctx) -> void override;
+
+        /// @brief Reverts the command in the given context.
+        /// @param ctx The command context to revert the command in.
         auto revert(command_context& ctx) -> void override;
 
+        /// @brief Returns the label of the command.
+        /// @return The label as a string view.
         [[nodiscard]] auto label() const noexcept -> string_view override;
+
+        /// @brief Returns the target scene of the command.
+        /// @return The target scene handle.
         [[nodiscard]] auto target_scene() const noexcept -> scene::scene_handle override;
 
       private:

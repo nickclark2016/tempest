@@ -21,14 +21,12 @@
 
 namespace tempest::editor
 {
-    hierarchy_window::hierarchy_window(ecs::archetype_registry& registry, scene::scene_manager& in_scene_mgr,
-                                       editor_selection& in_selection, logger& in_logger,
-                                       command_history* in_history,
-                                       const play_session_diff* in_session_diff,
-                                       scene::prefab_cache* in_prefab_cache,
-                                       assets::asset_database* in_asset_db)
-        : _entity_registry{registry}, _scene_mgr{in_scene_mgr}, _selection{in_selection}, _log{in_logger},
-          _history{in_history}, _session_diff{in_session_diff}, _prefab_cache{in_prefab_cache}, _asset_db{in_asset_db}
+    hierarchy_window::hierarchy_window(ecs::archetype_registry& registry, scene::scene_manager& scene_mgr,
+                                       editor_selection& selection, logger& log, command_history* history,
+                                       const play_session_diff* session_diff, scene::prefab_cache* prefab_cache,
+                                       assets::asset_database* asset_db)
+        : _entity_registry{registry}, _scene_mgr{scene_mgr}, _selection{selection}, _log{log}, _history{history},
+          _session_diff{session_diff}, _prefab_cache{prefab_cache}, _asset_db{asset_db}
     {
         if (_prefab_cache == nullptr)
         {
@@ -62,9 +60,8 @@ namespace tempest::editor
         if (_entity_destroyed_sub != event::null_subscription<ecs::entity_destroyed_event<ecs::entity>>)
         {
             [[maybe_unused]] const auto unsub =
-                _entity_registry->event_registry()
-                    .dispatcher<ecs::entity_destroyed_event<ecs::entity>>()
-                    .unsubscribe(_entity_destroyed_sub);
+                _entity_registry->event_registry().dispatcher<ecs::entity_destroyed_event<ecs::entity>>().unsubscribe(
+                    _entity_destroyed_sub);
             _entity_destroyed_sub = {};
         }
     }
@@ -222,8 +219,8 @@ namespace tempest::editor
             };
 
             const auto target_addr = compute_entity_address(*_entity_registry, target_entity);
-            auto mat_cmd = make_unique<assign_asset_command>(
-                assign_asset_command::for_material(target_addr, payload.asset_guid));
+            auto mat_cmd =
+                make_unique<assign_asset_command>(assign_asset_command::for_material(target_addr, payload.asset_guid));
             if (_history != nullptr)
             {
                 _history->execute(tempest::move(mat_cmd), cmd_ctx);
@@ -240,8 +237,8 @@ namespace tempest::editor
         return false;
     }
 
-    auto hierarchy_window::handle_asset_drop_on_scene(scene::scene_handle target_scene,
-                                                     const asset_payload& payload) -> bool
+    auto hierarchy_window::handle_asset_drop_on_scene(scene::scene_handle target_scene, const asset_payload& payload)
+        -> bool
     {
         const auto kind = _deduce_asset_kind(payload);
         if (kind != dropped_asset_kind::prefab)
@@ -395,7 +392,8 @@ namespace tempest::editor
             is_selected = _selection->is_selected(row.entity);
         }
 
-        char label_buffer[256] = {};
+        constexpr auto label_buffer_size = 256;
+        auto label_buffer = array<char, label_buffer_size>{};
         if (row.type == row_type::scene_header)
         {
             if (row.is_active_scene && row.is_dirty)
@@ -448,13 +446,13 @@ namespace tempest::editor
             }
             ImGui::SetNextItemWidth(-1.0F);
             const auto enter_pressed =
-                ImGui::InputText("##rename_input", _rename_buffer, sizeof(_rename_buffer),
+                ImGui::InputText("##rename_input", _rename_buffer.data(), sizeof(_rename_buffer),
                                  ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
             const auto escape_pressed = ImGui::IsKeyPressed(ImGuiKey_Escape, false);
 
             if (enter_pressed || ImGui::IsItemDeactivatedAfterEdit())
             {
-                _entity_registry->name(row.entity, string_view{static_cast<const char*>(_rename_buffer)});
+                _entity_registry->name(row.entity, string_view{static_cast<const char*>(_rename_buffer.data())});
                 _renaming_entity = default_selected_entity;
                 _cache.mark_dirty();
             }
@@ -494,7 +492,7 @@ namespace tempest::editor
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35F, 0.65F, 1.0F, 1.0F));
             }
 
-            const auto node_open = ImGui::TreeNodeEx("##node", node_flags, "%s", label_buffer);
+            const auto node_open = ImGui::TreeNodeEx("##node", node_flags, "%s", label_buffer.data());
 
             if (push_dynamic_color || push_prefab_color)
             {
@@ -556,10 +554,12 @@ namespace tempest::editor
                             {
                                 auto is_cycle = (row.entity == dropped_entity);
                                 auto current_ancestor = row.entity;
-                                while (!is_cycle && current_ancestor != ecs::tombstone && _entity_registry->is_valid(current_ancestor))
+                                while (!is_cycle && current_ancestor != ecs::tombstone &&
+                                       _entity_registry->is_valid(current_ancestor))
                                 {
                                     const auto* const rel_parent =
-                                        _entity_registry->try_get<ecs::relationship_component<ecs::entity>>(current_ancestor);
+                                        _entity_registry->try_get<ecs::relationship_component<ecs::entity>>(
+                                            current_ancestor);
                                     current_ancestor = (rel_parent != nullptr) ? rel_parent->parent : ecs::tombstone;
                                     if (current_ancestor == dropped_entity)
                                     {
@@ -583,8 +583,8 @@ namespace tempest::editor
                                             _entity_registry->assign_or_replace(
                                                 current_entity, scene::scene_entity_component{.scene = row.scene});
                                             const auto* const rel_c =
-                                                _entity_registry
-                                                    ->try_get<ecs::relationship_component<ecs::entity>>(current_entity);
+                                                _entity_registry->try_get<ecs::relationship_component<ecs::entity>>(
+                                                    current_entity);
                                             if (rel_c != nullptr)
                                             {
                                                 auto child = rel_c->first_child;
@@ -621,7 +621,8 @@ namespace tempest::editor
                                     _entity_registry->assign_or_replace(
                                         current_entity, scene::scene_entity_component{.scene = row.scene});
                                     const auto* const rel_c =
-                                        _entity_registry->try_get<ecs::relationship_component<ecs::entity>>(current_entity);
+                                        _entity_registry->try_get<ecs::relationship_component<ecs::entity>>(
+                                            current_entity);
                                     if (rel_c != nullptr)
                                     {
                                         auto child = rel_c->first_child;
@@ -629,8 +630,8 @@ namespace tempest::editor
                                         {
                                             self(self, child);
                                             const auto* const child_rel =
-                                                _entity_registry
-                                                    ->try_get<ecs::relationship_component<ecs::entity>>(child);
+                                                _entity_registry->try_get<ecs::relationship_component<ecs::entity>>(
+                                                    child);
                                             child = (child_rel != nullptr) ? child_rel->next_sibling : ecs::tombstone;
                                         }
                                     }
@@ -650,7 +651,8 @@ namespace tempest::editor
                                 auto remove_scene = [&](auto&& self, ecs::entity current_entity) -> void {
                                     _entity_registry->remove<scene::scene_entity_component>(current_entity);
                                     const auto* const rel_c =
-                                        _entity_registry->try_get<ecs::relationship_component<ecs::entity>>(current_entity);
+                                        _entity_registry->try_get<ecs::relationship_component<ecs::entity>>(
+                                            current_entity);
                                     if (rel_c != nullptr)
                                     {
                                         auto child = rel_c->first_child;
@@ -658,8 +660,8 @@ namespace tempest::editor
                                         {
                                             self(self, child);
                                             const auto* const child_rel =
-                                                _entity_registry
-                                                    ->try_get<ecs::relationship_component<ecs::entity>>(child);
+                                                _entity_registry->try_get<ecs::relationship_component<ecs::entity>>(
+                                                    child);
                                             child = (child_rel != nullptr) ? child_rel->next_sibling : ecs::tombstone;
                                         }
                                     }
@@ -794,7 +796,7 @@ namespace tempest::editor
             if (name_opt.has_value())
             {
                 const auto copy_len = tempest::min(sizeof(_rename_buffer) - 1, name_opt->size());
-                tempest::memcpy(_rename_buffer, name_opt->data(), copy_len);
+                tempest::memcpy(_rename_buffer.data(), name_opt->data(), copy_len);
                 _rename_buffer[copy_len] = '\0';
             }
             else
@@ -942,7 +944,7 @@ namespace tempest::editor
                 if (name_opt.has_value())
                 {
                     const auto copy_len = tempest::min(sizeof(_rename_buffer) - 1, name_opt->size());
-                    tempest::memcpy(_rename_buffer, name_opt->data(), copy_len);
+                    tempest::memcpy(_rename_buffer.data(), name_opt->data(), copy_len);
                     _rename_buffer[copy_len] = '\0';
                 }
                 else

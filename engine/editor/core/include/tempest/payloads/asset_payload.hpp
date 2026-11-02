@@ -41,13 +41,28 @@ namespace tempest::editor
         static constexpr array<char, max_path_length> default_path = {};
         static constexpr array<char, max_sub_asset_length> default_sub_asset_key = {};
 
+        /// @brief GUID of the asset.
         guid asset_guid = default_asset_guid;
+
+        /// @brief Hash of the asset type.
         size_t type_hash = default_type_hash;
+
+        /// @brief Length of the type name string.
         size_t type_name_length = default_length;
+
+        /// @brief Buffer storing the type name as a null-terminated string.
         array<char, max_type_name_length> type_name = default_type_name;
+
+        /// @brief Length of the asset path string.
         size_t path_length = default_length;
+
+        /// @brief Buffer storing the asset path as a null-terminated string.
         array<char, max_path_length> path = default_path;
+
+        /// @brief Length of the sub-asset key string.
         size_t sub_asset_key_length = default_length;
+
+        /// @brief Buffer storing the sub-asset key as a null-terminated string.
         array<char, max_sub_asset_length> sub_asset_key = default_sub_asset_key;
 
         /// @brief Obtains a string_view of the stored asset path.
