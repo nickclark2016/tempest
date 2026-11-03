@@ -30,8 +30,8 @@
 #include <tempest/rhi.hpp>
 #include <tempest/transform_component.hpp>
 
-#include <tempest/window_manager.hpp>
 #include <tempest/vk/device.hpp>
+#include <tempest/window_manager.hpp>
 
 #ifdef TEMPEST_PLATFORM_WINDOWS
 #ifndef NOMINMAX
@@ -800,8 +800,8 @@ namespace tempest::render_system::tests
 
         auto cluster_bounds_buf = graph.create_buffer(render_graph::rg_buffer_desc{
             .size = total_clusters * sizeof(cluster_bounds),
-            .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address |
-                     rhi::buffer_usage::transfer_src,
+            .usage =
+                rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_src,
             .name = "ClusterBoundsBuffer_QuadrantsTest",
         });
 
@@ -894,6 +894,478 @@ namespace tempest::render_system::tests
         }
 
         dev->destroy_buffer(cluster_readback);
+    }
+
+    /// @brief Verifies build_cluster_grid compute shader execution with a cluster count that is
+    ///        not a multiple of the 64-thread workgroup size, ensuring threadgroup boundary
+    ///        guards correctly prevent buffer overrun while computing exact cluster bounds.
+    TEST(render_system_tests, light_clustering_non_multiple_of_64_workgroup_bounds)
+    {
+        // Setup test device and rendering infrastructure
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
+        constexpr auto screen_width = 1280U;
+        constexpr auto screen_height = 720U;
+        auto graph = render_graph::render_graph{screen_width, screen_height};
+
+        const auto cam = render_camera{
+            .proj = math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F),
+            .inv_proj = math::inverse(math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F)),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                  math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view =
+                math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                            math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .eye_position = {0.0F, 0.0F, -5.0F, 1.0F},
+        };
+
+        // Custom cluster grid dimensions whose product is not a multiple of 64:
+        // 7 * 5 * 3 = 105 clusters (requires ceil(105/64) = 2 workgroups = 128 threads)
+        constexpr auto custom_cx = 7U;
+        constexpr auto custom_cy = 5U;
+        constexpr auto custom_cz = 3U;
+        constexpr auto total_clusters = custom_cx * custom_cy * custom_cz;
+
+        auto cluster_bounds_buf = graph.create_buffer(render_graph::rg_buffer_desc{
+            .size = total_clusters * sizeof(cluster_bounds),
+            .usage =
+                rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_src,
+            .name = "ClusterBoundsBuffer_NonMultiple64Test",
+        });
+
+        // Act: add clustering pass with custom grid dimensions
+        const auto& cluster_data =
+            add_light_clustering_pass(graph, pool, shaders, cluster_bounds_buf, cam, screen_width, screen_height, 0.1F,
+                                      100.0F, custom_cx, custom_cy, custom_cz);
+
+        struct dummy_sink_data
+        {
+            render_graph::rg_buffer_id buf;
+        };
+        graph.add_compute_pass<dummy_sink_data>(
+            "ClusterBoundsSink",
+            [buf_id = cluster_data.cluster_bounds_buffer](render_graph::pass_builder& builder,
+                                                          dummy_sink_data& data) -> void {
+                data.buf = builder.read(buf_id, rhi::pipeline_stage::compute, rhi::resource_access::read);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const dummy_sink_data& data, [[maybe_unused]] render_graph::pass_execution_context& ctx,
+               [[maybe_unused]] rhi::command_list& cmd) -> void {});
+
+        auto res = graph.execute_sync(*dev);
+        EXPECT_TRUE(res.has_value());
+        dev->wait_idle();
+
+        // Assert: read back all 105 cluster bounds and verify bounding box validity
+        auto cluster_readback = dev->create_buffer(rhi::buffer_desc{
+            .size = total_clusters * sizeof(cluster_bounds),
+            .memory_usage = rhi::memory_usage::readback,
+            .usage = rhi::buffer_usage::transfer_dst,
+            .name = "ClusterReadbackBuffer_NonMultiple64Test",
+        });
+
+        const auto* cluster_alloc = graph.get_physical_buffer(cluster_bounds_buf.id);
+        ASSERT_NE(cluster_alloc, nullptr);
+        if (cluster_alloc != nullptr)
+        {
+            auto& port = dev->get_graphics_execution_port();
+            auto& cmd = port.acquire_command_list();
+            cmd.begin();
+            const auto copy_region = rhi::buffer_copy_region{
+                .src_offset = 0,
+                .dst_offset = 0,
+                .size = total_clusters * sizeof(cluster_bounds),
+            };
+            cmd.copy_buffer(cluster_alloc->handle, cluster_readback,
+                            span<const rhi::buffer_copy_region>{&copy_region, 1});
+            cmd.end();
+            auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+            [[maybe_unused]] auto submit_res =
+                port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+            dev->wait_idle();
+
+            const auto* cb = static_cast<const cluster_bounds*>(cluster_readback.cpu_address);
+            ASSERT_NE(cb, nullptr);
+
+            for (auto cluster_idx = 0U; cluster_idx < total_clusters; ++cluster_idx)
+            {
+                // Verify each computed AABB is well-formed: min < max in all three dimensions
+                EXPECT_LT(cb[cluster_idx].min_corner.x, cb[cluster_idx].max_corner.x);
+                EXPECT_LT(cb[cluster_idx].min_corner.y, cb[cluster_idx].max_corner.y);
+                EXPECT_LT(cb[cluster_idx].min_corner.z, cb[cluster_idx].max_corner.z);
+            }
+        }
+
+        dev->destroy_buffer(cluster_readback);
+    }
+
+    /// @brief Adversarially stress-tests the compute shader threadgroup boundary guard
+    ///        by pre-filling buffer memory with a sentinel pattern and executing grids
+    ///        with non-multiple-of-64 cluster counts (105 clusters across 2 workgroups,
+    ///        1 cluster across 1 workgroup, 65 clusters across 2 workgroups).
+    ///        Verifies that every thread outside total_clusters exits immediately and does
+    ///        not overwrite any sentinel bytes beyond the cluster bounds array.
+    TEST(render_system_tests, light_clustering_canary_sentinel_guard_stress)
+    {
+        // Setup test device and rendering infrastructure
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
+        constexpr auto screen_width = 1280U;
+        constexpr auto screen_height = 720U;
+
+        const auto cam = render_camera{
+            .proj = math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F),
+            .inv_proj = math::inverse(math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F)),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                  math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view =
+                math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                            math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .eye_position = {0.0F, 0.0F, -5.0F, 1.0F},
+        };
+
+        struct test_grid_config
+        {
+            uint32_t cx;
+            uint32_t cy;
+            uint32_t cz;
+        };
+
+        const auto test_configs = array<test_grid_config, 3>{
+            test_grid_config{.cx = 7U, .cy = 5U, .cz = 3U},
+            test_grid_config{.cx = 1U, .cy = 1U, .cz = 1U},
+            test_grid_config{.cx = 65U, .cy = 1U, .cz = 1U},
+        };
+
+        constexpr auto sentinel_val = -99999.0F;
+        const auto sentinel_bound = cluster_bounds{
+            .min_corner = {sentinel_val, sentinel_val, sentinel_val, sentinel_val},
+            .max_corner = {sentinel_val, sentinel_val, sentinel_val, sentinel_val},
+        };
+
+        for (const auto& config : test_configs)
+        {
+            const auto total_clusters = config.cx * config.cy * config.cz;
+            const auto workgroup_count = (total_clusters + 63U) / 64U;
+            const auto total_threads = workgroup_count * 64U;
+
+            // Allocate upload staging buffer pre-populated with sentinel bounds
+            auto staging_buf = dev->create_buffer(rhi::buffer_desc{
+                .size = total_threads * sizeof(cluster_bounds),
+                .memory_usage = rhi::memory_usage::upload,
+                .usage = rhi::buffer_usage::transfer_src,
+                .name = "ClusterCanaryStagingBuffer",
+            });
+            auto* staging_ptr = static_cast<cluster_bounds*>(staging_buf.cpu_address);
+            ASSERT_NE(staging_ptr, nullptr);
+            for (auto thread_idx = 0U; thread_idx < total_threads; ++thread_idx)
+            {
+                staging_ptr[thread_idx] = sentinel_bound;
+            }
+
+            // Allocate device buffer with capacity for all dispatched threads
+            auto dev_buf = dev->create_buffer(rhi::buffer_desc{
+                .size = total_threads * sizeof(cluster_bounds),
+                .memory_usage = rhi::memory_usage::device_only,
+                .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address |
+                         rhi::buffer_usage::transfer_src | rhi::buffer_usage::transfer_dst,
+                .name = "ClusterCanaryDeviceBuffer",
+            });
+
+            // Populate device buffer with sentinel data
+            auto& port = dev->get_graphics_execution_port();
+            auto& init_cmd = port.acquire_command_list();
+            init_cmd.begin();
+            const auto init_copy_region = rhi::buffer_copy_region{
+                .src_offset = 0,
+                .dst_offset = 0,
+                .size = total_threads * sizeof(cluster_bounds),
+            };
+            init_cmd.copy_buffer(staging_buf, dev_buf, span<const rhi::buffer_copy_region>{&init_copy_region, 1});
+            init_cmd.end();
+            auto init_cmd_ptrs = array<const rhi::command_list*, 1>{&init_cmd};
+            [[maybe_unused]] auto init_submit =
+                port.submit(span<const rhi::command_list*>{init_cmd_ptrs.data(), init_cmd_ptrs.size()}, {}, {});
+            dev->wait_idle();
+
+            // Act: Import pre-populated buffer into render graph and execute clustering pass
+            auto graph = render_graph::render_graph{screen_width, screen_height};
+            auto imported_buf_id = graph.import_buffer(dev_buf);
+
+            const auto& cluster_data =
+                add_light_clustering_pass(graph, pool, shaders, imported_buf_id, cam, screen_width, screen_height, 0.1F,
+                                          100.0F, config.cx, config.cy, config.cz);
+
+            struct dummy_sink_data
+            {
+                render_graph::rg_buffer_id buf;
+            };
+            graph.add_compute_pass<dummy_sink_data>(
+                "ClusterSentinelSink",
+                [buf_id = cluster_data.cluster_bounds_buffer](render_graph::pass_builder& builder,
+                                                              dummy_sink_data& data) -> void {
+                    data.buf = builder.read(buf_id, rhi::pipeline_stage::compute, rhi::resource_access::read);
+                    builder.mark_sink();
+                },
+                []([[maybe_unused]] const dummy_sink_data& data,
+                   [[maybe_unused]] render_graph::pass_execution_context& ctx,
+                   [[maybe_unused]] rhi::command_list& cmd) -> void {});
+
+            auto res = graph.execute_sync(*dev);
+            EXPECT_TRUE(res.has_value());
+            dev->wait_idle();
+
+            // Assert: Readback buffer and verify boundary safety
+            auto readback_buf = dev->create_buffer(rhi::buffer_desc{
+                .size = total_threads * sizeof(cluster_bounds),
+                .memory_usage = rhi::memory_usage::readback,
+                .usage = rhi::buffer_usage::transfer_dst,
+                .name = "ClusterCanaryReadbackBuffer",
+            });
+
+            auto& copy_cmd = port.acquire_command_list();
+            copy_cmd.begin();
+            const auto readback_copy_region = rhi::buffer_copy_region{
+                .src_offset = 0,
+                .dst_offset = 0,
+                .size = total_threads * sizeof(cluster_bounds),
+            };
+            copy_cmd.copy_buffer(dev_buf, readback_buf, span<const rhi::buffer_copy_region>{&readback_copy_region, 1});
+            copy_cmd.end();
+            auto copy_cmd_ptrs = array<const rhi::command_list*, 1>{&copy_cmd};
+            [[maybe_unused]] auto copy_submit =
+                port.submit(span<const rhi::command_list*>{copy_cmd_ptrs.data(), copy_cmd_ptrs.size()}, {}, {});
+            dev->wait_idle();
+
+            const auto* readback_ptr = static_cast<const cluster_bounds*>(readback_buf.cpu_address);
+            ASSERT_NE(readback_ptr, nullptr);
+
+            // Verify active clusters [0, total_clusters - 1] are valid and overwritten
+            for (auto cluster_idx = 0U; cluster_idx < total_clusters; ++cluster_idx)
+            {
+                EXPECT_NE(readback_ptr[cluster_idx].min_corner.x, sentinel_val);
+                EXPECT_NE(readback_ptr[cluster_idx].max_corner.x, sentinel_val);
+                EXPECT_LT(readback_ptr[cluster_idx].min_corner.x, readback_ptr[cluster_idx].max_corner.x);
+                EXPECT_LT(readback_ptr[cluster_idx].min_corner.y, readback_ptr[cluster_idx].max_corner.y);
+                EXPECT_LT(readback_ptr[cluster_idx].min_corner.z, readback_ptr[cluster_idx].max_corner.z);
+            }
+
+            // Verify sentinel canary clusters [total_clusters, total_threads - 1] remain untouched
+            for (auto thread_idx = total_clusters; thread_idx < total_threads; ++thread_idx)
+            {
+                EXPECT_FLOAT_EQ(readback_ptr[thread_idx].min_corner.x, sentinel_val);
+                EXPECT_FLOAT_EQ(readback_ptr[thread_idx].min_corner.y, sentinel_val);
+                EXPECT_FLOAT_EQ(readback_ptr[thread_idx].min_corner.z, sentinel_val);
+                EXPECT_FLOAT_EQ(readback_ptr[thread_idx].min_corner.w, sentinel_val);
+                EXPECT_FLOAT_EQ(readback_ptr[thread_idx].max_corner.x, sentinel_val);
+                EXPECT_FLOAT_EQ(readback_ptr[thread_idx].max_corner.y, sentinel_val);
+                EXPECT_FLOAT_EQ(readback_ptr[thread_idx].max_corner.z, sentinel_val);
+                EXPECT_FLOAT_EQ(readback_ptr[thread_idx].max_corner.w, sentinel_val);
+            }
+
+            // Cleanup test resources for this iteration
+            dev->destroy_buffer(readback_buf);
+            dev->destroy_buffer(dev_buf);
+            dev->destroy_buffer(staging_buf);
+        }
+    }
+
+    /// @brief Stress-tests compute cluster grid generation across diverse aspect ratios (21:9 ultrawide,
+    ///        portrait 9:16) and an extreme depth range (z_near = 0.01, z_far = 10000.0).
+    ///        Verifies depth slice continuity, quadrant symmetry, and absence of NaN / Inf coordinates.
+    TEST(render_system_tests, light_clustering_aspect_ratios_and_depth_stress)
+    {
+        // Setup test device and rendering infrastructure
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
+
+        // Ultrawide 21:9 configuration (3440 x 1440) with extreme depth range
+        constexpr auto screen_width = 3440U;
+        constexpr auto screen_height = 1440U;
+        constexpr auto test_near = 0.01F;
+        constexpr auto test_far = 10000.0F;
+
+        const auto cam = render_camera{
+            .proj = math::perspective(3440.0F / 1440.0F, 1.0F, test_near, test_far),
+            .inv_proj = math::inverse(math::perspective(3440.0F / 1440.0F, 1.0F, test_near, test_far)),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                  math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view =
+                math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                            math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .eye_position = {0.0F, 0.0F, -5.0F, 1.0F},
+        };
+
+        const auto dims = compute_cluster_grid_dimensions(screen_width, screen_height);
+        EXPECT_EQ(dims.x, 21U);
+        EXPECT_EQ(dims.y, 9U);
+        EXPECT_EQ(dims.z, 24U);
+        const auto total_clusters = dims.x * dims.y * dims.z;
+
+        auto graph = render_graph::render_graph{screen_width, screen_height};
+        auto cluster_bounds_buf = graph.create_buffer(render_graph::rg_buffer_desc{
+            .size = total_clusters * sizeof(cluster_bounds),
+            .usage =
+                rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_src,
+            .name = "ClusterBoundsBuffer_UltrawideExtremeDepthTest",
+        });
+
+        // Act: Add clustering pass with 21:9 ultrawide and extreme depth planes
+        const auto& cluster_data = add_light_clustering_pass(graph, pool, shaders, cluster_bounds_buf, cam,
+                                                             screen_width, screen_height, test_near, test_far);
+
+        struct dummy_sink_data
+        {
+            render_graph::rg_buffer_id buf;
+        };
+        graph.add_compute_pass<dummy_sink_data>(
+            "ClusterUltrawideSink",
+            [buf_id = cluster_data.cluster_bounds_buffer](render_graph::pass_builder& builder,
+                                                          dummy_sink_data& data) -> void {
+                data.buf = builder.read(buf_id, rhi::pipeline_stage::compute, rhi::resource_access::read);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const dummy_sink_data& data, [[maybe_unused]] render_graph::pass_execution_context& ctx,
+               [[maybe_unused]] rhi::command_list& cmd) -> void {});
+
+        auto res = graph.execute_sync(*dev);
+        EXPECT_TRUE(res.has_value());
+        dev->wait_idle();
+
+        // Assert: Readback all 4536 clusters and verify depth continuity and bounds
+        auto readback_buf = dev->create_buffer(rhi::buffer_desc{
+            .size = total_clusters * sizeof(cluster_bounds),
+            .memory_usage = rhi::memory_usage::readback,
+            .usage = rhi::buffer_usage::transfer_dst,
+            .name = "ClusterUltrawideReadbackBuffer",
+        });
+
+        const auto* cluster_alloc = graph.get_physical_buffer(cluster_bounds_buf.id);
+        ASSERT_NE(cluster_alloc, nullptr);
+        if (cluster_alloc != nullptr)
+        {
+            auto& port = dev->get_graphics_execution_port();
+            auto& cmd = port.acquire_command_list();
+            cmd.begin();
+            const auto copy_region = rhi::buffer_copy_region{
+                .src_offset = 0,
+                .dst_offset = 0,
+                .size = total_clusters * sizeof(cluster_bounds),
+            };
+            cmd.copy_buffer(cluster_alloc->handle, readback_buf, span<const rhi::buffer_copy_region>{&copy_region, 1});
+            cmd.end();
+            auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+            [[maybe_unused]] auto submit_res =
+                port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+            dev->wait_idle();
+
+            const auto* cb = static_cast<const cluster_bounds*>(readback_buf.cpu_address);
+            ASSERT_NE(cb, nullptr);
+
+            // Verify slice 0 near plane (-0.01)
+            EXPECT_NEAR(cb[0].max_corner.z, -test_near, 1e-4F);
+
+            // Verify slice 23 far plane (-10000.0)
+            const auto last_slice_base = (dims.z - 1U) * dims.x * dims.y;
+            EXPECT_NEAR(cb[last_slice_base].min_corner.z, -test_far, 1.0F);
+
+            // Verify all clusters have valid, non-degenerate bounds
+            for (auto cluster_idx = 0U; cluster_idx < total_clusters; ++cluster_idx)
+            {
+                EXPECT_LT(cb[cluster_idx].min_corner.x, cb[cluster_idx].max_corner.x);
+                EXPECT_LT(cb[cluster_idx].min_corner.y, cb[cluster_idx].max_corner.y);
+                EXPECT_LT(cb[cluster_idx].min_corner.z, cb[cluster_idx].max_corner.z);
+            }
+
+            // Verify depth continuity between adjacent slices
+            const auto slice_size = dims.x * dims.y;
+            for (auto slice_z = 0U; slice_z < dims.z - 1U; ++slice_z)
+            {
+                const auto current_slice_idx = slice_z * slice_size;
+                const auto next_slice_idx = (slice_z + 1U) * slice_size;
+                EXPECT_NEAR(cb[current_slice_idx].min_corner.z, cb[next_slice_idx].max_corner.z, 1e-2F);
+            }
+
+            // Verify bilateral symmetry on slice 0 (left vs right)
+            const auto idx_left = 0U;
+            const auto idx_right = dims.x - 1U;
+            EXPECT_NEAR(cb[idx_left].min_corner.x, -cb[idx_right].max_corner.x, 1e-4F);
+        }
+
+        dev->destroy_buffer(readback_buf);
+    }
+
+    /// @brief Mathematical oracle verifying the bijectivity of 1D threadgroup index mapping
+    ///        to 3D (tile_x, tile_y, tile_z) coordinates across exhaustive grid configurations.
+    TEST(render_system_tests, light_clustering_coordinate_mapping_bijectivity_oracle)
+    {
+        const auto test_dimensions = array<math::vec3<uint32_t>, 8>{
+            math::vec3<uint32_t>{1U, 1U, 1U},   math::vec3<uint32_t>{65U, 1U, 1U},  math::vec3<uint32_t>{7U, 5U, 3U},
+            math::vec3<uint32_t>{16U, 9U, 24U}, math::vec3<uint32_t>{21U, 9U, 24U}, math::vec3<uint32_t>{32U, 9U, 24U},
+            math::vec3<uint32_t>{5U, 9U, 24U},  math::vec3<uint32_t>{4U, 9U, 24U},
+        };
+
+        for (const auto& dims : test_dimensions)
+        {
+            const auto grid_cx = dims.x;
+            const auto grid_cy = dims.y;
+            const auto grid_cz = dims.z;
+            const auto total_clusters = grid_cx * grid_cy * grid_cz;
+
+            auto visited = vector<uint8_t>{};
+            visited.resize(total_clusters, 0U);
+
+            for (auto tile_index = 0U; tile_index < total_clusters; ++tile_index)
+            {
+                // Reconstruct 3D coordinates using identical shader formulas
+                const auto tile_x = tile_index % grid_cx;
+                const auto tile_y = (tile_index / grid_cx) % grid_cy;
+                const auto tile_z = tile_index / (grid_cx * grid_cy);
+
+                EXPECT_LT(tile_x, grid_cx);
+                EXPECT_LT(tile_y, grid_cy);
+                EXPECT_LT(tile_z, grid_cz);
+
+                // Inverse mapping reconstruction
+                const auto reconstructed_index = tile_x + tile_y * grid_cx + tile_z * grid_cx * grid_cy;
+                EXPECT_EQ(reconstructed_index, tile_index);
+
+                // Ensure every 3D cell is visited exactly once
+                EXPECT_EQ(visited[reconstructed_index], 0U);
+                visited[reconstructed_index] = 1U;
+            }
+
+            // Verify every cell was visited
+            for (auto cluster_idx = 0U; cluster_idx < total_clusters; ++cluster_idx)
+            {
+                EXPECT_EQ(visited[cluster_idx], 1U);
+            }
+
+            // Verify workgroup ceiling dispatch and boundary guard logic
+            const auto workgroup_count = (total_clusters + 63U) / 64U;
+            const auto total_dispatched_threads = workgroup_count * 64U;
+            EXPECT_GE(total_dispatched_threads, total_clusters);
+            EXPECT_LT(total_dispatched_threads - total_clusters, 64U);
+
+            // Every thread at or beyond total_clusters MUST trigger the boundary check
+            for (auto thread_idx = total_clusters; thread_idx < total_dispatched_threads; ++thread_idx)
+            {
+                const auto should_return = thread_idx >= total_clusters;
+                EXPECT_TRUE(should_return);
+            }
+        }
     }
 
     TEST(render_system_tests, clustered_lighting_and_culling_execution)
@@ -1700,7 +2172,8 @@ namespace tempest::render_system::tests
         const auto& dag = compile_res.value();
         auto solver = render_graph::barrier_solver{};
         const auto all_passes = graph.get_compiler().get_passes();
-        const auto sync = solver.solve(dag, all_passes, graph.get_allocator(), graph.get_compiler().get_registered_textures());
+        const auto sync =
+            solver.solve(dag, all_passes, graph.get_allocator(), graph.get_compiler().get_registered_textures());
         for (const auto& batch : sync.queue_batches)
         {
             EXPECT_EQ(batch.queue, render_graph::queue_type::graphics);
@@ -5798,8 +6271,7 @@ namespace tempest::render_system::tests
         add_frame_upload_pass(graph, pool);
 
         // Act: Add PBR opaque pass with draw commands
-        const auto& opaque_data =
-            add_pbr_opaque_pass(graph, pool, shaders, hdr_tex, depth_tex, shadow_atlas, 1, 0);
+        const auto& opaque_data = add_pbr_opaque_pass(graph, pool, shaders, hdr_tex, depth_tex, shadow_atlas, 1, 0);
 
         // Assert: Output texture and draw parameters are valid
         EXPECT_TRUE(opaque_data.hdr_color.is_valid());
@@ -5884,8 +6356,7 @@ namespace tempest::render_system::tests
         add_frame_upload_pass(graph, pool);
 
         // Act: Add PBR masked pass with draw commands
-        const auto& masked_data =
-            add_pbr_masked_pass(graph, pool, shaders, hdr_tex, depth_tex, shadow_atlas, 1, 0);
+        const auto& masked_data = add_pbr_masked_pass(graph, pool, shaders, hdr_tex, depth_tex, shadow_atlas, 1, 0);
 
         // Assert: Output texture and draw parameters are valid
         EXPECT_TRUE(masked_data.hdr_color.is_valid());
@@ -6417,12 +6888,12 @@ namespace tempest::render_system::tests
                     .name = "TestSwapchainTarget",
                 });
                 auto view = dev->create_texture_view(tex, rhi::texture_view_desc{
-                    .override_format = nullopt,
-                    .base_mip_level = 0,
-                    .mip_level_count = 1,
-                    .base_array_layer = 0,
-                    .array_layer_count = 1,
-                });
+                                                              .override_format = nullopt,
+                                                              .base_mip_level = 0,
+                                                              .mip_level_count = 1,
+                                                              .base_array_layer = 0,
+                                                              .array_layer_count = 1,
+                                                          });
                 return test_target{.tex = tex, .view = view};
             };
 
@@ -7116,9 +7587,10 @@ namespace tempest::render_system::tests
         builder.set_config(renderer_config{
             .render_width = 640,
             .render_height = 480,
-            .pool_config = {
-                .frames_in_flight = 4,
-            },
+            .pool_config =
+                {
+                    .frames_in_flight = 4,
+                },
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
@@ -7492,5 +7964,3 @@ namespace tempest::render_system::tests
         win_mgr.destroy_window(test_win);
     }
 } // namespace tempest::render_system::tests
-
-

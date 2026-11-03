@@ -10,13 +10,20 @@
 #include <tempest/quat.hpp>
 #include <tempest/slot_map.hpp>
 #include <tempest/vec3.hpp>
-#include <tempest/vector.hpp>
 
 namespace tempest::physics
 {
+    struct character_entry
+    {
+        jolt::shim::character_virtual* character = nullptr;
+        jolt::shim::shape_handle shape = nullptr;
+    };
+
     class TEMPEST_API physics_world
     {
       public:
+        using character_record = character_entry;
+
         physics_world();
         explicit physics_world(jolt::shim::physics_system* system);
         explicit physics_world(const jolt::shim::init_desc& description);
@@ -42,8 +49,7 @@ namespace tempest::physics
       private:
         jolt::shim::physics_system* _physics_system = nullptr;
         bool _owns_physics_system = false;
-        tempest::slot_map<jolt::shim::character_virtual*> _characters;
-        tempest::vector<jolt::shim::shape_handle> _allocated_shapes;
+        tempest::slot_map<character_entry> _characters;
 
         auto _release() -> void;
     };

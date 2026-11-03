@@ -9,22 +9,36 @@ struct BuildClusterGridPushConstants {
 ConstantBuffer<BuildClusterGridPushConstants> push_constants;
 
 [shader("compute")]
-[numthreads(1, 1, 1)]
-void CSMain(uint3 work_group_id : SV_GroupID) {
-    ClusterBounds* clusters = (ClusterBounds*)push_constants.clusters_buffer_address;
+[numthreads(64, 1, 1)]
+void CSMain(uint3 dispatch_thread_id : SV_DispatchThreadID) {
+    const uint tile_index = dispatch_thread_id.x;
     ClusterGridCreateInfo create_info = push_constants.create_info;
+
+    const uint grid_cx = create_info.workgroup_count_tile_size_px.x;
+    const uint grid_cy = create_info.workgroup_count_tile_size_px.y;
+    const uint grid_cz = create_info.workgroup_count_tile_size_px.z;
+    const uint total_clusters = grid_cx * grid_cy * grid_cz;
+
+    if (tile_index >= total_clusters) {
+        return;
+    }
+
+    ClusterBounds* clusters = (ClusterBounds*)push_constants.clusters_buffer_address;
+
+    const uint tile_x = tile_index % grid_cx;
+    const uint tile_y = (tile_index / grid_cx) % grid_cy;
+    const uint tile_z = tile_index / (grid_cx * grid_cy);
 
     const float3 eye_position_view = float3(0.0);
     const float w = create_info.screen_bounds.x;
     const float h = create_info.screen_bounds.y;
-    const float cx = float(create_info.workgroup_count_tile_size_px.x);
-    const float cy = float(create_info.workgroup_count_tile_size_px.y);
-    const uint tile_index = work_group_id.x + work_group_id.y * create_info.workgroup_count_tile_size_px.x + work_group_id.z * create_info.workgroup_count_tile_size_px.x * create_info.workgroup_count_tile_size_px.y;
+    const float cx = float(grid_cx);
+    const float cy = float(grid_cy);
 
-    const float x0 = (float(work_group_id.x) / cx) * w;
-    const float x1 = (float(work_group_id.x + 1) / cx) * w;
-    const float y0 = (float(work_group_id.y) / cy) * h;
-    const float y1 = (float(work_group_id.y + 1) / cy) * h;
+    const float x0 = (float(tile_x) / cx) * w;
+    const float x1 = (float(tile_x + 1) / cx) * w;
+    const float y0 = (float(tile_y) / cy) * h;
+    const float y1 = (float(tile_y + 1) / cy) * h;
 
     float3 p0_view = screen_to_view(float4(x0, y0, 1.0f, 1.0f), create_info);
     float3 p1_view = screen_to_view(float4(x1, y0, 1.0f, 1.0f), create_info);
@@ -35,9 +49,9 @@ void CSMain(uint3 work_group_id : SV_GroupID) {
     const float z_far = create_info.screen_bounds.w;
     const float z_far_over_near = z_far / max(z_near, 1e-4);
 
-    const float workgroup_size_z = float(create_info.workgroup_count_tile_size_px.z);
-    const float tile_near = -z_near * pow(z_far_over_near, float(work_group_id.z) / workgroup_size_z);
-    const float tile_far = -z_near * pow(z_far_over_near, float(work_group_id.z + 1) / workgroup_size_z);
+    const float workgroup_size_z = float(grid_cz);
+    const float tile_near = -z_near * pow(z_far_over_near, float(tile_z) / workgroup_size_z);
+    const float tile_far = -z_near * pow(z_far_over_near, float(tile_z + 1) / workgroup_size_z);
 
     const float3 p0_near = line_intersection_to_z_plane(eye_position_view, p0_view, tile_near);
     const float3 p1_near = line_intersection_to_z_plane(eye_position_view, p1_view, tile_near);

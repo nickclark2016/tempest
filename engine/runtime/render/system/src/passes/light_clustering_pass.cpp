@@ -1,7 +1,8 @@
 #include <tempest/render_system/passes/light_clustering_pass.hpp>
 
-#include <tempest/math_utils.hpp>
 #include <tempest/algorithm.hpp>
+#include <tempest/math_utils.hpp>
+
 
 namespace tempest::render_system
 {
@@ -57,8 +58,8 @@ namespace tempest::render_system
     auto add_light_clustering_pass(render_graph::render_graph& graph, [[maybe_unused]] resource_pool& pool,
                                    shader_manager& shaders, render_graph::rg_buffer_id cluster_bounds_buf,
                                    const render_camera& cam, uint32_t screen_width, uint32_t screen_height,
-                                   float near_plane, float far_plane,
-                                   uint32_t cluster_count_x, uint32_t cluster_count_y, uint32_t cluster_count_z,
+                                   float near_plane, float far_plane, uint32_t cluster_count_x,
+                                   uint32_t cluster_count_y, uint32_t cluster_count_z,
                                    enum_mask<rhi::pipeline_statistic_flags> pipeline_stats)
         -> const light_clustering_pass_data&
     {
@@ -81,10 +82,12 @@ namespace tempest::render_system
         const auto actual_cz = grid_dims.z;
 
         grid_dims.w = (screen_width + actual_cx - 1) / actual_cx;
+        const auto total_clusters = actual_cx * actual_cy * actual_cz;
 
         const auto create_info = cluster_grid_create_info{
             .inv_projection = cam.inv_proj,
-            .screen_bounds = {static_cast<float>(screen_width), static_cast<float>(screen_height), near_plane, far_plane},
+            .screen_bounds = {static_cast<float>(screen_width), static_cast<float>(screen_height), near_plane,
+                              far_plane},
             .workgroup_count_tile_size_px = grid_dims,
         };
 
@@ -114,9 +117,9 @@ namespace tempest::render_system
                     builder.write(cluster_bounds_buf, rhi::pipeline_stage::compute, rhi::resource_access::write);
                 data.create_info = create_info;
             },
-            [&shaders, actual_cx, actual_cy, actual_cz, pipe](const light_clustering_pass_data& data,
-                                                              render_graph::pass_execution_context& ctx,
-                                                              rhi::command_list& pass_cmd) -> void {
+            [&shaders, total_clusters, pipe](const light_clustering_pass_data& data,
+                                             render_graph::pass_execution_context& ctx,
+                                             rhi::command_list& pass_cmd) -> void {
                 auto rhi_pipe = shaders.get_rhi_pipeline(pipe);
                 if (rhi_pipe.handle == 0)
                 {
@@ -135,7 +138,8 @@ namespace tempest::render_system
                 pass_cmd.push_constants(rhi::shader_stage::compute, 0,
                                         span<const byte>{reinterpret_cast<const byte*>(&constants), sizeof(constants)});
 
-                pass_cmd.dispatch(actual_cx, actual_cy, actual_cz);
+                const auto workgroup_count = (total_clusters + 63U) / 64U;
+                pass_cmd.dispatch(workgroup_count, 1, 1);
             });
     }
 } // namespace tempest::render_system

@@ -5,35 +5,6 @@
 
 namespace tempest::physics
 {
-    namespace
-    {
-        [[nodiscard]] auto to_slot_map_key(character_id char_id) -> slot_map<jolt::shim::character_virtual*>::key_type
-        {
-            if (char_id == invalid_character_id)
-            {
-                return slot_map_traits<slot_map<jolt::shim::character_virtual*>::key_type>::empty;
-            }
-#if defined(_WIN64) || defined(__x86_64__) || defined(__ppc64__) || defined(__aarch64__)
-            const auto slot_index = static_cast<uint64_t>(char_id & 0x000FFFFF);
-            const auto generation = static_cast<uint64_t>((char_id >> 20) & 0x0FFF);
-            return (generation << 32) | slot_index; // NOLINT
-#else
-            return char_id;
-#endif
-        }
-
-        [[nodiscard]] auto to_character_id(slot_map<jolt::shim::character_virtual*>::key_type key) -> character_id
-        {
-#if defined(_WIN64) || defined(__x86_64__) || defined(__ppc64__) || defined(__aarch64__)
-            const auto slot_index = static_cast<uint32_t>(key & 0x000FFFFF);
-            const auto generation = static_cast<uint32_t>((key >> 32) & 0x0FFF);
-            return (generation << 20) | slot_index; // NOLINT
-#else
-            return key;
-#endif
-        }
-    } // namespace
-
     physics_world::physics_world() : _owns_physics_system(true)
     {
         auto description = jolt::shim::init_desc{};
@@ -57,11 +28,10 @@ namespace tempest::physics
     }
 
     physics_world::physics_world(physics_world&& other) noexcept
-        : _physics_system(other._physics_system), _owns_physics_system(other._owns_physics_system),
-          _characters(tempest::move(other._characters)), _allocated_shapes(tempest::move(other._allocated_shapes))
+        : _physics_system(tempest::exchange(other._physics_system, nullptr)),
+          _owns_physics_system(tempest::exchange(other._owns_physics_system, false)),
+          _characters(tempest::move(other._characters))
     {
-        other._physics_system = nullptr;
-        other._owns_physics_system = false;
     }
 
     physics_world::~physics_world()
@@ -81,7 +51,6 @@ namespace tempest::physics
         _physics_system = tempest::exchange(other._physics_system, nullptr);
         _owns_physics_system = tempest::exchange(other._owns_physics_system, false);
         _characters = tempest::move(other._characters);
-        _allocated_shapes = tempest::move(other._allocated_shapes);
 
         return *this;
     }
@@ -94,9 +63,13 @@ namespace tempest::physics
             return invalid_character_id;
         }
 
-        const auto half_height = tempest::max(0.0F, (config.character_height - (2.0F * config.character_radius)) * 0.5F);
+        const auto half_height =
+            tempest::max(0.0F, (config.character_height - (2.0F * config.character_radius)) * 0.5F);
         auto* const shape = _physics_system->create_capsule_shape(half_height, config.character_radius);
-        _allocated_shapes.push_back(shape);
+        if (shape == nullptr)
+        {
+            return invalid_character_id;
+        }
 
         const auto description = jolt::shim::character_virtual_desc{
             .shape = shape,
@@ -140,38 +113,56 @@ namespace tempest::physics
             .callbacks = {},
         };
 
-        auto* character = _physics_system->create_character_virtual(description);
+        auto* const character = _physics_system->create_character_virtual(description);
         if (character == nullptr)
         {
+            _physics_system->destroy_shape(shape);
             return invalid_character_id;
         }
 
-        const auto key = _characters.insert(character);
-        return to_character_id(key);
+        return _characters.insert(character_entry{
+            .character = character,
+            .shape = shape,
+        });
     }
 
-    auto physics_world::despawn_character(character_id id) -> void
+    auto physics_world::despawn_character(character_id char_id) -> void
     {
-        const auto key = to_slot_map_key(id);
-        const auto it = _characters.find(key);
-        if (it != _characters.end())
+        if (char_id == invalid_character_id)
         {
-            auto* character = *it;
-            if (character != nullptr && _physics_system != nullptr)
+            return;
+        }
+
+        const auto character_iterator = _characters.find(char_id);
+        if (character_iterator != _characters.end())
+        {
+            const auto entry = *character_iterator;
+            if (_physics_system != nullptr)
             {
-                _physics_system->destroy_character_virtual(character);
+                if (entry.character != nullptr)
+                {
+                    _physics_system->destroy_character_virtual(entry.character);
+                }
+                if (entry.shape != nullptr)
+                {
+                    _physics_system->destroy_shape(entry.shape);
+                }
             }
-            _characters.erase(key);
+            _characters.erase(char_id);
         }
     }
 
-    auto physics_world::get_character(character_id id) const -> jolt::shim::character_virtual*
+    auto physics_world::get_character(character_id char_id) const -> jolt::shim::character_virtual*
     {
-        const auto key = to_slot_map_key(id);
-        const auto it = _characters.find(key);
-        if (it != _characters.end())
+        if (char_id == invalid_character_id)
         {
-            return *it;
+            return nullptr;
+        }
+
+        const auto character_iterator = _characters.find(char_id);
+        if (character_iterator != _characters.end())
+        {
+            return character_iterator->character;
         }
         return nullptr;
     }
@@ -196,25 +187,27 @@ namespace tempest::physics
 
     auto physics_world::_release() -> void
     {
-        for (auto* character : _characters)
+        for (const auto& entry : _characters)
         {
-            if (character != nullptr && _physics_system != nullptr)
+            if (_physics_system != nullptr)
             {
-                _physics_system->destroy_character_virtual(character);
+                if (entry.character != nullptr)
+                {
+                    _physics_system->destroy_character_virtual(entry.character);
+                }
+                if (entry.shape != nullptr)
+                {
+                    _physics_system->destroy_shape(entry.shape);
+                }
             }
         }
         _characters.clear();
 
-        if (_physics_system != nullptr)
+        if (_owns_physics_system && _physics_system != nullptr)
         {
-            for (auto* shape : _allocated_shapes)
-            {
-                if (shape != nullptr)
-                {
-                    _physics_system->destroy_shape(shape);
-                }
-            }
-            _allocated_shapes.clear();
+            jolt::shim::destroy_physics_system(_physics_system);
         }
+        _physics_system = nullptr;
+        _owns_physics_system = false;
     }
 } // namespace tempest::physics

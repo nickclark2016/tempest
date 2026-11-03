@@ -243,8 +243,7 @@ namespace tempest
     template <typename T, typename Allocator>
     slot_map<T, Allocator>::slot_map(slot_map&& other) noexcept
         : _elements{tempest::move(other._elements)},
-          _first_free_element{tempest::exchange(other._first_free_element, 0)},
-          _size{tempest::exchange(other._size, 0)}
+          _first_free_element{tempest::exchange(other._first_free_element, 0)}, _size{tempest::exchange(other._size, 0)}
     {
     }
 
@@ -477,6 +476,12 @@ namespace tempest
     slot_map<T, Allocator>::const_iterator slot_map<T, Allocator>::find(key_type key) const noexcept
     {
         const auto key_index = get_slot_map_key_id(key);
+
+        if (key_index >= _elements.size() * key_block::value_count)
+        {
+            return end();
+        }
+
         auto& block = _get_block(key);
         auto block_index = key_index % key_block::value_count;
 
