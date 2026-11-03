@@ -242,10 +242,10 @@ namespace tempest
 
     template <typename T, typename Allocator>
     slot_map<T, Allocator>::slot_map(slot_map&& other) noexcept
-        : _elements(tempest::move(other._elements)), _first_free_element(other._first_free_element), _size(other._size)
+        : _elements{tempest::move(other._elements)},
+          _first_free_element{tempest::exchange(other._first_free_element, 0)},
+          _size{tempest::exchange(other._size, 0)}
     {
-        other._first_free_element = 0;
-        other._size = 0;
     }
 
     template <typename T, typename Allocator>
@@ -257,39 +257,41 @@ namespace tempest
     template <typename T, typename Allocator>
     slot_map<T, Allocator>& slot_map<T, Allocator>::operator=(const slot_map<T, Allocator>& rhs)
     {
-        if (this != &rhs)
+        if (this == &rhs)
         {
-            _release();
+            return *this;
+        }
 
-            _grow_to(rhs._elements.capacity());
+        _release();
 
-            for (size_t block_idx = 0; block_idx < rhs._elements.size(); ++block_idx)
+        _grow_to(rhs._elements.capacity());
+
+        for (size_t block_idx = 0; block_idx < rhs._elements.size(); ++block_idx)
+        {
+            auto& other_block = rhs._elements[block_idx];
+            auto& this_block = _elements[block_idx];
+
+            for (size_t i = 0; i < key_block::element_count; ++i)
             {
-                auto& other_block = rhs._elements[block_idx];
-                auto& this_block = _elements[block_idx];
-
-                for (size_t i = 0; i < key_block::element_count; ++i)
-                {
-                    this_block.skip_field[i] = other_block.skip_field[i];
-                }
-
-                for (size_t i = 0; i < key_block::value_count; ++i)
-                {
-                    const auto skip_list = other_block.skip_field[i / key_block::skip_field_bits_per_element];
-                    const auto skip_entry = skip_list & (1 << (i % key_block::skip_field_bits_per_element));
-
-                    this_block.key_table[i] = other_block.key_table[i];
-
-                    if (skip_entry)
-                    {
-                        _insert_at(other_block.key_table[i], other_block.typed_ptr()[i]);
-                    }
-                }
+                this_block.skip_field[i] = other_block.skip_field[i];
             }
 
-            _first_free_element = rhs._first_free_element;
-            _size = rhs._size;
+            for (size_t i = 0; i < key_block::value_count; ++i)
+            {
+                const auto skip_list = other_block.skip_field[i / key_block::skip_field_bits_per_element];
+                const auto skip_entry = skip_list & (1 << (i % key_block::skip_field_bits_per_element));
+
+                this_block.key_table[i] = other_block.key_table[i];
+
+                if (skip_entry)
+                {
+                    _insert_at(other_block.key_table[i], other_block.typed_ptr()[i]);
+                }
+            }
         }
+
+        _first_free_element = rhs._first_free_element;
+        _size = rhs._size;
 
         return *this;
     }
@@ -297,17 +299,16 @@ namespace tempest
     template <typename T, typename Allocator>
     slot_map<T, Allocator>& slot_map<T, Allocator>::operator=(slot_map<T, Allocator>&& rhs) noexcept
     {
-        if (this != &rhs)
+        if (this == &rhs)
         {
-            _release();
-
-            _elements = tempest::move(rhs._elements);
-            _first_free_element = rhs._first_free_element;
-            _size = rhs._size;
-
-            rhs._first_free_element = 0;
-            rhs._size = 0;
+            return *this;
         }
+
+        _release();
+
+        _elements = tempest::move(rhs._elements);
+        _first_free_element = tempest::exchange(rhs._first_free_element, 0);
+        _size = tempest::exchange(rhs._size, 0);
 
         return *this;
     }

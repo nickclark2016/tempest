@@ -24,11 +24,10 @@ namespace tempest
     }
 
     stack_allocator::stack_allocator(stack_allocator&& other) noexcept
-        : _buffer{other._buffer}, _capacity{other._capacity}, _allocated_bytes{other._allocated_bytes}
+        : _buffer{tempest::exchange(other._buffer, nullptr)},
+          _capacity{tempest::exchange(other._capacity, 0)},
+          _allocated_bytes{tempest::exchange(other._allocated_bytes, 0)}
     {
-        other._buffer = nullptr;
-        other._allocated_bytes = 0;
-        other._capacity = 0;
     }
 
     stack_allocator::~stack_allocator()
@@ -38,16 +37,16 @@ namespace tempest
 
     auto stack_allocator::operator=(stack_allocator&& rhs) noexcept -> stack_allocator&
     {
-        if (&rhs == this) [[unlikely]]
+        if (this == &rhs) [[unlikely]]
         {
             return *this;
         }
 
         release();
 
-        tempest::swap(_buffer, rhs._buffer);
-        tempest::swap(_capacity, rhs._capacity);
-        tempest::swap(_allocated_bytes, rhs._allocated_bytes);
+        _buffer = tempest::exchange(rhs._buffer, nullptr);
+        _capacity = tempest::exchange(rhs._capacity, 0);
+        _allocated_bytes = tempest::exchange(rhs._allocated_bytes, 0);
 
         return *this;
     }
@@ -72,11 +71,16 @@ namespace tempest
 
     void stack_allocator::deallocate(void* ptr)
     {
-        assert(ptr > _buffer);                    // Tried to release memory from before allocated region
-        assert(ptr < _buffer + _capacity);        // Tried to release memory from past allocated region
-        assert(ptr < _buffer + _allocated_bytes); // Tried to release unallocated memory inside the allocated region
+        if (ptr == nullptr)
+        {
+            return;
+        }
 
-        const auto size_at_ptr = reinterpret_cast<byte*>(ptr) - _buffer;
+        assert(ptr >= _buffer);
+        assert(ptr < _buffer + _capacity);
+        assert(ptr <= _buffer + _allocated_bytes);
+
+        const auto size_at_ptr = static_cast<size_t>(reinterpret_cast<byte*>(ptr) - _buffer);
         _allocated_bytes = size_at_ptr;
     }
 
@@ -87,8 +91,7 @@ namespace tempest
 
     void stack_allocator::free_marker(size_t marker)
     {
-        const auto diff = marker - _allocated_bytes;
-        if (diff > 0)
+        if (marker <= _allocated_bytes)
         {
             _allocated_bytes = marker;
         }
@@ -117,13 +120,11 @@ namespace tempest
     }
 
     heap_allocator::heap_allocator(heap_allocator&& other) noexcept
-        : _tlsf_handle{other._tlsf_handle}, _memory{other._memory}, _allocated_size{other._allocated_size},
-          _max_size{other._max_size}
+        : _tlsf_handle{tempest::exchange(other._tlsf_handle, nullptr)},
+          _memory{tempest::exchange(other._memory, nullptr)},
+          _allocated_size{tempest::exchange(other._allocated_size, 0)},
+          _max_size{tempest::exchange(other._max_size, 0)}
     {
-        other._tlsf_handle = nullptr;
-        other._memory = nullptr;
-        other._allocated_size = 0;
-        other._max_size = 0;
     }
 
     heap_allocator::~heap_allocator()
@@ -133,17 +134,17 @@ namespace tempest
 
     auto heap_allocator::operator=(heap_allocator&& rhs) noexcept -> heap_allocator&
     {
-        if (&rhs == this) [[unlikely]]
+        if (this == &rhs) [[unlikely]]
         {
             return *this;
         }
 
         _release();
 
-        tempest::swap(_tlsf_handle, rhs._tlsf_handle);
-        tempest::swap(_memory, rhs._memory);
-        tempest::swap(_allocated_size, rhs._allocated_size);
-        tempest::swap(_max_size, rhs._max_size);
+        _tlsf_handle = tempest::exchange(rhs._tlsf_handle, nullptr);
+        _memory = tempest::exchange(rhs._memory, nullptr);
+        _allocated_size = tempest::exchange(rhs._allocated_size, 0);
+        _max_size = tempest::exchange(rhs._max_size, 0);
 
         return *this;
     }

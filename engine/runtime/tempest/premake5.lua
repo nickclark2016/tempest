@@ -93,7 +93,6 @@ scoped.project('tempest', function()
             'rhi-vk',
             'scene',
             'serialization',
-            'units',
         }
     end)
 
@@ -136,7 +135,6 @@ scoped.project('tempest', function()
         'rhi-vk',
         'scene',
         'serialization',
-        'units',
 
         'miniz',
         'yyjson',
@@ -178,7 +176,6 @@ scoped.project('tempest', function()
             'rhi-vk:includedirs',
             'scene:includedirs',
             'serialization:includedirs',
-            'units:includedirs',
         }
 
         dependson {

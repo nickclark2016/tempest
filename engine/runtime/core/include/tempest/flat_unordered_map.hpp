@@ -284,15 +284,15 @@ namespace tempest
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     inline flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::flat_unordered_map(flat_unordered_map&& other) noexcept
-        : _metadata_pages(other._metadata_pages), _data_pages(other._data_pages), _size(other._size),
-          _page_count(other._page_count), _metadata_alloc{tempest::move(other._metadata_alloc)},
-          _alloc{tempest::move(other._alloc)}, _hash{tempest::move(other._hash)},
+        : _metadata_pages{tempest::exchange(other._metadata_pages, nullptr)},
+          _data_pages{tempest::exchange(other._data_pages, nullptr)},
+          _size{tempest::exchange(other._size, 0)},
+          _page_count{tempest::exchange(other._page_count, 0)},
+          _metadata_alloc{tempest::move(other._metadata_alloc)},
+          _alloc{tempest::move(other._alloc)},
+          _hash{tempest::move(other._hash)},
           _metadata_strategy{tempest::move(other._metadata_strategy)}
     {
-        other._metadata_pages = nullptr;
-        other._data_pages = nullptr;
-        other._size = 0;
-        other._page_count = 0;
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
@@ -357,15 +357,10 @@ namespace tempest
         _hash = tempest::move(other._hash);
         _metadata_strategy = tempest::move(other._metadata_strategy);
 
-        _metadata_pages = other._metadata_pages;
-        _data_pages = other._data_pages;
-        _size = other._size;
-        _page_count = other._page_count;
-
-        other._metadata_pages = nullptr;
-        other._data_pages = nullptr;
-        other._size = 0;
-        other._page_count = 0;
+        _metadata_pages = tempest::exchange(other._metadata_pages, nullptr);
+        _data_pages = tempest::exchange(other._data_pages, nullptr);
+        _size = tempest::exchange(other._size, 0);
+        _page_count = tempest::exchange(other._page_count, 0);
 
         return *this;
     }

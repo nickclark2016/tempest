@@ -1,4 +1,6 @@
 #include <tempest/shared_library.hpp>
+#include <tempest/inplace_vector.hpp>
+#include <tempest/string.hpp>
 
 #if defined(TEMPEST_PLATFORM_WINDOWS)
 #define NOMINMAX
@@ -12,6 +14,34 @@
 
 namespace tempest
 {
+    namespace
+    {
+        static constexpr size_t stack_symbol_capacity = 256;
+
+        template <typename Invocation>
+        auto with_null_terminated_symbol(string_view function_name, Invocation&& invocation)
+        {
+            if (function_name.empty())
+            {
+                return invocation("");
+            }
+
+            if (function_name.size() < stack_symbol_capacity)
+            {
+                auto buffer = inplace_vector<char, stack_symbol_capacity>{};
+                for (const auto character : function_name)
+                {
+                    buffer.push_back(character);
+                }
+                buffer.push_back('\0');
+                return invocation(buffer.data());
+            }
+
+            const auto name_str = string{function_name};
+            return invocation(name_str.c_str());
+        }
+    } // namespace
+
 #ifdef TEMPEST_PLATFORM_WINDOWS
     struct shared_library::_impl
     {
@@ -61,23 +91,25 @@ namespace tempest
 
         auto load_function(HMODULE lib_handle, string_view function_name) -> expected<void*, shared_library::function_error>
         {
-            const auto existing_error = GetLastError();
-            SetLastError(ERROR_SUCCESS);
+            return with_null_terminated_symbol(function_name, [&](const char* const symbol_name) -> expected<void*, shared_library::function_error> {
+                const auto existing_error = GetLastError();
+                SetLastError(ERROR_SUCCESS);
 
-            auto* const func_handle = GetProcAddress(lib_handle, function_name.data());
-            if (func_handle == nullptr)
-            {
-                const auto load_error = GetLastError();
-                const auto error_code = load_error == ERROR_PROC_NOT_FOUND
-                                            ? shared_library::function_error::function_not_found
-                                            : shared_library::function_error::unknown_error;
+                auto* const func_handle = GetProcAddress(lib_handle, symbol_name);
+                if (func_handle == nullptr)
+                {
+                    const auto load_error = GetLastError();
+                    const auto error_code = load_error == ERROR_PROC_NOT_FOUND
+                                                ? shared_library::function_error::function_not_found
+                                                : shared_library::function_error::unknown_error;
+
+                    SetLastError(existing_error);
+                    return unexpected(error_code);
+                }
 
                 SetLastError(existing_error);
-                return unexpected(error_code);
-            }
-
-            SetLastError(existing_error);
-            return reinterpret_cast<void*>(func_handle);
+                return reinterpret_cast<void*>(func_handle);
+            });
         }
     } // namespace
 #elif defined(TEMPEST_PLATFORM_LINUX) || defined(TEMPEST_PLATFORM_MACOS)
@@ -129,28 +161,30 @@ namespace tempest
 
         auto load_function(void* lib_handle, string_view function_name) -> expected<void*, shared_library::function_error>
         {
-            dlerror(); // Clear any existing error
+            return with_null_terminated_symbol(function_name, [&](const char* const symbol_name) -> expected<void*, shared_library::function_error> {
+                dlerror(); // Clear any existing error
 
-            auto* const func_handle = dlsym(lib_handle, function_name.data());
-            if (func_handle == nullptr)
-            {
-                const auto* error_msg = dlerror();
-                shared_library::function_error error_code = shared_library::function_error::unknown_error;
-
-                if (error_msg != nullptr)
+                auto* const func_handle = dlsym(lib_handle, symbol_name);
+                if (func_handle == nullptr)
                 {
-                    auto error_view = string_view(error_msg);
-                    if (search(error_view, "undefined symbol") != error_view.end() ||
-                        search(error_view, "symbol not found") != error_view.end())
+                    const auto* const error_msg = dlerror();
+                    auto error_code = shared_library::function_error::unknown_error;
+
+                    if (error_msg != nullptr)
                     {
-                        error_code = shared_library::function_error::function_not_found;
+                        const auto error_view = string_view{error_msg};
+                        if (search(error_view, "undefined symbol") != error_view.end() ||
+                            search(error_view, "symbol not found") != error_view.end())
+                        {
+                            error_code = shared_library::function_error::function_not_found;
+                        }
                     }
+
+                    return unexpected(error_code);
                 }
 
-                return unexpected(error_code);
-            }
-
-            return func_handle;
+                return func_handle;
+            });
         }
     }
 #endif
@@ -179,7 +213,7 @@ namespace tempest
             return unexpected(result.error());
         }
 
-        shared_library lib;
+        auto lib = shared_library{};
         lib._pimpl = make_unique<_impl>();
         lib._pimpl->handle = *result;
         return lib;

@@ -325,30 +325,31 @@ namespace tempest
         requires is_copy_constructible_v<T> && is_copy_constructible_v<E> && is_copy_assignable_v<T> &&
                  is_copy_assignable_v<E> && (is_nothrow_move_constructible_v<T> || !is_nothrow_move_constructible_v<T>)
     {
-        if (this != tempest::addressof(other))
+        if (this == tempest::addressof(other))
         {
-            if (_has_value && other._has_value)
-            {
-                _value = other._value;
-            }
-            else if (!_has_value && !other._has_value)
-            {
-                _error = other._error;
-            }
-            else if (_has_value && !other._has_value)
-            {
-                tempest::destroy_at(&_value);
-                (void)tempest::construct_at(&_error, other._error);
-            }
-            else
-            {
-                tempest::destroy_at(&_error);
-                (void)tempest::construct_at(&_value, other._value);
-            }
-
-            _has_value = other._has_value;
+            return *this;
         }
 
+        if (_has_value && other._has_value)
+        {
+            _value = other._value;
+        }
+        else if (!_has_value && !other._has_value)
+        {
+            _error = other._error;
+        }
+        else if (_has_value && !other._has_value)
+        {
+            tempest::destroy_at(&_value);
+            [[maybe_unused]] const auto* constructed_err = tempest::construct_at(&_error, other._error);
+        }
+        else
+        {
+            tempest::destroy_at(&_error);
+            [[maybe_unused]] const auto* constructed_val = tempest::construct_at(&_value, other._value);
+        }
+
+        _has_value = other._has_value;
         return *this;
     }
 
@@ -359,30 +360,33 @@ namespace tempest
         requires is_move_constructible_v<T> && is_move_constructible_v<E> && is_move_assignable_v<T> &&
                  is_move_assignable_v<E> && (is_nothrow_move_constructible_v<T> || !is_nothrow_move_constructible_v<T>)
     {
-        if (this != tempest::addressof(other))
+        if (this == tempest::addressof(other))
         {
-            if (_has_value && other._has_value)
-            {
-                _value = tempest::move(other._value);
-            }
-            else if (!_has_value && !other._has_value)
-            {
-                _error = tempest::move(other._error);
-            }
-            else if (_has_value && !other._has_value)
-            {
-                tempest::destroy_at(&_value);
-                (void)tempest::construct_at(&_error, tempest::move(other._error));
-            }
-            else
-            {
-                tempest::destroy_at(&_error);
-                (void)tempest::construct_at(&_value, tempest::move(other._value));
-            }
-
-            _has_value = other._has_value;
+            return *this;
         }
 
+        if (_has_value && other._has_value)
+        {
+            _value = tempest::move(other._value);
+        }
+        else if (!_has_value && !other._has_value)
+        {
+            _error = tempest::move(other._error);
+        }
+        else if (_has_value && !other._has_value)
+        {
+            tempest::destroy_at(&_value);
+            [[maybe_unused]] const auto* constructed_err =
+                tempest::construct_at(&_error, tempest::move(other._error));
+        }
+        else
+        {
+            tempest::destroy_at(&_error);
+            [[maybe_unused]] const auto* constructed_val =
+                tempest::construct_at(&_value, tempest::move(other._value));
+        }
+
+        _has_value = other._has_value;
         return *this;
     }
 

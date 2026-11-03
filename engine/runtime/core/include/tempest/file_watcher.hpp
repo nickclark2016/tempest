@@ -54,18 +54,25 @@ namespace tempest
 
         mpsc_queue(mpsc_queue&& other) noexcept
         {
-            lock_guard<mutex> lock{other._mutex};
+            const auto lock = lock_guard{other._mutex};
             _items = tempest::move(other._items);
         }
 
         auto operator=(mpsc_queue&& other) noexcept -> mpsc_queue&
         {
-            if (this != &other)
+            if (this == &other)
             {
-                lock_guard<mutex> lock_this{_mutex};
-                lock_guard<mutex> lock_other{other._mutex};
-                _items = tempest::move(other._items);
+                return *this;
             }
+
+            auto* const first_mutex = &_mutex < &other._mutex ? &_mutex : &other._mutex;
+            auto* const second_mutex = &_mutex < &other._mutex ? &other._mutex : &_mutex;
+
+            const auto first_lock = lock_guard{*first_mutex};
+            const auto second_lock = lock_guard{*second_mutex};
+
+            _items = tempest::move(other._items);
+
             return *this;
         }
 

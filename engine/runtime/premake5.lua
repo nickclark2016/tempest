@@ -15,5 +15,4 @@ scoped.group('Runtime', function()
     include 'serialization/premake5.lua'
     include 'server/premake5.lua'
     include 'tempest/premake5.lua'
-    include 'units/premake5.lua'
 end)

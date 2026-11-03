@@ -559,22 +559,23 @@ namespace tempest
         }
     }
 
-    json_document::json_document(json_document&& other) noexcept : _doc{other._doc}
+    json_document::json_document(json_document&& other) noexcept
+        : _doc{tempest::exchange(other._doc, nullptr)}
     {
-        other._doc = nullptr;
     }
 
     auto json_document::operator=(json_document&& other) noexcept -> json_document&
     {
-        if (this != &other)
+        if (this == &other)
         {
-            if (_doc != nullptr)
-            {
-                yyjson_doc_free(cast_doc(_doc));
-            }
-            _doc = other._doc;
-            other._doc = nullptr;
+            return *this;
         }
+
+        if (_doc != nullptr)
+        {
+            yyjson_doc_free(cast_doc(_doc));
+        }
+        _doc = tempest::exchange(other._doc, nullptr);
         return *this;
     }
 

@@ -637,19 +637,21 @@ namespace tempest
     template <typename... Ts>
     inline constexpr variant<Ts...>& variant<Ts...>::operator=(const variant& other)
     {
-        if (this != &other)
+        if (this == &other)
         {
-            if (_index == other._index)
-            {
-                detail::variant_helper::copy_assign<0, Ts...>(other._index, &other._storage.data, &_storage.data);
-            }
-            else
-            {
-                detail::variant_helper::destroy<0, Ts...>(_index, &_storage.data);
-                detail::variant_helper::copy_construct<0, Ts...>(other._index, &other._storage.data, &_storage.data,
-                                                                 detail::type_list<Ts...>{});
-                _index = other._index;
-            }
+            return *this;
+        }
+
+        if (_index == other._index)
+        {
+            detail::variant_helper::copy_assign<0, Ts...>(other._index, &other._storage.data, &_storage.data);
+        }
+        else
+        {
+            detail::variant_helper::destroy<0, Ts...>(_index, &_storage.data);
+            detail::variant_helper::copy_construct<0, Ts...>(other._index, &other._storage.data, &_storage.data,
+                                                             detail::type_list<Ts...>{});
+            _index = other._index;
         }
 
         return *this;
@@ -658,19 +660,21 @@ namespace tempest
     template <typename... Ts>
     inline constexpr variant<Ts...>& variant<Ts...>::operator=(variant&& other) noexcept
     {
-        if (this != &other)
+        if (this == &other)
         {
-            if (_index == other._index)
-            {
-                detail::variant_helper::move_assign<0, Ts...>(other._index, &other._storage.data, &_storage.data);
-            }
-            else
-            {
-                detail::variant_helper::destroy<0, Ts...>(_index, &_storage.data);
-                detail::variant_helper::move_construct<0, Ts...>(other._index, &other._storage.data, &_storage.data,
-                                                                 detail::type_list<Ts...>{});
-                _index = other._index;
-            }
+            return *this;
+        }
+
+        if (_index == other._index)
+        {
+            detail::variant_helper::move_assign<0, Ts...>(other._index, &other._storage.data, &_storage.data);
+        }
+        else
+        {
+            detail::variant_helper::destroy<0, Ts...>(_index, &_storage.data);
+            detail::variant_helper::move_construct<0, Ts...>(other._index, &other._storage.data, &_storage.data,
+                                                             detail::type_list<Ts...>{});
+            _index = other._index;
         }
 
         return *this;

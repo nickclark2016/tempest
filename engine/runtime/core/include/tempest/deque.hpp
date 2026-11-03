@@ -160,47 +160,45 @@ namespace tempest
         deque& operator=(const deque& other)
             requires is_copy_constructible_v<T> && is_copy_assignable_v<T>
         {
-            if (this != &other)
+            if (this == &other)
             {
-                clear();
-                for (auto idx = size_type{0}; idx < other.size(); ++idx)
-                {
-                    push_back(other[idx]);
-                }
+                return *this;
+            }
+
+            clear();
+            for (auto idx = size_type{0}; idx < other.size(); ++idx)
+            {
+                push_back(other[idx]);
             }
             return *this;
         }
 
         deque(deque&& other) noexcept
-            : _map(other._map), _map_cap(other._map_cap), _head_block(other._head_block),
-              _head_offset(other._head_offset), _size(other._size), _alloc(tempest::move(other._alloc))
+            : _map{tempest::exchange(other._map, nullptr)},
+              _map_cap{tempest::exchange(other._map_cap, 0)},
+              _head_block{tempest::exchange(other._head_block, 0)},
+              _head_offset{tempest::exchange(other._head_offset, 0)},
+              _size{tempest::exchange(other._size, 0)},
+              _alloc{tempest::move(other._alloc)}
         {
-            other._map = nullptr;
-            other._map_cap = 0;
-            other._head_block = 0;
-            other._head_offset = 0;
-            other._size = 0;
         }
 
         deque& operator=(deque&& other) noexcept
         {
-            if (this != &other)
+            if (this == &other)
             {
-                clear();
-                delete_map();
-                _map = other._map;
-                _map_cap = other._map_cap;
-                _head_block = other._head_block;
-                _head_offset = other._head_offset;
-                _size = other._size;
-                _alloc = tempest::move(other._alloc);
-
-                other._map = nullptr;
-                other._map_cap = 0;
-                other._head_block = 0;
-                other._head_offset = 0;
-                other._size = 0;
+                return *this;
             }
+
+            clear();
+            delete_map();
+            _map = tempest::exchange(other._map, nullptr);
+            _map_cap = tempest::exchange(other._map_cap, 0);
+            _head_block = tempest::exchange(other._head_block, 0);
+            _head_offset = tempest::exchange(other._head_offset, 0);
+            _size = tempest::exchange(other._size, 0);
+            _alloc = tempest::move(other._alloc);
+
             return *this;
         }
 

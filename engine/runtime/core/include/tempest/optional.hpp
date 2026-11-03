@@ -386,22 +386,24 @@ namespace tempest
     template <typename T>
     inline constexpr optional<T>& optional<T>::operator=(const optional& other)
     {
-        if (this != &other)
+        if (this == &other)
         {
-            if (has_value())
-            {
-                tempest::destroy_at(&_data.value);
-            }
+            return *this;
+        }
 
-            if (other.has_value())
-            {
-                (void)tempest::construct_at(&_data.value, other._data.value);
-                _has_value = true;
-            }
-            else
-            {
-                _has_value = false;
-            }
+        if (has_value())
+        {
+            tempest::destroy_at(&_data.value);
+        }
+
+        if (other.has_value())
+        {
+            [[maybe_unused]] const auto* constructed_val = tempest::construct_at(&_data.value, other._data.value);
+            _has_value = true;
+        }
+        else
+        {
+            _has_value = false;
         }
 
         return *this;
@@ -411,23 +413,26 @@ namespace tempest
     inline constexpr optional<T>& optional<T>::operator=(optional&& other) noexcept(
         is_nothrow_move_assignable_v<T> && is_nothrow_move_constructible_v<T> && is_nothrow_destructible_v<T>)
     {
-        if (this != &other)
+        if (this == &other)
         {
-            if (has_value())
-            {
-                tempest::destroy_at(&_data.value);
-            }
+            return *this;
+        }
 
-            if (other.has_value())
-            {
-                (void)tempest::construct_at(&_data.value, tempest::move(other._data.value));
-                other.reset();
-                _has_value = true;
-            }
-            else
-            {
-                _has_value = false;
-            }
+        if (has_value())
+        {
+            tempest::destroy_at(&_data.value);
+        }
+
+        if (other.has_value())
+        {
+            [[maybe_unused]] const auto* constructed_val =
+                tempest::construct_at(&_data.value, tempest::move(other._data.value));
+            other.reset();
+            _has_value = true;
+        }
+        else
+        {
+            _has_value = false;
         }
 
         return *this;
@@ -874,11 +879,12 @@ namespace tempest
     template <typename T>
     inline constexpr optional<T&>& optional<T&>::operator=(optional&& other) noexcept
     {
-        if (this != &other)
+        if (this == &other)
         {
-            _ref = tempest::exchange(other._ref, nullptr);
+            return *this;
         }
 
+        _ref = tempest::exchange(other._ref, nullptr);
         return *this;
     }
 

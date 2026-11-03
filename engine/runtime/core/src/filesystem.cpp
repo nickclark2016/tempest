@@ -12,10 +12,7 @@
 #else
 #include <dirent.h>
 #include <errno.h>
-#include <iconv.h>
 #include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -51,89 +48,6 @@ namespace tempest::filesystem
 
     namespace detail
     {
-        auto convert_wide_to_narrow(tempest::wstring_view wide_str) -> string
-        {
-            tempest::string result;
-
-#ifdef _WIN32
-            // Use WideCharToMultiByte for Windows
-            // Use ACP (ANSI Code Page) for conversion
-            const auto size_needed = WideCharToMultiByte(CP_UTF8, 0, wide_str.data(), static_cast<int>(wide_str.size()),
-                                                         nullptr, 0, nullptr, nullptr);
-            result.resize(static_cast<size_t>(size_needed), L'\0');
-            WideCharToMultiByte(CP_UTF8, 0, wide_str.data(), static_cast<int>(wide_str.size()), result.data(),
-                                static_cast<int>(size_needed), nullptr, nullptr);
-#else
-            auto conv_desc = iconv_open("UTF-8", "WCHAR_T");
-            if (conv_desc == bit_cast<iconv_t>(-1ll))
-            {
-                perror("iconv_open failed");
-                return result;
-            }
-
-            auto in_bytes = wide_str.size() * sizeof(wchar_t);
-            const auto out_bytes = in_bytes * 4 + 1; // UTF-8 can take up to 4 bytes per character
-            result.resize(out_bytes, L'\0');
-
-            char* in_buf = const_cast<char*>(reinterpret_cast<const char*>(wide_str.data()));
-            char* out_buf = result.data();
-
-            auto bytes_left = out_bytes;
-
-            const auto res = iconv(conv_desc, &in_buf, &in_bytes, &out_buf, &bytes_left);
-            if (res == static_cast<size_t>(-1))
-            {
-                perror("iconv failed");
-                iconv_close(conv_desc);
-                return string();
-            }
-
-            iconv_close(conv_desc);
-            result.resize(out_bytes - bytes_left);
-#endif
-
-            return result;
-        }
-
-        auto convert_narrow_to_wide(tempest::string_view narrow_str) -> wstring
-        {
-            wstring result;
-#ifdef _WIN32
-            const auto size_needed =
-                MultiByteToWideChar(CP_UTF8, 0, narrow_str.data(), static_cast<int>(narrow_str.size()), nullptr, 0);
-            result.resize(static_cast<size_t>(size_needed), L'\0');
-            MultiByteToWideChar(CP_UTF8, 0, narrow_str.data(), static_cast<int>(narrow_str.size()), result.data(),
-                                static_cast<int>(size_needed));
-#else
-            auto conv_desc = iconv_open("WCHAR_T", "UTF-8");
-            if (conv_desc == bit_cast<iconv_t>(-1ll))
-            {
-                perror("iconv_open failed");
-                return result;
-            }
-
-            auto in_bytes = narrow_str.size();
-            const auto out_bytes = in_bytes * sizeof(wchar_t) + 1; // WCHAR_T can take up to sizeof(wchar_t) bytes
-            result.resize(out_bytes / sizeof(wchar_t), L'\0');
-
-            char* in_buf = const_cast<char*>(narrow_str.data());
-            char* out_buf = reinterpret_cast<char*>(result.data());
-
-            auto bytes_left = out_bytes;
-            const auto res = iconv(conv_desc, &in_buf, &in_bytes, &out_buf, &bytes_left);
-            if (res == static_cast<size_t>(-1))
-            {
-                perror("iconv failed");
-                iconv_close(conv_desc);
-                return wstring();
-            }
-
-            iconv_close(conv_desc);
-            result.resize((out_bytes - bytes_left) / sizeof(wchar_t));
-#endif
-            return result;
-        }
-
         template <character_type T>
         constexpr auto compare_slash_insensitive(basic_string_view<T> lhs, basic_string_view<T> rhs) -> int
         {
@@ -1144,7 +1058,7 @@ namespace tempest::filesystem
     auto path::string() const -> tempest::string
     {
 #ifdef _WIN32
-        return detail::convert_wide_to_narrow(_path);
+        return tempest::convert_wide_to_narrow(_path);
 #else
         return _path;
 #endif
@@ -1155,7 +1069,7 @@ namespace tempest::filesystem
 #ifdef _WIN32
         return _path;
 #else
-        return detail::convert_narrow_to_wide(_path);
+        return tempest::convert_narrow_to_wide(_path);
 #endif
     }
 

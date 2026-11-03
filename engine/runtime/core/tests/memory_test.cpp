@@ -143,6 +143,250 @@ TEST(memory_tests, stack_allocator_allocation_and_move)
     EXPECT_EQ(stack3.get_marker(), 0U);
 }
 
+/// @brief Verify stack_allocator safely deallocates the first allocation (offset 0) and nullptr without asserting.
+TEST(memory_tests, stack_allocator_first_allocation_dealloc)
+{
+    // Setup: Create stack allocator
+    constexpr auto stack_size = 4096;
+    auto stack = tempest::stack_allocator{stack_size};
+
+    // Act: Allocate with alignment 1 to ensure offset 0 at buffer start
+    auto* const ptr = stack.allocate(64, 1);
+    ASSERT_NE(ptr, nullptr);
+    EXPECT_EQ(stack.get_marker(), 64U);
+
+    // Deallocate first allocation at offset 0
+    stack.deallocate(ptr);
+    EXPECT_EQ(stack.get_marker(), 0U);
+
+    // Deallocate nullptr is a safe no-op
+    stack.deallocate(nullptr);
+    EXPECT_EQ(stack.get_marker(), 0U);
+}
+
+/// @brief Verify stack_allocator marker rewind and rejection of invalid forward markers without unsigned underflow.
+TEST(memory_tests, stack_allocator_marker_rewind_and_underflow_safety)
+{
+    // Setup: Create stack allocator and allocate successive blocks
+    constexpr auto stack_size = 4096;
+    auto stack = tempest::stack_allocator{stack_size};
+
+    auto* const p1 = stack.allocate(128, 8);
+    ASSERT_NE(p1, nullptr);
+    const auto marker1 = stack.get_marker();
+
+    auto* const p2 = stack.allocate(256, 8);
+    ASSERT_NE(p2, nullptr);
+    const auto marker2 = stack.get_marker();
+    EXPECT_GT(marker2, marker1);
+
+    // Act: Roll back to marker1
+    stack.free_marker(marker1);
+    EXPECT_EQ(stack.get_marker(), marker1);
+
+    // Act: Attempt invalid forward rewind to marker2 (should be rejected)
+    stack.free_marker(marker2);
+    EXPECT_EQ(stack.get_marker(), marker1);
+
+    // Act: Roll back to 0
+    stack.free_marker(0);
+    EXPECT_EQ(stack.get_marker(), 0U);
+}
+
+/// @brief Adversarially stress test stack_allocator deallocation boundaries, offset 0, intermediate blocks, and nullptr across states.
+TEST(memory_tests, stack_allocator_adversarial_boundary_and_null_dealloc)
+{
+    // Setup: Create stack allocator
+    constexpr auto stack_size = 4096;
+    auto stack = tempest::stack_allocator{stack_size};
+
+    // Assert: nullptr deallocation on fresh stack is a safe no-op
+    stack.deallocate(nullptr);
+    EXPECT_EQ(stack.get_marker(), 0U);
+
+    // Act: Allocate first block at offset 0 with 64-byte alignment
+    auto* const first_ptr = stack.allocate(128, 64);
+    ASSERT_NE(first_ptr, nullptr);
+    const auto marker_after_first = stack.get_marker();
+    EXPECT_GE(marker_after_first, 128U);
+
+    // Assert: nullptr deallocation with active allocations is a safe no-op
+    stack.deallocate(nullptr);
+    EXPECT_EQ(stack.get_marker(), marker_after_first);
+
+    // Act: Allocate second block
+    auto* const second_ptr = stack.allocate(256, 16);
+    ASSERT_NE(second_ptr, nullptr);
+    const auto marker_after_second = stack.get_marker();
+    EXPECT_GT(marker_after_second, marker_after_first);
+
+    // Act: Deallocate intermediate block (rewind to second_ptr)
+    stack.deallocate(second_ptr);
+    EXPECT_EQ(stack.get_marker(), marker_after_first);
+
+    // Act: Re-allocate into freed space
+    auto* const replacement_ptr = stack.allocate(256, 16);
+    ASSERT_NE(replacement_ptr, nullptr);
+    EXPECT_EQ(replacement_ptr, second_ptr);
+
+    // Act: Deallocate initial block at offset 0
+    stack.deallocate(first_ptr);
+    EXPECT_EQ(stack.get_marker(), 0U);
+
+    // Act: Allocate again from empty stack, confirming complete reuse
+    auto* const reused_ptr = stack.allocate(64, 1);
+    ASSERT_NE(reused_ptr, nullptr);
+    EXPECT_EQ(reused_ptr, first_ptr);
+    EXPECT_EQ(stack.get_marker(), 64U);
+
+    // Act: Reset and verify nullptr deallocation on reset stack
+    stack.reset();
+    EXPECT_EQ(stack.get_marker(), 0U);
+    stack.deallocate(nullptr);
+    EXPECT_EQ(stack.get_marker(), 0U);
+
+    // Act: Release and verify nullptr deallocation on released stack
+    stack.release();
+    EXPECT_EQ(stack.get_marker(), 0U);
+    stack.deallocate(nullptr);
+    EXPECT_EQ(stack.get_marker(), 0U);
+}
+
+/// @brief Adversarially stress test stack_allocator marker rewind boundary conditions, including zero, capacity, and forward overflow.
+TEST(memory_tests, stack_allocator_adversarial_marker_rewind_stress)
+{
+    // Setup: Create stack allocator
+    constexpr auto stack_size = 1024;
+    auto stack = tempest::stack_allocator{stack_size};
+
+    // Assert: Rewind on empty stack to 0 is a safe no-op
+    stack.free_marker(0);
+    EXPECT_EQ(stack.get_marker(), 0U);
+
+    // Assert: Invalid forward rewind to capacity on empty stack is rejected
+    stack.free_marker(stack_size);
+    EXPECT_EQ(stack.get_marker(), 0U);
+
+    // Assert: Invalid forward rewind to maximum size_t value is rejected without underflow
+    stack.free_marker(~size_t(0));
+    EXPECT_EQ(stack.get_marker(), 0U);
+
+    // Act: Fill allocator to exact capacity
+    auto* const full_block = stack.allocate(stack_size, 1);
+    ASSERT_NE(full_block, nullptr);
+    EXPECT_EQ(stack.get_marker(), stack_size);
+
+    // Assert: Rewind to exact capacity when fully allocated is valid
+    stack.free_marker(stack_size);
+    EXPECT_EQ(stack.get_marker(), stack_size);
+
+    // Assert: Invalid forward rewind past capacity is rejected
+    stack.free_marker(stack_size + 1);
+    EXPECT_EQ(stack.get_marker(), stack_size);
+    stack.free_marker(stack_size + 500);
+    EXPECT_EQ(stack.get_marker(), stack_size);
+    stack.free_marker(~size_t(0));
+    EXPECT_EQ(stack.get_marker(), stack_size);
+
+    // Act: Rewind to half capacity
+    constexpr auto half_capacity = stack_size / 2;
+    stack.free_marker(half_capacity);
+    EXPECT_EQ(stack.get_marker(), half_capacity);
+
+    // Assert: Forward rewind back to full capacity is rejected
+    stack.free_marker(stack_size);
+    EXPECT_EQ(stack.get_marker(), half_capacity);
+
+    // Act: Rewind to zero
+    stack.free_marker(0);
+    EXPECT_EQ(stack.get_marker(), 0U);
+
+    // Assert: Allocator can be refilled to full capacity after rewind to zero
+    auto* const refilled_block = stack.allocate(stack_size, 1);
+    ASSERT_NE(refilled_block, nullptr);
+    EXPECT_EQ(refilled_block, full_block);
+    EXPECT_EQ(stack.get_marker(), stack_size);
+}
+
+/// @brief Adversarially test stack_allocator self-move assignment, moved-from state operations, and lifecycle transfers.
+TEST(memory_tests, stack_allocator_adversarial_self_move_and_moved_from_state)
+{
+    // Setup: Create stack allocator and allocate initial block
+    constexpr auto stack_size = 2048;
+    auto stack = tempest::stack_allocator{stack_size};
+
+    auto* const ptr1 = stack.allocate(512, 16);
+    ASSERT_NE(ptr1, nullptr);
+    const auto marker_before_self_move = stack.get_marker();
+
+    // Act: Self-move assignment
+    stack = tempest::move(stack);
+
+    // Assert: Self-move preserves state intact
+    EXPECT_EQ(stack.get_marker(), marker_before_self_move);
+    auto* const ptr2 = stack.allocate(256, 16);
+    ASSERT_NE(ptr2, nullptr);
+    EXPECT_GT(stack.get_marker(), marker_before_self_move);
+
+    // Act: Move construct into another instance
+    auto moved_target = tempest::move(stack);
+
+    // Assert: Moved-from instance has zero marker and safely ignores nullptr dealloc
+    EXPECT_EQ(stack.get_marker(), 0U);
+    stack.deallocate(nullptr);
+    stack.free_marker(0);
+    stack.free_marker(100);
+    stack.reset();
+    stack.release();
+    EXPECT_EQ(stack.get_marker(), 0U);
+
+    // Assert: Target instance preserved all previous state
+    EXPECT_EQ(moved_target.get_marker(), 768U);
+
+    // Act: Move assign into a third instance
+    auto third_stack = tempest::stack_allocator{1024};
+    third_stack = tempest::move(moved_target);
+
+    EXPECT_EQ(moved_target.get_marker(), 0U);
+    EXPECT_EQ(third_stack.get_marker(), 768U);
+}
+
+/// @brief Adversarially test rapid interleaved allocation, rewind, and re-allocation patterns.
+TEST(memory_tests, stack_allocator_adversarial_interleaved_churn)
+{
+    // Setup: Create stack allocator
+    constexpr auto stack_size = 8192;
+    auto stack = tempest::stack_allocator{stack_size};
+
+    for (size_t iteration = 0; iteration < 100; ++iteration)
+    {
+        const auto base_marker = stack.get_marker();
+
+        auto* const block_a = stack.allocate(64, 8);
+        ASSERT_NE(block_a, nullptr);
+
+        auto* const block_b = stack.allocate(128, 16);
+        ASSERT_NE(block_b, nullptr);
+        const auto marker_b = stack.get_marker();
+
+        auto* const block_c = stack.allocate(256, 16);
+        ASSERT_NE(block_c, nullptr);
+
+        // Act: Rewind to marker_b and re-allocate
+        stack.free_marker(marker_b);
+        EXPECT_EQ(stack.get_marker(), marker_b);
+
+        auto* const replacement_c = stack.allocate(128, 8);
+        ASSERT_NE(replacement_c, nullptr);
+
+        // Act: Rewind all the way to base_marker
+        stack.free_marker(base_marker);
+        EXPECT_EQ(stack.get_marker(), base_marker);
+    }
+
+    EXPECT_EQ(stack.get_marker(), 0U);
+}
+
 //==============================================================================
 // max_align_t Tests
 //==============================================================================

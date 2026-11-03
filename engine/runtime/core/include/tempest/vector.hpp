@@ -258,15 +258,12 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr vector<T, Allocator>::vector(vector&& other) noexcept : _alloc{tempest::move(other._alloc)}, _data(other._data), _end(other._end), _capacity_end(other._capacity_end)
+    constexpr vector<T, Allocator>::vector(vector&& other) noexcept
+        : _alloc{tempest::move(other._alloc)},
+          _data{tempest::exchange(other._data, nullptr)},
+          _end{tempest::exchange(other._end, nullptr)},
+          _capacity_end{tempest::exchange(other._capacity_end, nullptr)}
     {
-        
-        
-        
-
-        other._data = nullptr;
-        other._end = nullptr;
-        other._capacity_end = nullptr;
     }
 
     template <typename T, typename Allocator>
@@ -274,13 +271,9 @@ namespace tempest
     {
         if (_alloc == other._alloc)
         {
-            _data = other._data;
-            _end = other._end;
-            _capacity_end = other._capacity_end;
-
-            other._data = nullptr;
-            other._end = nullptr;
-            other._capacity_end = nullptr;
+            _data = tempest::exchange(other._data, nullptr);
+            _end = tempest::exchange(other._end, nullptr);
+            _capacity_end = tempest::exchange(other._capacity_end, nullptr);
         }
         else
         {
@@ -351,13 +344,9 @@ namespace tempest
         allocator_traits<Allocator>::deallocate(_alloc, _data, capacity());
 
         _alloc = tempest::move(other._alloc);
-        _data = other._data;
-        _end = other._end;
-        _capacity_end = other._capacity_end;
-
-        other._data = nullptr;
-        other._end = nullptr;
-        other._capacity_end = nullptr;
+        _data = tempest::exchange(other._data, nullptr);
+        _end = tempest::exchange(other._end, nullptr);
+        _capacity_end = tempest::exchange(other._capacity_end, nullptr);
 
         return *this;
     }
