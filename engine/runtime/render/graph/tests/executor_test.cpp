@@ -1671,7 +1671,7 @@ namespace tempest::render_graph
                 });
                 data.shadow_map = builder.write(t, rhi::pipeline_stage::attachment_output,
                                                 rhi::resource_access::write,
-                                                rhi::image_layout::depth_stencil_attachment_optimal);
+                                                rhi::image_layout::general);
             },
             []([[maybe_unused]] const shadow_data&, pass_execution_context&, rhi::command_list&) {});
 
@@ -1690,7 +1690,7 @@ namespace tempest::render_graph
                 data.shadow_map = builder.read(rg_texture_id{.id = 0, .version = 1},
                                                rhi::pipeline_stage::fragment,
                                                rhi::resource_access::read,
-                                               rhi::image_layout::depth_stencil_read_only_optimal);
+                                               rhi::image_layout::general);
                 auto c = builder.create_texture(rg_texture_desc{.name = "ColorHDR"});
                 data.color_hdr = builder.write(c, rhi::pipeline_stage::attachment_output,
                                                rhi::resource_access::write,

@@ -215,7 +215,7 @@ namespace tempest::render_graph
             .type = access_type::write,
             .stages = rhi::pipeline_stage::early_fragment_tests | rhi::pipeline_stage::late_fragment_tests,
             .access = rhi::resource_access::read_write,
-            .layout = rhi::image_layout::depth_stencil_attachment_optimal,
+            .layout = rhi::image_layout::general,
             .subresource = attachment.subresource,
             .load_op = attachment.depth_load_op,
             .store_op = attachment.depth_store_op,

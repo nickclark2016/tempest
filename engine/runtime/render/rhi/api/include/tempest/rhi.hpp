@@ -224,6 +224,12 @@ namespace tempest::rhi
         }
     }
 
+    constexpr auto is_depth_format(data_format format) noexcept -> bool
+    {
+        return format == data_format::depth16_unorm || format == data_format::depth24_unorm_stencil8 ||
+               format == data_format::depth32_float || format == data_format::depth32_float_stencil8;
+    }
+
     enum class buffer_usage : uint8_t
     {
         none = 0,
@@ -398,8 +404,6 @@ namespace tempest::rhi
         undefined,
         general,
         present,
-        depth_stencil_attachment_optimal,
-        depth_stencil_read_only_optimal,
     };
 
     enum class shader_stage : uint16_t
@@ -1059,6 +1063,9 @@ namespace tempest::rhi
                                                     image_layout layout = image_layout::general) -> void = 0;
         virtual auto write_storage_image_descriptor(descriptor_handle slot, texture_view_handle view,
                                                     image_layout layout = image_layout::general) -> void = 0;
+        virtual auto process_deferred_retirements() -> void
+        {
+        }
 
         // Object naming
         virtual auto set_debug_name([[maybe_unused]] buffer_handle handle, [[maybe_unused]] cstring_view name) -> void

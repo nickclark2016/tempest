@@ -48,25 +48,25 @@ namespace tempest::render_graph
         , _priority{other._priority}
         , _affinity{other._affinity}
         , _error{other._error}
-        , _suspended{other._suspended}
+        , _suspended{tempest::exchange(other._suspended, false)}
     {
-        TEMPEST_ASSERT(!other._suspended);
-        other._suspended = false;
+        TEMPEST_ASSERT(!_suspended);
     }
 
     auto gpu_sync_point::operator=(gpu_sync_point&& other) noexcept -> gpu_sync_point&
     {
-        if (this != &other)
+        if (this == &other)
         {
-            TEMPEST_ASSERT(!_suspended && !other._suspended);
-            _monitor = other._monitor;
-            _sync_point = other._sync_point;
-            _priority = other._priority;
-            _affinity = other._affinity;
-            _error = other._error;
-            _suspended = other._suspended;
-            other._suspended = false;
+            return *this;
         }
+
+        TEMPEST_ASSERT(!_suspended && !other._suspended);
+        _monitor = other._monitor;
+        _sync_point = other._sync_point;
+        _priority = other._priority;
+        _affinity = other._affinity;
+        _error = other._error;
+        _suspended = tempest::exchange(other._suspended, false);
         return *this;
     }
 

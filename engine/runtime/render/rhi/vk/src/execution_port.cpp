@@ -199,8 +199,6 @@ namespace tempest::rhi::vk
             flags |= (stages & pipeline_stage::blit) ? VK_ACCESS_2_TRANSFER_WRITE_BIT : 0;
             flags |= (stages & pipeline_stage::resolve) ? VK_ACCESS_2_TRANSFER_WRITE_BIT : 0;
             flags |= (stages & pipeline_stage::clear) ? VK_ACCESS_2_TRANSFER_WRITE_BIT : 0;
-            flags |= (stages & pipeline_stage::indirect_commands) ? VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT : 0;
-            flags |= (stages & pipeline_stage::index_input) ? VK_ACCESS_2_INDEX_READ_BIT : 0;
             flags |= (stages & pipeline_stage::vertex) ? VK_ACCESS_2_SHADER_WRITE_BIT : 0;
             flags |= (stages & pipeline_stage::tessellation_control) ? VK_ACCESS_2_SHADER_WRITE_BIT : 0;
             flags |= (stages & pipeline_stage::tessellation_evaluation) ? VK_ACCESS_2_SHADER_WRITE_BIT : 0;
@@ -416,10 +414,6 @@ namespace tempest::rhi::vk
                 return VK_IMAGE_LAYOUT_GENERAL;
             case image_layout::present:
                 return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-            case image_layout::depth_stencil_attachment_optimal:
-                return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            case image_layout::depth_stencil_read_only_optimal:
-                return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
             }
             return VK_IMAGE_LAYOUT_GENERAL;
         }
@@ -620,7 +614,7 @@ namespace tempest::rhi::vk
                     .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
                     .pNext = nullptr,
                     .imageView = view.handle,
-                    .imageLayout = static_cast<VkImageLayout>(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+                    .imageLayout = static_cast<VkImageLayout>(VK_IMAGE_LAYOUT_GENERAL),
                     .resolveMode = VK_RESOLVE_MODE_NONE,
                     .resolveImageView = VK_NULL_HANDLE,
                     .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -1179,9 +1173,9 @@ namespace tempest::rhi::vk
     }
 
     execution_port::execution_port(vk::device& parent_device, uint32_t queue_family_index, queue_type queue_type,
-                                   VkQueue queue, dispatch_table dispatch_table)
+                                   VkQueue queue, dispatch_table dispatch_table, mutex& submit_mutex)
         : _parent_device{&parent_device}, _queue_family_index{queue_family_index}, _queue_type{queue_type},
-          _queue{queue}, _dispatch_table{dispatch_table}
+          _queue{queue}, _dispatch_table{dispatch_table}, _submit_mutex{submit_mutex}
     {
         _timeline_semaphore = _parent_device->create_timeline_semaphore();
 
@@ -1217,7 +1211,7 @@ namespace tempest::rhi::vk
 
     auto execution_port::wait_idle() -> void
     {
-        auto lock = lock_guard{_submit_mutex};
+        auto lock = lock_guard{*_submit_mutex};
         if (_queue != VK_NULL_HANDLE)
         {
             _dispatch_table.queueWaitIdle(_queue);
@@ -1257,7 +1251,7 @@ namespace tempest::rhi::vk
     auto execution_port::submit(span<const rhi::command_list*> commands, span<const device_sync_point> wait_semaphores,
                                 span<const device_sync_point> signal_semaphores) -> expected<void, submit_error>
     {
-        auto lock = lock_guard{_submit_mutex};
+        auto lock = lock_guard{*_submit_mutex};
 
         ++_timeline_value;
 
@@ -1368,6 +1362,7 @@ namespace tempest::rhi::vk
             return;
         }
 
+        auto lock = lock_guard{*_submit_mutex};
         const auto label_info = VkDebugUtilsLabelEXT{
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
             .pNext = nullptr,
@@ -1386,6 +1381,7 @@ namespace tempest::rhi::vk
             return;
         }
 
+        auto lock = lock_guard{*_submit_mutex};
         _dispatch_table.queueEndDebugUtilsLabelEXT(_queue);
 #endif
     }
@@ -1399,6 +1395,7 @@ namespace tempest::rhi::vk
             return;
         }
 
+        auto lock = lock_guard{*_submit_mutex};
         const auto label_info = VkDebugUtilsLabelEXT{
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
             .pNext = nullptr,

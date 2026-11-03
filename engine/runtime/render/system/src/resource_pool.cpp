@@ -136,91 +136,70 @@ namespace tempest::render_system
     }
 
     resource_pool::resource_pool(resource_pool&& other) noexcept
-        : _device{other._device}, _cfg{other._cfg}, _vertex_buffer{other._vertex_buffer},
-          _mesh_table_buffer{other._mesh_table_buffer}, _material_table_buffer{other._material_table_buffer},
-          _staging_buffer{other._staging_buffer}, _vertex_bytes_allocated{other._vertex_bytes_allocated},
-          _mesh_count{other._mesh_count}, _material_count{other._material_count},
-          _mesh_indices{tempest::move(other._mesh_indices)}, _mesh_layouts{tempest::move(other._mesh_layouts)},
-          _material_indices{tempest::move(other._material_indices)}, _materials{tempest::move(other._materials)},
-          _textures{tempest::move(other._textures)}, _linear_sampler{other._linear_sampler},
-          _point_sampler{other._point_sampler}, _shadow_comparison_sampler{other._shadow_comparison_sampler},
-          _linear_sampler_descriptor{other._linear_sampler_descriptor},
-          _point_sampler_descriptor{other._point_sampler_descriptor},
-          _shadow_comparison_sampler_descriptor{other._shadow_comparison_sampler_descriptor},
-          _scene_constants_buffer{other._scene_constants_buffer},
-          _directional_shadow_buffer{other._directional_shadow_buffer}, _lights_buffer{other._lights_buffer},
-          _object_buffer{other._object_buffer}, _instance_buffer{other._instance_buffer},
-          _draw_commands_buffer{other._draw_commands_buffer}
+        : _device{tempest::exchange(other._device, nullptr)}, _cfg{tempest::exchange(other._cfg, {})},
+          _vertex_buffer{tempest::exchange(other._vertex_buffer, {})},
+          _mesh_table_buffer{tempest::exchange(other._mesh_table_buffer, {})},
+          _material_table_buffer{tempest::exchange(other._material_table_buffer, {})},
+          _staging_buffer{tempest::exchange(other._staging_buffer, {})},
+          _vertex_bytes_allocated{tempest::exchange(other._vertex_bytes_allocated, 0)},
+          _mesh_count{tempest::exchange(other._mesh_count, 0)},
+          _material_count{tempest::exchange(other._material_count, 0)},
+          _mesh_indices{tempest::move(other._mesh_indices)},
+          _mesh_layouts{tempest::move(other._mesh_layouts)},
+          _material_indices{tempest::move(other._material_indices)},
+          _materials{tempest::move(other._materials)},
+          _textures{tempest::move(other._textures)},
+          _linear_sampler{tempest::exchange(other._linear_sampler, {})},
+          _point_sampler{tempest::exchange(other._point_sampler, {})},
+          _shadow_comparison_sampler{tempest::exchange(other._shadow_comparison_sampler, {})},
+          _linear_sampler_descriptor{tempest::exchange(other._linear_sampler_descriptor, {})},
+          _point_sampler_descriptor{tempest::exchange(other._point_sampler_descriptor, {})},
+          _shadow_comparison_sampler_descriptor{tempest::exchange(other._shadow_comparison_sampler_descriptor, {})},
+          _scene_constants_buffer{tempest::exchange(other._scene_constants_buffer, {})},
+          _directional_shadow_buffer{tempest::exchange(other._directional_shadow_buffer, {})},
+          _lights_buffer{tempest::exchange(other._lights_buffer, {})},
+          _object_buffer{tempest::exchange(other._object_buffer, {})},
+          _instance_buffer{tempest::exchange(other._instance_buffer, {})},
+          _draw_commands_buffer{tempest::exchange(other._draw_commands_buffer, {})}
     {
-        other._device = nullptr;
-        other._vertex_buffer = {};
-        other._mesh_table_buffer = {};
-        other._material_table_buffer = {};
-        other._staging_buffer = {};
-        other._linear_sampler = {};
-        other._point_sampler = {};
-        other._shadow_comparison_sampler = {};
-        other._linear_sampler_descriptor = {};
-        other._point_sampler_descriptor = {};
-        other._shadow_comparison_sampler_descriptor = {};
-        other._scene_constants_buffer = {};
-        other._directional_shadow_buffer = {};
-        other._lights_buffer = {};
-        other._object_buffer = {};
-        other._instance_buffer = {};
-        other._draw_commands_buffer = {};
     }
 
     auto resource_pool::operator=(resource_pool&& other) noexcept -> resource_pool&
     {
-        if (this != &other)
+        if (this == &other)
         {
-            release_all();
-            _device = other._device;
-            _cfg = other._cfg;
-            _vertex_buffer = other._vertex_buffer;
-            _mesh_table_buffer = other._mesh_table_buffer;
-            _material_table_buffer = other._material_table_buffer;
-            _staging_buffer = other._staging_buffer;
-            _vertex_bytes_allocated = other._vertex_bytes_allocated;
-            _mesh_count = other._mesh_count;
-            _material_count = other._material_count;
-            _mesh_indices = tempest::move(other._mesh_indices);
-            _mesh_layouts = tempest::move(other._mesh_layouts);
-            _material_indices = tempest::move(other._material_indices);
-            _materials = tempest::move(other._materials);
-            _textures = tempest::move(other._textures);
-            _linear_sampler = other._linear_sampler;
-            _point_sampler = other._point_sampler;
-            _shadow_comparison_sampler = other._shadow_comparison_sampler;
-            _linear_sampler_descriptor = other._linear_sampler_descriptor;
-            _point_sampler_descriptor = other._point_sampler_descriptor;
-            _shadow_comparison_sampler_descriptor = other._shadow_comparison_sampler_descriptor;
-            _scene_constants_buffer = other._scene_constants_buffer;
-            _directional_shadow_buffer = other._directional_shadow_buffer;
-            _lights_buffer = other._lights_buffer;
-            _object_buffer = other._object_buffer;
-            _instance_buffer = other._instance_buffer;
-            _draw_commands_buffer = other._draw_commands_buffer;
-
-            other._device = nullptr;
-            other._vertex_buffer = {};
-            other._mesh_table_buffer = {};
-            other._material_table_buffer = {};
-            other._staging_buffer = {};
-            other._linear_sampler = {};
-            other._point_sampler = {};
-            other._shadow_comparison_sampler = {};
-            other._linear_sampler_descriptor = {};
-            other._point_sampler_descriptor = {};
-            other._shadow_comparison_sampler_descriptor = {};
-            other._scene_constants_buffer = {};
-            other._directional_shadow_buffer = {};
-            other._lights_buffer = {};
-            other._object_buffer = {};
-            other._instance_buffer = {};
-            other._draw_commands_buffer = {};
+            return *this;
         }
+
+        release_all();
+        _device = tempest::exchange(other._device, nullptr);
+        _cfg = tempest::exchange(other._cfg, {});
+        _vertex_buffer = tempest::exchange(other._vertex_buffer, {});
+        _mesh_table_buffer = tempest::exchange(other._mesh_table_buffer, {});
+        _material_table_buffer = tempest::exchange(other._material_table_buffer, {});
+        _staging_buffer = tempest::exchange(other._staging_buffer, {});
+        _vertex_bytes_allocated = tempest::exchange(other._vertex_bytes_allocated, 0);
+        _mesh_count = tempest::exchange(other._mesh_count, 0);
+        _material_count = tempest::exchange(other._material_count, 0);
+        _mesh_indices = tempest::move(other._mesh_indices);
+        _mesh_layouts = tempest::move(other._mesh_layouts);
+        _material_indices = tempest::move(other._material_indices);
+        _materials = tempest::move(other._materials);
+        _textures = tempest::move(other._textures);
+        _linear_sampler = tempest::exchange(other._linear_sampler, {});
+        _point_sampler = tempest::exchange(other._point_sampler, {});
+        _shadow_comparison_sampler = tempest::exchange(other._shadow_comparison_sampler, {});
+        _linear_sampler_descriptor = tempest::exchange(other._linear_sampler_descriptor, {});
+        _point_sampler_descriptor = tempest::exchange(other._point_sampler_descriptor, {});
+        _shadow_comparison_sampler_descriptor =
+            tempest::exchange(other._shadow_comparison_sampler_descriptor, {});
+        _scene_constants_buffer = tempest::exchange(other._scene_constants_buffer, {});
+        _directional_shadow_buffer = tempest::exchange(other._directional_shadow_buffer, {});
+        _lights_buffer = tempest::exchange(other._lights_buffer, {});
+        _object_buffer = tempest::exchange(other._object_buffer, {});
+        _instance_buffer = tempest::exchange(other._instance_buffer, {});
+        _draw_commands_buffer = tempest::exchange(other._draw_commands_buffer, {});
+
         return *this;
     }
 
@@ -718,7 +697,8 @@ namespace tempest::render_system
                                                                         });
 
             auto desc_handle = _device->allocate_descriptor(rhi::descriptor_type::sampled_image);
-            _device->write_sampled_image_descriptor(desc_handle, view_handle, rhi::image_layout::general);
+            _device->write_sampled_image_descriptor(desc_handle, view_handle,
+                                                    rhi::image_layout::general);
 
             _textures[id] = texture_entry{
                 .texture = tex_handle,

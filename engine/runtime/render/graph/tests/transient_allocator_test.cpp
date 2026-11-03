@@ -382,9 +382,10 @@ namespace tempest::render_graph
 
         // Surface resize event (1080p -> 1440p)
         allocator.on_surface_resize(dev);
-        // Only surface-relative texture destroyed
-        EXPECT_EQ(dev.destroyed_textures, 1U);
-        EXPECT_EQ(allocator.get_texture_pool_count(), 1U); // FixedTex remains!
+        // Destruction of surface-relative texture is deferred until flight slot arrives
+        EXPECT_EQ(dev.destroyed_textures, 0U);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 1U);
+        EXPECT_EQ(allocator.get_texture_pool_count(), 1U); // FixedTex remains in active pool!
 
         // Frame 2: 1440p (2560x1440)
         auto lifetimes2 = flat_unordered_map<uint32_t, resource_lifetime>{};
@@ -401,6 +402,9 @@ namespace tempest::render_graph
 
         allocator.allocate(dev, dag2, textures, {}, 2560, 1440);
 
+        // Retired texture was safely reclaimed and destroyed when slot arrived
+        EXPECT_EQ(dev.destroyed_textures, 1U);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 0U);
         // Fixed texture was reused, only 1 new surface texture was created (total 3 created)
         EXPECT_EQ(dev.created_textures, 3U);
         EXPECT_EQ(allocator.get_texture_pool_count(), 2U);
@@ -753,5 +757,287 @@ namespace tempest::render_graph
         // Teardown
         allocator.release_all(dev);
         EXPECT_EQ(dev.destroyed_buffers, 1U);
+    }
+
+    /// @brief Tests that surface resize defers eviction until the respective flight slot runs allocate.
+    TEST(transient_allocator_test, transient_allocator_resize_deferred_eviction)
+    {
+        // Setup: Mock device and transient allocator with 2 frames in flight
+        auto dev = mock_device{};
+        auto allocator = transient_allocator{};
+        allocator.set_frames_in_flight(2);
+
+        const auto textures = vector<registered_texture>{
+            init_list,
+            registered_texture{
+                .id = 0,
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::surface_relative(1.0F, 1.0F),
+                        .format = rhi::data_format::rgba8_unorm,
+                        .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
+                        .name = "SurfaceTex",
+                    },
+                .is_imported = false,
+            },
+        };
+
+        auto lifetimes = flat_unordered_map<uint32_t, resource_lifetime>{};
+        lifetimes[0] = resource_lifetime{.first_pass = 0, .last_pass = 0};
+
+        const auto dag = compiled_dag{
+            .sorted_pass_indices = vector<uint32_t>{init_list, 0U},
+            .resolved_texture_aliases = {},
+            .resolved_buffer_aliases = {},
+            .texture_lifetimes = tempest::move(lifetimes),
+            .buffer_lifetimes = {},
+        };
+
+        // Act: Frame slot 0 allocation at 1080p
+        allocator.set_frame_slot(0);
+        allocator.allocate(dev, dag, textures, {}, 1920, 1080);
+        EXPECT_EQ(dev.created_textures, 1U);
+        EXPECT_EQ(allocator.get_texture_pool_count(), 1U);
+
+        // Act: Frame slot 1 allocation at 1080p
+        allocator.set_frame_slot(1);
+        allocator.allocate(dev, dag, textures, {}, 1920, 1080);
+        EXPECT_EQ(dev.created_textures, 2U);
+        EXPECT_EQ(allocator.get_texture_pool_count(), 2U);
+
+        // Act: Surface resize occurs (1080p -> 1440p)
+        allocator.on_surface_resize(dev);
+
+        // Assert: Both surface textures moved to retired; 0 textures destroyed immediately
+        EXPECT_EQ(dev.destroyed_textures, 0U);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 2U);
+        EXPECT_EQ(allocator.get_texture_pool_count(), 0U);
+
+        // Act: Advance to slot 0 and allocate at 1440p
+        allocator.set_frame_slot(0);
+        allocator.allocate(dev, dag, textures, {}, 2560, 1440);
+
+        // Assert: Slot 0 retired texture is reclaimed and destroyed, slot 1 retired texture remains
+        EXPECT_EQ(dev.destroyed_textures, 1U);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 1U);
+        EXPECT_EQ(allocator.get_texture_pool_count(), 1U);
+
+        // Act: Advance to slot 1 and allocate at 1440p
+        allocator.set_frame_slot(1);
+        allocator.allocate(dev, dag, textures, {}, 2560, 1440);
+
+        // Assert: Slot 1 retired texture is reclaimed and destroyed; retired pool is now empty
+        EXPECT_EQ(dev.destroyed_textures, 2U);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 0U);
+        EXPECT_EQ(allocator.get_texture_pool_count(), 2U);
+
+        // Teardown
+        allocator.release_all(dev);
+        EXPECT_EQ(dev.destroyed_textures, 4U);
+        EXPECT_EQ(allocator.get_texture_pool_count(), 0U);
+    }
+
+    /// @brief Stress-tests rapid repeated surface resize across multiple frames in flight,
+    /// verifying deferred retirement isolation, fixed-texture preservation, and clean teardown.
+    TEST(transient_allocator_test, rapid_repeated_resize_multi_flight_stress)
+    {
+        // Setup: Initialize mock device and allocator with 4 frames in flight
+        auto dev = mock_device{};
+        auto allocator = transient_allocator{};
+        constexpr auto flight_slot_count = 4U;
+        allocator.set_frames_in_flight(flight_slot_count);
+
+        const auto textures = vector<registered_texture>{
+            init_list,
+            registered_texture{
+                .id = 0,
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::surface_relative(1.0F, 1.0F),
+                        .format = rhi::data_format::rgba8_unorm,
+                        .name = "SurfaceTexA",
+                    },
+            },
+            registered_texture{
+                .id = 1,
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::surface_relative(0.5F, 0.5F),
+                        .format = rhi::data_format::rgba8_unorm,
+                        .name = "SurfaceTexB",
+                    },
+            },
+            registered_texture{
+                .id = 2,
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::absolute(512, 512),
+                        .format = rhi::data_format::r8_unorm,
+                        .name = "FixedTex",
+                    },
+            },
+        };
+
+        auto lifetimes = flat_unordered_map<uint32_t, resource_lifetime>{};
+        lifetimes[0] = resource_lifetime{.first_pass = 0, .last_pass = 0};
+        lifetimes[1] = resource_lifetime{.first_pass = 0, .last_pass = 0};
+        lifetimes[2] = resource_lifetime{.first_pass = 0, .last_pass = 0};
+
+        const auto dag = compiled_dag{
+            .sorted_pass_indices = vector<uint32_t>{init_list, 0U},
+            .resolved_texture_aliases = {},
+            .resolved_buffer_aliases = {},
+            .texture_lifetimes = lifetimes,
+            .buffer_lifetimes = {},
+        };
+
+        // Act: Run 16 consecutive frames with varying surface dimensions and rapid resize events
+        constexpr auto total_iterations = 16U;
+        for (auto frame_idx = 0U; frame_idx < total_iterations; ++frame_idx)
+        {
+            const auto current_slot = frame_idx % flight_slot_count;
+            allocator.set_frame_slot(current_slot);
+
+            const auto width = 1280U + (frame_idx * 32U);
+            const auto height = 720U + (frame_idx * 16U);
+
+            // Trigger surface resize event
+            allocator.on_surface_resize(dev);
+
+            // Multiple rapid resizes in the same frame should not leak or double-retire
+            if (frame_idx % 2 == 0)
+            {
+                allocator.on_surface_resize(dev);
+            }
+
+            allocator.allocate(dev, dag, textures, {}, width, height);
+
+            // Assert: active textures are accessible and properly sized
+            const auto* alloc_a = allocator.get_texture(0);
+            const auto* alloc_b = allocator.get_texture(1);
+            const auto* alloc_fixed = allocator.get_texture(2);
+
+            ASSERT_NE(alloc_a, nullptr);
+            ASSERT_NE(alloc_b, nullptr);
+            ASSERT_NE(alloc_fixed, nullptr);
+
+            EXPECT_EQ(alloc_a->size.width, width);
+            EXPECT_EQ(alloc_a->size.height, height);
+            EXPECT_EQ(alloc_b->size.width, width / 2U);
+            EXPECT_EQ(alloc_b->size.height, height / 2U);
+            EXPECT_EQ(alloc_fixed->size.width, 512U);
+            EXPECT_EQ(alloc_fixed->size.height, 512U);
+        }
+
+        // Teardown: release all resources and verify clean destruction of active and retired
+        allocator.release_all(dev);
+
+        EXPECT_EQ(dev.created_textures, dev.destroyed_textures);
+        EXPECT_EQ(dev.created_views, dev.destroyed_views);
+        EXPECT_EQ(dev.allocated_descriptors, dev.freed_descriptors);
+        EXPECT_EQ(allocator.get_texture_pool_count(), 0U);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 0U);
+    }
+
+    /// @brief Stress-tests delayed flight slot advancement with unaligned resize triggers,
+    /// verifying exact flight slot isolation and zero premature destructions.
+    TEST(transient_allocator_test, delayed_timeline_flight_slot_reclamation_stress)
+    {
+        // Setup: 3 frames in flight
+        auto dev = mock_device{};
+        auto allocator = transient_allocator{};
+        constexpr auto flight_slot_count = 3U;
+        allocator.set_frames_in_flight(flight_slot_count);
+
+        const auto textures = vector<registered_texture>{
+            init_list,
+            registered_texture{
+                .id = 0,
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::surface_relative(1.0F, 1.0F),
+                        .format = rhi::data_format::rgba8_unorm,
+                        .name = "SurfaceTex",
+                    },
+            },
+        };
+
+        auto lifetimes = flat_unordered_map<uint32_t, resource_lifetime>{};
+        lifetimes[0] = resource_lifetime{.first_pass = 0, .last_pass = 0};
+
+        const auto dag = compiled_dag{
+            .sorted_pass_indices = vector<uint32_t>{init_list, 0U},
+            .resolved_texture_aliases = {},
+            .resolved_buffer_aliases = {},
+            .texture_lifetimes = lifetimes,
+            .buffer_lifetimes = {},
+        };
+
+        // Act: Slot 0 allocation at 1080p
+        allocator.set_frame_slot(0);
+        allocator.allocate(dev, dag, textures, {}, 1920, 1080);
+        EXPECT_EQ(dev.created_textures, 1U);
+        EXPECT_EQ(allocator.get_texture_pool_count(), 1U);
+
+        // Resize 1 (1080p -> 1440p)
+        allocator.on_surface_resize(dev);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 1U);
+        EXPECT_EQ(dev.destroyed_textures, 0U);
+
+        // Act: Slot 1 allocation at 1440p
+        allocator.set_frame_slot(1);
+        allocator.allocate(dev, dag, textures, {}, 2560, 1440);
+        EXPECT_EQ(dev.created_textures, 2U);
+        EXPECT_EQ(allocator.get_texture_pool_count(), 1U);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 1U);
+        EXPECT_EQ(dev.destroyed_textures, 0U);
+
+        // Resize 2 (1440p -> 4K)
+        allocator.on_surface_resize(dev);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 2U);
+        EXPECT_EQ(dev.destroyed_textures, 0U);
+
+        // Act: Slot 2 allocation at 4K
+        allocator.set_frame_slot(2);
+        allocator.allocate(dev, dag, textures, {}, 3840, 2160);
+        EXPECT_EQ(dev.created_textures, 3U);
+        EXPECT_EQ(allocator.get_texture_pool_count(), 1U);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 2U);
+        EXPECT_EQ(dev.destroyed_textures, 0U);
+
+        // Resize 3 (4K -> 720p)
+        allocator.on_surface_resize(dev);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 3U);
+        EXPECT_EQ(dev.destroyed_textures, 0U);
+
+        // Multiple redundant resizes should be no-ops on empty pool
+        allocator.on_surface_resize(dev);
+        allocator.on_surface_resize(dev);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 3U);
+        EXPECT_EQ(dev.destroyed_textures, 0U);
+
+        // Act: Advance to Slot 0 at 720p. Only Slot 0's retired texture should be destroyed!
+        allocator.set_frame_slot(0);
+        allocator.allocate(dev, dag, textures, {}, 1280, 720);
+        EXPECT_EQ(dev.destroyed_textures, 1U);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 2U);
+
+        // Act: Advance to Slot 1 at 720p. Only Slot 1's retired texture should be destroyed!
+        allocator.set_frame_slot(1);
+        allocator.allocate(dev, dag, textures, {}, 1280, 720);
+        EXPECT_EQ(dev.destroyed_textures, 2U);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 1U);
+
+        // Act: Advance to Slot 2 at 720p. Only Slot 2's retired texture should be destroyed!
+        allocator.set_frame_slot(2);
+        allocator.allocate(dev, dag, textures, {}, 1280, 720);
+        EXPECT_EQ(dev.destroyed_textures, 3U);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 0U);
+
+        // Teardown: Clean release
+        allocator.release_all(dev);
+        EXPECT_EQ(dev.created_textures, dev.destroyed_textures);
+        EXPECT_EQ(allocator.get_texture_pool_count(), 0U);
+        EXPECT_EQ(allocator.get_retired_texture_pool_count(), 0U);
     }
 } // namespace tempest::render_graph

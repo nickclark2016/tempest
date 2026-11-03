@@ -44,6 +44,7 @@ namespace tempest::render_graph
         {
             enum_mask<rhi::pipeline_stage> write_stages{rhi::pipeline_stage::attachment_output};
             enum_mask<rhi::pipeline_stage> signal_stages{rhi::pipeline_stage::attachment_output};
+            rhi::image_layout src_layout{rhi::image_layout::general};
         };
 
         auto determine_presentation_sync_info(const queue_sync_batch& batch, const frame_sync_options& frame_sync,
@@ -51,6 +52,7 @@ namespace tempest::render_graph
             -> presentation_sync_info
         {
             auto detected_write_stages = optional<enum_mask<rhi::pipeline_stage>>{nullopt};
+            auto detected_layout = optional<rhi::image_layout>{nullopt};
 
             if (frame_sync.presented_texture.has_value())
             {
@@ -67,6 +69,7 @@ namespace tempest::render_graph
                                 if (static_cast<bool>(access.access & rhi::resource_access::write))
                                 {
                                     detected_write_stages = access.stages;
+                                    detected_layout = access.layout;
                                 }
                             }
                         }
@@ -86,9 +89,12 @@ namespace tempest::render_graph
                                                      ? enum_mask<rhi::pipeline_stage>{*frame_sync.signal_stages}
                                                      : effective_write_stages;
 
+            const auto effective_src_layout = detected_layout.value_or(rhi::image_layout::general);
+
             return presentation_sync_info{
                 .write_stages = effective_write_stages,
                 .signal_stages = effective_signal_stages,
+                .src_layout = effective_src_layout,
             };
         }
 
@@ -670,7 +676,7 @@ namespace tempest::render_graph
                         {
                             .stages = pres_sync.write_stages,
                             .access = rhi::resource_access::write,
-                            .layout = rhi::image_layout::general,
+                            .layout = pres_sync.src_layout,
                         },
                     .dst =
                         {

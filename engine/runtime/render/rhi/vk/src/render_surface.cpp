@@ -9,23 +9,40 @@ namespace tempest::rhi::vk
     {
     }
 
-    render_surface::~render_surface()
+    auto render_surface::release_swapchain() -> void
     {
-        // Get us the vk device handle, avoid a vtable
-        auto* const vk_device = static_cast<vk::device*>(_swapchain_desc.rhi_device);
-
-        // Destroy the swapchain attachments
-        for (const auto& attachment : _swapchain_desc.attachments)
+        if (_swapchain_desc.rhi_device == nullptr)
         {
-            vk_device->destroy_texture_view(attachment.view);
-            vk_device->release_texture_handle(attachment.image);
+            return;
         }
 
-        // Destroy the swapchain
+        auto* const vk_device = static_cast<vk::device*>(_swapchain_desc.rhi_device);
+
+        for (const auto& attachment : _swapchain_desc.attachments)
+        {
+            if (attachment.view.handle != 0)
+            {
+                vk_device->destroy_texture_view(attachment.view);
+            }
+            if (attachment.image.handle != 0)
+            {
+                vk_device->release_texture_handle(attachment.image);
+            }
+        }
+        _swapchain_desc.attachments.clear();
+
         if (_swapchain_desc.swapchain != VK_NULL_HANDLE)
         {
             vk_device->get_dispatch_table().destroySwapchainKHR(_swapchain_desc.swapchain, nullptr);
+            _swapchain_desc.swapchain = VK_NULL_HANDLE;
         }
+
+        _last_acquired_index = invalid_acquired_index;
+    }
+
+    render_surface::~render_surface()
+    {
+        release_swapchain();
     }
 
     auto render_surface::get_format() const -> render_surface_format

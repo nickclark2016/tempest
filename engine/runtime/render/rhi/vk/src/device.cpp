@@ -1,3 +1,4 @@
+#include <tempest/assert.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/exception.hpp>
 #include <tempest/utility.hpp>
@@ -465,10 +466,6 @@ namespace tempest::rhi::vk
                 return VK_IMAGE_LAYOUT_GENERAL;
             case image_layout::present:
                 return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-            case image_layout::depth_stencil_attachment_optimal:
-                return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            case image_layout::depth_stencil_read_only_optimal:
-                return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
             }
             return VK_IMAGE_LAYOUT_GENERAL;
         }
@@ -515,6 +512,8 @@ namespace tempest::rhi::vk
 
         for (const auto& raw_surface : _raw_surfaces)
         {
+            TEMPEST_ASSERT(raw_surface.active_swapchain_count == 0 &&
+                           "~device: Cannot destroy VkSurfaceKHR while child VkSwapchainKHR handles still exist");
             _instance_dispatch_table.destroySurfaceKHR(raw_surface.handle, nullptr);
         }
         _raw_surfaces.clear();
@@ -627,6 +626,19 @@ namespace tempest::rhi::vk
     auto device::wait_idle() -> void
     {
         [[maybe_unused]] const auto result = _dispatch_table.deviceWaitIdle();
+        process_deferred_descriptor_retirements(/*force_flush=*/true);
+    }
+
+    auto device::process_deferred_retirements() -> void
+    {
+        for (auto& entry : _retired_descriptors)
+        {
+            if (entry.frames_remaining > 0)
+            {
+                --entry.frames_remaining;
+            }
+        }
+        process_deferred_descriptor_retirements(/*force_flush=*/false);
     }
 
     auto device::wait_for_sync(host_sync_point sync_point) -> void
@@ -916,6 +928,12 @@ namespace tempest::rhi::vk
             return nullptr;
         }
 
+        auto surface_iter = _raw_surfaces.find(desc.raw_surface.handle);
+        if (surface_iter != _raw_surfaces.end())
+        {
+            ++surface_iter->active_swapchain_count;
+        }
+
         auto image_count = uint32_t{0};
         _dispatch_table.getSwapchainImagesKHR(vk_swapchain, &image_count, nullptr);
         auto swapchain_images = vector<VkImage>{};
@@ -967,6 +985,21 @@ namespace tempest::rhi::vk
 
     auto device::destroy_render_surface(unique_ptr<rhi::render_surface> surface) -> void
     {
+        if (!surface)
+        {
+            return;
+        }
+
+        auto* const vk_surface = static_cast<vk::render_surface*>(surface.get());
+        const auto raw_surface_handle = vk_surface->get_raw_surface();
+        for (auto& raw_surface_entry : _raw_surfaces)
+        {
+            if (raw_surface_entry.handle == raw_surface_handle && raw_surface_entry.active_swapchain_count > 0)
+            {
+                --raw_surface_entry.active_swapchain_count;
+                break;
+            }
+        }
         surface.reset();
     }
 
@@ -975,6 +1008,8 @@ namespace tempest::rhi::vk
         const auto raw_surface_iter = _raw_surfaces.find(surface.handle);
         if (raw_surface_iter != _raw_surfaces.end())
         {
+            TEMPEST_ASSERT(raw_surface_iter->active_swapchain_count == 0 &&
+                           "destroy_raw_surface: Cannot destroy VkSurfaceKHR while child VkSwapchainKHR handles still exist");
             _instance_dispatch_table.destroySurfaceKHR(raw_surface_iter->handle, nullptr);
             _raw_surfaces.erase(surface.handle);
         }
@@ -2162,24 +2197,30 @@ namespace tempest::rhi::vk
         auto graphics_queue_index = _device.get_queue_index(queue_type::graphics);
         if (graphics_queue && graphics_queue_index)
         {
+            auto& queue_mutex = get_or_create_queue_mutex(graphics_queue.value());
             _graphics_execution_port = make_unique<execution_port>(
-                *this, graphics_queue_index.value(), queue_type::graphics, graphics_queue.value(), _dispatch_table);
+                *this, graphics_queue_index.value(), queue_type::graphics, graphics_queue.value(), _dispatch_table,
+                queue_mutex);
         }
 
         auto compute_queue = _device.get_queue(queue_type::compute);
         auto compute_queue_index = _device.get_queue_index(queue_type::compute);
         if (compute_queue && compute_queue_index)
         {
+            auto& queue_mutex = get_or_create_queue_mutex(compute_queue.value());
             _async_compute_execution_port = make_unique<execution_port>(
-                *this, compute_queue_index.value(), queue_type::compute, compute_queue.value(), _dispatch_table);
+                *this, compute_queue_index.value(), queue_type::compute, compute_queue.value(), _dispatch_table,
+                queue_mutex);
         }
 
         auto transfer_queue = _device.get_queue(queue_type::transfer);
         auto transfer_queue_index = _device.get_queue_index(queue_type::transfer);
         if (transfer_queue && transfer_queue_index)
         {
+            auto& queue_mutex = get_or_create_queue_mutex(transfer_queue.value());
             _async_transfer_execution_port = make_unique<execution_port>(
-                *this, transfer_queue_index.value(), queue_type::transfer, transfer_queue.value(), _dispatch_table);
+                *this, transfer_queue_index.value(), queue_type::transfer, transfer_queue.value(), _dispatch_table,
+                queue_mutex);
         }
 
         if (!_calibrator.is_calibrated() && _graphics_execution_port)
@@ -2305,23 +2346,23 @@ namespace tempest::rhi::vk
         // Initialize slot tracking and free lists
         _sampler_slots.resize(max_active_samplers);
         _sampler_free_list.reserve(max_active_samplers);
-        for (uint32_t i = max_active_samplers; i > 0; --i)
+        for (auto index = max_active_samplers; index > 0; --index)
         {
-            _sampler_free_list.push_back(i - 1);
+            _sampler_free_list.push_back(index - 1);
         }
 
         _sampled_image_slots.resize(max_active_textures);
         _sampled_image_free_list.reserve(max_active_textures);
-        for (uint32_t i = max_active_textures; i > 0; --i)
+        for (auto index = max_active_textures; index > 0; --index)
         {
-            _sampled_image_free_list.push_back(i - 1);
+            _sampled_image_free_list.push_back(index - 1);
         }
 
         _storage_image_slots.resize(max_active_storage_images);
         _storage_image_free_list.reserve(max_active_storage_images);
-        for (uint32_t i = max_active_storage_images; i > 0; --i)
+        for (auto index = max_active_storage_images; index > 0; --index)
         {
-            _storage_image_free_list.push_back(i - 1);
+            _storage_image_free_list.push_back(index - 1);
         }
 
         set_object_name(reinterpret_cast<uint64_t>(_sampler_descriptor_buffer), VK_OBJECT_TYPE_BUFFER,
@@ -2338,8 +2379,111 @@ namespace tempest::rhi::vk
                         "Sampler Set Layout");
     }
 
+    auto device::get_or_create_queue_mutex(VkQueue queue) -> mutex&
+    {
+        for (auto& ctx : _queue_mutexes)
+        {
+            if (ctx.queue == queue)
+            {
+                return *ctx.submit_mutex;
+            }
+        }
+        _queue_mutexes.push_back(queue_sync_context{
+            .queue = queue,
+            .submit_mutex = make_unique<mutex>(),
+        });
+        return *_queue_mutexes.back().submit_mutex;
+    }
+
+    auto device::_recycle_descriptor_slot(descriptor_type type, uint32_t index) -> void
+    {
+        switch (type)
+        {
+        case descriptor_type::sampler:
+            TEMPEST_ASSERT(_sampler_slots[index].status == descriptor_slot_status::retiring);
+            _sampler_slots[index].status = descriptor_slot_status::free;
+            ++_sampler_slots[index].generation;
+            _sampler_free_list.push_back(index);
+            tempest::memset(_sampler_descriptor_buffer_ptr + (index * _sampler_descriptor_size), 0,
+                            _sampler_descriptor_size);
+            break;
+        case descriptor_type::sampled_image:
+            TEMPEST_ASSERT(_sampled_image_slots[index].status == descriptor_slot_status::retiring);
+            _sampled_image_slots[index].status = descriptor_slot_status::free;
+            ++_sampled_image_slots[index].generation;
+            _sampled_image_free_list.push_back(index);
+            tempest::memset(_resource_descriptor_buffer_ptr + (index * _sampled_image_descriptor_size), 0,
+                            _sampled_image_descriptor_size);
+            break;
+        case descriptor_type::storage_image:
+            TEMPEST_ASSERT(_storage_image_slots[index].status == descriptor_slot_status::retiring);
+            _storage_image_slots[index].status = descriptor_slot_status::free;
+            ++_storage_image_slots[index].generation;
+            _storage_image_free_list.push_back(index);
+            tempest::memset(_resource_descriptor_buffer_ptr + _storage_image_buffer_offset +
+                                (index * _storage_image_descriptor_size),
+                            0, _storage_image_descriptor_size);
+            break;
+        }
+    }
+
+    auto device::process_deferred_descriptor_retirements(bool force_flush) -> void
+    {
+        for (auto* iter = _retired_descriptors.begin(); iter != _retired_descriptors.end();)
+        {
+            auto can_recycle = false;
+            if (force_flush)
+            {
+                can_recycle = true;
+            }
+            else if (iter->frames_remaining == 0)
+            {
+                auto all_completed = true;
+                for (const auto& sync_info : iter->required_sync_points)
+                {
+                    if (sync_info.semaphore.handle != 0 && sync_info.snapshot_value > 0)
+                    {
+                        const auto gpu_value = get_semaphore_value(sync_info.semaphore);
+                        if (sync_info.port != nullptr)
+                        {
+                            const auto current_port_value = sync_info.port->get_current_timeline_value();
+                            if (current_port_value > sync_info.snapshot_value)
+                            {
+                                if (gpu_value < (sync_info.snapshot_value + 1))
+                                {
+                                    all_completed = false;
+                                    break;
+                                }
+                                continue;
+                            }
+                        }
+
+                        if (gpu_value < sync_info.snapshot_value)
+                        {
+                            all_completed = false;
+                            break;
+                        }
+                    }
+                }
+                can_recycle = all_completed;
+            }
+
+            if (can_recycle)
+            {
+                _recycle_descriptor_slot(iter->type, iter->index);
+                iter = _retired_descriptors.erase(iter);
+            }
+            else
+            {
+                ++iter;
+            }
+        }
+    }
+
     auto device::allocate_descriptor(descriptor_type type) -> descriptor_handle
     {
+        process_deferred_descriptor_retirements(/*force_flush=*/false);
+
         switch (type)
         {
         case descriptor_type::sampler: {
@@ -2347,30 +2491,33 @@ namespace tempest::rhi::vk
             {
                 return {};
             }
-            auto idx = _sampler_free_list.back();
+            const auto index = _sampler_free_list.back();
             _sampler_free_list.pop_back();
-            _sampler_slots[idx].allocated = true;
-            return descriptor_handle{.index = idx, .generation = _sampler_slots[idx].generation};
+            TEMPEST_ASSERT(_sampler_slots[index].status == descriptor_slot_status::free);
+            _sampler_slots[index].status = descriptor_slot_status::allocated;
+            return descriptor_handle{.index = index, .generation = _sampler_slots[index].generation};
         }
         case descriptor_type::sampled_image: {
             if (_sampled_image_free_list.empty())
             {
                 return {};
             }
-            auto idx = _sampled_image_free_list.back();
+            const auto index = _sampled_image_free_list.back();
             _sampled_image_free_list.pop_back();
-            _sampled_image_slots[idx].allocated = true;
-            return descriptor_handle{.index = idx, .generation = _sampled_image_slots[idx].generation};
+            TEMPEST_ASSERT(_sampled_image_slots[index].status == descriptor_slot_status::free);
+            _sampled_image_slots[index].status = descriptor_slot_status::allocated;
+            return descriptor_handle{.index = index, .generation = _sampled_image_slots[index].generation};
         }
         case descriptor_type::storage_image: {
             if (_storage_image_free_list.empty())
             {
                 return {};
             }
-            auto idx = _storage_image_free_list.back();
+            const auto index = _storage_image_free_list.back();
             _storage_image_free_list.pop_back();
-            _storage_image_slots[idx].allocated = true;
-            return descriptor_handle{.index = idx, .generation = _storage_image_slots[idx].generation};
+            TEMPEST_ASSERT(_storage_image_slots[index].status == descriptor_slot_status::free);
+            _storage_image_slots[index].status = descriptor_slot_status::allocated;
+            return descriptor_handle{.index = index, .generation = _storage_image_slots[index].generation};
         }
         }
         return {};
@@ -2381,46 +2528,97 @@ namespace tempest::rhi::vk
         switch (type)
         {
         case descriptor_type::sampler:
-            if (descriptor.index < _sampler_slots.size() && _sampler_slots[descriptor.index].allocated &&
-                _sampler_slots[descriptor.index].generation == descriptor.generation)
+            if (descriptor.index >= _sampler_slots.size() ||
+                _sampler_slots[descriptor.index].status != descriptor_slot_status::allocated ||
+                _sampler_slots[descriptor.index].generation != descriptor.generation)
             {
-                _sampler_slots[descriptor.index].allocated = false;
-                _sampler_slots[descriptor.index].generation++;
-                _sampler_free_list.push_back(descriptor.index);
-                tempest::memset(_sampler_descriptor_buffer_ptr + (descriptor.index * _sampler_descriptor_size), 0,
-                                _sampler_descriptor_size);
+                return;
             }
+            _sampler_slots[descriptor.index].status = descriptor_slot_status::retiring;
             break;
         case descriptor_type::sampled_image:
-            if (descriptor.index < _sampled_image_slots.size() && _sampled_image_slots[descriptor.index].allocated &&
-                _sampled_image_slots[descriptor.index].generation == descriptor.generation)
+            if (descriptor.index >= _sampled_image_slots.size() ||
+                _sampled_image_slots[descriptor.index].status != descriptor_slot_status::allocated ||
+                _sampled_image_slots[descriptor.index].generation != descriptor.generation)
             {
-                _sampled_image_slots[descriptor.index].allocated = false;
-                _sampled_image_slots[descriptor.index].generation++;
-                _sampled_image_free_list.push_back(descriptor.index);
-                tempest::memset(_resource_descriptor_buffer_ptr + (descriptor.index * _sampled_image_descriptor_size),
-                                0, _sampled_image_descriptor_size);
+                return;
             }
+            _sampled_image_slots[descriptor.index].status = descriptor_slot_status::retiring;
             break;
         case descriptor_type::storage_image:
-            if (descriptor.index < _storage_image_slots.size() && _storage_image_slots[descriptor.index].allocated &&
-                _storage_image_slots[descriptor.index].generation == descriptor.generation)
+            if (descriptor.index >= _storage_image_slots.size() ||
+                _storage_image_slots[descriptor.index].status != descriptor_slot_status::allocated ||
+                _storage_image_slots[descriptor.index].generation != descriptor.generation)
             {
-                _storage_image_slots[descriptor.index].allocated = false;
-                _storage_image_slots[descriptor.index].generation++;
-                _storage_image_free_list.push_back(descriptor.index);
-                tempest::memset(_resource_descriptor_buffer_ptr + _storage_image_buffer_offset +
-                                    (descriptor.index * _storage_image_descriptor_size),
-                                0, _storage_image_descriptor_size);
+                return;
             }
+            _storage_image_slots[descriptor.index].status = descriptor_slot_status::retiring;
             break;
         }
+
+        auto sync_points = inplace_vector<retired_descriptor_sync, 3>{};
+        if (_graphics_execution_port != nullptr)
+        {
+            const auto sync_point = _graphics_execution_port->get_timeline_sync_point();
+            if (sync_point.semaphore.handle != 0 && sync_point.value > 0)
+            {
+                sync_points.push_back(retired_descriptor_sync{
+                    .semaphore = sync_point.semaphore,
+                    .snapshot_value = sync_point.value,
+                    .port = _graphics_execution_port.get(),
+                });
+            }
+        }
+        if (_async_compute_execution_port != nullptr)
+        {
+            const auto sync_point = _async_compute_execution_port->get_timeline_sync_point();
+            if (sync_point.semaphore.handle != 0 && sync_point.value > 0)
+            {
+                sync_points.push_back(retired_descriptor_sync{
+                    .semaphore = sync_point.semaphore,
+                    .snapshot_value = sync_point.value,
+                    .port = _async_compute_execution_port.get(),
+                });
+            }
+        }
+        if (_async_transfer_execution_port != nullptr)
+        {
+            const auto sync_point = _async_transfer_execution_port->get_timeline_sync_point();
+            if (sync_point.semaphore.handle != 0 && sync_point.value > 0)
+            {
+                sync_points.push_back(retired_descriptor_sync{
+                    .semaphore = sync_point.semaphore,
+                    .snapshot_value = sync_point.value,
+                    .port = _async_transfer_execution_port.get(),
+                });
+            }
+        }
+
+        if (sync_points.empty())
+        {
+            _recycle_descriptor_slot(type, descriptor.index);
+            return;
+        }
+
+        _retired_descriptors.push_back(retired_descriptor_entry{
+            .type = type,
+            .index = descriptor.index,
+            .generation = descriptor.generation,
+            .required_sync_points = tempest::move(sync_points),
+            .frames_remaining = _frames_in_flight,
+        });
     }
 
     auto device::write_sampler_descriptor(descriptor_handle slot, sampler_handle sampler) -> void
     {
         auto samp_opt = get_sampler(sampler);
         if (!samp_opt.has_value() || slot.index >= max_active_samplers)
+        {
+            return;
+        }
+
+        if (_sampler_slots[slot.index].status != descriptor_slot_status::allocated ||
+            _sampler_slots[slot.index].generation != slot.generation)
         {
             return;
         }
@@ -2444,6 +2642,12 @@ namespace tempest::rhi::vk
     {
         auto view_opt = get_texture_view(view);
         if (!view_opt.has_value() || slot.index >= max_active_textures)
+        {
+            return;
+        }
+
+        if (_sampled_image_slots[slot.index].status != descriptor_slot_status::allocated ||
+            _sampled_image_slots[slot.index].generation != slot.generation)
         {
             return;
         }
@@ -2477,6 +2681,12 @@ namespace tempest::rhi::vk
             return;
         }
 
+        if (_storage_image_slots[slot.index].status != descriptor_slot_status::allocated ||
+            _storage_image_slots[slot.index].generation != slot.generation)
+        {
+            return;
+        }
+
         auto image_info = VkDescriptorImageInfo{
             .sampler = VK_NULL_HANDLE,
             .imageView = view_opt->handle,
@@ -2496,6 +2706,54 @@ namespace tempest::rhi::vk
         auto* dest_ptr = _resource_descriptor_buffer_ptr + _storage_image_buffer_offset +
                          (slot.index * _storage_image_descriptor_size);
         _dispatch_table.getDescriptorEXT(&get_info, _storage_image_descriptor_size, dest_ptr);
+    }
+
+    auto device::is_descriptor_memory_zeroed(descriptor_type type, uint32_t index) const -> bool
+    {
+        const byte* ptr = nullptr;
+        auto size = size_t{0};
+        switch (type)
+        {
+        case descriptor_type::sampler:
+            if (index >= max_active_samplers)
+            {
+                return true;
+            }
+            ptr = _sampler_descriptor_buffer_ptr + (index * _sampler_descriptor_size);
+            size = _sampler_descriptor_size;
+            break;
+        case descriptor_type::sampled_image:
+            if (index >= max_active_textures)
+            {
+                return true;
+            }
+            ptr = _resource_descriptor_buffer_ptr + (index * _sampled_image_descriptor_size);
+            size = _sampled_image_descriptor_size;
+            break;
+        case descriptor_type::storage_image:
+            if (index >= max_active_storage_images)
+            {
+                return true;
+            }
+            ptr = _resource_descriptor_buffer_ptr + _storage_image_buffer_offset +
+                  (index * _storage_image_descriptor_size);
+            size = _storage_image_descriptor_size;
+            break;
+        }
+
+        if (ptr == nullptr || size == 0)
+        {
+            return true;
+        }
+
+        for (auto byte_index = size_t{0}; byte_index < size; ++byte_index)
+        {
+            if (ptr[byte_index] != byte{0})
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     auto device::set_object_name([[maybe_unused]] uint64_t object_handle, [[maybe_unused]] VkObjectType object_type,

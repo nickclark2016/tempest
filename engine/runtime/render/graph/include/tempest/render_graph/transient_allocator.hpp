@@ -133,12 +133,18 @@ namespace tempest::render_graph
             return _buffer_pool.size();
         }
 
+        [[nodiscard]] auto get_retired_texture_pool_count() const noexcept -> size_t
+        {
+            return _retired_textures.size();
+        }
+
       private:
         uint32_t _frames_in_flight{1};
         uint32_t _frame_slot{0};
         transient_pool_config _pool_config{};
 
         vector<pooled_texture> _texture_pool;
+        vector<pooled_texture> _retired_textures;
         vector<pooled_buffer> _buffer_pool;
 
         flat_unordered_map<uint32_t, physical_texture_allocation> _active_textures;

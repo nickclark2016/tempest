@@ -3,6 +3,7 @@
 
 #include <tempest/array.hpp>
 #include <tempest/assert.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/inplace_vector.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/memory.hpp>
@@ -436,7 +437,7 @@ namespace tempest::rhi::vk
     {
       public:
         execution_port(vk::device& parent_device, uint32_t queue_family_index, queue_type queue_type, VkQueue queue,
-                       dispatch_table dispatch_table);
+                       dispatch_table dispatch_table, mutex& submit_mutex);
         execution_port(const execution_port&) = delete;
         execution_port(execution_port&&) noexcept = delete;
         ~execution_port() override;
@@ -489,7 +490,7 @@ namespace tempest::rhi::vk
 
         [[nodiscard]] auto get_submit_mutex() noexcept -> mutex&
         {
-            return _submit_mutex;
+            return *_submit_mutex;
         }
 
       private:
@@ -509,7 +510,7 @@ namespace tempest::rhi::vk
         mutex _slab_allocator_mutex;
 
         // Ensures that only one thread can submit command lists at a time, since Vulkan queues are not thread-safe
-        mutex _submit_mutex;
+        non_null<mutex> _submit_mutex;
     };
 } // namespace tempest::rhi::vk
 

@@ -19,8 +19,8 @@ namespace tempest::render_system
     }
 
     shader_manager::shader_manager(shader_manager&& other) noexcept
-        : _device{other._device}, _asset_db{other._asset_db}, _modules{tempest::move(other._modules)},
-          _graphics_pipelines{tempest::move(other._graphics_pipelines)},
+        : _device{tempest::exchange(other._device, nullptr)}, _asset_db{tempest::exchange(other._asset_db, nullptr)},
+          _modules{tempest::move(other._modules)}, _graphics_pipelines{tempest::move(other._graphics_pipelines)},
           _compute_pipelines{tempest::move(other._compute_pipelines)},
           _module_paths_to_handle{tempest::move(other._module_paths_to_handle)},
           _named_graphics_pipelines{tempest::move(other._named_graphics_pipelines)},
@@ -29,29 +29,27 @@ namespace tempest::render_system
           _module_to_compute_pipelines{tempest::move(other._module_to_compute_pipelines)},
           _retired_pipelines{tempest::move(other._retired_pipelines)}
     {
-        other._device = nullptr;
-        other._asset_db = nullptr;
     }
 
     auto shader_manager::operator=(shader_manager&& other) noexcept -> shader_manager&
     {
-        if (this != &other)
+        if (this == &other)
         {
-            release_all();
-            _device = other._device;
-            _asset_db = other._asset_db;
-            _modules = tempest::move(other._modules);
-            _graphics_pipelines = tempest::move(other._graphics_pipelines);
-            _compute_pipelines = tempest::move(other._compute_pipelines);
-            _module_paths_to_handle = tempest::move(other._module_paths_to_handle);
-            _named_graphics_pipelines = tempest::move(other._named_graphics_pipelines);
-            _named_compute_pipelines = tempest::move(other._named_compute_pipelines);
-            _module_to_graphics_pipelines = tempest::move(other._module_to_graphics_pipelines);
-            _module_to_compute_pipelines = tempest::move(other._module_to_compute_pipelines);
-            _retired_pipelines = tempest::move(other._retired_pipelines);
-            other._device = nullptr;
-            other._asset_db = nullptr;
+            return *this;
         }
+
+        release_all();
+        _device = tempest::exchange(other._device, nullptr);
+        _asset_db = tempest::exchange(other._asset_db, nullptr);
+        _modules = tempest::move(other._modules);
+        _graphics_pipelines = tempest::move(other._graphics_pipelines);
+        _compute_pipelines = tempest::move(other._compute_pipelines);
+        _module_paths_to_handle = tempest::move(other._module_paths_to_handle);
+        _named_graphics_pipelines = tempest::move(other._named_graphics_pipelines);
+        _named_compute_pipelines = tempest::move(other._named_compute_pipelines);
+        _module_to_graphics_pipelines = tempest::move(other._module_to_graphics_pipelines);
+        _module_to_compute_pipelines = tempest::move(other._module_to_compute_pipelines);
+        _retired_pipelines = tempest::move(other._retired_pipelines);
         return *this;
     }
 

@@ -552,7 +552,7 @@ namespace tempest::render_graph
                             .type = access_type::write,
                             .stages = rhi::pipeline_stage::attachment_output,
                             .access = rhi::resource_access::write,
-                            .layout = rhi::image_layout::depth_stencil_attachment_optimal,
+                            .layout = rhi::image_layout::general,
                             .load_op = rhi::load_op::clear,
                         },
                     },
@@ -569,7 +569,7 @@ namespace tempest::render_graph
                             .type = access_type::read,
                             .stages = rhi::pipeline_stage::fragment,
                             .access = rhi::resource_access::read,
-                            .layout = rhi::image_layout::depth_stencil_read_only_optimal,
+                            .layout = rhi::image_layout::general,
                         },
                     },
                 .buffer_accesses =
@@ -693,10 +693,9 @@ namespace tempest::render_graph
         EXPECT_TRUE(static_cast<bool>(b.dst.stages & rhi::pipeline_stage::early_fragment_tests));
     }
 
-    /// @brief Verify that depth-stencil attachments transition to depth_stencil_attachment_optimal
-    ///        from undefined, and subsequently transition to sampled layouts (general or read-only)
-    ///        when consumed by downstream reading passes.
-    TEST(barrier_solver_test, depth_attachment_optimal_transitions_to_optimal_layout)
+    /// @brief Verify that depth-stencil attachments transition to general layout
+    ///        from undefined, and subsequently maintain general layout across reading passes.
+    TEST(barrier_solver_test, depth_attachment_transitions_to_general_layout)
     {
         // Setup mock device, transient allocator, and registered depth texture
         auto dev = mock_test_device{};
@@ -748,7 +747,7 @@ namespace tempest::render_graph
                             .type = access_type::write,
                             .stages = rhi::pipeline_stage::early_fragment_tests | rhi::pipeline_stage::late_fragment_tests,
                             .access = rhi::resource_access::read_write,
-                            .layout = rhi::image_layout::depth_stencil_attachment_optimal,
+                            .layout = rhi::image_layout::general,
                             .load_op = rhi::load_op::clear,
                             .store_op = rhi::store_op::store,
                             .attachment = attachment_type::depth_stencil,
@@ -767,7 +766,7 @@ namespace tempest::render_graph
                             .type = access_type::read,
                             .stages = rhi::pipeline_stage::fragment,
                             .access = rhi::resource_access::read,
-                            .layout = rhi::image_layout::depth_stencil_read_only_optimal,
+                            .layout = rhi::image_layout::general,
                         },
                     },
             },
@@ -775,18 +774,18 @@ namespace tempest::render_graph
 
         const auto sync = solver.solve(dag, passes, allocator, textures);
 
-        // Assert: Pass 0 transitions from undefined to depth_stencil_attachment_optimal
+        // Assert: Pass 0 transitions from undefined to general
         ASSERT_EQ(sync.pass_plans.size(), 2U);
         ASSERT_EQ(sync.pass_plans[0].texture_barriers.size(), 1U);
         const auto& b0 = sync.pass_plans[0].texture_barriers[0];
         EXPECT_EQ(b0.src.layout, rhi::image_layout::undefined);
-        EXPECT_EQ(b0.dst.layout, rhi::image_layout::depth_stencil_attachment_optimal);
+        EXPECT_EQ(b0.dst.layout, rhi::image_layout::general);
 
-        // Pass 1 transitions from depth_stencil_attachment_optimal to depth_stencil_read_only_optimal
+        // Pass 1 synchronizes write-to-read within general layout
         ASSERT_EQ(sync.pass_plans[1].texture_barriers.size(), 1U);
         const auto& b1 = sync.pass_plans[1].texture_barriers[0];
-        EXPECT_EQ(b1.src.layout, rhi::image_layout::depth_stencil_attachment_optimal);
-        EXPECT_EQ(b1.dst.layout, rhi::image_layout::depth_stencil_read_only_optimal);
+        EXPECT_EQ(b1.src.layout, rhi::image_layout::general);
+        EXPECT_EQ(b1.dst.layout, rhi::image_layout::general);
         EXPECT_EQ(b1.src.stages, rhi::pipeline_stage::early_fragment_tests | rhi::pipeline_stage::late_fragment_tests);
         EXPECT_EQ(b1.dst.stages, rhi::pipeline_stage::fragment);
     }

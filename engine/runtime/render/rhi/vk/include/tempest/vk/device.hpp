@@ -1,6 +1,8 @@
 #ifndef tempest_rhi_vk_device_hpp
 #define tempest_rhi_vk_device_hpp
 
+#include <tempest/inplace_vector.hpp>
+#include <tempest/mutex.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/slot_map.hpp>
 #include <tempest/vk/calibration.hpp>
@@ -69,6 +71,7 @@ namespace tempest::rhi::vk
     {
         VkSurfaceKHR handle;
         native_wsi_handle native_surface_handles;
+        uint32_t active_swapchain_count = 0;
     };
 
     class TEMPEST_API device final : public rhi::device
@@ -177,6 +180,23 @@ namespace tempest::rhi::vk
         {
             return _storage_image_buffer_offset;
         }
+
+        [[nodiscard]] auto get_retired_descriptor_count() const noexcept -> size_t
+        {
+            return _retired_descriptors.size();
+        }
+
+        auto set_frames_in_flight(uint32_t count) noexcept -> void
+        {
+            _frames_in_flight = count > 0 ? count : 1U;
+        }
+
+        [[nodiscard]] auto get_frames_in_flight() const noexcept -> uint32_t
+        {
+            return _frames_in_flight;
+        }
+
+        [[nodiscard]] auto is_descriptor_memory_zeroed(descriptor_type type, uint32_t index) const -> bool;
 
         [[nodiscard]] auto get_buffer(buffer_handle handle) const -> optional<buffer>
         {
@@ -321,12 +341,50 @@ namespace tempest::rhi::vk
             return _allocator;
         }
 
+        auto process_deferred_retirements() -> void override;
+
       private:
+        enum class descriptor_slot_status : uint8_t
+        {
+            free,
+            allocated,
+            retiring,
+        };
+
         struct descriptor_slot_state
         {
-            uint32_t generation = 1;
-            bool allocated = false;
+            static constexpr uint32_t initial_generation = 1;
+            static constexpr auto default_status = descriptor_slot_status::free;
+
+            uint32_t generation = initial_generation;
+            descriptor_slot_status status = default_status;
         };
+
+        struct queue_sync_context
+        {
+            VkQueue queue{VK_NULL_HANDLE};
+            unique_ptr<mutex> submit_mutex{};
+        };
+
+        struct retired_descriptor_sync
+        {
+            semaphore_handle semaphore{};
+            uint64_t snapshot_value{0};
+            const execution_port* port{nullptr};
+        };
+
+        struct retired_descriptor_entry
+        {
+            descriptor_type type;
+            uint32_t index;
+            uint32_t generation;
+            inplace_vector<retired_descriptor_sync, 3> required_sync_points;
+            uint32_t frames_remaining{0};
+        };
+
+        auto get_or_create_queue_mutex(VkQueue queue) -> mutex&;
+        auto process_deferred_descriptor_retirements(bool force_flush = false) -> void;
+        auto _recycle_descriptor_slot(descriptor_type type, uint32_t index) -> void;
 
         device(const native_instance& instance, const physical_device_info& physical_device, const native_device& dev,
                const device_desc& desc);
@@ -391,6 +449,12 @@ namespace tempest::rhi::vk
         vector<uint32_t> _sampled_image_free_list;
         vector<descriptor_slot_state> _storage_image_slots;
         vector<uint32_t> _storage_image_free_list;
+
+        static constexpr uint32_t default_frames_in_flight = 1;
+        uint32_t _frames_in_flight = default_frames_in_flight;
+
+        inplace_vector<queue_sync_context, 3> _queue_mutexes;
+        vector<retired_descriptor_entry> _retired_descriptors;
     };
 } // namespace tempest::rhi::vk
 

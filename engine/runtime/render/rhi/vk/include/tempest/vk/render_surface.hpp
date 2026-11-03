@@ -48,14 +48,28 @@ namespace tempest::rhi::vk
         [[nodiscard]] auto present(rhi::execution_port& port, device_sync_point wait_values)
             -> expected<void, swapchain_error> override;
 
+        /// @brief Explicitly tears down swapchain attachments and VkSwapchainKHR ahead of destruction.
+        auto release_swapchain() -> void;
+
         [[nodiscard]] auto get_swapchain() const noexcept -> VkSwapchainKHR
         {
             return _swapchain_desc.swapchain;
         }
 
+        [[nodiscard]] auto get_raw_surface() const noexcept -> VkSurfaceKHR
+        {
+            return _swapchain_desc.surface;
+        }
+
+        [[nodiscard]] auto get_last_acquired_index() const noexcept -> uint32_t
+        {
+            return _last_acquired_index;
+        }
+
       private:
+        static constexpr uint32_t invalid_acquired_index = ~0U;
         swapchain_create_desc _swapchain_desc;
-        uint32_t _last_acquired_index = ~0U;
+        uint32_t _last_acquired_index = invalid_acquired_index;
     };
 } // namespace tempest::rhi::vk
 

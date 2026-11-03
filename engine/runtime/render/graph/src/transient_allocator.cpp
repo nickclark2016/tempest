@@ -331,6 +331,32 @@ namespace tempest::render_graph
             }
         }
 
+        // Reclaim retired textures whose flight slot matches current frame slot
+        auto remaining_retired = vector<pooled_texture>{};
+        remaining_retired.reserve(_retired_textures.size());
+
+        for (auto& p : _retired_textures)
+        {
+            if (p.flight_slot == _frame_slot)
+            {
+                if (p.sampled_descriptor.index != ~0U)
+                {
+                    dev.free_descriptor(rhi::descriptor_type::sampled_image, p.sampled_descriptor);
+                }
+                if (p.storage_descriptor.index != ~0U)
+                {
+                    dev.free_descriptor(rhi::descriptor_type::storage_image, p.storage_descriptor);
+                }
+                dev.destroy_texture_view(p.view);
+                dev.destroy_texture(p.handle);
+            }
+            else
+            {
+                remaining_retired.push_back(tempest::move(p));
+            }
+        }
+        _retired_textures = tempest::move(remaining_retired);
+
         // Evict Stale Resources for current _frame_slot
         // Resources for this flight slot have completed GPU execution and are safe to destroy if unused.
         auto remaining_textures = vector<pooled_texture>{};
@@ -433,6 +459,21 @@ namespace tempest::render_graph
         }
         _texture_pool.clear();
 
+        for (const auto& p : _retired_textures)
+        {
+            if (p.sampled_descriptor.index != ~0U)
+            {
+                dev.free_descriptor(rhi::descriptor_type::sampled_image, p.sampled_descriptor);
+            }
+            if (p.storage_descriptor.index != ~0U)
+            {
+                dev.free_descriptor(rhi::descriptor_type::storage_image, p.storage_descriptor);
+            }
+            dev.destroy_texture_view(p.view);
+            dev.destroy_texture(p.handle);
+        }
+        _retired_textures.clear();
+
         for (const auto& p : _buffer_pool)
         {
             dev.destroy_buffer(p.handle);
@@ -443,28 +484,20 @@ namespace tempest::render_graph
         _active_buffers.clear();
     }
 
-    void transient_allocator::on_surface_resize(rhi::device& dev)
+    void transient_allocator::on_surface_resize([[maybe_unused]] rhi::device& dev)
     {
         auto remaining_textures = vector<pooled_texture>{};
+        remaining_textures.reserve(_texture_pool.size());
 
-        for (const auto& p : _texture_pool)
+        for (auto& p : _texture_pool)
         {
             if (p.is_surface_relative)
             {
-                if (p.sampled_descriptor.index != ~0U)
-                {
-                    dev.free_descriptor(rhi::descriptor_type::sampled_image, p.sampled_descriptor);
-                }
-                if (p.storage_descriptor.index != ~0U)
-                {
-                    dev.free_descriptor(rhi::descriptor_type::storage_image, p.storage_descriptor);
-                }
-                dev.destroy_texture_view(p.view);
-                dev.destroy_texture(p.handle);
+                _retired_textures.push_back(tempest::move(p));
             }
             else
             {
-                remaining_textures.push_back(p);
+                remaining_textures.push_back(tempest::move(p));
             }
         }
 

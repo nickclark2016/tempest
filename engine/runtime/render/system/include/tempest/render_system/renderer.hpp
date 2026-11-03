@@ -121,6 +121,9 @@ namespace tempest::render_system
                               rhi::present_mode mode = rhi::present_mode::vsync);
         void unregister_surface(window_handle win);
         void resize_surface(window_handle win, uint32_t width, uint32_t height);
+        void drain_retired_surfaces(window_handle win);
+        void drain_retired_surfaces(rhi::raw_surface_handle raw_surface);
+        void clear_retired_surfaces();
 
         [[nodiscard]] auto get_render_surface(window_handle win = null_window_handle) const noexcept
             -> const rhi::render_surface*;
@@ -486,6 +489,23 @@ namespace tempest::render_system
         void enqueue_texture_retirement(render_graph::temporal_resources res);
         void process_deferred_texture_retirements();
         void clear_retired_textures();
+
+        struct retired_surface_entry
+        {
+            window_handle window = null_window_handle;
+            rhi::raw_surface_handle raw_surface = {};
+            unique_ptr<rhi::render_surface> surface = nullptr;
+            vector<rhi::semaphore_handle> render_semaphores{};
+            inplace_vector<rhi::host_sync_point, 3> required_sync_points{};
+            uint32_t frames_remaining = 0;
+        };
+
+        vector<retired_surface_entry> _retired_surfaces{};
+
+        void enqueue_surface_retirement(window_handle win, rhi::raw_surface_handle raw_surface,
+                                        unique_ptr<rhi::render_surface> surface,
+                                        vector<rhi::semaphore_handle> render_semaphores);
+        void process_deferred_surface_retirements();
     };
 } // namespace tempest::render_system
 

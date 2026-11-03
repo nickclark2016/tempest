@@ -30,10 +30,35 @@
 #include <tempest/rhi.hpp>
 #include <tempest/transform_component.hpp>
 
+#include <tempest/window_manager.hpp>
+#include <tempest/vk/device.hpp>
+
+#ifdef TEMPEST_PLATFORM_WINDOWS
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace tempest::render_system::tests
 {
     namespace
     {
+        auto resize_window_extent = [](window_manager& win_mgr, window_handle win, uint32_t width, uint32_t height) {
+#ifdef TEMPEST_PLATFORM_WINDOWS
+            const auto native_h = win_mgr.get_native_wsi_handle(win);
+            auto* const hwnd = static_cast<HWND>(native_h.window);
+            auto client_rect = RECT{0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
+            AdjustWindowRectEx(&client_rect, static_cast<DWORD>(GetWindowLongA(hwnd, GWL_STYLE)), FALSE,
+                               static_cast<DWORD>(GetWindowLongA(hwnd, GWL_EXSTYLE)));
+            SetWindowPos(hwnd, nullptr, 0, 0, client_rect.right - client_rect.left,
+                         client_rect.bottom - client_rect.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            win_mgr.poll_events();
+#else
+            win_mgr.poll_events();
+#endif
+        };
+
         struct test_fixture
         {
             unique_ptr<rhi::context> ctx;
@@ -1817,7 +1842,7 @@ namespace tempest::render_system::tests
             "ShadowSinkPass",
             [s = shadow_res.shadow_atlas](render_graph::pass_builder& builder, shadow_sink_data& sink_data) -> void {
                 sink_data.shadow = builder.read(s, rhi::pipeline_stage::fragment, rhi::resource_access::read,
-                                                rhi::image_layout::depth_stencil_read_only_optimal);
+                                                rhi::image_layout::general);
                 builder.mark_sink();
             },
             []([[maybe_unused]] const shadow_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
@@ -6125,6 +6150,103 @@ namespace tempest::render_system::tests
         dev->wait_idle();
     }
 
+    /// @brief Stress-tests rapid repeated texture and shadow atlas resizes across multiple frames in flight,
+    /// verifying deferred retirement queue drainage, no resource leakage, and safe destruction.
+    TEST(render_system_tests, renderer_rapid_repeated_resize_multi_frame_stress)
+    {
+        // Setup: initialize RHI device, registries, and renderer
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        static auto test_sink = stdout_log_sink{};
+        static auto log = logger{test_sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            auto sun_ent = registry.create();
+            registry.assign(sun_ent, directional_light_component{
+                                         .color = {1.0F, 1.0F, 1.0F},
+                                         .intensity = 2.0F,
+                                     });
+            registry.assign(sun_ent, shadow_caster_component{
+                                         .resolution = 512,
+                                         .num_cascades = 4,
+                                         .split_lambda = 0.5F,
+                                         .max_shadow_distance = 100.0F,
+                                     });
+            auto sun_tx = ecs::transform_component{};
+            sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
+            registry.assign(sun_ent, sun_tx);
+
+            const auto proj = math::perspective(16.0F / 9.0F, math::as_radians(60.0F), 0.1F);
+            const auto eye = math::vec3<float>{0.0F, 2.0F, -10.0F};
+            const auto view =
+                math::look_at(eye, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F});
+            const auto override_camera = render_camera{
+                .proj = proj,
+                .inv_proj = math::inverse(proj),
+                .view = view,
+                .inv_view = math::inverse(view),
+                .eye_position = {eye.x, eye.y, eye.z, 1.0F},
+            };
+
+            // Act: Render 8 frames while repeatedly changing shadow atlas resolution and frame dimensions
+            constexpr auto resolutions = array<uint32_t, 8>{512U, 1024U, 512U, 2048U, 1024U, 512U, 1024U, 512U};
+            for (auto frame_idx = 0U; frame_idx < 8U; ++frame_idx)
+            {
+                registry.replace(sun_ent, shadow_caster_component{
+                                              .resolution = resolutions[frame_idx],
+                                              .num_cascades = 4,
+                                              .split_lambda = 0.5F,
+                                              .max_shadow_distance = 100.0F,
+                                          });
+
+                const auto width = 800U + (frame_idx * 64U);
+                const auto height = 600U + (frame_idx * 36U);
+
+                rend->prepare_frame(width, height, nullopt, nullopt, override_camera);
+                auto render_res = rend->render();
+                EXPECT_TRUE(render_res.has_value());
+            }
+
+            // Act: Execute 3 steady frames to drain retired queues via timeline completion
+            for (auto i = 0U; i < 3U; ++i)
+            {
+                rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
+                auto drain_res = rend->render();
+                EXPECT_TRUE(drain_res.has_value());
+            }
+
+            // Assert: All retired textures successfully drained without leaks
+            EXPECT_EQ(rend->get_retired_texture_count(), 0U);
+        }
+
+        dev->wait_idle();
+    }
+
     //=============================================================================
     // Pass Dispatcher Integration Tests
     //=============================================================================
@@ -6558,5 +6680,817 @@ namespace tempest::render_system::tests
 
         dev->wait_idle();
     }
+
+    // =========================================================================
+    // Move Semantics & State Reset Tests (Rule of 5 / exchange)
+    // =========================================================================
+
+    /// @brief Verifies that moving a renderer instance resets scalar and primitive state
+    /// on the moved-from instance to default safe values using tempest::exchange.
+    TEST(render_system_tests, renderer_move_constructor_and_assignment_state_reset)
+    {
+        // Setup: Test device, logger, and registries
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        auto original_rend = builder.build(*dev, log);
+        ASSERT_NE(original_rend, nullptr);
+
+        // Act: Move construct
+        auto moved_rend = tempest::move(*original_rend);
+
+        // Assert: Moved-from instance has reset fields
+        EXPECT_EQ(original_rend->get_active_draw_count(), 0U);
+        EXPECT_EQ(original_rend->get_opaque_draw_count(), 0U);
+        EXPECT_EQ(original_rend->get_alpha_masked_draw_count(), 0U);
+        EXPECT_EQ(original_rend->get_transparent_draw_count(), 0U);
+        EXPECT_EQ(original_rend->get_frames_in_flight(), 0U);
+
+        // Act: Move assign to a new renderer instance
+        auto second_rend = builder.build(*dev, log);
+        ASSERT_NE(second_rend, nullptr);
+
+        *second_rend = tempest::move(moved_rend);
+
+        // Assert: Moved-from instance after assignment has reset fields
+        EXPECT_EQ(moved_rend.get_active_draw_count(), 0U);
+        EXPECT_EQ(moved_rend.get_opaque_draw_count(), 0U);
+        EXPECT_EQ(moved_rend.get_alpha_masked_draw_count(), 0U);
+        EXPECT_EQ(moved_rend.get_transparent_draw_count(), 0U);
+        EXPECT_EQ(moved_rend.get_frames_in_flight(), 0U);
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that moving a resource_pool instance resets buffer addresses and state
+    /// on the moved-from instance to default safe values using tempest::exchange.
+    TEST(render_system_tests, resource_pool_move_constructor_and_assignment_state_reset)
+    {
+        // Setup: Test device
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool_a = resource_pool{*dev, resource_pool_config{}};
+        EXPECT_NE(pool_a.get_vertex_buffer_address(), 0ULL);
+
+        // Act: Move construct
+        auto pool_b = tempest::move(pool_a);
+
+        // Assert: Moved-from instance has zeroed buffer address
+        EXPECT_EQ(pool_a.get_vertex_buffer_address(), 0ULL);
+        EXPECT_NE(pool_b.get_vertex_buffer_address(), 0ULL);
+
+        // Act: Move assign to a new pool
+        auto pool_c = resource_pool{*dev, resource_pool_config{}};
+        pool_c = tempest::move(pool_b);
+
+        // Assert: Moved-from instance after assignment has zeroed address
+        EXPECT_EQ(pool_b.get_vertex_buffer_address(), 0ULL);
+        EXPECT_NE(pool_c.get_vertex_buffer_address(), 0ULL);
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that moving a shader_manager instance resets device pointers
+    /// on the moved-from instance to default safe values using tempest::exchange.
+    TEST(render_system_tests, shader_manager_move_constructor_and_assignment_state_reset)
+    {
+        // Setup: Test device
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto mgr_a = shader_manager{*dev, fixture.asset_db};
+
+        // Act: Move construct
+        auto mgr_b = tempest::move(mgr_a);
+
+        // Act: Move assign
+        auto mgr_c = shader_manager{*dev, fixture.asset_db};
+        mgr_c = tempest::move(mgr_b);
+
+        dev->wait_idle();
+    }
+
+    /// @brief Validates that renderer::unregister_surface synchronously destroys the active swapchain
+    ///        and flushes retired swapchains belonging to that window, so that subsequent
+    ///        device::destroy_raw_surface succeeds without assertion failures or validation errors.
+    TEST(render_system_tests, unregister_surface_synchronous_swapchain_teardown_and_retired_drain)
+    {
+        // Setup: Test device, logger, registries, and hidden GLFW window
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 640,
+            .render_height = 480,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        auto test_renderer = builder.build(*dev, log);
+        ASSERT_NE(test_renderer, nullptr);
+
+        auto win_mgr = window_manager{};
+        const auto test_win = win_mgr.create_window({
+            .width = 640,
+            .height = 480,
+            .title = "Renderer Unregister Test",
+            .resizable = true,
+        });
+        ASSERT_TRUE(test_win.is_valid());
+
+        const auto native_handle = win_mgr.get_native_wsi_handle(test_win);
+        auto raw_res = dev->create_raw_surface(native_handle);
+        ASSERT_TRUE(raw_res.has_value());
+        const auto raw_surf = raw_res.value();
+
+        auto* const vk_dev = static_cast<rhi::vk::device*>(dev);
+
+        // Act: Register surface, verify initial active swapchain
+        test_renderer->register_surface(test_win, raw_surf, 640, 480);
+        EXPECT_NE(test_renderer->get_render_surface(test_win), nullptr);
+
+        const auto initial_raw_info = vk_dev->get_raw_surface(raw_surf);
+        ASSERT_TRUE(initial_raw_info.has_value());
+        EXPECT_EQ(initial_raw_info->active_swapchain_count, 1u);
+
+        // Act: Resize surface and execute a frame to create an in-flight retired swapchain
+        const auto dummy_ui = [](rhi::command_list&, uint32_t, uint32_t) {};
+        resize_window_extent(win_mgr, test_win, 800, 600);
+        test_renderer->resize_surface(test_win, 800, 600);
+        const auto frame_result = test_renderer->render_frame(test_win, nullopt, dummy_ui);
+        EXPECT_TRUE(frame_result.has_value());
+
+        // Assert: Retired swapchain is present in flight (active count is 2: active + retired)
+        const auto populated_raw_info = vk_dev->get_raw_surface(raw_surf);
+        ASSERT_TRUE(populated_raw_info.has_value());
+        EXPECT_EQ(populated_raw_info->active_swapchain_count, 2u);
+
+        // Act: Unregister surface, verifying synchronous active and retired swapchain destruction
+        test_renderer->unregister_surface(test_win);
+        EXPECT_EQ(test_renderer->get_render_surface(test_win), nullptr);
+
+        // Assert: Both active and retired swapchains are completely drained (active count drops to 0)
+        const auto drained_raw_info = vk_dev->get_raw_surface(raw_surf);
+        ASSERT_TRUE(drained_raw_info.has_value());
+        EXPECT_EQ(drained_raw_info->active_swapchain_count, 0u);
+
+        // Assert: device::destroy_raw_surface must succeed without assertion tripping (active_swapchain_count == 0)
+        dev->destroy_raw_surface(raw_surf);
+        EXPECT_FALSE(vk_dev->get_raw_surface(raw_surf).has_value());
+
+        // Teardown
+        win_mgr.destroy_window(test_win);
+    }
+
+    /// @brief Validates that drain_retired_surfaces correctly purges retired entries
+    ///        matching a window or raw_surface handle while leaving concurrent windows untouched.
+    TEST(render_system_tests, renderer_drain_retired_surfaces_isolation)
+    {
+        // Setup: Test device, logger, registries, and 2 concurrent windows
+        auto fixture = create_test_device();
+        auto* const dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 640,
+            .render_height = 480,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        auto test_renderer = builder.build(*dev, log);
+        ASSERT_NE(test_renderer, nullptr);
+
+        auto win_mgr = window_manager{};
+        const auto win_primary = win_mgr.create_window({
+            .width = 640,
+            .height = 480,
+            .title = "Concurrent Window Primary",
+            .resizable = true,
+        });
+        const auto win_secondary = win_mgr.create_window({
+            .width = 800,
+            .height = 600,
+            .title = "Concurrent Window Secondary",
+            .resizable = true,
+        });
+        ASSERT_TRUE(win_primary.is_valid());
+        ASSERT_TRUE(win_secondary.is_valid());
+
+        const auto raw_res_primary = dev->create_raw_surface(win_mgr.get_native_wsi_handle(win_primary));
+        const auto raw_res_secondary = dev->create_raw_surface(win_mgr.get_native_wsi_handle(win_secondary));
+        ASSERT_TRUE(raw_res_primary.has_value());
+        ASSERT_TRUE(raw_res_secondary.has_value());
+        const auto raw_primary = raw_res_primary.value();
+        const auto raw_secondary = raw_res_secondary.value();
+
+        auto* const vk_dev = static_cast<rhi::vk::device*>(dev);
+
+        // Act: Register both surfaces
+        test_renderer->register_surface(win_primary, raw_primary, 640, 480);
+        test_renderer->register_surface(win_secondary, raw_secondary, 800, 600);
+
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_primary)->active_swapchain_count, 1u);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_secondary)->active_swapchain_count, 1u);
+
+        const auto dummy_ui = [](rhi::command_list&, uint32_t, uint32_t) {};
+
+        // Act: Resize primary window and execute a frame so a retired swapchain is pending
+        resize_window_extent(win_mgr, win_primary, 700, 525);
+        test_renderer->resize_surface(win_primary, 700, 525);
+        const auto frame_pri_res = test_renderer->render_frame(win_primary, nullopt, dummy_ui);
+        EXPECT_TRUE(frame_pri_res.has_value());
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_primary)->active_swapchain_count, 2u);
+
+        // Act: Resize secondary window and execute a frame so a retired swapchain is pending
+        resize_window_extent(win_mgr, win_secondary, 860, 645);
+        test_renderer->resize_surface(win_secondary, 860, 645);
+        const auto frame_sec_res = test_renderer->render_frame(win_secondary, nullopt, dummy_ui);
+        EXPECT_TRUE(frame_sec_res.has_value());
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_secondary)->active_swapchain_count, 2u);
+
+        // Assert: Both windows currently have retired swapchains in flight
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_primary)->active_swapchain_count, 2u);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_secondary)->active_swapchain_count, 2u);
+
+        // Act: Explicitly drain retired surfaces targeting ONLY win_primary
+        test_renderer->drain_retired_surfaces(win_primary);
+
+        // Assert: Primary window's retired swapchains are destroyed (only active remains)
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_primary)->active_swapchain_count, 1u);
+        // Assert: Secondary window's retired swapchains are completely untouched
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_secondary)->active_swapchain_count, 2u);
+
+        // Act: Explicitly drain retired surfaces targeting ONLY raw_secondary
+        test_renderer->drain_retired_surfaces(raw_secondary);
+
+        // Assert: Secondary window's retired swapchains are destroyed (only active remains)
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_secondary)->active_swapchain_count, 1u);
+
+        // Act: Unregister primary window
+        test_renderer->unregister_surface(win_primary);
+        EXPECT_EQ(test_renderer->get_render_surface(win_primary), nullptr);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_primary)->active_swapchain_count, 0u);
+
+        // Assert: Primary raw surface can be destroyed cleanly while secondary remains alive and active
+        dev->destroy_raw_surface(raw_primary);
+        EXPECT_FALSE(vk_dev->get_raw_surface(raw_primary).has_value());
+        EXPECT_NE(test_renderer->get_render_surface(win_secondary), nullptr);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_secondary)->active_swapchain_count, 1u);
+
+        // Act: Secondary surface can still render without issues
+        const auto frame_sec2_res = test_renderer->render_frame(win_secondary, nullopt, dummy_ui);
+        EXPECT_TRUE(frame_sec2_res.has_value());
+
+        // Act: Unregister secondary window
+        test_renderer->unregister_surface(win_secondary);
+        EXPECT_EQ(test_renderer->get_render_surface(win_secondary), nullptr);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_secondary)->active_swapchain_count, 0u);
+
+        // Assert: Secondary raw surface destroys cleanly
+        dev->destroy_raw_surface(raw_secondary);
+        EXPECT_FALSE(vk_dev->get_raw_surface(raw_secondary).has_value());
+
+        // Teardown
+        win_mgr.destroy_window(win_secondary);
+        win_mgr.destroy_window(win_primary);
+    }
+
+    /// @brief Adversarially stress-tests rapid repeated surface registration and unregistration cycles
+    ///        on a renderer, confirming zero leak of active swapchains and clean raw surface destruction.
+    TEST(render_system_tests, renderer_rapid_window_register_unregister_stress)
+    {
+        // Setup: Test device, logger, registries, and hidden window
+        auto fixture = create_test_device();
+        auto* const dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 640,
+            .render_height = 480,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        auto test_renderer = builder.build(*dev, log);
+        ASSERT_NE(test_renderer, nullptr);
+
+        auto win_mgr = window_manager{};
+        const auto test_win = win_mgr.create_window({
+            .width = 640,
+            .height = 480,
+            .title = "Rapid Register Unregister Stress",
+            .resizable = false,
+        });
+        ASSERT_TRUE(test_win.is_valid());
+
+        const auto native_handle = win_mgr.get_native_wsi_handle(test_win);
+        auto raw_res = dev->create_raw_surface(native_handle);
+        ASSERT_TRUE(raw_res.has_value());
+        const auto raw_surf = raw_res.value();
+
+        // Act: Execute rapid register/unregister cycles
+        constexpr auto cycle_count = 20u;
+        for (auto iteration = 0u; iteration < cycle_count; ++iteration)
+        {
+            test_renderer->register_surface(test_win, raw_surf, 640, 480);
+            EXPECT_NE(test_renderer->get_render_surface(test_win), nullptr);
+
+            test_renderer->unregister_surface(test_win);
+            EXPECT_EQ(test_renderer->get_render_surface(test_win), nullptr);
+        }
+
+        // Act: Execute consecutive re-registrations without intervening unregistration
+        constexpr auto consecutive_count = 10u;
+        for (auto iteration = 0u; iteration < consecutive_count; ++iteration)
+        {
+            test_renderer->register_surface(test_win, raw_surf, 640, 480);
+            EXPECT_NE(test_renderer->get_render_surface(test_win), nullptr);
+        }
+
+        test_renderer->unregister_surface(test_win);
+        EXPECT_EQ(test_renderer->get_render_surface(test_win), nullptr);
+
+        // Assert: device::destroy_raw_surface strictly enforces active_swapchain_count == 0
+        dev->destroy_raw_surface(raw_surf);
+
+        win_mgr.destroy_window(test_win);
+    }
+
+    /// @brief Adversarially tests multiple active window surfaces with intermediate resizings producing
+    ///        retired swapchains, followed by non-FIFO/non-LIFO out-of-order unregistrations.
+    TEST(render_system_tests, renderer_multi_window_out_of_order_unregistration_with_resizing)
+    {
+        // Setup: Test device, logger, registries, and 3 test windows
+        auto fixture = create_test_device();
+        auto* const dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 640,
+            .render_height = 480,
+            .pool_config = {
+                .frames_in_flight = 4,
+            },
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        auto test_renderer = builder.build(*dev, log);
+        ASSERT_NE(test_renderer, nullptr);
+
+        auto win_mgr = window_manager{};
+        const auto win_alpha = win_mgr.create_window({
+            .width = 640,
+            .height = 480,
+            .title = "Window Alpha",
+            .resizable = true,
+        });
+        const auto win_beta = win_mgr.create_window({
+            .width = 640,
+            .height = 480,
+            .title = "Window Beta",
+            .resizable = true,
+        });
+        const auto win_gamma = win_mgr.create_window({
+            .width = 640,
+            .height = 480,
+            .title = "Window Gamma",
+            .resizable = true,
+        });
+        ASSERT_TRUE(win_alpha.is_valid());
+        ASSERT_TRUE(win_beta.is_valid());
+        ASSERT_TRUE(win_gamma.is_valid());
+
+        const auto raw_res_alpha = dev->create_raw_surface(win_mgr.get_native_wsi_handle(win_alpha));
+        const auto raw_res_beta = dev->create_raw_surface(win_mgr.get_native_wsi_handle(win_beta));
+        const auto raw_res_gamma = dev->create_raw_surface(win_mgr.get_native_wsi_handle(win_gamma));
+        ASSERT_TRUE(raw_res_alpha.has_value());
+        ASSERT_TRUE(raw_res_beta.has_value());
+        ASSERT_TRUE(raw_res_gamma.has_value());
+        const auto raw_alpha = raw_res_alpha.value();
+        const auto raw_beta = raw_res_beta.value();
+        const auto raw_gamma = raw_res_gamma.value();
+
+        auto* const vk_dev = static_cast<rhi::vk::device*>(dev);
+
+        // Act: Register all 3 surfaces
+        test_renderer->register_surface(win_alpha, raw_alpha, 640, 480);
+        test_renderer->register_surface(win_beta, raw_beta, 640, 480);
+        test_renderer->register_surface(win_gamma, raw_gamma, 640, 480);
+
+        EXPECT_NE(test_renderer->get_render_surface(win_alpha), nullptr);
+        EXPECT_NE(test_renderer->get_render_surface(win_beta), nullptr);
+        EXPECT_NE(test_renderer->get_render_surface(win_gamma), nullptr);
+
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_alpha)->active_swapchain_count, 1u);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_beta)->active_swapchain_count, 1u);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_gamma)->active_swapchain_count, 1u);
+
+        // Act: Resize all 3 surfaces and execute full frames to generate retired swapchains
+        const auto dummy_ui = [](rhi::command_list&, uint32_t, uint32_t) {};
+
+        resize_window_extent(win_mgr, win_alpha, 700, 500);
+        test_renderer->resize_surface(win_alpha, 700, 500);
+        const auto frame_alpha_res = test_renderer->render_frame(win_alpha, nullopt, dummy_ui);
+        EXPECT_TRUE(frame_alpha_res.has_value());
+
+        resize_window_extent(win_mgr, win_beta, 720, 520);
+        test_renderer->resize_surface(win_beta, 720, 520);
+        const auto frame_beta_res = test_renderer->render_frame(win_beta, nullopt, dummy_ui);
+        EXPECT_TRUE(frame_beta_res.has_value());
+
+        resize_window_extent(win_mgr, win_gamma, 740, 540);
+        test_renderer->resize_surface(win_gamma, 740, 540);
+        const auto frame_gamma_res = test_renderer->render_frame(win_gamma, nullopt, dummy_ui);
+        EXPECT_TRUE(frame_gamma_res.has_value());
+
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_alpha)->active_swapchain_count, 2u);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_beta)->active_swapchain_count, 2u);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_gamma)->active_swapchain_count, 2u);
+
+        // Act: Out-of-order unregistration: destroy middle window Beta first
+        test_renderer->unregister_surface(win_beta);
+        EXPECT_EQ(test_renderer->get_render_surface(win_beta), nullptr);
+        EXPECT_NE(test_renderer->get_render_surface(win_alpha), nullptr);
+        EXPECT_NE(test_renderer->get_render_surface(win_gamma), nullptr);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_beta)->active_swapchain_count, 0u);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_alpha)->active_swapchain_count, 2u);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_gamma)->active_swapchain_count, 2u);
+
+        // Assert: Raw surface Beta must destroy cleanly with active_swapchain_count == 0
+        dev->destroy_raw_surface(raw_beta);
+        win_mgr.destroy_window(win_beta);
+
+        // Act: Out-of-order unregistration: destroy window Gamma second
+        test_renderer->unregister_surface(win_gamma);
+        EXPECT_EQ(test_renderer->get_render_surface(win_gamma), nullptr);
+        EXPECT_NE(test_renderer->get_render_surface(win_alpha), nullptr);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_gamma)->active_swapchain_count, 0u);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_alpha)->active_swapchain_count, 2u);
+
+        // Assert: Raw surface Gamma must destroy cleanly
+        dev->destroy_raw_surface(raw_gamma);
+        win_mgr.destroy_window(win_gamma);
+
+        // Act: Out-of-order unregistration: destroy initial window Alpha last
+        test_renderer->unregister_surface(win_alpha);
+        EXPECT_EQ(test_renderer->get_render_surface(win_alpha), nullptr);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_alpha)->active_swapchain_count, 0u);
+
+        // Assert: Raw surface Alpha must destroy cleanly
+        dev->destroy_raw_surface(raw_alpha);
+        win_mgr.destroy_window(win_alpha);
+    }
+
+    /// @brief Tests zero-size (minimized) window registration/unregistration and redundant unregistration calls.
+    TEST(render_system_tests, renderer_minimized_window_and_redundant_unregister_stress)
+    {
+        // Setup: Test device, logger, registries, and window
+        auto fixture = create_test_device();
+        auto* const dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 640,
+            .render_height = 480,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        auto test_renderer = builder.build(*dev, log);
+        ASSERT_NE(test_renderer, nullptr);
+
+        auto win_mgr = window_manager{};
+        const auto test_win = win_mgr.create_window({
+            .width = 640,
+            .height = 480,
+            .title = "Minimized & Redundant Test",
+            .resizable = true,
+        });
+        ASSERT_TRUE(test_win.is_valid());
+
+        const auto raw_res = dev->create_raw_surface(win_mgr.get_native_wsi_handle(test_win));
+        ASSERT_TRUE(raw_res.has_value());
+        const auto raw_surf = raw_res.value();
+
+        // Act: Register minimized (0x0) window
+        test_renderer->register_surface(test_win, raw_surf, 0, 0);
+        EXPECT_EQ(test_renderer->get_render_surface(test_win), nullptr);
+
+        // Act: Unregister minimized window
+        test_renderer->unregister_surface(test_win);
+        EXPECT_EQ(test_renderer->get_render_surface(test_win), nullptr);
+
+        // Act: Register normally then unregister multiple times redundantly
+        test_renderer->register_surface(test_win, raw_surf, 640, 480);
+        EXPECT_NE(test_renderer->get_render_surface(test_win), nullptr);
+
+        test_renderer->unregister_surface(test_win);
+        EXPECT_EQ(test_renderer->get_render_surface(test_win), nullptr);
+
+        // Redundant unregistration calls must be safe no-ops
+        test_renderer->unregister_surface(test_win);
+        test_renderer->unregister_surface(window_handle{77777});
+
+        // Assert: Raw surface destruction succeeds cleanly
+        dev->destroy_raw_surface(raw_surf);
+        win_mgr.destroy_window(test_win);
+    }
+
+    /// @brief Adversarially challenges swapchain retirement queues under a rapid resize storm
+    ///        followed by abrupt window unregistration, verifying active_swapchain_count strictly drops to 0.
+    TEST(render_system_tests, renderer_rapid_resize_storm_and_immediate_unregistration_stress)
+    {
+        // Setup: Test device, logger, registries, and test window
+        auto fixture = create_test_device();
+        auto* const dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 640,
+            .render_height = 480,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        auto test_renderer = builder.build(*dev, log);
+        ASSERT_NE(test_renderer, nullptr);
+
+        auto win_mgr = window_manager{};
+        const auto test_win = win_mgr.create_window({
+            .width = 640,
+            .height = 480,
+            .title = "Rapid Resize Storm Test",
+            .resizable = true,
+        });
+        ASSERT_TRUE(test_win.is_valid());
+
+        const auto raw_res = dev->create_raw_surface(win_mgr.get_native_wsi_handle(test_win));
+        ASSERT_TRUE(raw_res.has_value());
+        const auto raw_surf = raw_res.value();
+
+        auto* const vk_dev = static_cast<rhi::vk::device*>(dev);
+
+        // Act: Initial registration
+        test_renderer->register_surface(test_win, raw_surf, 640, 480);
+        EXPECT_NE(test_renderer->get_render_surface(test_win), nullptr);
+
+        const auto initial_raw_info = vk_dev->get_raw_surface(raw_surf);
+        ASSERT_TRUE(initial_raw_info.has_value());
+        EXPECT_EQ(initial_raw_info->active_swapchain_count, 1u);
+
+        // Act: Storm of rapid consecutive resizings generating multiple retired swapchains
+        const auto dummy_ui = [](rhi::command_list&, uint32_t, uint32_t) {};
+        constexpr auto resize_iterations = 4u;
+        for (auto iteration = 1u; iteration <= resize_iterations; ++iteration)
+        {
+            const auto new_width = 640u + iteration * 32u;
+            const auto new_height = 480u + iteration * 24u;
+
+            resize_window_extent(win_mgr, test_win, new_width, new_height);
+            test_renderer->resize_surface(test_win, new_width, new_height);
+            const auto frame_res = test_renderer->render_frame(test_win, nullopt, dummy_ui);
+            EXPECT_TRUE(frame_res.has_value());
+
+            const auto current_raw_info = vk_dev->get_raw_surface(raw_surf);
+            ASSERT_TRUE(current_raw_info.has_value());
+            // Active count is at least 2 (active surface + in-flight retired surface)
+            EXPECT_GE(current_raw_info->active_swapchain_count, 2u);
+        }
+
+        const auto pre_drain_info = vk_dev->get_raw_surface(raw_surf);
+        ASSERT_TRUE(pre_drain_info.has_value());
+        EXPECT_GE(pre_drain_info->active_swapchain_count, 2u);
+
+        // Act: Abruptly unregister window while retired swapchains are still active in the retirement queue
+        test_renderer->unregister_surface(test_win);
+        EXPECT_EQ(test_renderer->get_render_surface(test_win), nullptr);
+
+        // Assert: All retired swapchains and the active swapchain must be synchronously destroyed
+        const auto post_drain_info = vk_dev->get_raw_surface(raw_surf);
+        ASSERT_TRUE(post_drain_info.has_value());
+        EXPECT_EQ(post_drain_info->active_swapchain_count, 0u);
+
+        // Assert: Raw surface destruction strictly succeeds without assertion or validation layer error
+        dev->destroy_raw_surface(raw_surf);
+        EXPECT_FALSE(vk_dev->get_raw_surface(raw_surf).has_value());
+
+        // Teardown
+        win_mgr.destroy_window(test_win);
+    }
+
+    /// @brief Adversarially verifies continuous full-frame render flight cycles with dynamic resizing
+    ///        interspersed, followed by abrupt window unregistration while GPU flight slots are populated.
+    TEST(render_system_tests, renderer_continuous_render_flight_with_resizing_and_abrupt_unregistration)
+    {
+        // Setup: Test device, logger, registries, and window
+        auto fixture = create_test_device();
+        auto* const dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto types = ecs::component_type_registry{};
+        auto registry = ecs::archetype_registry{events, types};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 640,
+            .render_height = 480,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        auto test_renderer = builder.build(*dev, log);
+        ASSERT_NE(test_renderer, nullptr);
+
+        auto win_mgr = window_manager{};
+        const auto test_win = win_mgr.create_window({
+            .width = 640,
+            .height = 480,
+            .title = "Continuous Flight Resize Test",
+            .resizable = true,
+        });
+        ASSERT_TRUE(test_win.is_valid());
+
+        const auto raw_res = dev->create_raw_surface(win_mgr.get_native_wsi_handle(test_win));
+        ASSERT_TRUE(raw_res.has_value());
+        const auto raw_surf = raw_res.value();
+
+        auto* const vk_dev = static_cast<rhi::vk::device*>(dev);
+
+        test_renderer->register_surface(test_win, raw_surf, 640, 480);
+        EXPECT_EQ(vk_dev->get_raw_surface(raw_surf)->active_swapchain_count, 1u);
+
+        const auto dummy_ui = [](rhi::command_list&, uint32_t, uint32_t) {};
+
+        // Act: Execute multiple complete rendering frames, resizing every other frame
+        constexpr auto total_flight_frames = 8u;
+        for (auto frame_index = 0u; frame_index < total_flight_frames; ++frame_index)
+        {
+            if (frame_index % 2u == 1u)
+            {
+                const auto dynamic_width = 640u + frame_index * 16u;
+                const auto dynamic_height = 480u + frame_index * 12u;
+                resize_window_extent(win_mgr, test_win, dynamic_width, dynamic_height);
+                test_renderer->resize_surface(test_win, dynamic_width, dynamic_height);
+            }
+
+            const auto render_result = test_renderer->render_frame(test_win, nullopt, dummy_ui);
+            EXPECT_TRUE(render_result.has_value());
+        }
+
+        // Act: Abruptly unregister window while frames have been submitted and semaphores signaled
+        test_renderer->unregister_surface(test_win);
+        EXPECT_EQ(test_renderer->get_render_surface(test_win), nullptr);
+
+        // Assert: Active swapchain count must immediately reach 0
+        const auto final_raw_info = vk_dev->get_raw_surface(raw_surf);
+        ASSERT_TRUE(final_raw_info.has_value());
+        EXPECT_EQ(final_raw_info->active_swapchain_count, 0u);
+
+        // Assert: Raw surface destruction succeeds cleanly
+        dev->destroy_raw_surface(raw_surf);
+        EXPECT_FALSE(vk_dev->get_raw_surface(raw_surf).has_value());
+
+        // Teardown
+        win_mgr.destroy_window(test_win);
+    }
 } // namespace tempest::render_system::tests
+
 
