@@ -6,6 +6,7 @@
 #include <tempest/editor.hpp>
 #include <tempest/editor_engine_context.hpp>
 #include <tempest/engine_types.hpp>
+#include <tempest/game_module.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/memory.hpp>
@@ -626,10 +627,15 @@ namespace tempest::editor::tests
         ASSERT_TRUE(game_lib_res.has_value());
         const auto& game_lib = *game_lib_res;
 
+        const auto game_register_types =
+            game_lib.get_function_handle<void, ecs::component_type_registry&>("tempest_game_register_types");
+        ASSERT_TRUE(game_register_types.has_value());
         const auto game_on_load =
-            game_lib.get_function_handle<void, engine_context*, span<string_view>>("on_load");
+            game_lib.get_function_handle<game_runtime_context*, engine_context&, span<const string_view>>(
+                "tempest_game_on_load");
         ASSERT_TRUE(game_on_load.has_value());
-        const auto game_on_unload = game_lib.get_function_handle<void>("on_unload");
+        const auto game_on_unload =
+            game_lib.get_function_handle<void, game_runtime_context*>("tempest_game_on_unload");
         ASSERT_TRUE(game_on_unload.has_value());
 
         {
@@ -652,8 +658,10 @@ namespace tempest::editor::tests
                                      engine.get_assets(), fmt, 2);
             auto ui_editor = editor_context(engine, win_info.handle, ui_ctx);
 
+            (*game_register_types)(engine.get_components());
             auto empty_args = vector<string_view>{};
-            (*game_on_load)(&engine, empty_args);
+            auto* const game =
+                (*game_on_load)(engine, span<const string_view>{empty_args.data(), empty_args.size()});
             engine.load_startup_scene_if_needed();
 
             auto frame_count = 0;
@@ -694,9 +702,9 @@ namespace tempest::editor::tests
             });
 
             engine.run();
-        }
 
-        (*game_on_unload)();
+            (*game_on_unload)(game);
+        }
     }
 
 

@@ -134,6 +134,12 @@ namespace tempest::editor
         _log_sink.attach(get_logger());
         get_assets().set_logger(&get_logger());
 
+        // Always initialize default shader roots and builtin assets so editor UI and viewport pipelines
+        // have required shaders and geometry even before a project workspace is opened.
+        assets::mount_default_shader_roots(get_assets());
+        assets::builtin::register_builtin_assets(get_assets(), &_mesh_reg, &_texture_reg, &_material_reg);
+        get_assets().scan_and_index();
+
         _reverse_deps = make_unique<scene::reverse_dependency_index>();
         get_scene_manager().set_reverse_dependency_index(_reverse_deps.get());
 
@@ -482,10 +488,22 @@ namespace tempest::editor
             return false;
         }
 
-        const auto candidates = array<filesystem::path, 2>{
-            filesystem::path{"game/assets/scenes/main.tscene"},
-            filesystem::path{"assets/scenes/main.tscene"},
-        };
+        auto candidates = vector<filesystem::path>{};
+        if (_current_project.has_value())
+        {
+            if (!_current_project->startup_scene.scene_path.empty())
+            {
+                auto proj_scene = filesystem::path{_current_project->startup_scene.scene_path};
+                if (proj_scene.is_relative())
+                {
+                    proj_scene = filesystem::path{_current_project->root_directory} / proj_scene;
+                }
+                candidates.push_back(proj_scene);
+            }
+            candidates.push_back(filesystem::path{_current_project->root_directory} / "assets/scenes/main.tscene");
+        }
+        candidates.push_back(filesystem::path{"game/assets/scenes/main.tscene"});
+        candidates.push_back(filesystem::path{"assets/scenes/main.tscene"});
 
         for (const auto& path : candidates)
         {
@@ -498,6 +516,56 @@ namespace tempest::editor
                     return true;
                 }
             }
+        }
+
+        // If no scene file exists on disk, create an in-memory fallback scene with camera and sunlight
+        static constexpr string_view fallback_scene_json =
+            "{\n"
+            "  \"version\": 1,\n"
+            "  \"entities\": [\n"
+            "    {\n"
+            "      \"id\": \"0x0000000000000001\",\n"
+            "      \"name\": \"Main Camera\",\n"
+            "      \"components\": {\n"
+            "        \"transform_component\": {\n"
+            "          \"position\": [0.0, 1.6, -5.0],\n"
+            "          \"rotation\": [0.0, 0.0, 0.0, 1.0],\n"
+            "          \"scale\": [1.0, 1.0, 1.0]\n"
+            "        },\n"
+            "        \"camera_component\": {\n"
+            "          \"aspect_ratio\": 1.7777778,\n"
+            "          \"vertical_fov\": 1.0471976,\n"
+            "          \"near_plane\": 0.05,\n"
+            "          \"far_plane\": 1000.0,\n"
+            "          \"target\": \"Viewport\",\n"
+            "          \"is_active\": true\n"
+            "        },\n"
+            "        \"active_camera_component\": {}\n"
+            "      }\n"
+            "    },\n"
+            "    {\n"
+            "      \"id\": \"0x0000000000000002\",\n"
+            "      \"name\": \"Sun Light\",\n"
+            "      \"components\": {\n"
+            "        \"transform_component\": {\n"
+            "          \"position\": [0.0, 5.0, 0.0],\n"
+            "          \"rotation\": [0.52456346, 0.18254332, -0.11629292, 0.8233997],\n"
+            "          \"scale\": [1.0, 1.0, 1.0]\n"
+            "        },\n"
+            "        \"directional_light_component\": {\n"
+            "          \"color\": [1.0, 0.98, 0.95],\n"
+            "          \"intensity\": 2.0\n"
+            "        }\n"
+            "      }\n"
+            "    }\n"
+            "  ]\n"
+            "}\n";
+
+        const auto fallback_res = get_scene_manager().load_from_string_sync(fallback_scene_json, "DefaultScene");
+        if (fallback_res.has_value())
+        {
+            get_logger().info("Created in-memory fallback scene with camera and sunlight.");
+            return true;
         }
 
         return false;

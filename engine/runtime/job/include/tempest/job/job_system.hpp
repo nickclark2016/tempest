@@ -4,6 +4,7 @@
 #include <tempest/algorithm.hpp>
 #include <tempest/api.hpp>
 #include <tempest/atomic.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/coroutine.hpp>
 #include <tempest/expected.hpp>
 #include <tempest/int.hpp>
@@ -93,7 +94,7 @@ namespace tempest::job
         {
             if (job.get_profiler() == nullptr)
             {
-                job.set_profiler(&_profiler);
+                job.set_profiler(_profiler.get());
             }
             if (job.name() == "task" && loc.function_name() != nullptr)
             {
@@ -104,7 +105,7 @@ namespace tempest::job
                 if (job.handle().promise().spawned_by_coroutine_id == 0)
                 {
                     job.handle().promise().spawned_by_coroutine_id =
-                        _profiler.get_or_register_thread().get_current_coroutine_id();
+                        _profiler->get_or_register_thread().get_current_coroutine_id();
                 }
                 if (job.handle().promise().spawned_by_thread_id == 0)
                 {
@@ -122,7 +123,7 @@ namespace tempest::job
         {
             if (job.get_profiler() == nullptr)
             {
-                job.set_profiler(&_profiler);
+                job.set_profiler(_profiler.get());
             }
             if (job.name() == "task" && loc.function_name() != nullptr)
             {
@@ -133,7 +134,7 @@ namespace tempest::job
                 if (job.handle().promise().spawned_by_coroutine_id == 0)
                 {
                     job.handle().promise().spawned_by_coroutine_id =
-                        _profiler.get_or_register_thread().get_current_coroutine_id();
+                        _profiler->get_or_register_thread().get_current_coroutine_id();
                 }
                 if (job.handle().promise().spawned_by_thread_id == 0)
                 {
@@ -171,13 +172,13 @@ namespace tempest::job
                 auto job = runner(get_dispatch_allocator(), *this, forward<F>(callable));
                 job.set_name(task_name);
                 job.set_source_location(loc);
-                job.set_profiler(&_profiler);
+                job.set_profiler(_profiler.get());
                 if (job.handle())
                 {
                     if (job.handle().promise().spawned_by_coroutine_id == 0)
                     {
                         job.handle().promise().spawned_by_coroutine_id =
-                            _profiler.get_or_register_thread().get_current_coroutine_id();
+                            _profiler->get_or_register_thread().get_current_coroutine_id();
                     }
                     if (job.handle().promise().spawned_by_thread_id == 0)
                     {
@@ -198,13 +199,13 @@ namespace tempest::job
                 auto job = runner(get_dispatch_allocator(), *this, forward<F>(callable));
                 job.set_name(task_name);
                 job.set_source_location(loc);
-                job.set_profiler(&_profiler);
+                job.set_profiler(_profiler.get());
                 if (job.handle())
                 {
                     if (job.handle().promise().spawned_by_coroutine_id == 0)
                     {
                         job.handle().promise().spawned_by_coroutine_id =
-                            _profiler.get_or_register_thread().get_current_coroutine_id();
+                            _profiler->get_or_register_thread().get_current_coroutine_id();
                     }
                     if (job.handle().promise().spawned_by_thread_id == 0)
                     {
@@ -222,13 +223,13 @@ namespace tempest::job
                 auto job = runner(get_dispatch_allocator(), *this, forward<F>(callable));
                 job.set_name(task_name);
                 job.set_source_location(loc);
-                job.set_profiler(&_profiler);
+                job.set_profiler(_profiler.get());
                 if (job.handle())
                 {
                     if (job.handle().promise().spawned_by_coroutine_id == 0)
                     {
                         job.handle().promise().spawned_by_coroutine_id =
-                            _profiler.get_or_register_thread().get_current_coroutine_id();
+                            _profiler->get_or_register_thread().get_current_coroutine_id();
                     }
                     if (job.handle().promise().spawned_by_thread_id == 0)
                     {
@@ -398,7 +399,7 @@ namespace tempest::job
             auto task = impl(get_dispatch_allocator(), *this, rng, priority, tempest::move(body), loc);
             task.set_name(outer_name);
             task.set_source_location(loc);
-            task.set_profiler(&_profiler);
+            task.set_profiler(_profiler.get());
             return task;
         }
 
@@ -460,8 +461,8 @@ namespace tempest::job
         [[nodiscard]] auto current_worker_index() const noexcept -> optional<size_t>;
 
       private:
-        logger& _logger;
-        profiler::profiler_session& _profiler;
+        non_null<logger> _logger;
+        non_null<profiler::profiler_session> _profiler;
         job_system_config _config{};
 
         struct impl;

@@ -3,6 +3,7 @@
 
 #include <tempest/api.hpp>
 #include <tempest/archetype.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/render_graph/render_graph.hpp>
 #include <tempest/render_system/camera_system.hpp>
 #include <tempest/render_system/resource_pool.hpp>
@@ -24,12 +25,12 @@ namespace tempest::render_system
 
     struct TEMPEST_API shadow_pass_params
     {
-        render_graph::render_graph& graph;
-        resource_pool& pool;
-        shader_manager& shaders;
+        non_null<render_graph::render_graph> graph;
+        non_null<resource_pool> pool;
+        non_null<shader_manager> shaders;
         render_graph::rg_texture_id shadow_atlas;
-        shelf_allocator& allocator;
-        const ecs::archetype_registry& registry;
+        non_null<shelf_allocator> allocator;
+        non_null<const ecs::archetype_registry> registry;
         const camera_system* camera_sys{nullptr};
         optional<render_camera> camera_override{nullopt};
         uint32_t opaque_draw_count{0};

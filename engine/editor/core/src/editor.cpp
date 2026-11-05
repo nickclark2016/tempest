@@ -1052,12 +1052,16 @@ namespace tempest::editor
         }
 
         const auto success = _engine_ctx->open_project(tproject_path);
-        if (success && _project_view != nullptr)
+        if (success)
         {
-            const auto& workspace_opt = _engine_ctx->get_current_project();
-            if (workspace_opt.has_value())
+            _launcher_dialog.close();
+            if (_project_view != nullptr)
             {
-                _project_view->get_model().rebuild_from_workspace(*workspace_opt);
+                const auto& workspace_opt = _engine_ctx->get_current_project();
+                if (workspace_opt.has_value())
+                {
+                    _project_view->get_model().rebuild_from_workspace(*workspace_opt);
+                }
             }
         }
         return success;
@@ -1131,7 +1135,7 @@ namespace tempest::editor
     auto editor_context::initialize_project_from_startup(span<const string_view> args) -> bool
     {
         static constexpr string_view project_prefix = "--project=";
-        for (size_t index = 0; index < args.size(); ++index)
+        for (auto index = static_cast<size_t>(0); index < args.size(); ++index)
         {
             const auto arg = args[index];
             if (arg.size() > project_prefix.size() &&
@@ -1157,25 +1161,6 @@ namespace tempest::editor
                         return true;
                     }
                 }
-            }
-        }
-
-        const auto current_working_dir = filesystem::current_path();
-        auto discovered_projects = vector<filesystem::path>{};
-
-        for (const auto& entry : filesystem::directory_iterator{current_working_dir})
-        {
-            if (!entry.is_directory() && entry.path().extension() == ".tproject")
-            {
-                discovered_projects.push_back(entry.path());
-            }
-        }
-
-        if (discovered_projects.size() == 1)
-        {
-            if (open_project(discovered_projects.front().generic_string()))
-            {
-                return true;
             }
         }
 

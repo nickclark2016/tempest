@@ -156,6 +156,7 @@ namespace tempest::assets
         [[nodiscard]] auto get_ignored_extensions() const -> span<const string>;
 
         // Asset & Path Resolution
+        [[nodiscard]] auto find_asset(string_view path_or_name) -> const asset_entry*;
         [[nodiscard]] auto find_asset(string_view path_or_name) const -> const asset_entry*;
         [[nodiscard]] auto find_source_by_id(const guid& source_id) const -> const source_entry*;
         [[nodiscard]] auto resolve_source_path(string_view path_or_name) const -> optional<string>;
@@ -201,6 +202,7 @@ namespace tempest::assets
         auto register_asset(asset_type_id type, string_view source_path) -> guid;
         auto register_asset_with_guid(const guid& uid, asset_type_id type, string_view source_path) -> bool;
         auto store_blob(const guid& asset_id, span<const byte> blob_data) -> void;
+        [[nodiscard]] auto get_blob(const guid& asset_id) -> span<const byte>;
         [[nodiscard]] auto get_blob(const guid& asset_id) const -> span<const byte>;
         [[nodiscard]] auto is_transient_asset(const guid& id) const -> bool;
 
@@ -276,6 +278,8 @@ namespace tempest::assets
         core::mesh_registry* _mesh_reg = nullptr;
         core::texture_registry* _texture_reg = nullptr;
         core::material_registry* _material_reg = nullptr;
+
+        auto _init_default_ignores() -> void;
         logger* _logger = nullptr;
 
         [[nodiscard]] auto _compute_canonical_entry_key(const filesystem::path& disk_path) const -> string;

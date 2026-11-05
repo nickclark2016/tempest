@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <tempest/array.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/job/allocator.hpp>
 #include <tempest/job/context.hpp>
 #include <tempest/job/job_system.hpp>
@@ -177,11 +178,11 @@ namespace tempest::job::tests
 
         struct dummy_allocator_provider
         {
-            job_allocator& alloc;
+            non_null<job_allocator> alloc;
 
             [[nodiscard]] auto get_job_allocator() noexcept -> job_allocator&
             {
-                return alloc;
+                return *alloc;
             }
 
             auto member_coro(int val) -> task<int>

@@ -36,6 +36,8 @@ namespace tempest::serialization
         auto reserve(size_t capacity) -> void;
         [[nodiscard]] auto read(size_t count) -> span<const byte>;
         [[nodiscard]] auto written_size() const noexcept -> size_t;
+        [[nodiscard]] auto read_offset() const noexcept -> size_t;
+        [[nodiscard]] auto remaining_bytes() const noexcept -> size_t;
 
       private:
         vector<byte> _buffer;
@@ -64,8 +66,11 @@ namespace tempest::serialization
         {
             const auto byte_span = archive.read(sizeof(T));
             // Copy instead of start_lifetime_as, since the data in the archive may not be properly aligned for T
-            T value;
-            tempest::memcpy(&value, byte_span.data(), sizeof(T));
+            auto value = T{};
+            if (byte_span.size() == sizeof(T) && byte_span.data() != nullptr)
+            {
+                tempest::memcpy(&value, byte_span.data(), sizeof(T));
+            }
             return value;
         }
     };
@@ -73,12 +78,16 @@ namespace tempest::serialization
     template <typename T, typename Allocator>
     struct serializer<binary_archive, vector<T, Allocator>>
     {
-        static auto serialize(binary_archive& archive, const vector<T>& vec) -> void
+        static auto serialize(binary_archive& archive, const vector<T, Allocator>& vec) -> void
         {
             const auto size = static_cast<uint64_t>(vec.size());
             serializer<binary_archive, uint64_t>::serialize(archive, size);
             if constexpr (is_trivially_copyable_v<T>)
             {
+                if (vec.empty())
+                {
+                    return;
+                }
                 const auto byte_span = as_bytes(span{vec.data(), vec.size()});
                 archive.write(byte_span);
             }
@@ -91,21 +100,40 @@ namespace tempest::serialization
             }
         }
 
-        static auto deserialize(binary_archive& archive) -> vector<T>
+        static auto deserialize(binary_archive& archive) -> vector<T, Allocator>
         {
             const auto size = serializer<binary_archive, uint64_t>::deserialize(archive);
             auto vec = vector<T, Allocator>{};
 
+            if (size == 0)
+            {
+                return vec;
+            }
+
+            if (sizeof(T) != 0 && size > (static_cast<size_t>(-1) / sizeof(T)))
+            {
+                return vec;
+            }
+
+            if (size > archive.remaining_bytes())
+            {
+                return vec;
+            }
+
             if constexpr (is_trivially_copyable_v<T>)
             {
-                unsafe::resize_no_init(vec, size);
-                const auto byte_span = archive.read(size * sizeof(T));
-                tempest::memcpy(vec.data(), byte_span.data(), size * sizeof(T));
+                const auto total_bytes = static_cast<size_t>(size * sizeof(T));
+                const auto byte_span = archive.read(total_bytes);
+                if (byte_span.size() == total_bytes && byte_span.data() != nullptr)
+                {
+                    unsafe::resize_no_init(vec, size);
+                    tempest::memcpy(vec.data(), byte_span.data(), total_bytes);
+                }
             }
             else
             {
                 vec.reserve(size);
-                for (uint64_t i = 0; i < size; ++i)
+                for (auto element_idx = 0ULL; element_idx < size; ++element_idx)
                 {
                     vec.push_back(serializer<binary_archive, T>::deserialize(archive));
                 }
@@ -146,16 +174,33 @@ namespace tempest::serialization
         {
             const auto size = static_cast<uint64_t>(str.size());
             serializer<binary_archive, uint64_t>::serialize(archive, size);
-            archive.write(as_bytes(span{str.data(), str.size()}));
+            if (!str.empty())
+            {
+                archive.write(as_bytes(span{str.data(), str.size()}));
+            }
         }
 
         static auto deserialize(binary_archive& archive) -> basic_string<CharT, Traits, Allocator>
         {
             const auto size = serializer<binary_archive, uint64_t>::deserialize(archive);
             auto str = basic_string<CharT, Traits, Allocator>{};
-            str.resize(size);
-            auto chars = archive.read(size * sizeof(CharT));
-            tempest::memcpy(str.data(), chars.data(), size * sizeof(CharT));
+            if (size == 0)
+            {
+                return str;
+            }
+
+            if (sizeof(CharT) != 0 && size > (static_cast<size_t>(-1) / sizeof(CharT)))
+            {
+                return str;
+            }
+
+            const auto total_bytes = static_cast<size_t>(size * sizeof(CharT));
+            const auto chars = archive.read(total_bytes);
+            if (chars.size() == total_bytes && chars.data() != nullptr)
+            {
+                str.resize(size);
+                tempest::memcpy(str.data(), chars.data(), total_bytes);
+            }
             return str;
         }
     };
@@ -182,7 +227,12 @@ namespace tempest::serialization
             const auto size = serializer<binary_archive, uint64_t>::deserialize(archive);
             auto map = flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>{};
 
-            for (uint64_t i = 0; i < size; ++i)
+            if (size == 0 || size > archive.remaining_bytes())
+            {
+                return map;
+            }
+
+            for (uint64_t entry_idx = 0; entry_idx < size; ++entry_idx)
             {
                 auto key = serializer<binary_archive, Key>::deserialize(archive);
                 auto value = serializer<binary_archive, Value>::deserialize(archive);

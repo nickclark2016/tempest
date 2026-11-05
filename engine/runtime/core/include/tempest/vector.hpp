@@ -543,12 +543,17 @@ namespace tempest
     template <typename T, typename Allocator>
     constexpr void vector<T, Allocator>::reserve(size_type new_cap)
     {
-        if (new_cap <= capacity())
+        if (new_cap <= capacity() || new_cap > max_size())
         {
             return;
         }
 
         auto new_data = allocator_traits<Allocator>::allocate(_alloc, new_cap);
+        if (new_data == nullptr)
+        {
+            return;
+        }
+
         auto new_end = new_data;
 
         if constexpr (is_trivially_copyable_v<T>)
@@ -567,8 +572,12 @@ namespace tempest
             }
         }
 
-        clear();
-        allocator_traits<Allocator>::deallocate(_alloc, _data, capacity());
+        if (_data != nullptr)
+        {
+            const auto old_cap = capacity();
+            clear();
+            allocator_traits<Allocator>::deallocate(_alloc, _data, old_cap);
+        }
 
         _data = new_data;
         _end = new_end;
@@ -583,7 +592,24 @@ namespace tempest
             return;
         }
 
+        if (size() == 0)
+        {
+            if (_data != nullptr)
+            {
+                allocator_traits<Allocator>::deallocate(_alloc, _data, capacity());
+                _data = nullptr;
+                _end = nullptr;
+                _capacity_end = nullptr;
+            }
+            return;
+        }
+
         auto new_data = allocator_traits<Allocator>::allocate(_alloc, size());
+        if (new_data == nullptr)
+        {
+            return;
+        }
+
         auto new_end = new_data;
 
         if constexpr (is_trivially_copyable_v<T>)
@@ -602,8 +628,12 @@ namespace tempest
             }
         }
 
-        clear();
-        allocator_traits<Allocator>::deallocate(_alloc, _data, capacity());
+        if (_data != nullptr)
+        {
+            const auto old_cap = capacity();
+            clear();
+            allocator_traits<Allocator>::deallocate(_alloc, _data, old_cap);
+        }
 
         _data = new_data;
         _end = new_end;
@@ -643,6 +673,10 @@ namespace tempest
         {
             const auto new_cap = _compute_next_capacity(size() + 1);
             auto new_data = allocator_traits<Allocator>::allocate(_alloc, new_cap);
+            if (new_data == nullptr)
+            {
+                return end();
+            }
             auto new_end = new_data;
 
             if constexpr (is_trivially_copyable_v<T>)
@@ -893,7 +927,8 @@ namespace tempest
         else if (count > size())
         {
             reserve(count);
-            for (size_type i = size(); i < count; ++i)
+            const auto target_count = tempest::min(count, capacity());
+            for (size_type element_idx = size(); element_idx < target_count; ++element_idx)
             {
                 allocator_traits<Allocator>::construct(_alloc, _end++);
             }
@@ -910,7 +945,8 @@ namespace tempest
         else if (count > size())
         {
             reserve(count);
-            for (size_type i = size(); i < count; ++i)
+            const auto target_count = tempest::min(count, capacity());
+            for (size_type element_idx = size(); element_idx < target_count; ++element_idx)
             {
                 allocator_traits<Allocator>::construct(_alloc, _end++, value);
             }
@@ -940,7 +976,18 @@ namespace tempest
     constexpr auto vector<T, Allocator>::_compute_next_capacity(
         size_type requested_capacity) const noexcept -> vector<T, Allocator>::size_type
     {
-        return tempest::bit_ceil(requested_capacity);
+        const auto max_cap = max_size();
+        if (requested_capacity > max_cap)
+        {
+            return max_cap;
+        }
+        constexpr auto highest_power_of_2 = size_type(1) << (sizeof(size_type) * 8 - 1);
+        if (requested_capacity > highest_power_of_2)
+        {
+            return max_cap;
+        }
+        const auto next_cap = tempest::bit_ceil(requested_capacity);
+        return tempest::min(next_cap, max_cap);
     }
 
     template <typename T, typename Allocator>
@@ -948,6 +995,10 @@ namespace tempest
     constexpr void vector<T, Allocator>::_emplace_one_at_back(Args&&... args)
     {
         reserve(_compute_next_capacity(size() + 1));
+        if (size() >= capacity())
+        {
+            return;
+        }
         (void)tempest::construct_at(_end++, tempest::forward<Args>(args)...);
     }
 
@@ -1053,7 +1104,10 @@ namespace tempest
         void resize_no_init(vector<T, Allocator>& vec, size_t count)
         {
             vec.reserve(count);
-            vec._end = vec._data + count;
+            if (vec.capacity() >= count)
+            {
+                vec._end = vec._data + count;
+            }
         }
     } // namespace unsafe
 

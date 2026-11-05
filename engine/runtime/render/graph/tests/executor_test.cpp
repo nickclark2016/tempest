@@ -490,8 +490,16 @@ namespace tempest::render_graph
                 return 0;
             }
 
-            auto signal_semaphore([[maybe_unused]] rhi::semaphore_handle semaphore, [[maybe_unused]] uint64_t value) -> void override
+            struct semaphore_signal_record
             {
+                rhi::semaphore_handle semaphore;
+                uint64_t value;
+            };
+            vector<semaphore_signal_record> signaled_semaphores;
+
+            auto signal_semaphore(rhi::semaphore_handle semaphore, uint64_t value) -> void override
+            {
+                signaled_semaphores.push_back({semaphore, value});
             }
 
             auto wait_semaphores([[maybe_unused]] span<const rhi::host_sync_point> sync_points,
@@ -1869,5 +1877,410 @@ namespace tempest::render_graph
         EXPECT_TRUE(pass_3_executed);
         EXPECT_EQ(dev.graphics_port.submit_calls, 1U);
         EXPECT_EQ(dev.graphics_port.submitted_commands.size(), 5U);
+    }
+
+    /// @brief Verifies that executing an empty render graph DAG with no passes immediately
+    /// signals the flight timeline semaphore to prevent host wait synchronization deadlocks.
+    TEST(executor_test, empty_dag_timeline_semaphore_signaled_stress)
+    {
+        // Setup: Empty render graph with no passes added
+        auto dev = mock_device_with_ports{};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
+
+        const auto timeline_sem = dev.create_timeline_semaphore();
+        constexpr auto target_timeline_val = uint64_t{42};
+
+        // Act: Execute empty graph with timeline semaphore
+        const auto sync_opts = frame_sync_options{
+            .timeline_semaphore = timeline_sem,
+            .timeline_value = target_timeline_val,
+        };
+        const auto exec_res = rg.execute_sync(dev, sync_opts);
+
+        // Assert: Graph executes successfully and signals timeline semaphore to target value
+        ASSERT_TRUE(exec_res.has_value());
+        ASSERT_EQ(dev.signaled_semaphores.size(), 1U);
+        EXPECT_EQ(dev.signaled_semaphores[0].semaphore.handle, timeline_sem.handle);
+        EXPECT_EQ(dev.signaled_semaphores[0].value, target_timeline_val);
+        EXPECT_EQ(dev.graphics_port.submit_calls, 0U);
+
+        // Repeat for subsequent frame increments
+        constexpr auto next_timeline_val = uint64_t{43};
+        const auto next_sync_opts = frame_sync_options{
+            .timeline_semaphore = timeline_sem,
+            .timeline_value = next_timeline_val,
+        };
+        const auto next_exec_res = rg.execute_sync(dev, next_sync_opts);
+
+        ASSERT_TRUE(next_exec_res.has_value());
+        ASSERT_EQ(dev.signaled_semaphores.size(), 2U);
+        EXPECT_EQ(dev.signaled_semaphores[1].value, next_timeline_val);
+
+        // Verify that empty DAG with timeline_value == 0 does not issue spurious signal
+        const auto zero_sync_opts = frame_sync_options{
+            .timeline_semaphore = timeline_sem,
+            .timeline_value = 0,
+        };
+        const auto zero_exec_res = rg.execute_sync(dev, zero_sync_opts);
+        ASSERT_TRUE(zero_exec_res.has_value());
+        EXPECT_EQ(dev.signaled_semaphores.size(), 2U);
+    }
+
+    /// @brief Verifies that executing an empty render graph DAG with presentation sync options
+    /// submits a minimal command list that transitions the presented texture to image_layout::present
+    /// and signals both the binary presentation semaphore and the flight timeline semaphore.
+    TEST(executor_test, empty_dag_presentation_sync_submits_minimal_command_list)
+    {
+        // Setup mock device, empty render graph, and presentation synchronizations
+        auto dev = mock_device_with_ports{};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
+
+        const auto wait_sem = dev.create_binary_semaphore();
+        const auto signal_sem = dev.create_binary_semaphore();
+        const auto timeline_sem = dev.create_timeline_semaphore();
+        const auto presented_tex = dev.create_texture(rhi::texture_desc{
+            .width = 1920,
+            .height = 1080,
+            .depth = 1,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .format = rhi::data_format::bgra8_srgb,
+            .usage = rhi::texture_usage::color_attachment,
+            .name = "SwapchainImage",
+        });
+
+        constexpr auto target_timeline_val = uint64_t{55};
+
+        // Act: Execute empty DAG with presentation sync options
+        const auto sync_opts = frame_sync_options{
+            .wait_semaphore = wait_sem,
+            .wait_stages = rhi::pipeline_stage::attachment_output,
+            .signal_semaphore = signal_sem,
+            .signal_stages = rhi::pipeline_stage::attachment_output,
+            .timeline_semaphore = timeline_sem,
+            .timeline_value = target_timeline_val,
+            .presented_texture = presented_tex,
+            .flight_slot_index = 0,
+            .frames_in_flight = 2,
+        };
+        const auto exec_res = rg.execute_sync(dev, sync_opts);
+
+        // Assert: Successful execution with exactly 1 graphics submission
+        ASSERT_TRUE(exec_res.has_value());
+        EXPECT_EQ(dev.graphics_port.submit_calls, 1U);
+        EXPECT_EQ(dev.graphics_port.submitted_commands.size(), 1U);
+
+        // Verify wait sync includes acquire semaphore
+        ASSERT_EQ(dev.graphics_port.last_wait_sync.size(), 1U);
+        EXPECT_EQ(dev.graphics_port.last_wait_sync[0].semaphore.handle, wait_sem.handle);
+        EXPECT_EQ(dev.graphics_port.last_wait_sync[0].stages, rhi::pipeline_stage::attachment_output);
+
+        // Verify signal sync includes render binary semaphore and timeline semaphore
+        ASSERT_EQ(dev.graphics_port.last_signal_sync.size(), 2U);
+        EXPECT_EQ(dev.graphics_port.last_signal_sync[0].semaphore.handle, signal_sem.handle);
+        EXPECT_EQ(dev.graphics_port.last_signal_sync[0].value, 0U);
+        EXPECT_EQ(dev.graphics_port.last_signal_sync[1].semaphore.handle, timeline_sem.handle);
+        EXPECT_EQ(dev.graphics_port.last_signal_sync[1].value, target_timeline_val);
+
+        // Verify minimal command list recorded pipeline barrier for image_layout::present transition
+        ASSERT_EQ(dev.graphics_port.allocated_cmds.size(), 1U);
+        EXPECT_GE(dev.graphics_port.allocated_cmds[0]->pipeline_barrier_calls, 1U);
+
+        // Verify host signal_semaphore was NOT called (handled entirely on device)
+        EXPECT_TRUE(dev.signaled_semaphores.empty());
+    }
+
+    /// @brief Verifies all permutations of semaphore configurations during empty DAG execution:
+    /// wait-only, signal-only, timeline-only, wait+signal+timeline, and no semaphores.
+    TEST(executor_test, empty_dag_semaphore_permutations_stress)
+    {
+        // Setup mock device, context, and empty render graph
+        auto dev = mock_device_with_ports{};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
+
+        const auto wait_sem = dev.create_binary_semaphore();
+        const auto signal_sem = dev.create_binary_semaphore();
+        const auto timeline_sem = dev.create_timeline_semaphore();
+
+        // Permutation: Wait semaphore only (wait-only submission)
+        // Act: Execute empty DAG with only wait_semaphore specified
+        const auto wait_only_opts = frame_sync_options{
+            .wait_semaphore = wait_sem,
+            .wait_stages = rhi::pipeline_stage::attachment_output,
+        };
+        const auto wait_only_res = rg.execute_sync(dev, wait_only_opts);
+
+        // Assert: Graphics port submitted with wait sync and empty signal sync
+        ASSERT_TRUE(wait_only_res.has_value());
+        EXPECT_EQ(dev.graphics_port.submit_calls, 1U);
+        ASSERT_EQ(dev.graphics_port.last_wait_sync.size(), 1U);
+        EXPECT_EQ(dev.graphics_port.last_wait_sync[0].semaphore.handle, wait_sem.handle);
+        EXPECT_TRUE(dev.graphics_port.last_signal_sync.empty());
+        EXPECT_TRUE(dev.signaled_semaphores.empty());
+
+        // Permutation: Signal semaphore only (signal-only submission)
+        // Act: Execute empty DAG with only signal_semaphore specified
+        const auto signal_only_opts = frame_sync_options{
+            .signal_semaphore = signal_sem,
+            .signal_stages = rhi::pipeline_stage::attachment_output,
+        };
+        const auto signal_only_res = rg.execute_sync(dev, signal_only_opts);
+
+        // Assert: Graphics port submitted with empty wait sync and single signal sync
+        ASSERT_TRUE(signal_only_res.has_value());
+        EXPECT_EQ(dev.graphics_port.submit_calls, 2U);
+        EXPECT_TRUE(dev.graphics_port.last_wait_sync.empty());
+        ASSERT_EQ(dev.graphics_port.last_signal_sync.size(), 1U);
+        EXPECT_EQ(dev.graphics_port.last_signal_sync[0].semaphore.handle, signal_sem.handle);
+        EXPECT_TRUE(dev.signaled_semaphores.empty());
+
+        // Permutation: Timeline semaphore only (fast host signal path)
+        // Act: Execute empty DAG with only timeline_semaphore specified
+        constexpr auto timeline_only_val = uint64_t{101};
+        const auto timeline_only_opts = frame_sync_options{
+            .timeline_semaphore = timeline_sem,
+            .timeline_value = timeline_only_val,
+        };
+        const auto timeline_only_res = rg.execute_sync(dev, timeline_only_opts);
+
+        // Assert: No queue submission; host dev.signal_semaphore called directly
+        ASSERT_TRUE(timeline_only_res.has_value());
+        EXPECT_EQ(dev.graphics_port.submit_calls, 2U);
+        ASSERT_EQ(dev.signaled_semaphores.size(), 1U);
+        EXPECT_EQ(dev.signaled_semaphores[0].semaphore.handle, timeline_sem.handle);
+        EXPECT_EQ(dev.signaled_semaphores[0].value, timeline_only_val);
+
+        // Permutation: Wait + Signal + Timeline semaphores combined
+        // Act: Execute empty DAG with all three semaphores configured
+        constexpr auto combined_timeline_val = uint64_t{102};
+        const auto combined_opts = frame_sync_options{
+            .wait_semaphore = wait_sem,
+            .wait_stages = rhi::pipeline_stage::attachment_output,
+            .signal_semaphore = signal_sem,
+            .signal_stages = rhi::pipeline_stage::attachment_output,
+            .timeline_semaphore = timeline_sem,
+            .timeline_value = combined_timeline_val,
+        };
+        const auto combined_res = rg.execute_sync(dev, combined_opts);
+
+        // Assert: Graphics port submitted with wait sync and both signal syncs
+        ASSERT_TRUE(combined_res.has_value());
+        EXPECT_EQ(dev.graphics_port.submit_calls, 3U);
+        ASSERT_EQ(dev.graphics_port.last_wait_sync.size(), 1U);
+        EXPECT_EQ(dev.graphics_port.last_wait_sync[0].semaphore.handle, wait_sem.handle);
+        ASSERT_EQ(dev.graphics_port.last_signal_sync.size(), 2U);
+        EXPECT_EQ(dev.graphics_port.last_signal_sync[0].semaphore.handle, signal_sem.handle);
+        EXPECT_EQ(dev.graphics_port.last_signal_sync[1].semaphore.handle, timeline_sem.handle);
+        EXPECT_EQ(dev.graphics_port.last_signal_sync[1].value, combined_timeline_val);
+        EXPECT_EQ(dev.signaled_semaphores.size(), 1U);
+
+        // Permutation: No semaphores configured at all
+        // Act: Execute empty DAG with default options
+        const auto none_opts = frame_sync_options{};
+        const auto none_res = rg.execute_sync(dev, none_opts);
+
+        // Assert: No queue submissions, no host signals, successful return
+        ASSERT_TRUE(none_res.has_value());
+        EXPECT_EQ(dev.graphics_port.submit_calls, 3U);
+        EXPECT_EQ(dev.signaled_semaphores.size(), 1U);
+    }
+
+    /// @brief Verifies high-frequency consecutive empty DAG executions (1000+ iterations)
+    /// to guarantee queue stability, submit counting, and timeline progression without leaks or lock contention.
+    TEST(executor_test, empty_dag_high_frequency_consecutive_execution_stress)
+    {
+        // Setup mock device, context, and empty render graph
+        auto dev = mock_device_with_ports{};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
+
+        const auto wait_sem = dev.create_binary_semaphore();
+        const auto signal_sem = dev.create_binary_semaphore();
+        const auto timeline_sem = dev.create_timeline_semaphore();
+        const auto presented_tex = dev.create_texture(rhi::texture_desc{
+            .width = 1920,
+            .height = 1080,
+            .depth = 1,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .format = rhi::data_format::bgra8_srgb,
+            .usage = rhi::texture_usage::color_attachment,
+            .name = "ContinuousSwapchainImage",
+        });
+
+        // Act: Execute 1000 consecutive empty DAG frames alternating flight slots
+        constexpr auto iteration_count = uint32_t{1000};
+        for (auto index = uint32_t{0}; index < iteration_count; ++index)
+        {
+            const auto target_timeline_val = static_cast<uint64_t>(index + 1);
+            const auto flight_slot = index % 2U;
+
+            const auto sync_opts = frame_sync_options{
+                .wait_semaphore = wait_sem,
+                .wait_stages = rhi::pipeline_stage::attachment_output,
+                .signal_semaphore = signal_sem,
+                .signal_stages = rhi::pipeline_stage::attachment_output,
+                .timeline_semaphore = timeline_sem,
+                .timeline_value = target_timeline_val,
+                .presented_texture = presented_tex,
+                .flight_slot_index = flight_slot,
+                .frames_in_flight = 2,
+            };
+
+            const auto exec_res = rg.execute_sync(dev, sync_opts);
+            ASSERT_TRUE(exec_res.has_value());
+        }
+
+        // Assert: Exactly 1000 queue submissions occurred without failure or deadlock
+        EXPECT_EQ(dev.graphics_port.submit_calls, iteration_count);
+        EXPECT_EQ(dev.graphics_port.allocated_cmds.size(), iteration_count);
+
+        // Verify the final submission accurately tracked the final timeline value
+        ASSERT_EQ(dev.graphics_port.last_signal_sync.size(), 2U);
+        EXPECT_EQ(dev.graphics_port.last_signal_sync[1].value, static_cast<uint64_t>(iteration_count));
+    }
+
+    /// @brief Verifies that alternating between empty DAG frames and non-empty DAG frames
+    /// preserves barrier solver layout tracking and ensures correct transitions for presented textures.
+    TEST(executor_test, empty_to_non_empty_graph_transition_state_consistency)
+    {
+        // Setup mock device, context, and render graph executor
+        auto dev = mock_device_with_ports{};
+        auto ctx = test_context{};
+        auto exec = render_graph_executor{};
+
+        const auto wait_sem = dev.create_binary_semaphore();
+        const auto signal_sem = dev.create_binary_semaphore();
+        const auto timeline_sem = dev.create_timeline_semaphore();
+        const auto swapchain_tex = dev.create_texture(rhi::texture_desc{
+            .width = 1920,
+            .height = 1080,
+            .depth = 1,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .format = rhi::data_format::bgra8_srgb,
+            .usage = rhi::texture_usage::color_attachment,
+            .name = "TransitionSwapchainTexture",
+        });
+
+        // Frame 1: Empty DAG execution with presentation sync
+        // Act: Execute empty graph
+        {
+            auto empty_rg = render_graph{ctx.jobs, 1920, 1080};
+            const auto empty_opts = frame_sync_options{
+                .wait_semaphore = wait_sem,
+                .wait_stages = rhi::pipeline_stage::attachment_output,
+                .signal_semaphore = signal_sem,
+                .signal_stages = rhi::pipeline_stage::attachment_output,
+                .timeline_semaphore = timeline_sem,
+                .timeline_value = 1,
+                .presented_texture = swapchain_tex,
+                .flight_slot_index = 0,
+                .frames_in_flight = 2,
+            };
+            const auto empty_res = exec.execute(dev, empty_rg, empty_opts);
+            ASSERT_TRUE(empty_res.has_value());
+            EXPECT_EQ(dev.graphics_port.submit_calls, 1U);
+        }
+
+        // Frame 2: Non-empty DAG execution with a raster pass rendering to the same swapchain texture
+        // Act: Register pass and execute
+        {
+            auto non_empty_rg = render_graph{ctx.jobs, 1920, 1080};
+            auto imported_target = non_empty_rg.import_texture(swapchain_tex);
+
+            struct pass_data
+            {
+                rg_texture_id target;
+            };
+
+            non_empty_rg.add_graphics_pass<pass_data>(
+                "ColorRenderPass",
+                [&](pass_builder& builder, pass_data& data) {
+                    data.target = builder.set_color_attachment(
+                        0,
+                        rg_color_attachment{
+                            .texture = imported_target,
+                            .load_op = rhi::load_op::clear,
+                            .store_op = rhi::store_op::store,
+                            .clear_value = {0.1F, 0.2F, 0.3F, 1.0F},
+                        });
+                },
+                []([[maybe_unused]] const pass_data& data, [[maybe_unused]] pass_execution_context& exec_ctx,
+                   [[maybe_unused]] rhi::command_list& cmd) {});
+
+            const auto non_empty_opts = frame_sync_options{
+                .wait_semaphore = wait_sem,
+                .wait_stages = rhi::pipeline_stage::attachment_output,
+                .signal_semaphore = signal_sem,
+                .signal_stages = rhi::pipeline_stage::attachment_output,
+                .timeline_semaphore = timeline_sem,
+                .timeline_value = 2,
+                .presented_texture = swapchain_tex,
+                .flight_slot_index = 1,
+                .frames_in_flight = 2,
+            };
+            const auto non_empty_res = exec.execute(dev, non_empty_rg, non_empty_opts);
+            ASSERT_TRUE(non_empty_res.has_value());
+            EXPECT_EQ(dev.graphics_port.submit_calls, 2U);
+        }
+
+        // Frame 3: Empty DAG execution again on the next flight slot
+        // Act: Execute empty graph
+        {
+            auto empty_rg = render_graph{ctx.jobs, 1920, 1080};
+            const auto empty_opts = frame_sync_options{
+                .wait_semaphore = wait_sem,
+                .wait_stages = rhi::pipeline_stage::attachment_output,
+                .signal_semaphore = signal_sem,
+                .signal_stages = rhi::pipeline_stage::attachment_output,
+                .timeline_semaphore = timeline_sem,
+                .timeline_value = 3,
+                .presented_texture = swapchain_tex,
+                .flight_slot_index = 0,
+                .frames_in_flight = 2,
+            };
+            const auto empty_res = exec.execute(dev, empty_rg, empty_opts);
+            ASSERT_TRUE(empty_res.has_value());
+            EXPECT_EQ(dev.graphics_port.submit_calls, 3U);
+        }
+
+        // Assert: 3 submissions across alternating empty and non-empty frames completed cleanly
+        EXPECT_EQ(dev.graphics_port.submit_calls, 3U);
+    }
+
+    /// @brief Verifies that passing null or zero-handle semaphores during empty DAG execution
+    /// does not cause unhandled crashes or undefined behavior.
+    TEST(executor_test, empty_dag_null_zero_handle_semaphores_safety)
+    {
+        // Setup mock device, context, and empty render graph
+        auto dev = mock_device_with_ports{};
+        auto ctx = test_context{};
+        auto rg = render_graph{ctx.jobs, 1920, 1080};
+
+        // Zero-handle semaphore handles
+        const auto zero_sem = rhi::semaphore_handle{0};
+
+        // Act: Execute empty DAG with zero-handle wait and signal semaphores
+        const auto zero_opts = frame_sync_options{
+            .wait_semaphore = zero_sem,
+            .wait_stages = rhi::pipeline_stage::attachment_output,
+            .signal_semaphore = zero_sem,
+            .signal_stages = rhi::pipeline_stage::attachment_output,
+            .timeline_semaphore = zero_sem,
+            .timeline_value = 0,
+        };
+        const auto exec_res = rg.execute_sync(dev, zero_opts);
+
+        // Assert: Graph executes safely without crashing
+        ASSERT_TRUE(exec_res.has_value());
+        EXPECT_EQ(dev.graphics_port.submit_calls, 1U);
+        ASSERT_EQ(dev.graphics_port.last_wait_sync.size(), 1U);
+        EXPECT_EQ(dev.graphics_port.last_wait_sync[0].semaphore.handle, 0U);
+        ASSERT_EQ(dev.graphics_port.last_signal_sync.size(), 1U);
+        EXPECT_EQ(dev.graphics_port.last_signal_sync[0].semaphore.handle, 0U);
     }
 } // namespace tempest::render_graph

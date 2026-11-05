@@ -1866,12 +1866,11 @@ TEST(gltf_importer_tests, gltf_database_save_and_reload_mesh_integrity)
         auto root = database.load(gltf_file_path.generic_string().c_str(), registry);
         EXPECT_TRUE(root != tempest::ecs::tombstone);
 
-        // Find the mesh in registry
-        for (const auto & it : mesh_reg)
+        if (mesh_reg.begin() != mesh_reg.end())
         {
+            const auto& it = *mesh_reg.begin();
             orig_mesh_guid = it.first;
             orig_mesh = it.second;
-            break;
         }
 
         EXPECT_TRUE(orig_mesh_guid != tempest::guid{});
@@ -2774,3 +2773,113 @@ TEST(asset_database_disk_freshness, load_reimports_when_source_file_changed_on_d
     // Teardown
     tempest::filesystem::remove_all(root_dir);
 }
+
+//==============================================================================
+// RFC 4648 Base64 Decoder Tests (P1-8)
+//==============================================================================
+
+/// @brief Verifies all 7 standard RFC 4648 base64 test vectors including edge padding.
+TEST(gltf_importer_tests, rfc4648_base64_standard_vectors)
+{
+    // Setup helper lambda to test string to string decoding
+    auto test_decode = [](tempest::string_view encoded, tempest::string_view expected) {
+        const auto input_span = tempest::span<const tempest::byte>{
+            reinterpret_cast<const tempest::byte*>(encoded.data()), encoded.size()};
+        const auto decoded = tempest::assets::parse_base64(input_span);
+        const auto decoded_str = tempest::string{
+            reinterpret_cast<const char*>(decoded.data()), decoded.size()};
+        EXPECT_EQ(decoded_str, expected);
+    };
+
+    // Act & Assert RFC 4648 Section 10 test vectors
+    test_decode("", "");
+    test_decode("Zg==", "f");
+    test_decode("Zm8=", "fo");
+    test_decode("Zm9v", "foo");
+    test_decode("Zm9vYg==", "foob");
+    test_decode("Zm9vYmE=", "fooba");
+    test_decode("Zm9vYmFy", "foobar");
+}
+
+/// @brief Verifies that data URIs with MIME prefixes (application/octet-stream and image/png)
+/// correctly strip headers and decode binary payloads.
+TEST(gltf_importer_tests, gltf_data_uri_embedded_buffer_decoding)
+{
+    // Setup data URI with octet-stream
+    const auto uri_buffer = tempest::string_view{"data:application/octet-stream;base64,Zm9vYmFy"};
+    const auto input_span = tempest::span<const tempest::byte>{
+        reinterpret_cast<const tempest::byte*>(uri_buffer.data()), uri_buffer.size()};
+
+    // Act
+    const auto decoded = tempest::assets::parse_base64(input_span);
+    const auto decoded_str = tempest::string{
+        reinterpret_cast<const char*>(decoded.data()), decoded.size()};
+
+    // Assert
+    EXPECT_EQ(decoded_str, "foobar");
+
+    // Setup data URI with image/png containing 4 bytes (PNG header prefix)
+    const auto uri_image = tempest::string_view{"data:image/png;base64,iVBORw=="};
+    const auto img_span = tempest::span<const tempest::byte>{
+        reinterpret_cast<const tempest::byte*>(uri_image.data()), uri_image.size()};
+
+    // Act
+    const auto img_decoded = tempest::assets::parse_base64(img_span);
+
+    // Assert
+    ASSERT_EQ(img_decoded.size(), 4U);
+    EXPECT_EQ(static_cast<uint8_t>(img_decoded[0]), 0x89);
+    EXPECT_EQ(static_cast<uint8_t>(img_decoded[1]), 0x50);
+    EXPECT_EQ(static_cast<uint8_t>(img_decoded[2]), 0x4E);
+    EXPECT_EQ(static_cast<uint8_t>(img_decoded[3]), 0x47);
+}
+
+/// @brief Verifies that invalid base64 characters or malformed padding return an empty vector.
+TEST(gltf_importer_tests, base64_invalid_character_rejection)
+{
+    // Setup invalid test inputs
+    auto test_invalid = [](tempest::string_view invalid_input) {
+        const auto input_span = tempest::span<const tempest::byte>{
+            reinterpret_cast<const tempest::byte*>(invalid_input.data()), invalid_input.size()};
+        const auto decoded = tempest::assets::parse_base64(input_span);
+        EXPECT_TRUE(decoded.empty());
+    };
+
+    // Act & Assert
+    test_invalid("Zm9v@mFy");
+    test_invalid("Zm9v=Yg=");
+    test_invalid("===");
+    test_invalid("Z===");
+}
+
+//==============================================================================
+// Const-Correctness Tests (P1-EXT)
+//==============================================================================
+
+/// @brief Verifies that const asset_database instances can query cached blobs and existing
+/// assets without invoking const_cast or mutating internal state.
+TEST(asset_database_constness, find_asset_and_get_blob_const_correctness)
+{
+    // Setup asset database with a registered and stored blob
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    const auto dummy_data = tempest::string_view{"precomputed_blob_data"};
+    const auto dummy_span = tempest::span<const tempest::byte>{
+        reinterpret_cast<const tempest::byte*>(dummy_data.data()), dummy_data.size()};
+    const auto asset_id = database.register_asset(tempest::assets::asset_type_id::of<tempest::assets::shader_asset>(), "shaders/test.slang");
+    database.store_blob(asset_id, dummy_span);
+
+    // Act: Access via const reference
+    const auto& const_db = database;
+    const auto* entry = const_db.find_asset("shaders/test.slang");
+    const auto blob = const_db.get_blob(asset_id);
+
+    // Assert
+    ASSERT_NE(entry, nullptr);
+    EXPECT_EQ(entry->id, asset_id);
+    EXPECT_EQ(blob.size(), dummy_data.size());
+    const auto blob_str = tempest::string_view{reinterpret_cast<const char*>(blob.data()), blob.size()};
+    EXPECT_EQ(blob_str, dummy_data);
+}
+

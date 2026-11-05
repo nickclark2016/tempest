@@ -137,6 +137,5 @@ namespace tempest::assets
         database.mount_root("assets/shaders/editor", 10, "shaders");
         database.mount_root("assets/shaders", 5, "shaders");
         database.mount_root("shaders", 5, "shaders");
-        database.mount_root("assets", 5, "");
     }
 } // namespace tempest::assets

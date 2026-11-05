@@ -3,6 +3,7 @@
 
 #include <tempest/api.hpp>
 #include <tempest/atomic.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/coroutine.hpp>
 #include <tempest/expected.hpp>
 #include <tempest/int.hpp>
@@ -85,7 +86,7 @@ namespace tempest::job
                 }
             }
 
-            new (&_storage[current_head & (Capacity - 1)]) T(forward<U>(value));
+            new (&_storage[(current_head & (Capacity - 1)) * sizeof(T)]) T(forward<U>(value));
             _head.store(current_head + 1, memory_order::release);
 
             auto cw = _consumer_waiter.exchange(0, memory_order::acq_rel);
@@ -109,7 +110,7 @@ namespace tempest::job
                 }
             }
 
-            auto* ptr = reinterpret_cast<T*>(&_storage[current_tail & (Capacity - 1)]);
+            auto* ptr = reinterpret_cast<T*>(&_storage[(current_tail & (Capacity - 1)) * sizeof(T)]);
             out = move(*ptr);
             ptr->~T();
             _tail.store(current_tail + 1, memory_order::release);
@@ -161,7 +162,7 @@ namespace tempest::job
       private:
         struct slot_awaiter
         {
-            spsc_channel& chan;
+            non_null<spsc_channel> chan;
 
             auto await_ready() const noexcept -> bool
             {
@@ -170,8 +171,8 @@ namespace tempest::job
 
             auto await_suspend(coroutine_handle<> h) noexcept -> bool
             {
-                chan._producer_waiter.store(reinterpret_cast<uintptr_t>(h.address()), memory_order::release);
-                if (chan.is_closed())
+                chan->_producer_waiter.store(reinterpret_cast<uintptr_t>(h.address()), memory_order::release);
+                if (chan->is_closed())
                 {
                     return false;
                 }
@@ -185,7 +186,7 @@ namespace tempest::job
 
         struct item_awaiter
         {
-            spsc_channel& chan;
+            non_null<spsc_channel> chan;
 
             auto await_ready() const noexcept -> bool
             {
@@ -194,8 +195,8 @@ namespace tempest::job
 
             auto await_suspend(coroutine_handle<> h) noexcept -> bool
             {
-                chan._consumer_waiter.store(reinterpret_cast<uintptr_t>(h.address()), memory_order::release);
-                if (chan.is_closed())
+                chan->_consumer_waiter.store(reinterpret_cast<uintptr_t>(h.address()), memory_order::release);
+                if (chan->is_closed())
                 {
                     return false;
                 }

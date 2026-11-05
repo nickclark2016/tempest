@@ -13,8 +13,6 @@
 #include <tempest/ui.hpp>
 #include <tempest/vector.hpp>
 
-#include <cstdio>
-
 namespace
 {
     using namespace tempest;
@@ -45,18 +43,17 @@ namespace
         const auto game_register_types_result =
             game_shared_library.get_function_handle<void, ecs::component_type_registry&>("tempest_game_register_types");
         const auto game_on_load_result =
-            game_shared_library.get_function_handle<void, engine_context&, span<const string_view>>("tempest_game_on_load");
-        const auto game_on_unload_result = game_shared_library.get_function_handle<void>("tempest_game_on_unload");
+            game_shared_library.get_function_handle<game_runtime_context*, engine_context&, span<const string_view>>(
+                "tempest_game_on_load");
+        const auto game_on_unload_result =
+            game_shared_library.get_function_handle<void, game_runtime_context*>("tempest_game_on_unload");
         const auto game_on_play_begin_result =
-            game_shared_library.get_function_handle<void, const play_settings&>("tempest_game_on_play_begin");
+            game_shared_library.get_function_handle<void, game_runtime_context*, const play_settings&>(
+                "tempest_game_on_play_begin");
         const auto game_on_play_end_result =
-            game_shared_library.get_function_handle<void>("tempest_game_on_play_end");
+            game_shared_library.get_function_handle<void, game_runtime_context*>("tempest_game_on_play_end");
 
-        const auto legacy_game_on_load_result =
-            game_shared_library.get_function_handle<void, engine_context*, span<string_view>>("on_load");
-        const auto legacy_game_on_unload_result = game_shared_library.get_function_handle<void>("on_unload");
-
-        if (!game_on_load_result && !legacy_game_on_load_result)
+        if (!game_on_load_result)
         {
             return 1;
         }
@@ -102,41 +99,37 @@ namespace
 
             auto ui_editor = editor::editor_context(tempest_engine, window_data.handle, ui_ctx);
 
-            if (game_on_load_result)
+            if (game_register_types_result)
             {
-                if (game_register_types_result)
-                {
-                    (*game_register_types_result)(tempest_engine.get_components());
-                }
-
-                if (game_on_play_begin_result)
-                {
-                    tempest_engine.get_play_mode_controller().set_on_play_begin(
-                        [fn = *game_on_play_begin_result](const play_settings& settings) {
-                            fn(settings);
-                        });
-                }
-
-                if (game_on_play_end_result)
-                {
-                    tempest_engine.get_play_mode_controller().set_on_play_end(
-                        [fn = *game_on_play_end_result]() {
-                            fn();
-                        });
-                }
-
-                (*game_on_load_result)(tempest_engine, span<const string_view>{args.data(), args.size()});
+                (*game_register_types_result)(tempest_engine.get_components());
             }
-            else if (legacy_game_on_load_result)
+
+            auto* const game =
+                (*game_on_load_result)(tempest_engine, span<const string_view>{args.data(), args.size()});
+
+            if (game_on_play_begin_result)
             {
-                (*legacy_game_on_load_result)(&tempest_engine, args);
+                tempest_engine.get_play_mode_controller().set_on_play_begin(
+                    [fn = *game_on_play_begin_result, game](const play_settings& settings) {
+                        fn(game, settings);
+                    });
+            }
+
+            if (game_on_play_end_result)
+            {
+                tempest_engine.get_play_mode_controller().set_on_play_end(
+                    [fn = *game_on_play_end_result, game]() {
+                        fn(game);
+                    });
             }
 
             (*game_editor_on_load_result)(&tempest_engine, &ui_editor, args);
 
-            [[maybe_unused]] const auto project_initialized = ui_editor.initialize_project_from_startup(args);
-
-            tempest_engine.load_startup_scene_if_needed();
+            const auto project_initialized = ui_editor.initialize_project_from_startup(args);
+            if (project_initialized)
+            {
+                tempest_engine.load_startup_scene_if_needed();
+            }
 
             tempest_engine.run();
 
@@ -144,11 +137,7 @@ namespace
 
             if (game_on_unload_result)
             {
-                (*game_on_unload_result)();
-            }
-            else if (legacy_game_on_unload_result)
-            {
-                (*legacy_game_on_unload_result)();
+                (*game_on_unload_result)(game);
             }
         }
 
@@ -165,25 +154,20 @@ namespace
 
 auto WINAPI WinMain(HINSTANCE /*unused*/, HINSTANCE /*unused*/, LPSTR /*cmdline*/, int /*unused*/) -> int
 {
-    // Try to attach the console
-    if (AttachConsole(ATTACH_PARENT_PROCESS))
-    {
-        auto* fp = static_cast<FILE*>(nullptr);
-        freopen_s(&fp, "CONOUT$", "w", stdout);
-        freopen_s(&fp, "CONOUT$", "w", stderr);
-    }
+    // Try to attach to parent console if invoked from terminal
+    [[maybe_unused]] const auto console_attached = AttachConsole(ATTACH_PARENT_PROCESS);
 
     auto arg_count = 0;
     auto* const args = CommandLineToArgvW(GetCommandLineW(), &arg_count);
 
     auto utf8_args = tempest::vector<tempest::string>{};
-    for (int i = 0; i < arg_count; ++i)
+    for (auto arg_idx = 0; arg_idx < arg_count; ++arg_idx)
     {
-        int utf8_size = WideCharToMultiByte(CP_UTF8, 0, args[i], -1, nullptr, 0, nullptr, nullptr);
+        const auto utf8_size = WideCharToMultiByte(CP_UTF8, 0, args[arg_idx], -1, nullptr, 0, nullptr, nullptr);
         if (utf8_size > 0)
         {
             auto utf8_arg = tempest::string(utf8_size - 1, '\0');
-            WideCharToMultiByte(CP_UTF8, 0, args[i], -1, utf8_arg.data(), utf8_size, nullptr, nullptr);
+            WideCharToMultiByte(CP_UTF8, 0, args[arg_idx], -1, utf8_arg.data(), utf8_size, nullptr, nullptr);
             utf8_args.push_back(tempest::move(utf8_arg));
         }
         else
@@ -207,9 +191,9 @@ auto WINAPI WinMain(HINSTANCE /*unused*/, HINSTANCE /*unused*/, LPSTR /*cmdline*
 int main(int argc, char* argv[])
 {
     auto arg_views = tempest::vector<tempest::string_view>{};
-    for (int i = 0; i < argc; ++i)
+    for (auto arg_idx = 0; arg_idx < argc; ++arg_idx)
     {
-        arg_views.push_back(argv[i]);
+        arg_views.push_back(argv[arg_idx]);
     }
 
     return run(arg_views);

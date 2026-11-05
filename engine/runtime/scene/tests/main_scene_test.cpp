@@ -10,6 +10,7 @@
 #include <tempest/physics/rigid_body_component.hpp>
 #include <tempest/render_system/render_components.hpp>
 #include <tempest/scene/scene_manager.hpp>
+#include <tempest/string_view.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/transform_history_component.hpp>
 #include <tempest/transform_history_system.hpp>
@@ -33,7 +34,6 @@ TEST(main_scene_test, load_main_scene_and_verify_entities)
     auto event_reg = tempest::event::event_registry{};
     auto type_reg = tempest::ecs::component_type_registry{};
     tempest::register_engine_types(type_reg);
-    type_reg.register_type<tempest::render_system::active_camera_component>();
 
     auto registry = tempest::ecs::basic_archetype_registry{event_reg, type_reg};
     auto manager = tempest::scene::scene_manager{registry};
@@ -77,6 +77,7 @@ TEST(main_scene_test, load_main_scene_and_verify_entities)
 
         const auto* const active = registry.try_get<tempest::render_system::active_camera_component>(camera_entity);
         EXPECT_NE(active, nullptr);
+        EXPECT_TRUE(registry.has<tempest::render_system::active_camera_component>(camera_entity));
     }
 
     // Verify Sun entity components
@@ -196,3 +197,96 @@ TEST(main_scene_test, load_main_scene_and_verify_entities)
         EXPECT_NEAR(interpolated_tx->position().z, 2.5F, 0.001F);
     }
 }
+
+// =========================================================================
+// SECTION: Fallback Scene Active Camera Component Verification
+// =========================================================================
+
+/// @brief Verifies that active_camera_component is properly registered via register_engine_types()
+/// and correctly instantiated into the archetype store during scene deserialization from fallback JSON,
+/// evaluating to true for both registry.has and registry.try_get != nullptr.
+TEST(main_scene_test, fallback_scene_active_camera_component_instantiation_and_query)
+{
+    // Setup ECS registry using only register_engine_types (no manual type registrations)
+    auto event_reg = tempest::event::event_registry{};
+    auto type_reg = tempest::ecs::component_type_registry{};
+    tempest::register_engine_types(type_reg);
+
+    auto registry = tempest::ecs::basic_archetype_registry{event_reg, type_reg};
+    auto manager = tempest::scene::scene_manager{registry};
+
+    static constexpr tempest::string_view fallback_scene_json =
+        "{\n"
+        "  \"version\": 1,\n"
+        "  \"entities\": [\n"
+        "    {\n"
+        "      \"id\": \"0x0000000000000001\",\n"
+        "      \"name\": \"Main Camera\",\n"
+        "      \"components\": {\n"
+        "        \"transform_component\": {\n"
+        "          \"position\": [0.0, 1.6, -5.0],\n"
+        "          \"rotation\": [0.0, 0.0, 0.0, 1.0],\n"
+        "          \"scale\": [1.0, 1.0, 1.0]\n"
+        "        },\n"
+        "        \"camera_component\": {\n"
+        "          \"aspect_ratio\": 1.7777778,\n"
+        "          \"vertical_fov\": 1.0471976,\n"
+        "          \"near_plane\": 0.05,\n"
+        "          \"far_plane\": 1000.0,\n"
+        "          \"target\": \"Viewport\",\n"
+        "          \"is_active\": true\n"
+        "        },\n"
+        "        \"active_camera_component\": {}\n"
+        "      }\n"
+        "    },\n"
+        "    {\n"
+        "      \"id\": \"0x0000000000000002\",\n"
+        "      \"name\": \"Sun Light\",\n"
+        "      \"components\": {\n"
+        "        \"transform_component\": {\n"
+        "          \"position\": [0.0, 5.0, 0.0],\n"
+        "          \"rotation\": [0.52456346, 0.18254332, -0.11629292, 0.8233997],\n"
+        "          \"scale\": [1.0, 1.0, 1.0]\n"
+        "        },\n"
+        "        \"directional_light_component\": {\n"
+        "          \"color\": [1.0, 0.98, 0.95],\n"
+        "          \"intensity\": 2.0\n"
+        "        }\n"
+        "      }\n"
+        "    }\n"
+        "  ]\n"
+        "}\n";
+
+    // Act: Deserialization from JSON string
+    const auto load_result = manager.load_from_string_sync(fallback_scene_json, "FallbackScene");
+    ASSERT_TRUE(load_result.has_value());
+
+    // Assert: Camera entity discovery and active_camera_component validation
+    const auto camera_opt = registry.find_first_with_name("Main Camera");
+    ASSERT_TRUE(camera_opt.has_value());
+    const auto camera_entity = *camera_opt;
+
+    // Verify entity validity
+    EXPECT_TRUE(registry.is_valid(camera_entity));
+
+    // Verify active_camera_component presence via has<T>
+    EXPECT_TRUE(registry.has<tempest::render_system::active_camera_component>(camera_entity));
+
+    // Verify active_camera_component pointer via try_get<T> != nullptr
+    const auto* const active_cam_ptr = registry.try_get<tempest::render_system::active_camera_component>(camera_entity);
+    EXPECT_NE(active_cam_ptr, nullptr);
+
+    // Verify transform and camera components are also properly instantiated
+    EXPECT_TRUE(registry.has<tempest::ecs::transform_component>(camera_entity));
+    EXPECT_TRUE(registry.has<tempest::render_system::camera_component>(camera_entity));
+
+    const auto* const cam_comp = registry.try_get<tempest::render_system::camera_component>(camera_entity);
+    ASSERT_NE(cam_comp, nullptr);
+    EXPECT_TRUE(cam_comp->is_active);
+    EXPECT_EQ(cam_comp->target, tempest::render_system::camera_target_type::viewport);
+    EXPECT_NEAR(cam_comp->aspect_ratio, 1.7777778F, 0.0001F);
+    EXPECT_NEAR(cam_comp->vertical_fov, 1.0471976F, 0.0001F);
+    EXPECT_NEAR(cam_comp->near_plane, 0.05F, 0.0001F);
+    EXPECT_NEAR(cam_comp->far_plane, 1000.0F, 0.0001F);
+}
+

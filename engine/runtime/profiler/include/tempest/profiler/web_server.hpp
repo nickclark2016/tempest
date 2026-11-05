@@ -3,6 +3,7 @@
 
 #include <tempest/api.hpp>
 #include <tempest/atomic.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/int.hpp>
 #include <tempest/mutex.hpp>
 #include <tempest/profiler/session.hpp>
@@ -69,7 +70,7 @@ namespace tempest::profiler
             vector<byte> rx_buffer;
         };
 
-        profiler_session& _session;
+        non_null<profiler_session> _session;
         web_server_config _config;
         atomic<bool> _running{false};
         atomic<uint16_t> _bound_port{0};

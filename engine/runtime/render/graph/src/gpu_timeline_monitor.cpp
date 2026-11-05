@@ -117,7 +117,7 @@ namespace tempest::render_graph
     {
         _wait_points_buffer.reserve(32);
         _semaphore_query_cache.reserve(32);
-        _control_semaphore = _device.create_timeline_semaphore();
+        _control_semaphore = _device->create_timeline_semaphore();
         _thread = thread{[this]() { _monitor_loop(); }};
     }
 
@@ -126,7 +126,7 @@ namespace tempest::render_graph
         stop();
         if (_control_semaphore != rhi::semaphore_handle{})
         {
-            _device.destroy_semaphore(_control_semaphore);
+            _device->destroy_semaphore(_control_semaphore);
             _control_semaphore = {};
         }
     }
@@ -142,7 +142,7 @@ namespace tempest::render_graph
     {
         auto guard = lock_guard{_wake_mutex};
         const auto next_seq = _control_seq.fetch_add(1, memory_order::relaxed) + 1;
-        _device.signal_semaphore(_control_semaphore, next_seq);
+        _device->signal_semaphore(_control_semaphore, next_seq);
     }
 
     auto gpu_timeline_monitor::is_stopped() const noexcept -> bool
@@ -181,7 +181,7 @@ namespace tempest::render_graph
                 {
                     *pending_head->error_out = gpu_sync_error::cancelled;
                 }
-                _jobs.schedule(pending_head->handle, pending_head->priority, pending_head->affinity);
+                _jobs->schedule(pending_head->handle, pending_head->priority, pending_head->affinity);
             }
             else if (expected_state == wait_state::cancelled)
             {
@@ -199,7 +199,7 @@ namespace tempest::render_graph
                 {
                     *entry->error_out = gpu_sync_error::cancelled;
                 }
-                _jobs.schedule(entry->handle, entry->priority, entry->affinity);
+                _jobs->schedule(entry->handle, entry->priority, entry->affinity);
             }
             else if (expected_state == wait_state::cancelled)
             {
@@ -256,7 +256,7 @@ namespace tempest::render_graph
 
                 if (!cached)
                 {
-                    current_val = _device.get_semaphore_value(entry->sync_point.semaphore);
+                    current_val = _device->get_semaphore_value(entry->sync_point.semaphore);
                     _semaphore_query_cache.push_back(semaphore_query_cache{
                         .semaphore = entry->sync_point.semaphore,
                         .current_value = current_val,
@@ -272,7 +272,7 @@ namespace tempest::render_graph
                         {
                             *entry->error_out = gpu_sync_error::none;
                         }
-                        _jobs.schedule(entry->handle, entry->priority, entry->affinity);
+                        _jobs->schedule(entry->handle, entry->priority, entry->affinity);
                     }
                     else if (expected_state == wait_state::cancelled)
                     {
@@ -292,7 +292,7 @@ namespace tempest::render_graph
             }
 
             // Build unique sync points (zero-allocation stack buffer)
-            _last_seen_control_val = _device.get_semaphore_value(_control_semaphore);
+            _last_seen_control_val = _device->get_semaphore_value(_control_semaphore);
 
             if (_stop_requested.load(memory_order::acquire))
             {
@@ -339,7 +339,7 @@ namespace tempest::render_graph
             // Wait
             const auto wait_timeout_ns =
                 _active_entries.empty() ? ~uint64_t{0} : uint64_t{2'000'000'000ULL}; // 2 s watchdog
-            const auto status = _device.wait_semaphores(
+            const auto status = _device->wait_semaphores(
                 span<const rhi::host_sync_point>{_wait_points_buffer.data(), _wait_points_buffer.size()},
                 wait_timeout_ns,
                 /*wait_any=*/true
@@ -347,7 +347,7 @@ namespace tempest::render_graph
 
             if (status == rhi::wait_status::device_lost)
             {
-                _log.error("GPU device lost while monitoring timeline semaphores");
+                _log->error("GPU device lost while monitoring timeline semaphores");
                 auto* lost_pending = _pending_requests.drain();
                 while (lost_pending != nullptr)
                 {
@@ -359,7 +359,7 @@ namespace tempest::render_graph
                         {
                             *lost_pending->error_out = gpu_sync_error::device_lost;
                         }
-                        _jobs.schedule(lost_pending->handle, lost_pending->priority, lost_pending->affinity);
+                        _jobs->schedule(lost_pending->handle, lost_pending->priority, lost_pending->affinity);
                     }
                     else if (expected_state == wait_state::cancelled)
                     {
@@ -377,7 +377,7 @@ namespace tempest::render_graph
                         {
                             *entry->error_out = gpu_sync_error::device_lost;
                         }
-                        _jobs.schedule(entry->handle, entry->priority, entry->affinity);
+                        _jobs->schedule(entry->handle, entry->priority, entry->affinity);
                     }
                     else if (expected_state == wait_state::cancelled)
                     {

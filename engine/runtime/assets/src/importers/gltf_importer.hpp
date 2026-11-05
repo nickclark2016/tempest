@@ -1,13 +1,21 @@
 #ifndef tempest_assets_importers_gltf_importer_hpp
 #define tempest_assets_importers_gltf_importer_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/asset_importer.hpp>
 #include <tempest/material.hpp>
+#include <tempest/span.hpp>
 #include <tempest/texture.hpp>
+#include <tempest/vector.hpp>
 #include <tempest/vertex.hpp>
 
 namespace tempest::assets
 {
+    /// @brief Decodes an RFC 4648 standard base64 payload or glTF data URI.
+    /// @param data Input byte span containing raw base64 ASCII or a "data:[<mediatype>][;base64],..." URI.
+    /// @return Decoded binary data as a vector of bytes, or an empty vector on invalid characters/padding.
+    TEMPEST_API auto parse_base64(span<const byte> data) -> vector<byte>;
+
     class gltf_importer : public asset_importer
     {
       public:

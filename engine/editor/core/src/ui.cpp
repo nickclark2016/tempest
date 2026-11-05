@@ -4,6 +4,7 @@
 #include <tempest/asset_database.hpp>
 #include <tempest/enum.hpp>
 #include <tempest/files.hpp>
+#include <tempest/format.hpp>
 #include <tempest/int.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/memory.hpp>
@@ -285,6 +286,41 @@ namespace tempest::editor
                     unsafe::resize_no_init(result, blob.size());
                     tempest::memcpy(result.data(), blob.data(), blob.size());
                     return result;
+                }
+            }
+
+            // Fallback: resolve disk path via asset database mounts and read from disk
+            auto disk_path = db.resolve_disk_path(filename);
+            if (!disk_path.has_value())
+            {
+                auto aliased = string("@shaders/");
+                aliased.append(filename.data(), filename.size());
+                disk_path = db.resolve_disk_path(aliased);
+            }
+            if (disk_path.has_value())
+            {
+                auto file_bytes = read_file_to_vector(*disk_path);
+                if (file_bytes.has_value() && !file_bytes->empty())
+                {
+                    return tempest::move(*file_bytes);
+                }
+            }
+
+            // Fallback: direct relative paths if mounts were not resolved
+            const auto direct_candidates = array<string, 3>{
+                tempest::format("assets/shaders/editor/{}", filename),
+                tempest::format("assets/shaders/engine/{}", filename),
+                tempest::format("assets/shaders/{}", filename),
+            };
+            for (const auto& candidate : direct_candidates)
+            {
+                if (filesystem::exists(candidate))
+                {
+                    auto file_bytes = read_file_to_vector(candidate);
+                    if (file_bytes.has_value() && !file_bytes->empty())
+                    {
+                        return tempest::move(*file_bytes);
+                    }
                 }
             }
 

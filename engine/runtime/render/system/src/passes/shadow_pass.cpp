@@ -66,7 +66,7 @@ namespace tempest::render_system
         auto shadow_data = directional_shadow_data{};
         shadow_data.cascade_count = 0;
 
-        const auto sun = resolve_sun(params.registry);
+        const auto sun = resolve_sun(*params.registry);
         const auto cam_opt = params.camera_override.has_value()
                                  ? params.camera_override
                                  : ((params.camera_sys != nullptr) ? params.camera_sys->get_active_camera() : tempest::nullopt);
@@ -88,7 +88,7 @@ namespace tempest::render_system
             const auto cam_ent_opt = params.camera_sys->get_active_camera_entity();
             if (cam_ent_opt.has_value())
             {
-                if (const auto* cam_comp = params.registry.try_get<camera_component>(*cam_ent_opt))
+                if (const auto* cam_comp = params.registry->try_get<camera_component>(*cam_ent_opt))
                 {
                     near_plane = cam_comp->near_plane;
                     fov_y = cam_comp->vertical_fov;
@@ -122,7 +122,7 @@ namespace tempest::render_system
             const auto cam_ent_opt = params.camera_sys->get_active_camera_entity();
             if (cam_ent_opt.has_value())
             {
-                if (const auto* cam_tx = params.registry.try_get<ecs::transform_component>(*cam_ent_opt))
+                if (const auto* cam_tx = params.registry->try_get<ecs::transform_component>(*cam_ent_opt))
                 {
                     cam_forward = math::extract_forward(math::quat(cam_tx->rotation()));
                 }
@@ -150,10 +150,10 @@ namespace tempest::render_system
         const auto alpha = tan_half_fov * math::sqrt(1.0F + (aspect * aspect));
         const auto alpha_sq = alpha * alpha;
 
-        const auto plan = (params.allocator.get_atlas_width() > 0)
+        const auto plan = (params.allocator->get_atlas_width() > 0)
                               ? calculate_directional_shadow_atlas_plan(sun.caster.resolution, num_cascades,
-                                                                        params.allocator.get_atlas_width(),
-                                                                        params.allocator.get_padding())
+                                                                        params.allocator->get_atlas_width(),
+                                                                        params.allocator->get_padding())
                               : shadow_atlas_plan{};
         const auto cascade_res =
             (plan.effective_cascade_resolution > 0) ? plan.effective_cascade_resolution : sun.caster.resolution;
@@ -205,15 +205,15 @@ namespace tempest::render_system
 
             const auto light_view_proj = ortho_proj * light_view;
 
-            const auto alloc_res = params.allocator.allocate(cascade_res, cascade_res);
+            const auto alloc_res = params.allocator->allocate(cascade_res, cascade_res);
             if (!alloc_res.has_value())
             {
                 break;
             }
 
             const auto rect = *alloc_res;
-            const auto atlas_w = static_cast<float>(params.allocator.get_atlas_width());
-            const auto atlas_h = static_cast<float>(params.allocator.get_atlas_height());
+            const auto atlas_w = static_cast<float>(params.allocator->get_atlas_width());
+            const auto atlas_h = static_cast<float>(params.allocator->get_atlas_height());
 
             shadow_data.cascades[i] = shadow_cascade_data{
                 .view_proj = light_view_proj,
@@ -239,11 +239,11 @@ namespace tempest::render_system
         shadow_data.depth_bias = sun.caster.depth_bias;
         shadow_data.debug_mode = static_cast<uint32_t>(sun.caster.debug_mode);
 
-        auto opaque_pipe_h = params.shaders.find_graphics_pipeline("shadow_depth_opaque_pipeline");
+        auto opaque_pipe_h = params.shaders->find_graphics_pipeline("shadow_depth_opaque_pipeline");
         if (!opaque_pipe_h.has_value())
         {
-            auto vs = params.shaders.register_shader_module("shadow_depth_opaque.vert.spv", rhi::shader_stage::vertex,
-                                                            "VSMain");
+            auto vs = params.shaders->register_shader_module("shadow_depth_opaque.vert.spv", rhi::shader_stage::vertex,
+                                                             "VSMain");
             auto stages = array{vs};
 
             auto tmpl = graphics_pipeline_template{
@@ -270,16 +270,16 @@ namespace tempest::render_system
                         .depth_compare_op = rhi::compare_op::greater_or_equal,
                     },
             };
-            opaque_pipe_h = params.shaders.register_graphics_pipeline("shadow_depth_opaque_pipeline", tmpl);
+            opaque_pipe_h = params.shaders->register_graphics_pipeline("shadow_depth_opaque_pipeline", tmpl);
         }
 
-        auto masked_pipe_h = params.shaders.find_graphics_pipeline("shadow_depth_masked_pipeline");
+        auto masked_pipe_h = params.shaders->find_graphics_pipeline("shadow_depth_masked_pipeline");
         if (!masked_pipe_h.has_value())
         {
-            auto vs = params.shaders.register_shader_module("shadow_depth_masked.vert.spv", rhi::shader_stage::vertex,
-                                                            "VSMain");
-            auto fs = params.shaders.register_shader_module("shadow_depth_masked.frag.spv", rhi::shader_stage::fragment,
-                                                            "FSMain");
+            auto vs = params.shaders->register_shader_module("shadow_depth_masked.vert.spv", rhi::shader_stage::vertex,
+                                                             "VSMain");
+            auto fs = params.shaders->register_shader_module("shadow_depth_masked.frag.spv", rhi::shader_stage::fragment,
+                                                             "FSMain");
             auto stages = array{vs, fs};
 
             auto tmpl = graphics_pipeline_template{
@@ -306,15 +306,15 @@ namespace tempest::render_system
                         .depth_compare_op = rhi::compare_op::greater_or_equal,
                     },
             };
-            masked_pipe_h = params.shaders.register_graphics_pipeline("shadow_depth_masked_pipeline", tmpl);
+            masked_pipe_h = params.shaders->register_graphics_pipeline("shadow_depth_masked_pipeline", tmpl);
         }
 
         const auto opaque_pipe = *opaque_pipe_h;
         const auto masked_pipe = *masked_pipe_h;
 
-        const auto& pass_data = params.graph.add_graphics_pass<shadow_pass_data>(
+        const auto& pass_data = params.graph->add_graphics_pass<shadow_pass_data>(
             "ShadowPass",
-            [&pool = params.pool, shadow_atlas_tex = params.shadow_atlas,
+            [&pool = *params.pool, shadow_atlas_tex = params.shadow_atlas,
              stats = params.pipeline_statistics](render_graph::pass_builder& builder, shadow_pass_data& data) -> void {
                 if (stats != rhi::pipeline_statistic_flags::none)
                 {
@@ -338,7 +338,7 @@ namespace tempest::render_system
                 builder.read(cmd_buf, rhi::pipeline_stage::indirect_commands, rhi::resource_access::read);
                 builder.read(vtx_buf, rhi::pipeline_stage::vertex, rhi::resource_access::read);
             },
-            [&pool = params.pool, &shaders = params.shaders, opaque_draw_count = params.opaque_draw_count,
+            [&pool = *params.pool, &shaders = *params.shaders, opaque_draw_count = params.opaque_draw_count,
              opaque_draw_offset = params.opaque_draw_offset, alpha_masked_draw_count = params.alpha_masked_draw_count,
              alpha_masked_draw_offset = params.alpha_masked_draw_offset, opaque_pipe, masked_pipe,
              cascades_to_render = rendered_cascades]([[maybe_unused]] const shadow_pass_data& data,

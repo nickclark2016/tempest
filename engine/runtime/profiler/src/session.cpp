@@ -479,12 +479,12 @@ namespace tempest::profiler
 
     auto thread_profiler_context::get_session() const noexcept -> const profiler_session&
     {
-        return _session;
+        return *_session;
     }
 
     auto thread_profiler_context::get_session() noexcept -> profiler_session&
     {
-        return _session;
+        return *_session;
     }
 
     auto thread_profiler_context::current_depth() const noexcept -> uint32_t
@@ -497,7 +497,7 @@ namespace tempest::profiler
     {
         if (!_current_chunk)
         {
-            _current_chunk = _session.acquire_chunk();
+            _current_chunk = _session->acquire_chunk();
             _current_chunk->set_thread_id(_thread_id);
         }
     }
@@ -507,7 +507,7 @@ namespace tempest::profiler
         if (_current_chunk && !_current_chunk->empty())
         {
             _current_chunk->set_thread_id(_thread_id);
-            _session.push_completed_chunk(tempest::move(_current_chunk));
+            _session->push_completed_chunk(tempest::move(_current_chunk));
             _current_chunk = nullptr;
         }
     }

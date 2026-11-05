@@ -1042,13 +1042,13 @@ namespace tempest::profiler
 
         if (cmd == "start_capture")
         {
-            _session.set_enabled(true);
+            _session->set_enabled(true);
             resp = R"({"type":"response","command":"start_capture","status":"ok","recording":true})";
         }
         else if (cmd == "stop_capture")
         {
-            _session.set_enabled(false);
-            const auto capture = create_capture_from_session(_session);
+            _session->set_enabled(false);
+            const auto capture = create_capture_from_session(*_session);
             format_to(tempest::back_inserter(resp),
                       "{{\"type\":\"response\",\"command\":\"stop_capture\",\"status\":\"ok\",\"recording\":false,"
                       "\"tracks\":{},\"metrics\":{}}}",
@@ -1056,7 +1056,7 @@ namespace tempest::profiler
         }
         else if (cmd == "query_stats")
         {
-            const auto capture = create_capture_from_session(_session);
+            const auto capture = create_capture_from_session(*_session);
             const auto stats = compute_all_zone_statistics(capture);
 
             resp = R"({"type":"stats","zone_count":)";
@@ -1080,7 +1080,7 @@ namespace tempest::profiler
         }
         else if (cmd == "get_snapshot")
         {
-            const auto capture = create_capture_from_session(_session);
+            const auto capture = create_capture_from_session(*_session);
             const auto chrome_json = export_chrome_trace_json_string(capture);
             resp = string{chrome_json.data(), chrome_json.size()};
         }

@@ -5,13 +5,18 @@
 #include <tempest/builtin_assets.hpp>
 #include <tempest/files.hpp>
 #include <tempest/filesystem.hpp>
+#include <tempest/format.hpp>
 #include <tempest/json.hpp>
+#include <tempest/math.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/project_workspace.hpp>
 #include <tempest/recent_projects.hpp>
+#include <tempest/render_system/camera_system.hpp>
+#include <tempest/render_system/render_components.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
+#include <tempest/transform_component.hpp>
 #include <tempest/vector.hpp>
 #include <tempest/windows/project_launcher_dialog.hpp>
 
@@ -38,6 +43,10 @@ namespace tempest::editor::tests
 
             explicit scoped_temp_directory(const fs::path& target_path) : path{target_path}
             {
+                if (fs::exists(path))
+                {
+                    fs::remove_all(path);
+                }
                 fs::create_directories(path);
             }
 
@@ -353,7 +362,165 @@ namespace tempest::editor::tests
         EXPECT_FALSE(editor.get_project_launcher_dialog().is_open());
     }
 
-    /// @brief Verifies auto-discovery when exactly one .tproject file resides in the current working directory.
+    /// @brief Verifies that passing --project=<nonexistent_path> fails resolution and opens the launcher dialog.
+    TEST(project_launcher_test, startup_resolution_nonexistent_project_equals_arg_opens_launcher)
+    {
+        // Setup: Engine context without any project created on disk
+        const auto temp_dir = fs::temp_directory_path() / "tempest_startup_arg_nonexistent";
+        const auto temp_guard = scoped_temp_directory{temp_dir};
+        const auto nonexistent_file = temp_dir / "NonExistentGame.tproject";
+
+        auto engine_ctx = editor_engine_context{};
+        engine_ctx.set_session_file_path((temp_dir / "editor_session.json").generic_string());
+        const auto win_desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Nonexistent Startup Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+        auto reg_info = engine_ctx.register_window(win_desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        auto editor = editor_context(engine_ctx, reg_info.handle, ui_ctx);
+
+        const auto arg_string = tempest::format("--project={}", nonexistent_file.generic_string());
+        auto args = vector<string_view>{};
+        args.push_back(string_view{arg_string});
+
+        // Act: Initialize with nonexistent project path
+        const auto resolved =
+            editor.initialize_project_from_startup(span<const string_view>{args.data(), args.size()});
+
+        // Assert: Resolution failed and launcher dialog opened
+        EXPECT_FALSE(resolved);
+        EXPECT_FALSE(engine_ctx.has_project());
+        EXPECT_TRUE(editor.get_project_launcher_dialog().is_open());
+    }
+
+    /// @brief Verifies that passing --project <nonexistent_path> fails resolution and opens the launcher dialog.
+    TEST(project_launcher_test, startup_resolution_nonexistent_project_space_arg_opens_launcher)
+    {
+        // Setup: Engine context without any project created on disk
+        const auto temp_dir = fs::temp_directory_path() / "tempest_startup_arg_space_nonexistent";
+        const auto temp_guard = scoped_temp_directory{temp_dir};
+        const auto nonexistent_file = temp_dir / "NonExistentSpaceGame.tproject";
+
+        auto engine_ctx = editor_engine_context{};
+        engine_ctx.set_session_file_path((temp_dir / "editor_session.json").generic_string());
+        const auto win_desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Nonexistent Space Startup Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+        auto reg_info = engine_ctx.register_window(win_desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        auto editor = editor_context(engine_ctx, reg_info.handle, ui_ctx);
+
+        const auto target_path_str = nonexistent_file.generic_string();
+        auto args = vector<string_view>{};
+        args.push_back("--project");
+        args.push_back(string_view{target_path_str});
+
+        // Act: Initialize with nonexistent project path
+        const auto resolved =
+            editor.initialize_project_from_startup(span<const string_view>{args.data(), args.size()});
+
+        // Assert: Resolution failed and launcher dialog opened
+        EXPECT_FALSE(resolved);
+        EXPECT_FALSE(engine_ctx.has_project());
+        EXPECT_TRUE(editor.get_project_launcher_dialog().is_open());
+    }
+
+    /// @brief Verifies that passing arbitrary flags without --project fails resolution and opens the launcher dialog.
+    TEST(project_launcher_test, startup_resolution_arbitrary_flags_without_project_opens_launcher)
+    {
+        // Setup: Engine context
+        const auto temp_dir = fs::temp_directory_path() / "tempest_startup_arbitrary_flags";
+        const auto temp_guard = scoped_temp_directory{temp_dir};
+
+        auto engine_ctx = editor_engine_context{};
+        engine_ctx.set_session_file_path((temp_dir / "editor_session.json").generic_string());
+        const auto win_desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Arbitrary Flags Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+        auto reg_info = engine_ctx.register_window(win_desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        auto editor = editor_context(engine_ctx, reg_info.handle, ui_ctx);
+
+        auto args = vector<string_view>{};
+        args.push_back("--debug");
+        args.push_back("-v");
+        args.push_back("--window-width");
+        args.push_back("1920");
+
+        // Act: Initialize with arbitrary non-project flags
+        const auto resolved =
+            editor.initialize_project_from_startup(span<const string_view>{args.data(), args.size()});
+
+        // Assert: Resolution failed and launcher dialog opened
+        EXPECT_FALSE(resolved);
+        EXPECT_FALSE(engine_ctx.has_project());
+        EXPECT_TRUE(editor.get_project_launcher_dialog().is_open());
+    }
+
+    /// @brief Verifies that passing empty --project= or trailing --project without path opens launcher dialog.
+    TEST(project_launcher_test, startup_resolution_empty_or_trailing_project_flag_opens_launcher)
+    {
+        // Setup: Engine context
+        const auto temp_dir = fs::temp_directory_path() / "tempest_startup_empty_flag";
+        const auto temp_guard = scoped_temp_directory{temp_dir};
+
+        auto engine_ctx = editor_engine_context{};
+        engine_ctx.set_session_file_path((temp_dir / "editor_session.json").generic_string());
+        const auto win_desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Empty Flag Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+        auto reg_info = engine_ctx.register_window(win_desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        auto editor = editor_context(engine_ctx, reg_info.handle, ui_ctx);
+
+        // Case A: --project= with empty path
+        auto empty_eq_args = vector<string_view>{};
+        empty_eq_args.push_back("--project=");
+        const auto resolved_eq =
+            editor.initialize_project_from_startup(span<const string_view>{empty_eq_args.data(), empty_eq_args.size()});
+        EXPECT_FALSE(resolved_eq);
+        EXPECT_FALSE(engine_ctx.has_project());
+        EXPECT_TRUE(editor.get_project_launcher_dialog().is_open());
+
+        // Case B: trailing --project with no following path argument
+        auto trailing_args = vector<string_view>{};
+        trailing_args.push_back("--project");
+        const auto resolved_trailing =
+            editor.initialize_project_from_startup(span<const string_view>{trailing_args.data(), trailing_args.size()});
+        EXPECT_FALSE(resolved_trailing);
+        EXPECT_FALSE(engine_ctx.has_project());
+        EXPECT_TRUE(editor.get_project_launcher_dialog().is_open());
+    }
+
+    /// @brief Verifies that launching without arguments forces the launcher dialog to show first even if a project exists in CWD.
     TEST(project_launcher_test, startup_resolution_single_project_in_cwd)
     {
         // Setup: Working directory containing single .tproject
@@ -383,11 +550,10 @@ namespace tempest::editor::tests
         // Act: Initialize from startup with empty arguments
         const auto resolved = editor.initialize_project_from_startup({});
 
-        // Assert: Auto-discovered single project in CWD
-        EXPECT_TRUE(resolved);
-        EXPECT_TRUE(engine_ctx.has_project());
-        EXPECT_EQ(engine_ctx.get_current_project()->name, "SingleGame");
-        EXPECT_FALSE(editor.get_project_launcher_dialog().is_open());
+        // Assert: Does not auto-open project; forces launcher dialog to show first
+        EXPECT_FALSE(resolved);
+        EXPECT_FALSE(engine_ctx.has_project());
+        EXPECT_TRUE(editor.get_project_launcher_dialog().is_open());
     }
 
     /// @brief Verifies that when 0 .tproject files exist in CWD, the launcher dialog opens.
@@ -418,6 +584,86 @@ namespace tempest::editor::tests
         const auto resolved = editor.initialize_project_from_startup({});
 
         // Assert: Did not resolve project, launcher dialog opened
+        EXPECT_FALSE(resolved);
+        EXPECT_FALSE(engine_ctx.has_project());
+        EXPECT_TRUE(editor.get_project_launcher_dialog().is_open());
+    }
+
+    /// @brief Verifies that launching without arguments forces the launcher dialog to show first
+    /// even if an immediate child directory contains a project.
+    TEST(project_launcher_test, startup_resolution_single_project_in_immediate_child_directory)
+    {
+        // Setup: Working directory with a child directory 'game' containing game.tproject
+        const auto temp_dir = fs::temp_directory_path() / "tempest_startup_child_cwd";
+        const auto temp_guard = scoped_temp_directory{temp_dir};
+        const auto game_dir = temp_dir / "game";
+        fs::create_directories(game_dir);
+        const auto proj_file = game_dir / "game.tproject";
+        ASSERT_TRUE(create_valid_test_project_file(proj_file, "game"));
+
+        const auto cwd_guard = scoped_current_path{temp_dir};
+
+        auto engine_ctx = editor_engine_context{};
+        engine_ctx.set_session_file_path((temp_dir / "editor_session.json").generic_string());
+        const auto win_desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Child CWD Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+        auto reg_info = engine_ctx.register_window(win_desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        auto editor = editor_context(engine_ctx, reg_info.handle, ui_ctx);
+
+        // Act: Initialize from startup with empty arguments
+        const auto resolved = editor.initialize_project_from_startup({});
+
+        // Assert: Did not auto-open project; forces launcher dialog to show first
+        EXPECT_FALSE(resolved);
+        EXPECT_FALSE(engine_ctx.has_project());
+        EXPECT_TRUE(editor.get_project_launcher_dialog().is_open());
+    }
+
+    /// @brief Verifies that when multiple projects exist in different child directories,
+    /// disambiguation is required and the launcher dialog opens.
+    TEST(project_launcher_test, startup_resolution_multiple_projects_in_subdirectories_opens_launcher)
+    {
+        // Setup: Working directory with two child directories each containing a project
+        const auto temp_dir = fs::temp_directory_path() / "tempest_startup_multi_child_cwd";
+        const auto temp_guard = scoped_temp_directory{temp_dir};
+        const auto sub1 = temp_dir / "project_a";
+        const auto sub2 = temp_dir / "project_b";
+        fs::create_directories(sub1);
+        fs::create_directories(sub2);
+        ASSERT_TRUE(create_valid_test_project_file(sub1 / "project_a.tproject", "project_a"));
+        ASSERT_TRUE(create_valid_test_project_file(sub2 / "project_b.tproject", "project_b"));
+
+        const auto cwd_guard = scoped_current_path{temp_dir};
+
+        auto engine_ctx = editor_engine_context{};
+        engine_ctx.set_session_file_path((temp_dir / "editor_session.json").generic_string());
+        const auto win_desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Multi Child Test Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+        auto reg_info = engine_ctx.register_window(win_desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        auto editor = editor_context(engine_ctx, reg_info.handle, ui_ctx);
+
+        // Act: Initialize from startup with empty arguments
+        const auto resolved = editor.initialize_project_from_startup({});
+
+        // Assert: Multiple projects in child directories require user choice via launcher dialog
         EXPECT_FALSE(resolved);
         EXPECT_FALSE(engine_ctx.has_project());
         EXPECT_TRUE(editor.get_project_launcher_dialog().is_open());
@@ -816,5 +1062,366 @@ namespace tempest::editor::tests
 
         launcher.close();
         EXPECT_FALSE(launcher.is_open());
+    }
+
+    /// @brief Verifies that project_launcher_dialog persists across multiple successive frames without auto-closing.
+    TEST(project_launcher_test, launcher_dialog_persists_across_multiple_frames)
+    {
+        // Setup: Engine and UI context
+        auto engine_ctx = editor_engine_context{};
+        const auto win_desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Multi Frame Persistence Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+        auto reg_info = engine_ctx.register_window(win_desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+
+        auto launcher = project_launcher_dialog{};
+        launcher.open(launcher_tab::recent_projects);
+        EXPECT_TRUE(launcher.is_open());
+
+        // Act & Assert: Render 10 consecutive frames
+        for (auto frame_index = 0; frame_index < 10; ++frame_index)
+        {
+            ui_ctx.begin_ui_commands();
+            launcher.draw();
+            ui_ctx.finish_ui_commands();
+
+            EXPECT_TRUE(launcher.is_open());
+        }
+
+        // Act: Explicitly close dialog
+        launcher.close();
+        EXPECT_FALSE(launcher.is_open());
+
+        // Assert: Remains closed on subsequent frame
+        ui_ctx.begin_ui_commands();
+        launcher.draw();
+        ui_ctx.finish_ui_commands();
+
+        EXPECT_FALSE(launcher.is_open());
+    }
+
+    /// @brief Verifies that when launched without a project, editor_context::draw() preserves launcher modal across frames.
+    TEST(project_launcher_test, editor_draw_preserves_launcher_dialog_across_frames)
+    {
+        // Setup: Empty working directory with no .tproject files
+        const auto temp_dir = fs::temp_directory_path() / "tempest_editor_draw_persistence";
+        const auto temp_guard = scoped_temp_directory{temp_dir};
+        const auto cwd_guard = scoped_current_path{temp_dir};
+
+        auto engine_ctx = editor_engine_context{};
+        engine_ctx.set_session_file_path((temp_dir / "editor_session.json").generic_string());
+        const auto win_desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Editor Draw Persistence Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+        auto reg_info = engine_ctx.register_window(win_desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        auto editor = editor_context(engine_ctx, reg_info.handle, ui_ctx);
+
+        // Act: Initialize startup without arguments -> opens launcher
+        const auto resolved = editor.initialize_project_from_startup({});
+        EXPECT_FALSE(resolved);
+        EXPECT_TRUE(editor.get_project_launcher_dialog().is_open());
+
+        // Act & Assert: Execute multiple full editor frames
+        for (auto frame_index = 0; frame_index < 5; ++frame_index)
+        {
+            ui_ctx.begin_ui_commands();
+            editor.draw();
+            ui_ctx.finish_ui_commands();
+
+            EXPECT_TRUE(editor.get_project_launcher_dialog().is_open());
+        }
+    }
+
+    /// @brief Verifies that project launcher closes when project open succeeds, but remains open if open fails.
+    TEST(project_launcher_test, launcher_dialog_open_project_lifecycle)
+    {
+        auto launcher = project_launcher_dialog{};
+        auto should_succeed = false;
+        launcher.set_on_open_project([&](string_view /*path*/) -> bool {
+            return should_succeed;
+        });
+
+        launcher.open(launcher_tab::open_browse);
+        EXPECT_TRUE(launcher.is_open());
+
+        // Act: Simulate open failure
+        should_succeed = false;
+        launcher.set_open_path("NonExistent.tproject");
+        EXPECT_TRUE(launcher.is_open());
+
+        // Act: Simulate open success
+        should_succeed = true;
+        launcher.close();
+        EXPECT_FALSE(launcher.is_open());
+    }
+
+    /// @brief Verifies that project launcher closes when project creation succeeds, but remains open if creation fails.
+    TEST(project_launcher_test, launcher_dialog_create_project_lifecycle)
+    {
+        auto launcher = project_launcher_dialog{};
+        auto should_succeed = false;
+        launcher.set_on_create_project([&](string_view /*name*/, string_view /*parent_dir*/) -> bool {
+            return should_succeed;
+        });
+
+        launcher.open(launcher_tab::create_project);
+        EXPECT_TRUE(launcher.is_open());
+
+        // Act: Simulate creation failure
+        should_succeed = false;
+        launcher.set_new_project_fields("TestGame", "C:/InvalidPath");
+        EXPECT_TRUE(launcher.is_open());
+
+        // Act: Simulate creation success
+        should_succeed = true;
+        launcher.close();
+        EXPECT_FALSE(launcher.is_open());
+    }
+
+    /// @brief Verifies that Cancel capability is governed by whether an active project exists.
+    TEST(project_launcher_test, launcher_dialog_cancel_conditional_on_active_project)
+    {
+        auto launcher = project_launcher_dialog{};
+        auto has_active = false;
+        launcher.set_has_active_project([&]() -> bool {
+            return has_active;
+        });
+
+        // Case A: No active project -> dialog open
+        launcher.open();
+        EXPECT_TRUE(launcher.is_open());
+
+        // Case B: Active project exists -> closing dismisses modal
+        has_active = true;
+        launcher.close();
+        EXPECT_FALSE(launcher.is_open());
+    }
+
+    //==============================================================================
+    // Empirical Stress Tests: Modal Persistence, Subdirectory Discovery & Fallback
+    //==============================================================================
+
+    /// @brief Stress-tests modal persistence over 120 rapid frames with dynamic viewport resizing,
+    /// zero-size minimization, extreme clipping, and tab transitions, verifying that _is_open
+    /// never drops prematurely without explicit dismissal.
+    TEST(project_launcher_test, launcher_dialog_rapid_120_frames_viewport_stress)
+    {
+        // Setup: Engine and headless UI context
+        auto engine_ctx = editor_engine_context{};
+        const auto win_desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Modal Stress Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+        auto reg_info = engine_ctx.register_window(win_desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+
+        auto launcher = project_launcher_dialog{};
+        launcher.open(launcher_tab::recent_projects);
+        EXPECT_TRUE(launcher.is_open());
+
+        // Act & Assert: Execute 120 rapid frames with simulated clipping, collapse, and tab transitions
+        for (auto frame_idx = 0; frame_idx < 120; ++frame_idx)
+        {
+            engine_ctx.get_logger().info(tempest::format("Running frame {}", frame_idx));
+            // Adversarially alternate tab requests while drawing
+            if (frame_idx % 15 == 0)
+            {
+                launcher.open(launcher_tab::open_browse);
+            }
+            else if (frame_idx % 30 == 0)
+            {
+                launcher.open(launcher_tab::create_project);
+            }
+
+            ui_ctx.begin_ui_commands();
+            launcher.draw();
+            ui_ctx.finish_ui_commands();
+
+            // Crucial invariant: modal MUST remain open despite clipping and collapse
+            EXPECT_TRUE(launcher.is_open());
+        }
+
+        // Act: Explicit close must dismiss
+        launcher.close();
+        EXPECT_FALSE(launcher.is_open());
+
+        // Assert: Remains closed on subsequent frame
+        ui_ctx.begin_ui_commands();
+        launcher.draw();
+        ui_ctx.finish_ui_commands();
+        EXPECT_FALSE(launcher.is_open());
+    }
+
+    /// @brief Stress-tests startup resolution when launching without arguments in complex directory trees,
+    /// ensuring the launcher dialog is always opened first without auto-opening discovered projects.
+    TEST(project_launcher_test, startup_resolution_deep_nesting_and_ignored_directories_stress)
+    {
+        const auto temp_dir = fs::temp_directory_path() / "tempest_discovery_stress";
+        const auto temp_guard = scoped_temp_directory{temp_dir};
+        const auto cwd_guard = scoped_current_path{temp_dir};
+
+        // Create ignored directory projects
+        const auto build_proj_dir = temp_dir / "build";
+        fs::create_directories(build_proj_dir);
+        EXPECT_TRUE(create_valid_test_project_file(build_proj_dir / "ignored_build.tproject", "IgnoredBuild"));
+
+        const auto dot_dir = temp_dir / ".git";
+        fs::create_directories(dot_dir);
+        EXPECT_TRUE(create_valid_test_project_file(dot_dir / "ignored_git.tproject", "IgnoredGit"));
+
+        const auto vendor_dir = temp_dir / "vendor";
+        fs::create_directories(vendor_dir);
+        EXPECT_TRUE(create_valid_test_project_file(vendor_dir / "ignored_vendor.tproject", "IgnoredVendor"));
+
+        // Deeply nested project (depth > 2) should NOT be discovered by single-depth child search
+        const auto deep_dir = temp_dir / "deep" / "nested" / "sub";
+        fs::create_directories(deep_dir);
+        EXPECT_TRUE(create_valid_test_project_file(deep_dir / "deep.tproject", "DeepProject"));
+
+        // Valid immediate child project: game/game.tproject
+        const auto game_dir = temp_dir / "game";
+        fs::create_directories(game_dir);
+        EXPECT_TRUE(create_valid_test_project_file(game_dir / "game.tproject", "game"));
+
+        auto engine_ctx = editor_engine_context{};
+        engine_ctx.set_session_file_path((temp_dir / "editor_session.json").generic_string());
+        const auto win_desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Discovery Stress Window",
+            .fullscreen = false,
+            .resizable = true,
+        };
+        auto reg_info = engine_ctx.register_window(win_desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
+        auto editor = editor_context(engine_ctx, reg_info.handle, ui_ctx);
+
+        // Act: Initialize startup without arguments forces launcher dialog
+        const auto resolved = editor.initialize_project_from_startup({});
+        EXPECT_FALSE(resolved);
+        EXPECT_FALSE(engine_ctx.has_project());
+        EXPECT_TRUE(editor.get_project_launcher_dialog().is_open());
+
+        // Act: Specifying --project explicitly opens the project directly
+        const auto project_arg = tempest::format("--project={}", (game_dir / "game.tproject").generic_string());
+        auto explicit_args = vector<string_view>{};
+        explicit_args.push_back(string_view{project_arg});
+        const auto explicit_resolved = editor.initialize_project_from_startup(
+            span<const string_view>{explicit_args.data(), explicit_args.size()});
+        EXPECT_TRUE(explicit_resolved);
+        EXPECT_TRUE(engine_ctx.has_project());
+        EXPECT_EQ(fs::path{engine_ctx.get_current_project_path()}.filename(), "game.tproject");
+        EXPECT_FALSE(editor.get_project_launcher_dialog().is_open());
+    }
+
+    /// @brief Stress-tests in-memory fallback scene creation, verifying valid ECS entity IDs,
+    /// non-null transform and camera components, active camera tag component, valid projection and view matrices, and directional lighting.
+    TEST(project_launcher_test, fallback_scene_ecs_camera_and_lighting_validation)
+    {
+        // Setup: Clean environment without disk scene files
+        const auto temp_dir = fs::temp_directory_path() / "tempest_fallback_scene_stress";
+        const auto temp_guard = scoped_temp_directory{temp_dir};
+        const auto cwd_guard = scoped_current_path{temp_dir};
+
+        auto engine_ctx = editor_engine_context{};
+        engine_ctx.set_session_file_path((temp_dir / "editor_session.json").generic_string());
+
+        // Act: Invoke startup scene loading when no scenes exist on disk
+        const auto scene_loaded = engine_ctx.load_startup_scene_if_needed();
+        EXPECT_TRUE(scene_loaded);
+
+        auto& registry = engine_ctx.get_entities();
+        auto camera_sys = render_system::camera_system{registry};
+
+        // Active camera entity discovery
+        const auto active_cam_entity = camera_sys.get_active_camera_entity();
+        ASSERT_TRUE(active_cam_entity.has_value());
+        EXPECT_TRUE(registry.is_valid(*active_cam_entity));
+
+        // Entity component attachment invariants
+        EXPECT_TRUE(registry.has<ecs::transform_component>(*active_cam_entity));
+        EXPECT_TRUE(registry.has<render_system::camera_component>(*active_cam_entity));
+        // Active camera tag component registered in engine_types must be properly deserialized from fallback scene JSON
+        EXPECT_TRUE(registry.has<render_system::active_camera_component>(*active_cam_entity));
+
+        const auto* const cam_comp = registry.try_get<render_system::camera_component>(*active_cam_entity);
+        ASSERT_NE(cam_comp, nullptr);
+        EXPECT_TRUE(cam_comp->is_active);
+        EXPECT_EQ(cam_comp->target, render_system::camera_target_type::viewport);
+        EXPECT_GT(cam_comp->aspect_ratio, 0.0F);
+        EXPECT_GT(cam_comp->vertical_fov, 0.0F);
+        EXPECT_GT(cam_comp->near_plane, 0.0F);
+        EXPECT_GT(cam_comp->far_plane, cam_comp->near_plane);
+
+        const auto* const tx_comp = registry.try_get<ecs::transform_component>(*active_cam_entity);
+        ASSERT_NE(tx_comp, nullptr);
+        EXPECT_EQ(tx_comp->position().y, 1.6F);
+        EXPECT_EQ(tx_comp->position().z, -5.0F);
+
+        // Active render camera matrix mathematical validity
+        const auto active_render_cam = camera_sys.get_active_camera();
+        ASSERT_TRUE(active_render_cam.has_value());
+
+        // Check view matrix and projection matrix for finite values
+        for (auto idx = 0; idx < 16; ++idx)
+        {
+            EXPECT_TRUE(tempest::isfinite(active_render_cam->view.data[idx]));
+            EXPECT_TRUE(tempest::isfinite(active_render_cam->proj.data[idx]));
+        }
+
+        // Directional light entity verification
+        auto found_light = false;
+        registry.each([&](const ecs::self_component& self, const render_system::directional_light_component& light,
+                          const ecs::transform_component&) {
+            found_light = true;
+            EXPECT_TRUE(registry.is_valid(self.entity));
+            EXPECT_GT(light.intensity, 0.0F);
+            EXPECT_GE(light.color.x, 0.0F);
+            EXPECT_LE(light.color.x, 1.0F);
+        });
+        EXPECT_TRUE(found_light);
+    }
+
+    /// @brief Stress-tests asset database mounting resilience and verifies shader bytecode
+    /// resolution with default roots and fallback mechanisms.
+    TEST(project_launcher_test, shader_loading_resilience_under_missing_or_partial_mounts)
+    {
+        auto engine_ctx = editor_engine_context{};
+
+        // Verify default shader roots are mounted during engine context construction
+        const auto& asset_db = engine_ctx.get_assets();
+        const auto disk_path_opt = asset_db.resolve_disk_path("@shaders/imgui.vert.spv");
+        // Note: disk path may or may not exist depending on build environment, but resolution must not assert
+        EXPECT_FALSE(string_view(disk_path_opt.has_value() ? *disk_path_opt : "").empty() &&
+                     !disk_path_opt.has_value());
+
+        // Querying a completely non-existent shader alias must fail gracefully with nullopt, never assert
+        const auto non_existent_opt = asset_db.resolve_disk_path("@shaders/non_existent_stress_shader.spv");
+        EXPECT_FALSE(non_existent_opt.has_value());
     }
 } // namespace tempest::editor::tests

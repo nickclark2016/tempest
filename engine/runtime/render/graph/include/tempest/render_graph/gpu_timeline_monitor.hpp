@@ -3,6 +3,7 @@
 
 #include <tempest/api.hpp>
 #include <tempest/atomic.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/coroutine.hpp>
 #include <tempest/int.hpp>
 #include <tempest/intrusive_stack.hpp>
@@ -37,17 +38,17 @@ namespace tempest::render_graph
 
         [[nodiscard]] auto get_device() const noexcept -> rhi::device&
         {
-            return _device;
+            return *_device.get();
         }
 
         [[nodiscard]] auto get_job_system() const noexcept -> job::job_system&
         {
-            return _jobs;
+            return *_jobs.get();
         }
 
         [[nodiscard]] auto get_logger() const noexcept -> logger&
         {
-            return _log;
+            return *_log.get();
         }
 
         auto register_wait(wait_entry& entry) -> void;
@@ -57,9 +58,9 @@ namespace tempest::render_graph
       private:
         auto _monitor_loop() -> void;
 
-        rhi::device& _device;
-        job::job_system& _jobs;
-        logger& _log;
+        non_null<rhi::device> _device;
+        non_null<job::job_system> _jobs;
+        non_null<logger> _log;
 
         rhi::semaphore_handle _control_semaphore{};
         atomic<uint64_t> _control_seq{0};

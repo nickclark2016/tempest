@@ -246,6 +246,92 @@ namespace tempest::render_graph
         const auto& dag = compile_res.value();
         if (dag.sorted_pass_indices.empty())
         {
+            if (frame_sync.signal_semaphore.has_value() || frame_sync.wait_semaphore.has_value())
+            {
+                auto& port = dev.get_graphics_execution_port();
+                auto& cmd = port.acquire_command_list(0, rhi::command_list_lifetime::transient);
+                cmd.begin();
+
+                if (frame_sync.presented_texture.has_value())
+                {
+                    const auto tex_handle = *frame_sync.presented_texture;
+                    const auto sig_stages = frame_sync.signal_stages.has_value()
+                                                ? enum_mask<rhi::pipeline_stage>{*frame_sync.signal_stages}
+                                                : enum_mask<rhi::pipeline_stage>{rhi::pipeline_stage::attachment_output};
+
+                    const auto present_barrier = rhi::texture_barrier{
+                        .texture = tex_handle,
+                        .src =
+                            {
+                                .stages = rhi::pipeline_stage::attachment_output,
+                                .access = rhi::resource_access::none,
+                                .layout = rhi::image_layout::undefined,
+                            },
+                        .dst =
+                            {
+                                .stages = sig_stages,
+                                .access = rhi::resource_access::none,
+                                .layout = rhi::image_layout::present,
+                            },
+                    };
+                    cmd.pipeline_barrier(span<const rhi::texture_barrier>{&present_barrier, 1}, {});
+                    _barrier_solver.set_texture_state(tex_handle.handle, sig_stages,
+                                                      rhi::resource_access::none, rhi::image_layout::present,
+                                                      queue_type::graphics);
+                }
+
+                cmd.end();
+
+                auto wait_sync = vector<rhi::device_sync_point>{};
+                if (frame_sync.wait_semaphore.has_value())
+                {
+                    wait_sync.push_back(rhi::device_sync_point{
+                        .semaphore = *frame_sync.wait_semaphore,
+                        .value = 0,
+                        .stages = frame_sync.wait_stages,
+                    });
+                }
+
+                auto signal_sync = vector<rhi::device_sync_point>{};
+                if (frame_sync.signal_semaphore.has_value())
+                {
+                    const auto sig_stages = frame_sync.signal_stages.has_value()
+                                                ? *frame_sync.signal_stages
+                                                : rhi::pipeline_stage::attachment_output;
+                    signal_sync.push_back(rhi::device_sync_point{
+                        .semaphore = *frame_sync.signal_semaphore,
+                        .value = 0,
+                        .stages = sig_stages,
+                    });
+                }
+
+                if (frame_sync.timeline_semaphore.has_value() && frame_sync.timeline_value > 0)
+                {
+                    signal_sync.push_back(rhi::device_sync_point{
+                        .semaphore = *frame_sync.timeline_semaphore,
+                        .value = frame_sync.timeline_value,
+                        .stages = rhi::pipeline_stage::all_graphics,
+                    });
+                }
+
+                const auto* cmd_ptr = &cmd;
+                const auto submit_res = port.submit(
+                    span<const rhi::command_list*>{&cmd_ptr, 1},
+                    wait_sync,
+                    signal_sync);
+
+                if (!submit_res.has_value())
+                {
+                    return unexpected(execution_error::queue_submit_failed);
+                }
+
+                return expected<void, execution_error>{};
+            }
+
+            if (frame_sync.timeline_semaphore.has_value() && frame_sync.timeline_value > 0)
+            {
+                dev.signal_semaphore(*frame_sync.timeline_semaphore, frame_sync.timeline_value);
+            }
             return expected<void, execution_error>{};
         }
 

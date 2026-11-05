@@ -2,6 +2,7 @@
 #define tempest_render_graph_types_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/cstring_view.hpp>
 #include <tempest/enum.hpp>
 #include <tempest/hash.hpp>
@@ -296,7 +297,7 @@ namespace tempest::render_graph
     /// \brief Color attachment description referencing a persistent temporal texture.
     struct rg_temporal_color_attachment
     {
-        temporal_texture& texture;
+        non_null<temporal_texture> texture;
         rhi::load_op load_op = rhi::load_op::clear;
         rhi::store_op store_op = rhi::store_op::store;
         rhi::clear_color_value clear_value{0.0F, 0.0F, 0.0F, 1.0F};
@@ -306,7 +307,7 @@ namespace tempest::render_graph
     /// \brief Depth/stencil attachment description referencing a persistent temporal texture.
     struct rg_temporal_depth_stencil_attachment
     {
-        temporal_texture& texture;
+        non_null<temporal_texture> texture;
         rhi::load_op depth_load_op = rhi::load_op::clear;
         rhi::store_op depth_store_op = rhi::store_op::store;
         rhi::load_op stencil_load_op = rhi::load_op::dont_care;
@@ -330,7 +331,7 @@ namespace tempest::render_graph
     /// \brief Color attachment description referencing a persistent flight texture at a specific slot.
     struct rg_flight_color_attachment
     {
-        flight_texture& texture;
+        non_null<flight_texture> texture;
         uint32_t flight_slot{0};
         rhi::load_op load_op = rhi::load_op::clear;
         rhi::store_op store_op = rhi::store_op::store;
@@ -341,7 +342,7 @@ namespace tempest::render_graph
     /// \brief Depth/stencil attachment description referencing a persistent flight texture at a specific slot.
     struct rg_flight_depth_stencil_attachment
     {
-        flight_texture& texture;
+        non_null<flight_texture> texture;
         uint32_t flight_slot{0};
         rhi::load_op depth_load_op = rhi::load_op::clear;
         rhi::store_op depth_store_op = rhi::store_op::store;

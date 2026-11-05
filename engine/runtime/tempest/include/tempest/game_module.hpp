@@ -27,6 +27,7 @@
 namespace tempest
 {
     class engine_context;
+    struct game_runtime_context;
 
     namespace ecs
     {
@@ -57,10 +58,13 @@ namespace tempest
 extern "C"
 {
     TEMPEST_GAME_API auto tempest_game_register_types(tempest::ecs::component_type_registry& types) -> void;
-    TEMPEST_GAME_API auto tempest_game_on_load(tempest::engine_context& ctx, tempest::span<const tempest::string_view> args) -> void;
-    TEMPEST_GAME_API auto tempest_game_on_unload() -> void;
-    TEMPEST_GAME_API auto tempest_game_on_play_begin(const tempest::play_settings& settings) -> void;
-    TEMPEST_GAME_API auto tempest_game_on_play_end() -> void;
+    TEMPEST_GAME_API auto tempest_game_on_load(tempest::engine_context& ctx,
+                                               tempest::span<const tempest::string_view> args)
+        -> tempest::game_runtime_context*;
+    TEMPEST_GAME_API auto tempest_game_on_unload(tempest::game_runtime_context* game) -> void;
+    TEMPEST_GAME_API auto tempest_game_on_play_begin(tempest::game_runtime_context* game,
+                                                     const tempest::play_settings& settings) -> void;
+    TEMPEST_GAME_API auto tempest_game_on_play_end(tempest::game_runtime_context* game) -> void;
 }
 
 #endif // tempest_game_module_hpp

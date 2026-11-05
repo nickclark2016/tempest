@@ -3,6 +3,8 @@
 #include <gtest/gtest.h>
 
 #include <tempest/iterator.hpp>
+#include <tempest/limits.hpp>
+#include <tempest/string.hpp>
 #include <tempest/utility.hpp>
 
 template <typename T>
@@ -636,4 +638,402 @@ TEST(vector, iterator_checks)
 {
     using vec_it = tempest::vector<int>::iterator;
     EXPECT_TRUE(tempest::contiguous_iterator<vec_it>);
+}
+
+/// @brief Verifies that calling reserve with capacity exceeding host memory fails safely
+/// without corrupting capacity, data pointers, or crashing subsequent push_back operations.
+TEST(vector, reserve_huge_allocation_failure_resilience)
+{
+    // Setup: empty vector
+    auto vec = tempest::vector<tempest::string>{};
+    const auto huge_cap = static_cast<size_t>(-1) / sizeof(tempest::string);
+
+    // Act: attempt to reserve huge capacity
+    vec.reserve(huge_cap);
+
+    // Assert: vector remains safely empty and uncorrupted
+    EXPECT_EQ(vec.capacity(), 0U);
+    EXPECT_EQ(vec.size(), 0U);
+    EXPECT_EQ(vec.data(), nullptr);
+
+    // Act: push element should successfully allocate normal capacity and not dereference null
+    vec.push_back("safe_string");
+
+    // Assert: element is properly stored
+    EXPECT_EQ(vec.size(), 1U);
+    EXPECT_GE(vec.capacity(), 1U);
+    EXPECT_EQ(vec[0], "safe_string");
+}
+
+/// @brief Verifies that calling reserve with huge capacity on a non-empty vector preserves
+/// all existing elements and original capacity without data loss or memory corruption.
+TEST(vector, reserve_huge_with_existing_elements_preserves_content)
+{
+    // Setup: vector with existing elements
+    auto vec = tempest::vector<tempest::string>{};
+    vec.push_back("first");
+    vec.push_back("second");
+    const auto original_cap = vec.capacity();
+
+    // Act: attempt huge reservation
+    const auto huge_cap = static_cast<size_t>(-1) / sizeof(tempest::string);
+    vec.reserve(huge_cap);
+
+    // Assert: existing elements and original capacity are completely preserved
+    EXPECT_EQ(vec.capacity(), original_cap);
+    EXPECT_EQ(vec.size(), 2U);
+    EXPECT_EQ(vec[0], "first");
+    EXPECT_EQ(vec[1], "second");
+}
+
+/// @brief Verifies that calling reserve with value exceeding max_size() is rejected safely.
+TEST(vector, reserve_overflow_above_max_size_is_rejected)
+{
+    // Setup: vector of ints
+    auto vec = tempest::vector<int>{};
+    const auto overflow_cap = static_cast<size_t>(-1);
+
+    // Act: reserve value that exceeds max_size()
+    vec.reserve(overflow_cap);
+
+    // Assert: rejected without wrapping or corrupting state
+    EXPECT_EQ(vec.capacity(), 0U);
+    EXPECT_EQ(vec.size(), 0U);
+    EXPECT_EQ(vec.data(), nullptr);
+}
+
+namespace
+{
+    template <typename T>
+    struct mock_failing_allocator
+    {
+        using value_type = T;
+        using size_type = size_t;
+        using difference_type = ptrdiff_t;
+
+        bool* fail_switch = nullptr;
+
+        constexpr mock_failing_allocator() noexcept = default;
+        constexpr explicit mock_failing_allocator(bool* failure_flag) noexcept : fail_switch{failure_flag}
+        {
+        }
+
+        template <typename U>
+        constexpr mock_failing_allocator(const mock_failing_allocator<U>& other) noexcept : fail_switch{other.fail_switch}
+        {
+        }
+
+        [[nodiscard]] auto allocate(size_t count) -> T*
+        {
+            if (fail_switch != nullptr && *fail_switch)
+            {
+                return nullptr;
+            }
+            if (sizeof(T) != 0 && count > (tempest::numeric_limits<size_t>::max() / sizeof(T)))
+            {
+                return nullptr;
+            }
+            auto* memory_buffer = tempest::aligned_alloc(sizeof(T) * count, alignof(T));
+            return static_cast<T*>(memory_buffer);
+        }
+
+        void deallocate(T* pointer, [[maybe_unused]] size_t count)
+        {
+            tempest::aligned_free(pointer);
+        }
+    };
+
+    template <typename T, typename U>
+    [[nodiscard]] constexpr auto operator==(const mock_failing_allocator<T>& lhs,
+                                            const mock_failing_allocator<U>& rhs) noexcept -> bool
+    {
+        return lhs.fail_switch == rhs.fail_switch;
+    }
+} // namespace
+
+/// @brief Verifies that calling reserve with boundary values approaching and exceeding
+/// max_size() on empty vectors leaves them safely empty without null dereference.
+TEST(vector, empirical_challenge_reserve_boundary_stress_empty)
+{
+    // Setup: empty vectors of different element types
+    auto int_vector = tempest::vector<int>{};
+    auto string_vector = tempest::vector<tempest::string>{};
+    auto uint64_vector = tempest::vector<uint64_t>{};
+
+    const auto max_int_cap = tempest::numeric_limits<size_t>::max() / sizeof(int);
+    const auto max_string_cap = tempest::numeric_limits<size_t>::max() / sizeof(tempest::string);
+    const auto max_uint64_cap = tempest::numeric_limits<size_t>::max() / sizeof(uint64_t);
+
+    // Act: reserve with extreme boundary values on empty int vector
+    int_vector.reserve(tempest::numeric_limits<size_t>::max());
+    EXPECT_EQ(int_vector.capacity(), 0U);
+    EXPECT_EQ(int_vector.size(), 0U);
+    EXPECT_EQ(int_vector.data(), nullptr);
+
+    int_vector.reserve(max_int_cap + 1);
+    EXPECT_EQ(int_vector.capacity(), 0U);
+    EXPECT_EQ(int_vector.size(), 0U);
+    EXPECT_EQ(int_vector.data(), nullptr);
+
+    int_vector.reserve(max_int_cap);
+    EXPECT_EQ(int_vector.capacity(), 0U);
+    EXPECT_EQ(int_vector.size(), 0U);
+    EXPECT_EQ(int_vector.data(), nullptr);
+
+    int_vector.reserve(max_int_cap - 1);
+    EXPECT_EQ(int_vector.capacity(), 0U);
+    EXPECT_EQ(int_vector.size(), 0U);
+    EXPECT_EQ(int_vector.data(), nullptr);
+
+    int_vector.reserve(1ULL << 62);
+    EXPECT_EQ(int_vector.capacity(), 0U);
+    EXPECT_EQ(int_vector.size(), 0U);
+    EXPECT_EQ(int_vector.data(), nullptr);
+
+    // Act: reserve on empty string vector
+    string_vector.reserve(tempest::numeric_limits<size_t>::max());
+    EXPECT_EQ(string_vector.capacity(), 0U);
+    EXPECT_EQ(string_vector.size(), 0U);
+    EXPECT_EQ(string_vector.data(), nullptr);
+
+    string_vector.reserve(max_string_cap);
+    EXPECT_EQ(string_vector.capacity(), 0U);
+    EXPECT_EQ(string_vector.size(), 0U);
+    EXPECT_EQ(string_vector.data(), nullptr);
+
+    // Act: reserve on empty uint64 vector
+    uint64_vector.reserve(max_uint64_cap);
+    EXPECT_EQ(uint64_vector.capacity(), 0U);
+    EXPECT_EQ(uint64_vector.size(), 0U);
+    EXPECT_EQ(uint64_vector.data(), nullptr);
+
+    // Act: push_back and emplace_back on vectors after failed reserve operations
+    int_vector.push_back(42);
+    EXPECT_EQ(int_vector.size(), 1U);
+    EXPECT_GE(int_vector.capacity(), 1U);
+    EXPECT_NE(int_vector.data(), nullptr);
+    EXPECT_EQ(int_vector[0], 42);
+
+    int_vector.emplace_back(84);
+    EXPECT_EQ(int_vector.size(), 2U);
+    EXPECT_GE(int_vector.capacity(), 2U);
+    EXPECT_EQ(int_vector[1], 84);
+    EXPECT_EQ(int_vector.front(), 42);
+    EXPECT_EQ(int_vector.back(), 84);
+
+    string_vector.push_back("first_entry");
+    string_vector.emplace_back("second_entry");
+    EXPECT_EQ(string_vector.size(), 2U);
+    EXPECT_GE(string_vector.capacity(), 2U);
+    EXPECT_EQ(string_vector[0], "first_entry");
+    EXPECT_EQ(string_vector[1], "second_entry");
+}
+
+/// @brief Verifies that calling reserve with extreme capacities on populated vectors preserves
+/// all existing elements, original capacity, and pointer identity without memory corruption.
+TEST(vector, empirical_challenge_reserve_boundary_stress_populated)
+{
+    // Setup: populated vector of strings and ints
+    auto populated_string_vec = tempest::vector<tempest::string>{};
+    populated_string_vec.push_back("alpha");
+    populated_string_vec.push_back("beta");
+    populated_string_vec.push_back("gamma");
+    populated_string_vec.push_back("delta");
+    populated_string_vec.push_back("epsilon");
+
+    const auto original_string_cap = populated_string_vec.capacity();
+    const auto* original_string_ptr = populated_string_vec.data();
+    const auto max_string_cap = tempest::numeric_limits<size_t>::max() / sizeof(tempest::string);
+
+    // Act: stress reserve with multiple extreme capacities
+    populated_string_vec.reserve(tempest::numeric_limits<size_t>::max());
+    EXPECT_EQ(populated_string_vec.capacity(), original_string_cap);
+    EXPECT_EQ(populated_string_vec.size(), 5U);
+    EXPECT_EQ(populated_string_vec.data(), original_string_ptr);
+
+    populated_string_vec.reserve(max_string_cap + 1);
+    EXPECT_EQ(populated_string_vec.capacity(), original_string_cap);
+    EXPECT_EQ(populated_string_vec.size(), 5U);
+    EXPECT_EQ(populated_string_vec.data(), original_string_ptr);
+
+    populated_string_vec.reserve(max_string_cap);
+    EXPECT_EQ(populated_string_vec.capacity(), original_string_cap);
+    EXPECT_EQ(populated_string_vec.size(), 5U);
+    EXPECT_EQ(populated_string_vec.data(), original_string_ptr);
+
+    populated_string_vec.reserve(1ULL << 60);
+    EXPECT_EQ(populated_string_vec.capacity(), original_string_cap);
+    EXPECT_EQ(populated_string_vec.size(), 5U);
+    EXPECT_EQ(populated_string_vec.data(), original_string_ptr);
+
+    // Assert: content integrity
+    EXPECT_EQ(populated_string_vec[0], "alpha");
+    EXPECT_EQ(populated_string_vec[1], "beta");
+    EXPECT_EQ(populated_string_vec[2], "gamma");
+    EXPECT_EQ(populated_string_vec[3], "delta");
+    EXPECT_EQ(populated_string_vec[4], "epsilon");
+
+    // Setup: populated vector of ints
+    auto populated_int_vec = tempest::vector<int>{};
+    for (auto val = 0; val < 16; ++val)
+    {
+        populated_int_vec.push_back(val * 10);
+    }
+    const auto original_int_cap = populated_int_vec.capacity();
+    const auto* original_int_ptr = populated_int_vec.data();
+    const auto max_int_cap = tempest::numeric_limits<size_t>::max() / sizeof(int);
+
+    // Act: stress reserve
+    populated_int_vec.reserve(tempest::numeric_limits<size_t>::max());
+    populated_int_vec.reserve(max_int_cap);
+    populated_int_vec.reserve(max_int_cap - 1);
+
+    // Assert: int vector preserved
+    EXPECT_EQ(populated_int_vec.capacity(), original_int_cap);
+    EXPECT_EQ(populated_int_vec.size(), 16U);
+    EXPECT_EQ(populated_int_vec.data(), original_int_ptr);
+    for (auto val = 0; val < 16; ++val)
+    {
+        EXPECT_EQ(populated_int_vec[static_cast<size_t>(val)], val * 10);
+    }
+}
+
+/// @brief Verifies that subsequent container operations (clear, shrink_to_fit, insert, erase,
+/// operator[]) function correctly after simulated allocation failures on reserve.
+TEST(vector, empirical_challenge_subsequent_container_operations_after_reserve_failure)
+{
+    // Setup: populated vector of strings
+    auto string_vec = tempest::vector<tempest::string>{};
+    string_vec.push_back("zero");
+    string_vec.push_back("one");
+    string_vec.push_back("two");
+
+    const auto max_string_cap = tempest::numeric_limits<size_t>::max() / sizeof(tempest::string);
+
+    // Act: trigger failed reserve
+    string_vec.reserve(max_string_cap);
+
+    // Assert: element mutation via operator[] and at()
+    string_vec[1] = "ONE_MODIFIED";
+    EXPECT_EQ(string_vec[1], "ONE_MODIFIED");
+    EXPECT_EQ(string_vec.at(1), "ONE_MODIFIED");
+
+    // Act: insert element at position 1
+    const auto insert_iter = string_vec.insert(string_vec.begin() + 1, "inserted_between");
+    EXPECT_EQ(string_vec.size(), 4U);
+    EXPECT_EQ(*insert_iter, "inserted_between");
+    EXPECT_EQ(string_vec[0], "zero");
+    EXPECT_EQ(string_vec[1], "inserted_between");
+    EXPECT_EQ(string_vec[2], "ONE_MODIFIED");
+    EXPECT_EQ(string_vec[3], "two");
+
+    // Act: erase element at position 2
+    const auto erase_iter = string_vec.erase(string_vec.begin() + 2);
+    EXPECT_EQ(string_vec.size(), 3U);
+    EXPECT_EQ(*erase_iter, "two");
+    EXPECT_EQ(string_vec[0], "zero");
+    EXPECT_EQ(string_vec[1], "inserted_between");
+    EXPECT_EQ(string_vec[2], "two");
+
+    // Act: shrink_to_fit adjusts capacity to size
+    string_vec.shrink_to_fit();
+    EXPECT_EQ(string_vec.capacity(), 3U);
+    EXPECT_EQ(string_vec.size(), 3U);
+    EXPECT_EQ(string_vec[0], "zero");
+    EXPECT_EQ(string_vec[1], "inserted_between");
+    EXPECT_EQ(string_vec[2], "two");
+
+    // Act: clear empties container while retaining capacity
+    string_vec.clear();
+    EXPECT_EQ(string_vec.size(), 0U);
+    EXPECT_TRUE(string_vec.empty());
+    EXPECT_EQ(string_vec.capacity(), 3U);
+
+    // Act: shrink_to_fit on empty container releases storage
+    string_vec.shrink_to_fit();
+    EXPECT_EQ(string_vec.size(), 0U);
+    EXPECT_EQ(string_vec.capacity(), 0U);
+    EXPECT_EQ(string_vec.data(), nullptr);
+
+    // Act: push_back and emplace_back on freshly shrunk container
+    string_vec.push_back("fresh_first");
+    string_vec.emplace_back("fresh_second");
+    EXPECT_EQ(string_vec.size(), 2U);
+    EXPECT_GE(string_vec.capacity(), 2U);
+    EXPECT_EQ(string_vec[0], "fresh_first");
+    EXPECT_EQ(string_vec[1], "fresh_second");
+}
+
+/// @brief Verifies container invariants and allocation failure resilience using a mock allocator
+/// that can be dynamically instructed to fail on demand.
+TEST(vector, empirical_challenge_controlled_failing_allocator_resilience)
+{
+    // Setup: controlled failure flag
+    auto fail_allocations = false;
+    auto alloc_instance = mock_failing_allocator<int>{&fail_allocations};
+    auto test_vector = tempest::vector<int, mock_failing_allocator<int>>{alloc_instance};
+
+    // Act: fail allocation on empty vector reserve
+    fail_allocations = true;
+    test_vector.reserve(64);
+
+    // Assert: empty vector remains untouched
+    EXPECT_EQ(test_vector.capacity(), 0U);
+    EXPECT_EQ(test_vector.size(), 0U);
+    EXPECT_EQ(test_vector.data(), nullptr);
+
+    // Act: re-enable allocation and populate container
+    fail_allocations = false;
+    test_vector.reserve(8);
+    EXPECT_GE(test_vector.capacity(), 8U);
+    for (auto val = 0; val < 5; ++val)
+    {
+        test_vector.push_back(val * 100);
+    }
+    const auto baseline_capacity = test_vector.capacity();
+    const auto* baseline_data = test_vector.data();
+
+    // Act: simulate allocation failure on reserve for populated vector
+    fail_allocations = true;
+    test_vector.reserve(baseline_capacity * 4);
+
+    // Assert: original state preserved
+    EXPECT_EQ(test_vector.capacity(), baseline_capacity);
+    EXPECT_EQ(test_vector.size(), 5U);
+    EXPECT_EQ(test_vector.data(), baseline_data);
+    for (auto val = 0; val < 5; ++val)
+    {
+        EXPECT_EQ(test_vector[static_cast<size_t>(val)], val * 100);
+    }
+
+    // Act: simulate allocation failure on shrink_to_fit
+    test_vector.shrink_to_fit();
+    EXPECT_EQ(test_vector.capacity(), baseline_capacity);
+    EXPECT_EQ(test_vector.size(), 5U);
+    EXPECT_EQ(test_vector.data(), baseline_data);
+
+    // Act: insert within remaining capacity succeeds even when allocation fails
+    const auto insert_result = test_vector.insert(test_vector.begin() + 2, 9999);
+    EXPECT_NE(insert_result, test_vector.end());
+    EXPECT_EQ(test_vector.size(), 6U);
+    EXPECT_EQ(test_vector[2], 9999);
+
+    // Fill remaining capacity to boundary (capacity 8)
+    test_vector.push_back(1000);
+    test_vector.push_back(2000);
+    EXPECT_EQ(test_vector.size(), 8U);
+    EXPECT_EQ(test_vector.capacity(), 8U);
+
+    // Act: insert requiring reallocation when allocator fails
+    const auto failed_insert_result = test_vector.insert(test_vector.begin() + 1, 8888);
+    EXPECT_EQ(failed_insert_result, test_vector.end());
+    EXPECT_EQ(test_vector.size(), 8U);
+    EXPECT_EQ(test_vector.capacity(), 8U);
+
+    // Act: restore allocator and verify push_back recovers
+    fail_allocations = false;
+    test_vector.push_back(3000);
+    EXPECT_EQ(test_vector.size(), 9U);
+    EXPECT_GE(test_vector.capacity(), 9U);
+    EXPECT_EQ(test_vector.back(), 3000);
 }

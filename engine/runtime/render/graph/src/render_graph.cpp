@@ -260,13 +260,13 @@ namespace tempest::render_graph
     auto pass_builder::set_temporal_color_attachment(uint32_t slot, const rg_temporal_color_attachment& attachment)
         -> rg_texture_id
     {
-        _graph->track_temporal_resource(&attachment.texture);
+        _graph->track_temporal_resource(attachment.texture.get());
 
-        const auto write_h = attachment.texture.get_write_texture();
-        const auto write_v = attachment.texture.get_write_view();
-        const auto write_desc = attachment.texture.get_write_sampled_descriptor();
+        const auto write_h = attachment.texture->get_write_texture();
+        const auto write_v = attachment.texture->get_write_view();
+        const auto write_desc = attachment.texture->get_write_sampled_descriptor();
         const auto imported_id = import_texture(write_h, write_v, rhi::image_layout::undefined, write_desc,
-                                                attachment.texture.get_desc().desc);
+                                                attachment.texture->get_desc().desc);
 
         mark_sink();
 
@@ -282,13 +282,13 @@ namespace tempest::render_graph
     auto pass_builder::set_temporal_depth_stencil_attachment(const rg_temporal_depth_stencil_attachment& attachment)
         -> rg_texture_id
     {
-        _graph->track_temporal_resource(&attachment.texture);
+        _graph->track_temporal_resource(attachment.texture.get());
 
-        const auto write_h = attachment.texture.get_write_texture();
-        const auto write_v = attachment.texture.get_write_view();
-        const auto write_desc = attachment.texture.get_write_sampled_descriptor();
+        const auto write_h = attachment.texture->get_write_texture();
+        const auto write_v = attachment.texture->get_write_view();
+        const auto write_desc = attachment.texture->get_write_sampled_descriptor();
         const auto imported_id = import_texture(write_h, write_v, rhi::image_layout::undefined, write_desc,
-                                                attachment.texture.get_desc().desc);
+                                                attachment.texture->get_desc().desc);
 
         mark_sink();
 
@@ -311,11 +311,11 @@ namespace tempest::render_graph
     auto pass_builder::set_flight_color_attachment(uint32_t slot, const rg_flight_color_attachment& attachment)
         -> rg_texture_id
     {
-        const auto tex_h = attachment.texture.get_texture(attachment.flight_slot);
-        const auto view_h = attachment.texture.get_view(attachment.flight_slot);
-        const auto desc_h = attachment.texture.get_sampled_descriptor(attachment.flight_slot);
+        const auto tex_h = attachment.texture->get_texture(attachment.flight_slot);
+        const auto view_h = attachment.texture->get_view(attachment.flight_slot);
+        const auto desc_h = attachment.texture->get_sampled_descriptor(attachment.flight_slot);
         const auto imported_id =
-            import_texture(tex_h, view_h, rhi::image_layout::undefined, desc_h, attachment.texture.get_desc().desc);
+            import_texture(tex_h, view_h, rhi::image_layout::undefined, desc_h, attachment.texture->get_desc().desc);
 
         mark_sink();
 
@@ -331,11 +331,11 @@ namespace tempest::render_graph
     auto pass_builder::set_flight_depth_stencil_attachment(const rg_flight_depth_stencil_attachment& attachment)
         -> rg_texture_id
     {
-        const auto tex_h = attachment.texture.get_texture(attachment.flight_slot);
-        const auto view_h = attachment.texture.get_view(attachment.flight_slot);
-        const auto desc_h = attachment.texture.get_sampled_descriptor(attachment.flight_slot);
+        const auto tex_h = attachment.texture->get_texture(attachment.flight_slot);
+        const auto view_h = attachment.texture->get_view(attachment.flight_slot);
+        const auto desc_h = attachment.texture->get_sampled_descriptor(attachment.flight_slot);
         const auto imported_id =
-            import_texture(tex_h, view_h, rhi::image_layout::undefined, desc_h, attachment.texture.get_desc().desc);
+            import_texture(tex_h, view_h, rhi::image_layout::undefined, desc_h, attachment.texture->get_desc().desc);
 
         mark_sink();
 

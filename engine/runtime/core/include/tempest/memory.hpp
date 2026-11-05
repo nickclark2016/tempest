@@ -321,6 +321,10 @@ namespace tempest
 
         [[nodiscard]] auto allocate(size_t n) -> T*
         {
+            if (sizeof(T) != 0 && n > (numeric_limits<size_t>::max() / sizeof(T)))
+            {
+                return nullptr;
+            }
             void* data = tempest::aligned_alloc(sizeof(T) * n, alignof(T));
             return static_cast<T*>(data);
         }

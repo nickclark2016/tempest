@@ -18,8 +18,6 @@
 #include <tempest/vertex.hpp>
 
 #include <tempest/filesystem.hpp>
-
-#include <cmath>
 #include <tempest/json.hpp>
 #include <tempest/string_view.hpp>
 
@@ -107,23 +105,143 @@ namespace tempest::assets
             return meta;
         }
 
-        auto parse_base64(span<const byte> data) -> vector<byte>
+        constexpr auto decode_b64_char(char character) noexcept -> int32_t
         {
-            const byte data_delim = static_cast<byte>(',');
-            const auto* data_start = find(data.begin(), data.end(), data_delim);
-            if (data_start == data.end())
+            if (character >= 'A' && character <= 'Z')
+            {
+                return character - 'A';
+            }
+            if (character >= 'a' && character <= 'z')
+            {
+                return character - 'a' + 26;
+            }
+            if (character >= '0' && character <= '9')
+            {
+                return character - '0' + 52;
+            }
+            if (character == '+')
+            {
+                return 62;
+            }
+            if (character == '/')
+            {
+                return 63;
+            }
+            return -1;
+        }
+
+        constexpr auto is_b64_whitespace(char character) noexcept -> bool
+        {
+            return character == ' ' || character == '\t' || character == '\r' || character == '\n';
+        }
+    } // namespace
+
+    auto parse_base64(span<const byte> data) -> vector<byte>
+    {
+        if (data.empty())
+        {
+            return {};
+        }
+
+        // Advance past optional data URI prefix up to and including ','
+        const auto* data_begin = data.begin();
+        const auto* data_end = data.end();
+        const auto comma_byte = static_cast<byte>(',');
+        const auto* comma_it = find(data_begin, data_end, comma_byte);
+        if (comma_it != data_end)
+        {
+            data_begin = tempest::next(comma_it);
+        }
+
+        auto decoded_data = vector<byte>{};
+        const auto remaining_chars = static_cast<size_t>(data_end - data_begin);
+        decoded_data.reserve((remaining_chars * 3) / 4);
+
+        auto quad_values = array<int32_t, 4>{};
+        auto quad_chars = array<char, 4>{};
+        auto quad_count = size_t{0};
+        auto saw_padding = false;
+
+        for (auto current = data_begin; current != data_end; current = tempest::next(current))
+        {
+            const auto character = static_cast<char>(*current);
+            if (is_b64_whitespace(character))
+            {
+                continue;
+            }
+
+            if (saw_padding)
             {
                 return {};
             }
 
-            data_start = tempest::next(data_start);
+            quad_chars[quad_count] = character;
+            if (character == '=')
+            {
+                quad_values[quad_count] = 0;
+            }
+            else
+            {
+                const auto val = decode_b64_char(character);
+                if (val < 0)
+                {
+                    return {};
+                }
+                quad_values[quad_count] = val;
+            }
 
-            vector<byte> decoded_data;
-            decoded_data.resize(data.size() - (data_start - data.begin()));
-            copy_n(data_start, decoded_data.size(), decoded_data.begin());
-            return decoded_data;
+            ++quad_count;
+
+            if (quad_count == 4)
+            {
+                const auto pad0 = quad_chars[2] == '=';
+                const auto pad1 = quad_chars[3] == '=';
+
+                if (pad0 && !pad1)
+                {
+                    return {};
+                }
+
+                if (quad_chars[0] == '=' || quad_chars[1] == '=')
+                {
+                    return {};
+                }
+
+                if (pad0 || pad1)
+                {
+                    saw_padding = true;
+                }
+
+                const auto triple = (static_cast<uint32_t>(quad_values[0]) << 18) |
+                                    (static_cast<uint32_t>(quad_values[1]) << 12) |
+                                    (static_cast<uint32_t>(quad_values[2]) << 6) |
+                                    static_cast<uint32_t>(quad_values[3]);
+
+                decoded_data.push_back(static_cast<byte>((triple >> 16) & 0xFF));
+
+                if (!pad0)
+                {
+                    decoded_data.push_back(static_cast<byte>((triple >> 8) & 0xFF));
+                }
+                if (!pad1)
+                {
+                    decoded_data.push_back(static_cast<byte>(triple & 0xFF));
+                }
+
+                quad_count = 0;
+            }
         }
 
+        if (quad_count != 0)
+        {
+            return {};
+        }
+
+        return decoded_data;
+    }
+
+    namespace
+    {
         auto read_buffer(const json_value& buffer, const optional<tempest::filesystem::path>& dir) -> vector<byte>
         {
             vector<byte> data;

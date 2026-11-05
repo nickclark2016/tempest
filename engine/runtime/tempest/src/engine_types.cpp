@@ -23,6 +23,7 @@ namespace tempest
         types.register_type<core::mesh_component>();
         types.register_type<core::material_component>();
         types.register_type<render_system::camera_component>();
+        types.register_type<render_system::active_camera_component>();
         types.register_type<render_system::directional_light_component>();
         types.register_type<render_system::point_light_component>();
         types.register_type<render_system::shadow_caster_component>();

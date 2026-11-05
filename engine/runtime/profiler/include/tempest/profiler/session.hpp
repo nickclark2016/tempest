@@ -4,6 +4,7 @@
 #include <tempest/api.hpp>
 #include <tempest/array.hpp>
 #include <tempest/atomic.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/mutex.hpp>
@@ -80,7 +81,7 @@ namespace tempest::profiler
         auto _ensure_active_chunk_locked() -> void;
         auto _flush_chunk_locked() -> void;
 
-        profiler_session& _session;
+        non_null<profiler_session> _session;
         uint64_t _thread_id{0};
         uint64_t _active_coroutine_id{0};
         string _thread_name{};

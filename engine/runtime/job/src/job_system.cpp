@@ -252,7 +252,7 @@ namespace tempest::job
             _impl->is_single_stepped = true;
             _impl->perf_worker_count = 0;
             _impl->eff_worker_count = 0;
-            _logger.info("Initializing tempest job_system in single-stepped mode (0 workers)");
+            _logger->info("Initializing tempest job_system in single-stepped mode (0 workers)");
             return;
         }
 
@@ -269,7 +269,7 @@ namespace tempest::job
         _impl->is_single_stepped = false;
 
         auto total_workers = perf + eff;
-        _logger.info("Initializing tempest job_system with worker pool");
+        _logger->info("Initializing tempest job_system with worker pool");
 
         _impl->workers.reserve(total_workers);
 
@@ -323,7 +323,7 @@ namespace tempest::job
         for (auto& state : _impl->workers)
         {
             state->worker_thread = tempest::thread([this, worker = state.get()]() -> void {
-                auto& prof_ctx = _profiler.get_or_register_thread();
+                auto& prof_ctx = _profiler->get_or_register_thread();
                 prof_ctx.set_thread_name(worker->type == core_class::performance ? "JobWorker-P" : "JobWorker-E");
 
                 if (_config.enable_core_pinning && worker->target_core.has_value())
@@ -579,7 +579,7 @@ namespace tempest::job
 
     job_system::~job_system()
     {
-        _logger.info("Shutting down tempest job_system");
+        _logger->info("Shutting down tempest job_system");
         wait_idle();
 
         if (!_impl->is_single_stepped)
@@ -736,7 +736,7 @@ namespace tempest::job
 
     auto job_system::step() -> bool
     {
-        [[maybe_unused]] auto& prof_ctx = _profiler.get_or_register_thread();
+        [[maybe_unused]] auto& prof_ctx = _profiler->get_or_register_thread();
         auto item = queue_item{};
         auto found = false;
 

@@ -397,7 +397,7 @@ namespace tempest::assets
         return result;
     }
 
-    asset_database::asset_database(asset_type_registry* type_reg) noexcept : _type_reg{type_reg}
+    auto asset_database::_init_default_ignores() -> void
     {
         _ignored_directories.push_back(".git");
         _ignored_directories.push_back(".cache");
@@ -409,6 +409,8 @@ namespace tempest::assets
         _ignored_directories.push_back("vendor");
         _ignored_directories.push_back("dependencies");
         _ignored_directories.push_back(".agents");
+        _ignored_directories.push_back("glTF-Sample-Assets");
+        _ignored_directories.push_back("polyhaven");
 
         _ignored_extensions.push_back(".tmp");
         _ignored_extensions.push_back(".bak");
@@ -417,6 +419,11 @@ namespace tempest::assets
         _ignored_extensions.push_back(".ilk");
         _ignored_extensions.push_back(".o");
         _ignored_extensions.push_back(".obj");
+    }
+
+    asset_database::asset_database(asset_type_registry* type_reg) noexcept : _type_reg{type_reg}
+    {
+        _init_default_ignores();
     }
 
     auto asset_database::open(string_view db_path) -> void
@@ -1334,7 +1341,7 @@ namespace tempest::assets
         return nullopt;
     }
 
-    auto asset_database::find_asset(string_view path_or_name) const -> const asset_entry*
+    auto asset_database::find_asset(string_view path_or_name) -> const asset_entry*
     {
         auto parsed = parse_alias(path_or_name);
         if (parsed.is_aliased)
@@ -1420,18 +1427,83 @@ namespace tempest::assets
 
                 if (disk_path.has_value())
                 {
-                    auto* mutable_this = const_cast<asset_database*>(this);
-                    mutable_this->register_asset(asset_type_id::of<shader_asset>(), asset_key);
+                    register_asset(asset_type_id::of<shader_asset>(), asset_key);
 
                     auto fs_path = filesystem::path(asset_key.c_str());
                     auto filename_str = string(fs_path.filename().string());
-                    if (!mutable_this->_basename_to_relative_path.contains(filename_str))
+                    if (!_basename_to_relative_path.contains(filename_str))
                     {
-                        mutable_this->_basename_to_relative_path.insert({filename_str, asset_key});
+                        _basename_to_relative_path.insert({filename_str, asset_key});
                     }
 
                     return find_by_path(asset_key);
                 }
+            }
+        }
+
+        return nullptr;
+    }
+
+    auto asset_database::find_asset(string_view path_or_name) const -> const asset_entry*
+    {
+        auto parsed = parse_alias(path_or_name);
+        if (parsed.is_aliased)
+        {
+            auto normalized_sub = normalize_path_str(parsed.subpath);
+            auto aliased_key = string("@");
+            aliased_key.append(parsed.alias.data(), parsed.alias.size());
+            if (!normalized_sub.empty())
+            {
+                aliased_key.append("/");
+                aliased_key.append(normalized_sub);
+            }
+
+            // Direct path lookup under alias
+            return find_by_path(aliased_key);
+        }
+
+        auto normalized = normalize_path_str(path_or_name);
+        if (normalized.empty())
+        {
+            return nullptr;
+        }
+
+        // Direct path lookup
+        const auto* entry = find_by_path(normalized);
+        if (entry != nullptr)
+        {
+            return entry;
+        }
+
+        // Basename index lookup
+        auto base_it = _basename_to_relative_path.find(normalized);
+        if (base_it != _basename_to_relative_path.end())
+        {
+            entry = find_by_path(base_it->second);
+            if (entry != nullptr)
+            {
+                return entry;
+            }
+        }
+
+        // Fallback: try prepending or stripping "shaders/"
+        if (!tempest::starts_with(normalized, "shaders/"))
+        {
+            auto with_shaders = string("shaders/");
+            with_shaders.append(normalized.data(), normalized.size());
+            entry = find_by_path(with_shaders);
+            if (entry != nullptr)
+            {
+                return entry;
+            }
+        }
+        else if (normalized.size() > 8)
+        {
+            auto without_shaders = string(tempest::substr(normalized, 8, normalized.size() - 8));
+            entry = find_by_path(without_shaders);
+            if (entry != nullptr)
+            {
+                return entry;
             }
         }
 
@@ -1789,7 +1861,7 @@ namespace tempest::assets
         entry->blob_size = data.size();
 
         constexpr size_t default_chunk_size = 64 * 1024;
-        const byte* dest_ptr = nullptr;
+        byte* dest_ptr = nullptr;
 
         if (data.size() > default_chunk_size)
         {
@@ -1816,7 +1888,7 @@ namespace tempest::assets
             }
 
             dest_ptr = _packing_chunk->data() + _current_chunk_used;
-            tempest::memcpy(const_cast<byte*>(dest_ptr), data.data(), data.size());
+            tempest::memcpy(dest_ptr, data.data(), data.size());
             _current_chunk_used += data.size();
         }
 
@@ -1824,7 +1896,7 @@ namespace tempest::assets
         _dirty = true;
     }
 
-    auto asset_database::get_blob(const guid& asset_id) const -> span<const byte>
+    auto asset_database::get_blob(const guid& asset_id) -> span<const byte>
     {
         auto iter = _asset_guid_to_index.find(asset_id);
         if (iter == _asset_guid_to_index.end())
@@ -1837,7 +1909,7 @@ namespace tempest::assets
 
         if (src_it != _source_id_to_index.end())
         {
-            const auto& src = _sources[src_it->second];
+            auto& src = _sources[src_it->second];
             auto disk_path = resolve_disk_path(src->source_path);
             if (disk_path.has_value())
             {
@@ -1854,15 +1926,25 @@ namespace tempest::assets
                     read_file_to_vector(string_view{disk_path->c_str(), disk_path->size()}).value_or(vector<byte>{});
                 if (!bytes.empty())
                 {
-                    auto* mutable_this = const_cast<asset_database*>(this);
                     src->source_hash = content_hash::compute(span<const byte>{bytes.data(), bytes.size()});
                     src->last_modified_time = disk_mtime;
-                    mutable_this->store_blob(asset_id, span<const byte>{bytes.data(), bytes.size()});
-                    return mutable_this->_cached_blobs[asset_id];
+                    store_blob(asset_id, span<const byte>{bytes.data(), bytes.size()});
+                    return _cached_blobs[asset_id];
                 }
             }
         }
 
+        auto it = _cached_blobs.find(asset_id);
+        if (it != _cached_blobs.end() && !it->second.empty())
+        {
+            return it->second;
+        }
+
+        return {};
+    }
+
+    auto asset_database::get_blob(const guid& asset_id) const -> span<const byte>
+    {
         auto it = _cached_blobs.find(asset_id);
         if (it != _cached_blobs.end() && !it->second.empty())
         {
@@ -2396,6 +2478,7 @@ namespace tempest::assets
         _sidecars.clear();
         clear_mount_roots();
         clear_ignores();
+        _init_default_ignores();
 
         // Configure mount roots
         for (const auto& mount : workspace.mounts)

@@ -908,3 +908,574 @@ TEST(basic_archetype_registry, replace_overaligned_component_dispatches_event_sa
     EXPECT_FLOAT_EQ(captured_new_value.w, 400.0F);
 }
 
+//==============================================================================
+// basic_entity_store & basic_entity_store_iterator Tests (P1-9 Bit-Skipping)
+//==============================================================================
+
+/// @brief Verifies that iterating an empty entity store does not execute any loop iterations,
+/// and that stepping beyond boundaries behaves safely without crashing.
+TEST(basic_entity_store_test, empty_store_iteration)
+{
+    // Setup empty store
+    auto store = tempest::ecs::basic_entity_store<tempest::ecs::entity, 4096, uint64_t>();
+
+    // Assert begin equals end
+    EXPECT_EQ(store.begin(), store.end());
+    EXPECT_EQ(store.cbegin(), store.cend());
+
+    auto iteration_count = 0;
+    for ([[maybe_unused]] const auto ent : store)
+    {
+        ++iteration_count;
+    }
+    EXPECT_EQ(iteration_count, 0);
+
+    // Boundary stepping on empty store
+    auto it = store.begin();
+    ++it;
+    EXPECT_EQ(it, store.end());
+    --it;
+    EXPECT_EQ(it, store.begin());
+}
+
+/// @brief Verifies that forward and reverse iteration over densely populated blocks correctly
+/// yields all entities in ascending and descending index order.
+TEST(basic_entity_store_test, dense_forward_and_reverse_iteration)
+{
+    // Setup store with 130 contiguous entities spanning 3 blocks
+    auto store = tempest::ecs::basic_entity_store<tempest::ecs::entity, 4096, uint64_t>();
+    constexpr size_t total_entities = 130;
+    auto created_entities = tempest::vector<tempest::ecs::entity>{};
+    created_entities.reserve(total_entities);
+
+    for (size_t i = 0; i < total_entities; ++i)
+    {
+        created_entities.push_back(store.acquire());
+    }
+
+    // Act: Forward iteration
+    auto forward_visited = tempest::vector<tempest::ecs::entity>{};
+    for (const auto ent : store)
+    {
+        forward_visited.push_back(ent);
+    }
+
+    // Assert forward match
+    ASSERT_EQ(forward_visited.size(), total_entities);
+    for (size_t i = 0; i < total_entities; ++i)
+    {
+        EXPECT_EQ(forward_visited[i], created_entities[i]);
+    }
+
+    // Act: Reverse iteration
+    auto reverse_visited = tempest::vector<tempest::ecs::entity>{};
+    auto rev_it = store.end();
+    while (rev_it != store.begin())
+    {
+        --rev_it;
+        reverse_visited.push_back(*rev_it);
+    }
+
+    // Assert reverse match
+    ASSERT_EQ(reverse_visited.size(), total_entities);
+    for (size_t i = 0; i < total_entities; ++i)
+    {
+        EXPECT_EQ(reverse_visited[i], created_entities[total_entities - 1 - i]);
+    }
+}
+
+/// @brief Verifies that O(1) word-skipping skips across empty blocks and empty chunks correctly
+/// during both forward and reverse iteration.
+TEST(basic_entity_store_test, sparse_iteration_skips_words_correctly)
+{
+    // Setup store with 2 chunks capacity (8192 entities)
+    auto store = tempest::ecs::basic_entity_store<tempest::ecs::entity, 4096, uint64_t>();
+    constexpr size_t allocation_count = 8192;
+    auto allocated = tempest::vector<tempest::ecs::entity>{};
+    allocated.reserve(allocation_count);
+
+    for (size_t i = 0; i < allocation_count; ++i)
+    {
+        allocated.push_back(store.acquire());
+    }
+
+    // Retain only specific sparse indices:
+    // 0 (chunk 0, block 0, offset 0)
+    // 63 (chunk 0, block 0, offset 63 - intra-block jump)
+    // 64 (chunk 0, block 1, offset 0 - block boundary)
+    // 127 (chunk 0, block 1, offset 63)
+    // 4095 (chunk 0, block 63, offset 63 - chunk boundary)
+    // 4096 (chunk 1, block 0, offset 0 - next chunk)
+    // 8191 (chunk 1, block 63, offset 63 - last slot)
+    auto is_retained = [](size_t i) -> bool {
+        return i == 0 || i == 63 || i == 64 || i == 127 || i == 4095 || i == 4096 || i == 8191;
+    };
+    constexpr auto retained_count = size_t{7};
+
+    for (size_t i = 0; i < allocation_count; ++i)
+    {
+        if (!is_retained(i))
+        {
+            store.release(allocated[i]);
+        }
+    }
+
+    // Act: Forward iteration
+    auto forward_visited = tempest::vector<tempest::ecs::entity>{};
+    for (const auto ent : store)
+    {
+        forward_visited.push_back(ent);
+    }
+
+    // Assert forward match
+    ASSERT_EQ(forward_visited.size(), retained_count);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(forward_visited[0]), 0);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(forward_visited[1]), 63);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(forward_visited[2]), 64);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(forward_visited[3]), 127);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(forward_visited[4]), 4095);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(forward_visited[5]), 4096);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(forward_visited[6]), 8191);
+
+    // Act: Reverse iteration
+    auto reverse_visited = tempest::vector<tempest::ecs::entity>{};
+    auto rev_it = store.end();
+    while (rev_it != store.begin())
+    {
+        --rev_it;
+        reverse_visited.push_back(*rev_it);
+    }
+
+    // Assert reverse match
+    ASSERT_EQ(reverse_visited.size(), retained_count);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(reverse_visited[0]), 8191);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(reverse_visited[1]), 4096);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(reverse_visited[2]), 4095);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(reverse_visited[3]), 127);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(reverse_visited[4]), 64);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(reverse_visited[5]), 63);
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(reverse_visited[6]), 0);
+}
+
+/// @brief Verifies bidirectional stepping consistency (++it followed by --it returns to original position).
+TEST(basic_entity_store_test, bidirectional_step_consistency)
+{
+    auto store = tempest::ecs::basic_entity_store<tempest::ecs::entity, 4096, uint64_t>();
+    auto allocated = tempest::vector<tempest::ecs::entity>{};
+    for (size_t i = 0; i < 200; ++i)
+    {
+        allocated.push_back(store.acquire());
+    }
+
+    // Release every 3rd entity to produce arbitrary sparse holes
+    for (size_t i = 0; i < 200; i += 3)
+    {
+        store.release(allocated[i]);
+    }
+
+    // Assert step consistency
+    for (auto it = store.begin(); it != store.end(); ++it)
+    {
+        auto stepped = it;
+        ++stepped;
+        if (stepped != store.end())
+        {
+            --stepped;
+            EXPECT_EQ(stepped, it);
+        }
+    }
+}
+
+/// @brief Verifies that const_iterator inter-operates seamlessly with non-const iterator.
+TEST(basic_entity_store_test, const_iterator_support)
+{
+    auto store = tempest::ecs::basic_entity_store<tempest::ecs::entity, 4096, uint64_t>();
+    const auto e1 = store.acquire();
+    const auto e2 = store.acquire();
+
+    const auto& const_store = store;
+    auto cit = const_store.begin();
+    EXPECT_EQ(*cit, e1);
+    ++cit;
+    EXPECT_EQ(*cit, e2);
+    ++cit;
+    EXPECT_EQ(cit, const_store.end());
+    EXPECT_EQ(cit, const_store.cend());
+
+    // Comparison across constness
+    EXPECT_EQ(store.begin(), const_store.begin());
+    EXPECT_EQ(store.end(), const_store.cend());
+}
+
+/// @brief Verifies iteration when an isolated entity is positioned at chunk and block boundaries.
+TEST(basic_entity_store_test, single_entity_at_block_and_chunk_boundaries)
+{
+    constexpr auto test_indices = tempest::array<size_t, 5>{0, 63, 64, 4095, 4096};
+
+    for (const auto target_idx : test_indices)
+    {
+        auto store = tempest::ecs::basic_entity_store<tempest::ecs::entity, 4096, uint64_t>();
+        auto allocated = tempest::vector<tempest::ecs::entity>{};
+        allocated.reserve(target_idx + 1);
+
+        for (size_t i = 0; i <= target_idx; ++i)
+        {
+            allocated.push_back(store.acquire());
+        }
+
+        for (size_t i = 0; i < target_idx; ++i)
+        {
+            store.release(allocated[i]);
+        }
+
+        // Assert single entity found
+        auto it = store.begin();
+        ASSERT_NE(it, store.end());
+        EXPECT_EQ(*it, allocated[target_idx]);
+
+        ++it;
+        EXPECT_EQ(it, store.end());
+
+        --it;
+        EXPECT_EQ(*it, allocated[target_idx]);
+        EXPECT_EQ(it, store.begin());
+
+        // Range-based for loop visits exactly this single entity
+        auto visit_count = 0;
+        for (const auto ent : store)
+        {
+            EXPECT_EQ(ent, allocated[target_idx]);
+            ++visit_count;
+        }
+        EXPECT_EQ(visit_count, 1);
+    }
+}
+
+//==============================================================================
+// Empirical Challenger Stress Harnesses (Milestone 4 P1-9 Bit-Skipping)
+//==============================================================================
+
+/// @brief Adversarially stress-tests basic_entity_store_iterator under pathological
+/// sparse allocation patterns at block and chunk boundaries (0, 63, 64, 127, 128, 4095).
+/// Verifies strictly monotonic forward and reverse traversal and oscillating bidirectional stepping.
+TEST(basic_entity_store_test, pathological_sparse_bit_skipping_stress)
+{
+    // Setup: Populate store across 4096 capacity chunk, then retain only boundary indices
+    auto store = tempest::ecs::basic_entity_store<tempest::ecs::entity, 4096, uint64_t>();
+    constexpr size_t total_alloc = 4096;
+    auto allocated = tempest::vector<tempest::ecs::entity>{};
+    allocated.reserve(total_alloc);
+
+    for (size_t alloc_idx = 0; alloc_idx < total_alloc; ++alloc_idx)
+    {
+        allocated.push_back(store.acquire());
+    }
+
+    // Retain only pathological boundary targets:
+    // Index 0: chunk 0, block 0, bit 0
+    // Index 63: chunk 0, block 0, bit 63 (last bit of block 0)
+    // Index 64: chunk 0, block 1, bit 0 (first bit of block 1)
+    // Index 127: chunk 0, block 1, bit 63 (last bit of block 1)
+    // Index 128: chunk 0, block 2, bit 0 (first bit of block 2)
+    // Index 4095: chunk 0, block 63, bit 63 (last bit of chunk 0)
+    auto is_target = [](size_t idx) -> bool {
+        return idx == 0 || idx == 63 || idx == 64 || idx == 127 || idx == 128 || idx == 4095;
+    };
+    constexpr auto expected_count = size_t{6};
+    const auto expected_targets = tempest::array<size_t, 6>{0, 63, 64, 127, 128, 4095};
+
+    for (size_t alloc_idx = 0; alloc_idx < total_alloc; ++alloc_idx)
+    {
+        if (!is_target(alloc_idx))
+        {
+            store.release(allocated[alloc_idx]);
+        }
+    }
+
+    ASSERT_EQ(store.size(), expected_count);
+
+    // Act & Assert: Forward traversal (++it) visits strictly ascending target IDs
+    auto forward_visited = tempest::vector<tempest::ecs::entity>{};
+    for (auto it = store.begin(); it != store.end(); ++it)
+    {
+        forward_visited.push_back(*it);
+    }
+
+    ASSERT_EQ(forward_visited.size(), expected_count);
+    for (size_t target_idx = 0; target_idx < expected_count; ++target_idx)
+    {
+        EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(forward_visited[target_idx]),
+                  expected_targets[target_idx]);
+    }
+
+    // Act & Assert: Reverse traversal (--it) visits strictly descending target IDs
+    auto reverse_visited = tempest::vector<tempest::ecs::entity>{};
+    auto rev_it = store.end();
+    while (rev_it != store.begin())
+    {
+        --rev_it;
+        reverse_visited.push_back(*rev_it);
+    }
+
+    ASSERT_EQ(reverse_visited.size(), expected_count);
+    for (size_t target_idx = 0; target_idx < expected_count; ++target_idx)
+    {
+        EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(reverse_visited[target_idx]),
+                  expected_targets[expected_count - 1 - target_idx]);
+    }
+
+    // Act & Assert: Oscillating step test (++it; --it; ++it;) across block boundaries
+    auto test_it = store.begin();
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 0);
+
+    ++test_it; // jumps to 63
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 63);
+
+    --test_it; // jumps back to 0
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 0);
+
+    ++test_it; // back to 63
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 63);
+
+    ++test_it; // crosses block boundary to 64
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 64);
+
+    --test_it; // steps back across block boundary to 63
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 63);
+
+    ++test_it; // forward to 64
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 64);
+
+    ++test_it; // forward to 127
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 127);
+
+    ++test_it; // forward across boundary to 128
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 128);
+
+    --test_it; // back across boundary to 127
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 127);
+
+    ++test_it; // forward to 128
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 128);
+
+    ++test_it; // forward across 61 empty blocks to 4095
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 4095);
+
+    --test_it; // back across 61 empty blocks to 128
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 128);
+
+    ++test_it; // forward to 4095
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 4095);
+
+    ++test_it; // reaches end()
+    EXPECT_EQ(test_it, store.end());
+
+    --test_it; // steps back from end() to last element 4095
+    EXPECT_EQ(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*test_it), 4095);
+}
+
+/// @brief Verifies empty store invariants and boundary stepping across default, reserved,
+/// and fully-drained stores.
+TEST(basic_entity_store_test, empty_store_all_configurations_stepping_stress)
+{
+    // Case A: Default constructed store with zero chunks / zero capacity
+    {
+        auto empty_store = tempest::ecs::basic_entity_store<tempest::ecs::entity, 4096, uint64_t>();
+        EXPECT_EQ(empty_store.size(), 0);
+        EXPECT_EQ(empty_store.capacity(), 0);
+        EXPECT_TRUE(empty_store.empty());
+        EXPECT_EQ(empty_store.begin(), empty_store.end());
+        EXPECT_EQ(empty_store.cbegin(), empty_store.cend());
+
+        auto step_it = empty_store.begin();
+        ++step_it;
+        EXPECT_EQ(step_it, empty_store.end());
+        --step_it;
+        EXPECT_EQ(step_it, empty_store.begin());
+
+        auto iter_count = 0;
+        for ([[maybe_unused]] const auto ent : empty_store)
+        {
+            ++iter_count;
+        }
+        EXPECT_EQ(iter_count, 0);
+    }
+
+    // Case B: Reserved store with 4096 capacity but 0 elements
+    {
+        auto reserved_store = tempest::ecs::basic_entity_store<tempest::ecs::entity, 4096, uint64_t>(4096);
+        EXPECT_EQ(reserved_store.size(), 0);
+        EXPECT_GE(reserved_store.capacity(), 4096);
+        EXPECT_TRUE(reserved_store.empty());
+        EXPECT_EQ(reserved_store.begin(), reserved_store.end());
+        EXPECT_EQ(reserved_store.cbegin(), reserved_store.cend());
+
+        auto iter_count = 0;
+        for ([[maybe_unused]] const auto ent : reserved_store)
+        {
+            ++iter_count;
+        }
+        EXPECT_EQ(iter_count, 0);
+    }
+
+    // Case C: Store where entities were allocated across multiple blocks and then all released
+    {
+        auto drained_store = tempest::ecs::basic_entity_store<tempest::ecs::entity, 4096, uint64_t>();
+        constexpr auto alloc_count = size_t{256};
+        auto temp_entities = tempest::vector<tempest::ecs::entity>{};
+        temp_entities.reserve(alloc_count);
+
+        for (size_t idx = 0; idx < alloc_count; ++idx)
+        {
+            temp_entities.push_back(drained_store.acquire());
+        }
+        EXPECT_EQ(drained_store.size(), alloc_count);
+
+        for (size_t idx = 0; idx < alloc_count; ++idx)
+        {
+            drained_store.release(temp_entities[idx]);
+        }
+        EXPECT_EQ(drained_store.size(), 0);
+        EXPECT_TRUE(drained_store.empty());
+        EXPECT_EQ(drained_store.begin(), drained_store.end());
+        EXPECT_EQ(drained_store.cbegin(), drained_store.cend());
+
+        auto iter_count = 0;
+        for ([[maybe_unused]] const auto ent : drained_store)
+        {
+            ++iter_count;
+        }
+        EXPECT_EQ(iter_count, 0);
+    }
+}
+
+/// @brief Verifies full capacity saturation of basic_entity_store, testing that all 4096 entities
+/// are visited without infinite loops or skips during forward and reverse traversal.
+TEST(basic_entity_store_test, full_capacity_saturation_stress)
+{
+    // Setup: Fill entire chunk of 4096 entities (64 blocks * 64 bits = 4096 contiguous set bits)
+    auto store = tempest::ecs::basic_entity_store<tempest::ecs::entity, 4096, uint64_t>();
+    constexpr size_t capacity_limit = 4096;
+    auto allocated = tempest::vector<tempest::ecs::entity>{};
+    allocated.reserve(capacity_limit);
+
+    for (size_t idx = 0; idx < capacity_limit; ++idx)
+    {
+        allocated.push_back(store.acquire());
+    }
+
+    ASSERT_EQ(store.size(), capacity_limit);
+
+    // Act: Forward traversal
+    auto forward_count = size_t{0};
+    auto last_seen_id = size_t{0};
+    for (auto it = store.begin(); it != store.end(); ++it)
+    {
+        const auto entity_id = static_cast<size_t>(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*it));
+        if (forward_count > 0)
+        {
+            EXPECT_EQ(entity_id, last_seen_id + 1);
+        }
+        else
+        {
+            EXPECT_EQ(entity_id, 0);
+        }
+        last_seen_id = entity_id;
+        ++forward_count;
+    }
+    EXPECT_EQ(forward_count, capacity_limit);
+    EXPECT_EQ(last_seen_id, capacity_limit - 1);
+
+    // Act: Reverse traversal
+    auto reverse_count = size_t{0};
+    auto rev_it = store.end();
+    auto expected_next_id = capacity_limit - 1;
+    while (rev_it != store.begin())
+    {
+        --rev_it;
+        const auto entity_id = static_cast<size_t>(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*rev_it));
+        EXPECT_EQ(entity_id, expected_next_id);
+        if (expected_next_id > 0)
+        {
+            --expected_next_id;
+        }
+        ++reverse_count;
+    }
+    EXPECT_EQ(reverse_count, capacity_limit);
+}
+
+/// @brief Empirical oracle generator and differential test: creates a deterministic pseudorandom
+/// distribution of allocated/released entities across 2048 slots and validates both forward and
+/// reverse iterators against a ground-truth oracle.
+TEST(basic_entity_store_test, randomized_sparse_oracle_fuzz_stress)
+{
+    // Setup: Deterministic linear congruential generator
+    auto lcg_state = uint64_t{0x123456789ABCDEF0ULL};
+    auto lcg_next = [&lcg_state]() -> uint64_t {
+        lcg_state = (lcg_state * 6364136223846793005ULL) + 1442695040888963407ULL;
+        return lcg_state;
+    };
+
+    auto store = tempest::ecs::basic_entity_store<tempest::ecs::entity, 4096, uint64_t>();
+    constexpr size_t total_candidates = 2048;
+    auto allocated = tempest::vector<tempest::ecs::entity>{};
+    allocated.reserve(total_candidates);
+
+    for (size_t idx = 0; idx < total_candidates; ++idx)
+    {
+        allocated.push_back(store.acquire());
+    }
+
+    // Oracle tracking of surviving indices
+    auto oracle = tempest::vector<size_t>{};
+    for (size_t idx = 0; idx < total_candidates; ++idx)
+    {
+        // 25% retention probability using PRNG bits
+        const auto retain = ((lcg_next() >> 32) & 0x3ULL) == 0ULL;
+        if (retain)
+        {
+            oracle.push_back(idx);
+        }
+        else
+        {
+            store.release(allocated[idx]);
+        }
+    }
+
+    ASSERT_EQ(store.size(), oracle.size());
+
+    // Act: Forward iteration against oracle
+    auto forward_visited = tempest::vector<size_t>{};
+    for (const auto ent : store)
+    {
+        forward_visited.push_back(
+            static_cast<size_t>(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(ent)));
+    }
+
+    // Assert forward matching
+    ASSERT_EQ(forward_visited.size(), oracle.size());
+    for (size_t idx = 0; idx < oracle.size(); ++idx)
+    {
+        EXPECT_EQ(forward_visited[idx], oracle[idx]);
+    }
+
+    // Act: Reverse iteration against oracle
+    auto reverse_visited = tempest::vector<size_t>{};
+    auto rev_it = store.end();
+    while (rev_it != store.begin())
+    {
+        --rev_it;
+        reverse_visited.push_back(
+            static_cast<size_t>(tempest::ecs::entity_traits<tempest::ecs::entity>::as_entity(*rev_it)));
+    }
+
+    // Assert reverse matching
+    ASSERT_EQ(reverse_visited.size(), oracle.size());
+    for (size_t idx = 0; idx < oracle.size(); ++idx)
+    {
+        EXPECT_EQ(reverse_visited[idx], oracle[oracle.size() - 1 - idx]);
+    }
+}
+
+
+

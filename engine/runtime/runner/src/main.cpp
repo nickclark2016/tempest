@@ -33,19 +33,17 @@ namespace
         const auto game_register_types_result =
             game_shared_library.get_function_handle<void, ecs::component_type_registry&>("tempest_game_register_types");
         const auto game_on_load_result =
-            game_shared_library.get_function_handle<void, engine_context&, span<const string_view>>("tempest_game_on_load");
+            game_shared_library.get_function_handle<game_runtime_context*, engine_context&, span<const string_view>>(
+                "tempest_game_on_load");
         const auto game_on_unload_result =
-            game_shared_library.get_function_handle<void>("tempest_game_on_unload");
+            game_shared_library.get_function_handle<void, game_runtime_context*>("tempest_game_on_unload");
         const auto game_on_play_begin_result =
-            game_shared_library.get_function_handle<void, const play_settings&>("tempest_game_on_play_begin");
+            game_shared_library.get_function_handle<void, game_runtime_context*, const play_settings&>(
+                "tempest_game_on_play_begin");
         const auto game_on_play_end_result =
-            game_shared_library.get_function_handle<void>("tempest_game_on_play_end");
+            game_shared_library.get_function_handle<void, game_runtime_context*>("tempest_game_on_play_end");
 
-        const auto legacy_on_load_result =
-            game_shared_library.get_function_handle<void, client_context*, span<string_view>>("on_load");
-        const auto legacy_on_unload_result = game_shared_library.get_function_handle<void>("on_unload");
-
-        if (!game_on_load_result && !legacy_on_load_result)
+        if (!game_on_load_result)
         {
             return 1;
         }
@@ -69,69 +67,59 @@ namespace
                 return 1;
             }
 
-            if (game_on_load_result)
+            if (game_register_types_result)
             {
-                if (game_register_types_result)
-                {
-                    (*game_register_types_result)(tempest_engine.get_components());
-                }
+                (*game_register_types_result)(tempest_engine.get_components());
+            }
 
-                const auto scene_candidates = array<filesystem::path, 2>{
-                    filesystem::path{"game/assets/scenes/main.tscene"},
-                    filesystem::path{"assets/scenes/main.tscene"},
-                };
+            const auto scene_candidates = array<filesystem::path, 2>{
+                filesystem::path{"game/assets/scenes/main.tscene"},
+                filesystem::path{"assets/scenes/main.tscene"},
+            };
 
-                for (const auto& scene_path : scene_candidates)
+            for (const auto& scene_path : scene_candidates)
+            {
+                if (filesystem::exists(scene_path))
                 {
-                    if (filesystem::exists(scene_path))
+                    const auto load_result = tempest_engine.get_scene_manager().load_sync(scene_path);
+                    if (load_result.has_value())
                     {
-                        const auto load_result = tempest_engine.get_scene_manager().load_sync(scene_path);
-                        if (load_result.has_value())
-                        {
-                            tempest_engine.get_logger().info(format("Loaded startup scene: {}", scene_path.generic_string()));
-                            break;
-                        }
+                        tempest_engine.get_logger().info(
+                            format("Loaded startup scene: {}", scene_path.generic_string()));
+                        break;
                     }
-                }
-
-                (*game_on_load_result)(tempest_engine, span<const string_view>{args.data(), args.size()});
-
-                auto settings = play_settings{};
-                for (const auto& arg : args)
-                {
-                    constexpr auto prefix = string_view{"--connect="};
-                    if (tempest::starts_with(arg, prefix))
-                    {
-                        settings.mode = network_mode::connect_remote;
-                        settings.remote_address = string_view{arg.data() + prefix.size(), arg.size() - prefix.size()};
-                    }
-                }
-
-                if (game_on_play_begin_result)
-                {
-                    (*game_on_play_begin_result)(settings);
-                }
-
-                tempest_engine.run();
-
-                if (game_on_play_end_result)
-                {
-                    (*game_on_play_end_result)();
-                }
-
-                if (game_on_unload_result)
-                {
-                    (*game_on_unload_result)();
                 }
             }
-            else if (legacy_on_load_result)
+
+            auto* const game =
+                (*game_on_load_result)(tempest_engine, span<const string_view>{args.data(), args.size()});
+
+            auto settings = play_settings{};
+            for (const auto& arg : args)
             {
-                (*legacy_on_load_result)(&tempest_engine, args);
-                tempest_engine.run();
-                if (legacy_on_unload_result)
+                constexpr auto prefix = string_view{"--connect="};
+                if (tempest::starts_with(arg, prefix))
                 {
-                    (*legacy_on_unload_result)();
+                    settings.mode = network_mode::connect_remote;
+                    settings.remote_address = string_view{arg.data() + prefix.size(), arg.size() - prefix.size()};
                 }
+            }
+
+            if (game_on_play_begin_result)
+            {
+                (*game_on_play_begin_result)(game, settings);
+            }
+
+            tempest_engine.run();
+
+            if (game_on_play_end_result)
+            {
+                (*game_on_play_end_result)(game);
+            }
+
+            if (game_on_unload_result)
+            {
+                (*game_on_unload_result)(game);
             }
         }
 

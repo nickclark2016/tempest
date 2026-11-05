@@ -177,10 +177,6 @@ namespace tempest::editor
 
             ImGui::EndPopup();
         }
-        else
-        {
-            _is_open = false;
-        }
     }
 
     auto project_launcher_dialog::_draw_recents_tab() -> void

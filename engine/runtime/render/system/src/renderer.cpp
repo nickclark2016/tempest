@@ -1842,6 +1842,10 @@ namespace tempest::render_system
             _frame_index++;
             _frame_begun = false;
         }
+        else if (!_flight_slots.empty())
+        {
+            _flight_slots[slot_idx].timeline_value--;
+        }
         return res;
     }
 

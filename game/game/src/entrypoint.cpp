@@ -4,6 +4,7 @@
 #include <tempest/algorithm.hpp>
 #include <tempest/archetype.hpp>
 #include <tempest/array.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/chrono.hpp>
 #include <tempest/guid.hpp>
 #include <tempest/inplace_vector.hpp>
@@ -294,10 +295,41 @@ namespace
         tempest::guid local_player_mat_id = {};
         tempest::guid remote_player_mat_id = {};
     };
+} // namespace
 
-    tempest::engine_context* g_engine = nullptr;
-    tempest::client_context* g_client_ctx = nullptr;
-    tempest::unique_ptr<multiplayer_client> g_client = nullptr;
+namespace tempest
+{
+    struct game_runtime_context
+    {
+        non_null<engine_context> engine;
+        client_context* client_ctx = nullptr;
+        unique_ptr<multiplayer_client> client = nullptr;
+
+        explicit game_runtime_context(engine_context& ctx)
+            : engine{ctx}
+            , client_ctx{dynamic_cast<client_context*>(&ctx)}
+            , client{make_unique<multiplayer_client>()}
+        {
+        }
+
+        ~game_runtime_context()
+        {
+            if (client != nullptr)
+            {
+                client->physics_scene.reset();
+                client.reset();
+            }
+        }
+
+        game_runtime_context(const game_runtime_context&) = delete;
+        game_runtime_context(game_runtime_context&&) noexcept = delete;
+        auto operator=(const game_runtime_context&) -> game_runtime_context& = delete;
+        auto operator=(game_runtime_context&&) noexcept -> game_runtime_context& = delete;
+    };
+} // namespace tempest
+
+namespace
+{
 
     auto spawn_local_player(tempest::engine_context* ctx, multiplayer_client* client) -> void
     {
@@ -496,12 +528,12 @@ extern "C"
     }
 
     TEMPEST_GAME_API auto tempest_game_on_load(tempest::engine_context& ctx,
-                                               tempest::span<const tempest::string_view> args) -> void
+                                               tempest::span<const tempest::string_view> args)
+        -> tempest::game_runtime_context*
     {
-        g_engine = &ctx;
-        g_client_ctx = dynamic_cast<tempest::client_context*>(&ctx);
-        g_client = tempest::make_unique<multiplayer_client>();
-        auto* const client = g_client.get();
+        auto game = tempest::make_unique<tempest::game_runtime_context>(ctx);
+        auto* const client = game->client.get();
+        auto* const client_ctx = game->client_ctx;
 
         auto server_ep = tempest::optional<tempest::network::endpoint>{};
         for (const auto& arg : args)
@@ -535,11 +567,11 @@ extern "C"
         client->physics_scene = tempest::make_unique<tempest::physics::physics_scene_system>(
             client->client_physics_world, ctx.get_entities(), ctx.get_events());
 
-        if (g_client_ctx != nullptr)
+        if (client_ctx != nullptr)
         {
-            client->local_player_mesh_id = g_client_ctx->get_meshes().register_mesh(
+            client->local_player_mesh_id = client_ctx->get_meshes().register_mesh(
                 create_box_mesh({0.18F, 0.08F, 0.22F}, {1.0F, 1.0F, 1.0F, 1.0F}, {0.0F, -0.82F, 0.15F}));
-            client->remote_player_mesh_id = g_client_ctx->get_meshes().register_mesh(
+            client->remote_player_mesh_id = client_ctx->get_meshes().register_mesh(
                 create_capsule_mesh(0.5F, 0.4F, {1.0F, 1.0F, 1.0F, 1.0F}));
 
             auto local_mat = tempest::core::material{};
@@ -547,14 +579,14 @@ extern "C"
             local_mat.set_vec3(tempest::core::material::emissive_factor_name, {0.0F, 0.0F, 0.0F});
             local_mat.set_scalar(tempest::core::material::metallic_factor_name, 0.1F);
             local_mat.set_scalar(tempest::core::material::roughness_factor_name, 0.5F);
-            client->local_player_mat_id = g_client_ctx->get_materials().register_material(tempest::move(local_mat));
+            client->local_player_mat_id = client_ctx->get_materials().register_material(tempest::move(local_mat));
 
             auto remote_mat = tempest::core::material{};
             remote_mat.set_vec4(tempest::core::material::base_color_factor_name, {0.15F, 0.75F, 0.95F, 1.0F});
             remote_mat.set_vec3(tempest::core::material::emissive_factor_name, {0.0F, 0.0F, 0.0F});
             remote_mat.set_scalar(tempest::core::material::metallic_factor_name, 0.1F);
             remote_mat.set_scalar(tempest::core::material::roughness_factor_name, 0.5F);
-            client->remote_player_mat_id = g_client_ctx->get_materials().register_material(tempest::move(remote_mat));
+            client->remote_player_mat_id = client_ctx->get_materials().register_material(tempest::move(remote_mat));
         }
 
         ctx.register_on_initialize_callback([client](tempest::engine_context& engine_ctx) -> void {
@@ -863,9 +895,9 @@ extern "C"
             }
         });
 
-        if (g_client_ctx != nullptr)
+        if (client_ctx != nullptr)
         {
-            g_client_ctx->register_on_interpolate_callback([client](tempest::engine_context& engine_ctx,
+            client_ctx->register_on_interpolate_callback([client](tempest::engine_context& engine_ctx,
                                                                    [[maybe_unused]] float alpha) -> void {
                 if (!engine_ctx.is_play_mode() || client->local_player_entity == tempest::ecs::null)
                 {
@@ -950,21 +982,23 @@ extern "C"
             });
         }
 
-        ctx.register_on_close_callback([]([[maybe_unused]] tempest::engine_context& engine_ctx) -> void {
-            tempest_game_on_play_end();
-            tempest_game_on_unload();
+        ctx.register_on_close_callback([game_ptr = game.get()]([[maybe_unused]] tempest::engine_context& engine_ctx) -> void {
+            tempest_game_on_play_end(game_ptr);
         });
+
+        return game.release();
     }
 
-    TEMPEST_GAME_API auto tempest_game_on_play_begin(const tempest::play_settings& settings) -> void
+    TEMPEST_GAME_API auto tempest_game_on_play_begin(tempest::game_runtime_context* game,
+                                                     const tempest::play_settings& settings) -> void
     {
-        if (g_client == nullptr || g_engine == nullptr)
+        if (game == nullptr || game->client == nullptr)
         {
             return;
         }
 
-        auto* const client = g_client.get();
-        auto* const ctx = g_engine;
+        auto* const client = game->client.get();
+        auto* const ctx = game->engine.get();
 
         client->is_offline = (settings.mode == tempest::network_mode::standalone_offline);
 
@@ -1046,26 +1080,26 @@ extern "C"
             spawn_local_player(ctx, client);
         }
 
-        if (g_client_ctx != nullptr)
+        if (game->client_ctx != nullptr)
         {
-            const auto win = g_client_ctx->get_main_window();
+            const auto win = game->client_ctx->get_main_window();
             if (win.is_valid())
             {
-                g_client_ctx->get_window_manager().set_cursor_mode(win, tempest::cursor_mode::disabled);
+                game->client_ctx->get_window_manager().set_cursor_mode(win, tempest::cursor_mode::disabled);
             }
         }
         client->first_mouse = true;
     }
 
-    TEMPEST_GAME_API auto tempest_game_on_play_end() -> void
+    TEMPEST_GAME_API auto tempest_game_on_play_end(tempest::game_runtime_context* game) -> void
     {
-        if (g_client == nullptr || g_engine == nullptr)
+        if (game == nullptr || game->client == nullptr)
         {
             return;
         }
 
-        auto* const client = g_client.get();
-        auto* const ctx = g_engine;
+        auto* const client = game->client.get();
+        auto* const ctx = game->engine.get();
 
         despawn_local_player(ctx, client);
         despawn_remote_players(ctx, client);
@@ -1099,12 +1133,12 @@ extern "C"
         client->first_snapshot_received = false;
         client->session_id = multiplayer_client::default_session_id;
 
-        if (g_client_ctx != nullptr)
+        if (game->client_ctx != nullptr)
         {
-            const auto win = g_client_ctx->get_main_window();
+            const auto win = game->client_ctx->get_main_window();
             if (win.is_valid())
             {
-                g_client_ctx->get_window_manager().set_cursor_mode(win, tempest::cursor_mode::normal);
+                game->client_ctx->get_window_manager().set_cursor_mode(win, tempest::cursor_mode::normal);
             }
         }
         client->camera_yaw = multiplayer_client::default_camera_yaw;
@@ -1115,44 +1149,8 @@ extern "C"
         client->camera_entity = tempest::ecs::null;
     }
 
-    TEMPEST_GAME_API auto tempest_game_on_unload() -> void
+    TEMPEST_GAME_API auto tempest_game_on_unload(tempest::game_runtime_context* game) -> void
     {
-        if (g_client != nullptr)
-        {
-            g_client->physics_scene.reset();
-            g_client.reset();
-        }
-        g_engine = nullptr;
-        g_client_ctx = nullptr;
-    }
-
-    GAME_API void on_load(tempest::client_context* ctx, [[maybe_unused]] tempest::span<tempest::string_view> args)
-    {
-        tempest_game_register_types(ctx->get_components());
-
-        auto const_args = tempest::vector<tempest::string_view>{};
-        for (const auto& arg : args)
-        {
-            const_args.push_back(arg);
-        }
-        tempest_game_on_load(*ctx, tempest::span<const tempest::string_view>{const_args.data(), const_args.size()});
-
-        auto settings = tempest::play_settings{};
-        for (const auto& arg : args)
-        {
-            constexpr auto prefix = tempest::string_view{"--connect="};
-            if (tempest::starts_with(arg, prefix))
-            {
-                settings.mode = tempest::network_mode::connect_remote;
-                settings.remote_address = substr(arg, prefix.size());
-            }
-        }
-        tempest_game_on_play_begin(settings);
-    }
-
-    GAME_API void on_unload()
-    {
-        tempest_game_on_play_end();
-        tempest_game_on_unload();
+        delete game;
     }
 }

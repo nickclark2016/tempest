@@ -242,6 +242,19 @@ namespace tempest::ecs
              * @brief Default constructor.
              */
             constexpr basic_entity_store_iterator() noexcept = default;
+            constexpr basic_entity_store_iterator(const basic_entity_store_iterator&) noexcept = default;
+            constexpr basic_entity_store_iterator(basic_entity_store_iterator&&) noexcept = default;
+            constexpr auto operator=(const basic_entity_store_iterator&) noexcept -> basic_entity_store_iterator& = default;
+            constexpr auto operator=(basic_entity_store_iterator&&) noexcept -> basic_entity_store_iterator& = default;
+            ~basic_entity_store_iterator() = default;
+
+            template <typename OtherT>
+                requires(!is_same_v<OtherT, T> && is_convertible_v<OtherT*, T*>)
+            constexpr basic_entity_store_iterator(
+                const basic_entity_store_iterator<OtherT, EPC, EPB, BPC>& other) noexcept
+                : chunks{other.chunks}, index{other.index}, end{other.end}
+            {
+            }
 
             /**
              * @brief Construct a new basic entity store iterator object.
@@ -319,24 +332,63 @@ namespace tempest::ecs
             -> basic_entity_store_iterator<T, EPC, EPB, BPC>&
         {
             ++index;
-
-            while (index < end)
+            if (index >= end)
             {
-                // TODO: Figure out faster iteration
-                auto chunk_index = index / entities_per_chunk;
-                auto chunk_offset = index % entities_per_chunk;
-
-                auto block_index = chunk_offset / entities_per_block;
-                auto block_offset = chunk_offset % entities_per_block;
-
-                if (tempest::is_bit_set(chunks[chunk_index].blocks[block_index].occupancy, block_offset))
-                {
-                    break;
-                }
-
-                ++index;
+                index = end;
+                return *this;
             }
 
+            using occupancy_type = make_unsigned_t<remove_cvref_t<decltype(chunks[0].blocks[0].occupancy)>>;
+
+            auto chunk_index = index / entities_per_chunk;
+            const auto chunk_offset = index % entities_per_chunk;
+            auto block_index = chunk_offset / entities_per_block;
+            const auto block_offset = chunk_offset % entities_per_block;
+
+            auto occ = static_cast<occupancy_type>(chunks[chunk_index].blocks[block_index].occupancy);
+            const auto remaining = static_cast<occupancy_type>(occ >> block_offset);
+
+            if (remaining != 0)
+            {
+                const auto trailing_zeros = static_cast<size_t>(tempest::countr_zero(remaining));
+                index += trailing_zeros;
+                return *this;
+            }
+
+            // Advance to the boundary of the next block
+            index += (entities_per_block - block_offset);
+            ++block_index;
+            if (block_index == blocks_per_chunk)
+            {
+                block_index = 0;
+                ++chunk_index;
+            }
+
+            // Word-skip subsequent empty blocks in O(1) operations per word
+            while (index < end)
+            {
+                occ = static_cast<occupancy_type>(chunks[chunk_index].blocks[block_index].occupancy);
+                if (occ != 0)
+                {
+                    const auto trailing_zeros = static_cast<size_t>(tempest::countr_zero(occ));
+                    index += trailing_zeros;
+                    if (index > end)
+                    {
+                        index = end;
+                    }
+                    return *this;
+                }
+
+                index += entities_per_block;
+                ++block_index;
+                if (block_index == blocks_per_chunk)
+                {
+                    block_index = 0;
+                    ++chunk_index;
+                }
+            }
+
+            index = end;
             return *this;
         }
 
@@ -353,19 +405,87 @@ namespace tempest::ecs
         constexpr auto basic_entity_store_iterator<T, EPC, EPB, BPC>::operator--() noexcept
             -> basic_entity_store_iterator<T, EPC, EPB, BPC>&
         {
-            while (index > 0)
+            if (index == 0)
             {
-                --index;
+                return *this;
+            }
 
-                auto chunk_index = index / entities_per_chunk;
-                auto chunk_offset = index % entities_per_chunk;
+            using occupancy_type = make_unsigned_t<remove_cvref_t<decltype(chunks[0].blocks[0].occupancy)>>;
 
-                auto block_index = chunk_offset / entities_per_block;
-                auto block_offset = chunk_offset % entities_per_block;
+            const auto prev_index = index - 1;
+            auto chunk_index = prev_index / entities_per_chunk;
+            const auto chunk_offset = prev_index % entities_per_chunk;
+            auto block_index = chunk_offset / entities_per_block;
+            const auto block_offset = chunk_offset % entities_per_block;
 
-                if (tempest::is_bit_set(chunks[chunk_index].blocks[block_index].occupancy, block_offset))
+            auto occ = static_cast<occupancy_type>(chunks[chunk_index].blocks[block_index].occupancy);
+            auto remaining = static_cast<occupancy_type>(0);
+
+            if (block_offset + 1 < entities_per_block)
+            {
+                const auto mask =
+                    (static_cast<occupancy_type>(1) << (block_offset + 1)) - static_cast<occupancy_type>(1);
+                remaining = static_cast<occupancy_type>(occ & mask);
+            }
+            else
+            {
+                remaining = occ;
+            }
+
+            if (remaining != 0)
+            {
+                constexpr auto total_bits = sizeof(occupancy_type) * char_bit;
+                const auto highest_bit = static_cast<size_t>((total_bits - 1) - tempest::countl_zero(remaining));
+                const auto block_base = prev_index - block_offset;
+                index = block_base + highest_bit;
+                return *this;
+            }
+
+            if (block_index == 0 && chunk_index == 0)
+            {
+                index = 0;
+                return *this;
+            }
+
+            auto block_base = prev_index - block_offset;
+            block_base -= entities_per_block;
+            if (block_index > 0)
+            {
+                --block_index;
+            }
+            else
+            {
+                block_index = blocks_per_chunk - 1;
+                --chunk_index;
+            }
+
+            // Word-skip preceding empty blocks backwards in O(1) operations per word
+            while (true)
+            {
+                occ = static_cast<occupancy_type>(chunks[chunk_index].blocks[block_index].occupancy);
+                if (occ != 0)
                 {
-                    break;
+                    constexpr auto total_bits = sizeof(occupancy_type) * char_bit;
+                    const auto highest_bit = static_cast<size_t>((total_bits - 1) - tempest::countl_zero(occ));
+                    index = block_base + highest_bit;
+                    return *this;
+                }
+
+                if (block_index == 0 && chunk_index == 0)
+                {
+                    index = 0;
+                    return *this;
+                }
+
+                block_base -= entities_per_block;
+                if (block_index > 0)
+                {
+                    --block_index;
+                }
+                else
+                {
+                    block_index = blocks_per_chunk - 1;
+                    --chunk_index;
                 }
             }
 
@@ -384,11 +504,6 @@ namespace tempest::ecs
         /**
          * @brief Equality operator.
          *
-         * @tparam T The type of the value the iterator points to.
-         * @tparam EPC The number of entities per chunk.
-         * @tparam EPB The number of entities per block.
-         * @tparam BPC The number of blocks per chunk.
-         *
          * Checks for equality of two iterators by the index they point to. If the iterators were generated from
          * different basic_entity_stores, this function is undefined.
          *
@@ -396,9 +511,9 @@ namespace tempest::ecs
          * @param rhs The right hand side iterator.
          * @return true if the iterators point to the same index, false otherwise.
          */
-        template <typename T, size_t EPC, size_t EPB, size_t BPC>
-        [[nodiscard]] constexpr auto operator==(const basic_entity_store_iterator<T, EPC, EPB, BPC>& lhs,
-                                                const basic_entity_store_iterator<T, EPC, EPB, BPC>& rhs) noexcept
+        template <typename T1, typename T2, size_t EPC, size_t EPB, size_t BPC>
+        [[nodiscard]] constexpr auto operator==(const basic_entity_store_iterator<T1, EPC, EPB, BPC>& lhs,
+                                                const basic_entity_store_iterator<T2, EPC, EPB, BPC>& rhs) noexcept
             -> bool
         {
             return lhs.index == rhs.index;
@@ -407,11 +522,6 @@ namespace tempest::ecs
         /**
          * @brief Three-way comparison operator.
          *
-         * @tparam T The type of the value the iterator points to.
-         * @tparam EPC The number of entities per chunk.
-         * @tparam EPB The number of entities per block.
-         * @tparam BPC The number of blocks per chunk.
-         *
          * Compares two iterators by the index they point to. If the iterators were generated from different
          * basic_entity_stores, this function is undefined.
          *
@@ -419,9 +529,9 @@ namespace tempest::ecs
          * @param rhs The right hand side iterator.
          * @return strong_ordering representing the comparison result of the indices.
          */
-        template <typename T, size_t EPC, size_t EPB, size_t BPC>
-        [[nodiscard]] constexpr auto operator<=>(const basic_entity_store_iterator<T, EPC, EPB, BPC>& lhs,
-                                                 const basic_entity_store_iterator<T, EPC, EPB, BPC>& rhs) noexcept
+        template <typename T1, typename T2, size_t EPC, size_t EPB, size_t BPC>
+        [[nodiscard]] constexpr auto operator<=>(const basic_entity_store_iterator<T1, EPC, EPB, BPC>& lhs,
+                                                 const basic_entity_store_iterator<T2, EPC, EPB, BPC>& rhs) noexcept
         {
             return lhs.index <=> rhs.index;
         }
@@ -514,19 +624,19 @@ namespace tempest::ecs
     template <typename T, size_t N, integral O>
     constexpr auto basic_entity_store<T, N, O>::begin() noexcept -> basic_entity_store<T, N, O>::iterator
     {
+        using occupancy_type = make_unsigned_t<O>;
         for (size_t chunk_idx = 0; chunk_idx < _chunks.size(); ++chunk_idx)
         {
             for (size_t block_idx = 0; block_idx < blocks_per_chunk; ++block_idx)
             {
-                for (size_t block_offset = 0; block_offset < entities_per_block; ++block_offset)
+                const auto occ = static_cast<occupancy_type>(_chunks[chunk_idx].blocks[block_idx].occupancy);
+                if (occ != 0)
                 {
-                    if (tempest::is_bit_set(_chunks[chunk_idx].blocks[block_idx].occupancy, block_offset))
-                    {
-                        return iterator(_chunks.data(),
-                                        (chunk_idx * entities_per_chunk) + (block_idx * entities_per_block) +
-                                            block_offset,
-                                        capacity());
-                    }
+                    const auto block_offset = static_cast<size_t>(tempest::countr_zero(occ));
+                    return iterator(_chunks.data(),
+                                    (chunk_idx * entities_per_chunk) + (block_idx * entities_per_block) +
+                                        block_offset,
+                                    capacity());
                 }
             }
         }
@@ -536,19 +646,19 @@ namespace tempest::ecs
     template <typename T, size_t N, integral O>
     constexpr auto basic_entity_store<T, N, O>::begin() const noexcept -> basic_entity_store<T, N, O>::const_iterator
     {
+        using occupancy_type = make_unsigned_t<O>;
         for (size_t chunk_idx = 0; chunk_idx < _chunks.size(); ++chunk_idx)
         {
             for (size_t block_idx = 0; block_idx < blocks_per_chunk; ++block_idx)
             {
-                for (size_t block_offset = 0; block_offset < entities_per_block; ++block_offset)
+                const auto occ = static_cast<occupancy_type>(_chunks[chunk_idx].blocks[block_idx].occupancy);
+                if (occ != 0)
                 {
-                    if (tempest::is_bit_set(_chunks[chunk_idx].blocks[block_idx].occupancy, block_offset))
-                    {
-                        return const_iterator(_chunks.data(),
-                                              (chunk_idx * entities_per_chunk) + (block_idx * entities_per_block) +
-                                                  block_offset,
-                                              capacity());
-                    }
+                    const auto block_offset = static_cast<size_t>(tempest::countr_zero(occ));
+                    return const_iterator(_chunks.data(),
+                                          (chunk_idx * entities_per_chunk) + (block_idx * entities_per_block) +
+                                              block_offset,
+                                          capacity());
                 }
             }
         }

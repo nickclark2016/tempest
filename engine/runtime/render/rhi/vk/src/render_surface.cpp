@@ -110,20 +110,34 @@ namespace tempest::rhi::vk
         -> expected<void, swapchain_error>
     {
         auto* const vk_device = static_cast<vk::device*>(_swapchain_desc.rhi_device);
-        auto vk_sem = vk_device->get_semaphore(wait_values.semaphore);
-        TEMPEST_ASSERT(vk_sem != VK_NULL_HANDLE);
-        TEMPEST_ASSERT(_last_acquired_index < _swapchain_desc.attachments.size());
+        if (_last_acquired_index >= _swapchain_desc.attachments.size())
+        {
+            return unexpected{.value = swapchain_error::unspecified};
+        }
+
+        auto wait_semaphore_count = uint32_t{0};
+        auto vk_sem = VkSemaphore{VK_NULL_HANDLE};
+        if (wait_values.semaphore.handle != 0)
+        {
+            vk_sem = vk_device->get_semaphore(wait_values.semaphore);
+            if (vk_sem != VK_NULL_HANDLE)
+            {
+                wait_semaphore_count = 1U;
+            }
+        }
 
         auto& vk_port = static_cast<vk::execution_port&>(port);
         auto lock = lock_guard{vk_port.get_submit_mutex()};
 
         auto image_index = _last_acquired_index;
+        _last_acquired_index = invalid_acquired_index;
+
         auto result_code = VkResult{VK_SUCCESS};
         auto present_info = VkPresentInfoKHR{
             .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
             .pNext = nullptr,
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &vk_sem,
+            .waitSemaphoreCount = wait_semaphore_count,
+            .pWaitSemaphores = (wait_semaphore_count > 0) ? &vk_sem : nullptr,
             .swapchainCount = 1,
             .pSwapchains = &_swapchain_desc.swapchain,
             .pImageIndices = &image_index,
