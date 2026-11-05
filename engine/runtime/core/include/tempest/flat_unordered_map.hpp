@@ -11,7 +11,7 @@
 #include <tempest/memory.hpp>
 #include <tempest/utility.hpp>
 
-#include <compare>
+#include <tempest/compare.hpp>
 
 namespace tempest
 {
@@ -104,9 +104,17 @@ namespace tempest
             }
 
             friend auto operator<=>(const flat_unordered_map_iterator& lhs,
-                                    const flat_unordered_map_iterator& rhs) noexcept
+                                    const flat_unordered_map_iterator& rhs) noexcept -> strong_ordering
             {
-                return lhs._index <=> rhs._index;
+                if (lhs._index < rhs._index)
+                {
+                    return strong_ordering::less;
+                }
+                if (lhs._index > rhs._index)
+                {
+                    return strong_ordering::greater;
+                }
+                return strong_ordering::equal;
             }
 
             [[nodiscard]] auto index() const noexcept -> size_t

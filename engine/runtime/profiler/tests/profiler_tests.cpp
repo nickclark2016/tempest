@@ -16,8 +16,7 @@
 #include <tempest/json.hpp>
 #include <tempest/memory.hpp>
 
-#include <cmath>
-#include <cstdio>
+#include <tempest/math_utils.hpp>
 
 //==============================================================================
 // Single-Threaded & Hierarchical Profiler Tests
@@ -381,7 +380,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     ASSERT_DOUBLE_EQ(stats_odd.p95_ns, 950.0);
     ASSERT_DOUBLE_EQ(stats_odd.p99_ns, 990.0);
     // Population variance for 0, 10, ..., 1000 is 100 * (100 * 102 / 12) = 85,000 -> StdDev = sqrt(85000)
-    ASSERT_NEAR(stats_odd.std_deviation_ns, ::sqrt(85000.0), 1e-6);
+    ASSERT_NEAR(stats_odd.std_deviation_ns, tempest::math::sqrt(85000.0), 1e-6);
 
     // Setup & Act: Even distribution (4 samples: 100, 200, 300, 400 ns)
     auto zones_even = tempest::vector<tempest::profiler::zone_record>{};
@@ -402,7 +401,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     ASSERT_DOUBLE_EQ(stats_even.p90_ns, 370.0);
     ASSERT_DOUBLE_EQ(stats_even.p95_ns, 385.0);
     ASSERT_DOUBLE_EQ(stats_even.p99_ns, 397.0);
-    ASSERT_NEAR(stats_even.std_deviation_ns, ::sqrt(12500.0), 1e-6);
+    ASSERT_NEAR(stats_even.std_deviation_ns, tempest::math::sqrt(12500.0), 1e-6);
 
     // Assert: Empty and single-element distributions
     const auto stats_empty = tempest::profiler::compute_zone_statistics({});

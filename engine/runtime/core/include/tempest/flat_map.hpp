@@ -7,9 +7,7 @@
 #include <tempest/utility.hpp>
 #include <tempest/vector.hpp>
 
-#include <compare>
-#include <initializer_list>
-#include <utility>
+#include <tempest/compare.hpp>
 
 namespace tempest
 {
@@ -31,8 +29,13 @@ namespace tempest
         {
             pair<const K&, V&> p;
 
+            friend auto operator==(const flat_map_iterator_ptr_adapter& lhs,
+                                   const flat_map_iterator_ptr_adapter& rhs) noexcept -> bool = default;
             friend auto operator<=>(const flat_map_iterator_ptr_adapter& lhs,
-                                    const flat_map_iterator_ptr_adapter& rhs) noexcept = default;
+                                    const flat_map_iterator_ptr_adapter& rhs) noexcept
+            {
+                return lhs.p <=> rhs.p;
+            }
 
             pair<const K&, V&> operator*() noexcept;
             pair<const K&, const V&> operator*() const noexcept;
@@ -77,7 +80,10 @@ namespace tempest
 
             pair<const K*, V*> p;
 
-            friend auto operator<=>(const flat_map_iterator& lhs, const flat_map_iterator& rhs) noexcept = default;
+            friend auto operator<=>(const flat_map_iterator& lhs, const flat_map_iterator& rhs) noexcept
+            {
+                return lhs.p <=> rhs.p;
+            }
 
             flat_map_iterator& operator++() noexcept;
             flat_map_iterator operator++(int) noexcept;

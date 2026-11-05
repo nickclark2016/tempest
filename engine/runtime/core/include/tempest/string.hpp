@@ -14,7 +14,7 @@
 #include <tempest/string_view.hpp>
 #include <tempest/vector.hpp>
 
-#include <compare>
+#include <tempest/compare.hpp>
 
 namespace tempest
 {
@@ -48,7 +48,18 @@ namespace tempest
             constexpr difference_type operator-(const iter& other) const noexcept;
 
             constexpr bool operator==(const iter& other) const noexcept;
-            constexpr auto operator<=>(const iter& other) const noexcept = default;
+            constexpr auto operator<=>(const iter& other) const noexcept -> strong_ordering
+            {
+                if (ptr < other.ptr)
+                {
+                    return strong_ordering::less;
+                }
+                if (ptr > other.ptr)
+                {
+                    return strong_ordering::greater;
+                }
+                return strong_ordering::equal;
+            }
 
             constexpr operator pointer() const noexcept;
 
@@ -88,7 +99,18 @@ namespace tempest
             constexpr difference_type operator-(const const_iter& other) const noexcept;
 
             constexpr bool operator==(const const_iter& other) const noexcept;
-            constexpr auto operator<=>(const const_iter& other) const noexcept = default;
+            constexpr auto operator<=>(const const_iter& other) const noexcept -> strong_ordering
+            {
+                if (ptr < other.ptr)
+                {
+                    return strong_ordering::less;
+                }
+                if (ptr > other.ptr)
+                {
+                    return strong_ordering::greater;
+                }
+                return strong_ordering::equal;
+            }
 
             constexpr operator pointer() const noexcept;
 

@@ -5,7 +5,11 @@
 
 #include <tinyexr/tinyexr.h>
 
-#include <cstdlib>
+#ifdef _MSC_VER
+#include <malloc.h>
+#else
+extern "C" void free(void*);
+#endif
 
 namespace tempest::assets
 {

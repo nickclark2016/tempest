@@ -21,7 +21,6 @@
 #include <tempest/ui.hpp>
 #include <tempest/vector.hpp>
 
-#include <cstdlib>
 #include <tempest/chrono.hpp>
 #include <tempest/format.hpp>
 
@@ -97,7 +96,7 @@ namespace tempest::editor
     } // namespace
 } // namespace tempest::editor
 #else
-#include <cstdlib>
+extern "C" int system(const char*);
 
 namespace tempest::editor
 {

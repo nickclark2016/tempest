@@ -4,8 +4,18 @@
 
 #include <tlsf/tlsf.h>
 
-#include <cassert>
-#include <cstdlib>
+#include <tempest/assert.hpp>
+
+#ifdef _MSC_VER
+#include <malloc.h>
+#else
+extern "C"
+{
+    void* malloc(tempest::size_t size);
+    void free(void* ptr);
+    void* aligned_alloc(tempest::size_t alignment, tempest::size_t size);
+}
+#endif
 
 namespace tempest
 {
@@ -59,7 +69,7 @@ namespace tempest
             return nullptr;
         }
         const auto start = align_memory(_allocated_bytes, alignment);
-        assert(start < _capacity && "tempest::core::stack_allocator out of memory.");
+        TEMPEST_ASSERT(start < _capacity && "tempest::core::stack_allocator out of memory.");
         const auto new_allocated_byte_count = start + size;
         if (new_allocated_byte_count > _capacity)
         {
@@ -76,9 +86,9 @@ namespace tempest
             return;
         }
 
-        assert(ptr >= _buffer);
-        assert(ptr < _buffer + _capacity);
-        assert(ptr <= _buffer + _allocated_bytes);
+        TEMPEST_ASSERT(ptr >= _buffer);
+        TEMPEST_ASSERT(ptr < _buffer + _capacity);
+        TEMPEST_ASSERT(ptr <= _buffer + _allocated_bytes);
 
         const auto size_at_ptr = static_cast<size_t>(reinterpret_cast<byte*>(ptr) - _buffer);
         _allocated_bytes = size_at_ptr;

@@ -1,11 +1,10 @@
 #include <tempest/exception.hpp>
-
-#include <cstdlib>
+#include <tempest/unreachable.hpp>
 
 namespace tempest
 {
     [[noreturn]] void terminate()
     {
-        ::abort();
+        tempest::abort();
     }
 } // namespace tempest

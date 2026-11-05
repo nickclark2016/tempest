@@ -2,6 +2,7 @@
 #define tempest_core_string_view_hpp
 
 #include <tempest/char_traits.hpp>
+#include <tempest/compare.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/hash.hpp>
 #include <tempest/int.hpp>
@@ -88,7 +89,7 @@ namespace tempest
 
     template <typename CharT, typename Traits>
     constexpr auto operator<=>(const basic_string_view<CharT, Traits>& lhs,
-                               const basic_string_view<CharT, Traits>& rhs) noexcept
+                               const basic_string_view<CharT, Traits>& rhs) noexcept -> strong_ordering
     {
         auto lhs_size = lhs.size();
         auto rhs_size = rhs.size();
@@ -96,10 +97,18 @@ namespace tempest
         auto result = Traits::compare(lhs.data(), rhs.data(), tempest::min(lhs_size, rhs_size));
         if (result != 0)
         {
-            return result <=> 0;
+            return result < 0 ? strong_ordering::less : strong_ordering::greater;
         }
 
-        return lhs_size <=> rhs_size;
+        if (lhs_size < rhs_size)
+        {
+            return strong_ordering::less;
+        }
+        if (lhs_size > rhs_size)
+        {
+            return strong_ordering::greater;
+        }
+        return strong_ordering::equal;
     }
 
     template <typename CharT, typename Traits>

@@ -1,6 +1,7 @@
 #ifndef tempest_window_handle_hpp
 #define tempest_window_handle_hpp
 
+#include <tempest/compare.hpp>
 #include <tempest/int.hpp>
 
 namespace tempest
@@ -15,7 +16,13 @@ namespace tempest
             return id != 0;
         }
 
-        constexpr auto operator<=>(const window_handle&) const noexcept = default;
+        constexpr auto operator==(const window_handle&) const noexcept -> bool = default;
+        constexpr auto operator<=>(const window_handle& other) const noexcept -> strong_ordering
+        {
+            if (id < other.id) return strong_ordering::less;
+            if (id > other.id) return strong_ordering::greater;
+            return strong_ordering::equal;
+        }
     };
 
     inline constexpr window_handle null_window_handle{0};

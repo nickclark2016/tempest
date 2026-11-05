@@ -5,7 +5,15 @@
 
 #include <tinyexr/tinyexr.h>
 
-#include <cstdlib>
+#ifdef _MSC_VER
+#include <malloc.h>
+#else
+extern "C"
+{
+    void free(void*);
+    void* malloc(tempest::size_t);
+}
+#endif
 
 //=============================================================================
 // Section: TinyEXR Miniz Roundtrip Tests

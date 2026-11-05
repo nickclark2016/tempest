@@ -3,8 +3,6 @@
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/vector.hpp>
-
-#include <cstdio>
 #include <tempest/atomic.hpp>
 
 #define GLFW_INCLUDE_NONE

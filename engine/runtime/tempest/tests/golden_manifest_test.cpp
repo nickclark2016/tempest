@@ -139,6 +139,7 @@ TEST(golden_manifest_test, schema_hash_deterministic_across_registration_order)
     reverse_registry.register_type<tempest::render_system::shadow_caster_component>();
     reverse_registry.register_type<tempest::render_system::point_light_component>();
     reverse_registry.register_type<tempest::render_system::directional_light_component>();
+    reverse_registry.register_type<tempest::render_system::active_camera_component>();
     reverse_registry.register_type<tempest::render_system::camera_component>();
     reverse_registry.register_type<tempest::core::material_component>();
     reverse_registry.register_type<tempest::core::mesh_component>();

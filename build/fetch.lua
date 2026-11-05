@@ -96,7 +96,7 @@ local function fetch_aftermath(cache_dir)
             end
         end
     else
-        p.error('Unsupported target for aftermath: ' .. os.target())
+        premake.error('Unsupported target for aftermath: ' .. os.target())
     end
 end
 

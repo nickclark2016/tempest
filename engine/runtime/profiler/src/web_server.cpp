@@ -29,8 +29,8 @@ constexpr auto shutdown_send = SD_SEND;
 constexpr auto shutdown_both = SD_BOTH;
 #else
 #include <arpa/inet.h>
-#include <cerrno>
-#include <csignal>
+#include <errno.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>

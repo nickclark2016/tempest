@@ -1,5 +1,5 @@
 {
-  "schema_hash": "0x4335495c3e61ebe1",
+  "schema_hash": "0x87bb92396d09fd08",
   "types": [
     {
       "name": "tempest::core::material_component",
@@ -258,6 +258,15 @@
           "size": 16
         }
       ]
+    },
+    {
+      "name": "tempest::render_system::active_camera_component",
+      "size": 1,
+      "alignment": 1,
+      "version": 1,
+      "is_serializable": true,
+      "is_authorable": true,
+      "fields": []
     },
     {
       "name": "tempest::render_system::camera_component",

@@ -10,8 +10,7 @@
 #include <tempest/tempest.hpp>
 #include <tempest/transform_history_system.hpp>
 
-#include <clocale>
-#include <cstdlib>
+#include <locale.h>
 #include <tempest/chrono.hpp>
 
 #ifdef _WIN32

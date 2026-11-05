@@ -241,9 +241,20 @@ namespace tempest::chrono
 
     template <typename Rep1, typename Period1, typename Rep2, typename Period2>
     constexpr auto operator<=>(const duration<Rep1, Period1>& lhs, const duration<Rep2, Period2>& rhs) noexcept
+        -> strong_ordering
     {
         using CD = common_type_t<duration<Rep1, Period1>, duration<Rep2, Period2>>;
-        return CD(lhs).count() <=> CD(rhs).count();
+        const auto lc = CD(lhs).count();
+        const auto rc = CD(rhs).count();
+        if (lc < rc)
+        {
+            return strong_ordering::less;
+        }
+        if (lc > rc)
+        {
+            return strong_ordering::greater;
+        }
+        return strong_ordering::equal;
     }
 
     // Non-member duration arithmetic
@@ -458,6 +469,7 @@ namespace tempest::chrono
     template <typename Clock, typename Duration1, typename Duration2>
     constexpr auto operator<=>(const time_point<Clock, Duration1>& lhs,
                                const time_point<Clock, Duration2>& rhs) noexcept
+        -> strong_ordering
     {
         return lhs.time_since_epoch() <=> rhs.time_since_epoch();
     }

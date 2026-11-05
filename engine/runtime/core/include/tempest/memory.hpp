@@ -9,7 +9,29 @@
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
 
-#include <new>
+#ifndef __PLACEMENT_NEW_INLINE
+#define __PLACEMENT_NEW_INLINE
+inline void* operator new(tempest::size_t, void* ptr) noexcept
+{
+    return ptr;
+}
+
+inline void operator delete(void*, void*) noexcept
+{
+}
+#endif
+
+#ifndef __PLACEMENT_VEC_NEW_INLINE
+#define __PLACEMENT_VEC_NEW_INLINE
+inline void* operator new[](tempest::size_t, void* ptr) noexcept
+{
+    return ptr;
+}
+
+inline void operator delete[](void*, void*) noexcept
+{
+}
+#endif
 
 namespace tempest
 {

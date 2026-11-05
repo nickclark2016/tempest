@@ -29,7 +29,6 @@
 #include <tempest/utility.hpp>
 #include <tempest/vector.hpp>
 
-#include <cstdio>
 
 // ============================================================================
 // Test types for asset_type_id tests

@@ -1,7 +1,7 @@
 #include <tempest/profiler/session.hpp>
 #include <tempest/thread.hpp>
 
-#include <cstdio>
+#include <tempest/format.hpp>
 #include <tempest/int.hpp>
 
 #ifdef _WIN32
@@ -685,9 +685,7 @@ namespace tempest::profiler
 
         if (name.empty())
         {
-            char id_buf[32];
-            snprintf(id_buf, sizeof(id_buf), "Thread-%llu", static_cast<unsigned long long>(tid));
-            name = string(id_buf);
+            name = tempest::format("Thread-{}", tid);
         }
 
         return name;

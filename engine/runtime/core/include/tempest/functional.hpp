@@ -9,7 +9,6 @@
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
 
-#include <new> // needed for placement new
 
 namespace tempest
 {

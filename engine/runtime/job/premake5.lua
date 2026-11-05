@@ -3,7 +3,6 @@ scoped.project('job', function()
 
     language 'C++'
     cppdialect 'C++20'
-    tags { 'non-gpu-test' }
 
     targetdir '%{binaries}'
     objdir '%{intermediates}'

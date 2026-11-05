@@ -3,6 +3,7 @@
 
 #include <tempest/api.hpp>
 #include <tempest/asset_database.hpp>
+#include <tempest/compare.hpp>
 #include <tempest/filesystem.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/inplace_vector.hpp>
@@ -19,21 +20,39 @@ namespace tempest::render_system
     struct shader_module_handle
     {
         uint32_t id{0};
-        auto operator<=>(const shader_module_handle&) const = default;
+        auto operator==(const shader_module_handle&) const noexcept -> bool = default;
+        auto operator<=>(const shader_module_handle& other) const noexcept -> strong_ordering
+        {
+            if (id < other.id) return strong_ordering::less;
+            if (id > other.id) return strong_ordering::greater;
+            return strong_ordering::equal;
+        }
     };
 
     /// @brief Strongly typed handle representing a registered graphics pipeline.
     struct graphics_pipeline_handle
     {
         uint32_t id{0};
-        auto operator<=>(const graphics_pipeline_handle&) const = default;
+        auto operator==(const graphics_pipeline_handle&) const noexcept -> bool = default;
+        auto operator<=>(const graphics_pipeline_handle& other) const noexcept -> strong_ordering
+        {
+            if (id < other.id) return strong_ordering::less;
+            if (id > other.id) return strong_ordering::greater;
+            return strong_ordering::equal;
+        }
     };
 
     /// @brief Strongly typed handle representing a registered compute pipeline.
     struct compute_pipeline_handle
     {
         uint32_t id{0};
-        auto operator<=>(const compute_pipeline_handle&) const = default;
+        auto operator==(const compute_pipeline_handle&) const noexcept -> bool = default;
+        auto operator<=>(const compute_pipeline_handle& other) const noexcept -> strong_ordering
+        {
+            if (id < other.id) return strong_ordering::less;
+            if (id > other.id) return strong_ordering::greater;
+            return strong_ordering::equal;
+        }
     };
 
     /// @brief Descriptor for registering or loading a shader module from a memory blob or disk location.
