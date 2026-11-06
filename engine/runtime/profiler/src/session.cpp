@@ -552,7 +552,7 @@ namespace tempest::profiler
         auto hash_val = hash<uint64_t>{}(tid);
         auto slot_idx = hash_val % max_thread_slots;
 
-        auto occupant = _slots[slot_idx].thread_id.load(memory_order::relaxed);
+        auto occupant = _slots[slot_idx].thread_id.load(memory_order::acquire);
         if (occupant == tid && _slots[slot_idx].context) [[likely]]
         {
             return *_slots[slot_idx].context;

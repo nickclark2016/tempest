@@ -11,6 +11,7 @@
 #include <tempest/job/task.hpp>
 #include <tempest/job/types.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/thread.hpp>
 #include <tempest/utility.hpp>
 
 namespace tempest::job
@@ -50,16 +51,18 @@ namespace tempest::job
                 return;
             }
 
-            auto pw = _producer_waiter.exchange(0, memory_order::acq_rel);
-            if (pw != 0)
+            const auto prod_waiter = _producer_waiter.exchange(0, memory_order::seq_cst);
+            if (prod_waiter != 0)
             {
-                _resume(coroutine_handle<>::from_address(reinterpret_cast<void*>(pw)));
+                // NOLINTNEXTLINE
+                _resume(coroutine_handle<>::from_address(reinterpret_cast<void*>(prod_waiter)));
             }
 
-            auto cw = _consumer_waiter.exchange(0, memory_order::acq_rel);
-            if (cw != 0)
+            const auto consume_waiter = _consumer_waiter.exchange(0, memory_order::seq_cst);
+            if (consume_waiter != 0)
             {
-                _resume(coroutine_handle<>::from_address(reinterpret_cast<void*>(cw)));
+                // NOLINTNEXTLINE
+                _resume(coroutine_handle<>::from_address(reinterpret_cast<void*>(consume_waiter)));
             }
         }
 
@@ -89,10 +92,11 @@ namespace tempest::job
             new (&_storage[(current_head & (Capacity - 1)) * sizeof(T)]) T(forward<U>(value));
             _head.store(current_head + 1, memory_order::release);
 
-            auto cw = _consumer_waiter.exchange(0, memory_order::acq_rel);
-            if (cw != 0)
+            const auto consume_writer = _consumer_waiter.exchange(0, memory_order::seq_cst);
+            if (consume_writer != 0)
             {
-                _resume(coroutine_handle<>::from_address(reinterpret_cast<void*>(cw)));
+                // NOLINTNEXTLINE
+                _resume(coroutine_handle<>::from_address(reinterpret_cast<void*>(consume_writer)));
             }
 
             return true;
@@ -115,10 +119,11 @@ namespace tempest::job
             ptr->~T();
             _tail.store(current_tail + 1, memory_order::release);
 
-            auto pw = _producer_waiter.exchange(0, memory_order::acq_rel);
-            if (pw != 0)
+            const auto produce_writer = _producer_waiter.exchange(0, memory_order::seq_cst);
+            if (produce_writer != 0)
             {
-                _resume(coroutine_handle<>::from_address(reinterpret_cast<void*>(pw)));
+                // NOLINTNEXTLINE
+                _resume(coroutine_handle<>::from_address(reinterpret_cast<void*>(produce_writer)));
             }
 
             return true;
@@ -169,13 +174,25 @@ namespace tempest::job
                 return false;
             }
 
-            auto await_suspend(coroutine_handle<> h) noexcept -> bool
+            auto await_suspend(coroutine_handle<> hnd) noexcept -> bool
             {
-                chan->_producer_waiter.store(reinterpret_cast<uintptr_t>(h.address()), memory_order::release);
-                if (chan->is_closed())
+                const auto waiter_val = reinterpret_cast<uintptr_t>(hnd.address());
+                chan->_producer_waiter.store(waiter_val, memory_order::seq_cst);
+
+                const auto current_head = chan->_head.load(memory_order::relaxed);
+                const auto current_tail = chan->_tail.load(memory_order::seq_cst);
+                const auto has_slot = (current_head - current_tail) < Capacity;
+
+                if (has_slot || chan->is_closed())
                 {
-                    return false;
+                    auto expected = waiter_val;
+                    if (chan->_producer_waiter.compare_exchange_strong(expected, 0, memory_order::seq_cst,
+                                                                       memory_order::relaxed))
+                    {
+                        return false;
+                    }
                 }
+
                 return true;
             }
 
@@ -193,13 +210,25 @@ namespace tempest::job
                 return false;
             }
 
-            auto await_suspend(coroutine_handle<> h) noexcept -> bool
+            auto await_suspend(coroutine_handle<> hnd) noexcept -> bool
             {
-                chan->_consumer_waiter.store(reinterpret_cast<uintptr_t>(h.address()), memory_order::release);
-                if (chan->is_closed())
+                const auto waiter_val = reinterpret_cast<uintptr_t>(hnd.address());
+                chan->_consumer_waiter.store(waiter_val, memory_order::seq_cst);
+
+                const auto current_head = chan->_head.load(memory_order::seq_cst);
+                const auto current_tail = chan->_tail.load(memory_order::relaxed);
+                const auto has_item = (current_tail != current_head);
+
+                if (has_item || chan->is_closed())
                 {
-                    return false;
+                    auto expected = waiter_val;
+                    if (chan->_consumer_waiter.compare_exchange_strong(expected, 0, memory_order::seq_cst,
+                                                                       memory_order::relaxed))
+                    {
+                        return false;
+                    }
                 }
+
                 return true;
             }
 
@@ -218,30 +247,30 @@ namespace tempest::job
             return item_awaiter{.chan = *this};
         }
 
-        auto _resume(coroutine_handle<> h) noexcept -> void
+        auto _resume(coroutine_handle<> hnd) noexcept -> void
         {
             if (_sys != nullptr)
             {
-                _sys->schedule(h);
+                _sys->schedule(hnd);
             }
             else
             {
-                h.resume();
+                hnd.resume();
             }
         }
 
-        alignas(alignof(T)) unsigned char _storage[Capacity * sizeof(T)];
+        alignas(alignof(T)) array<unsigned char, Capacity * sizeof(T)> _storage;
 
-        alignas(64) atomic<size_t> _head{0};
+        alignas(hardware_destructive_interference_size) atomic<size_t> _head{0};
         size_t _cached_tail{0};
         atomic<uintptr_t> _producer_waiter{0};
 
-        alignas(64) atomic<size_t> _tail{0};
+        alignas(hardware_destructive_interference_size) atomic<size_t> _tail{0};
         size_t _cached_head{0};
         atomic<uintptr_t> _consumer_waiter{0};
 
         atomic<bool> _closed{false};
-        job_system* _sys{nullptr};
+        job_system* _sys = nullptr;
     };
 } // namespace tempest::job
 

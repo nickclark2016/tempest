@@ -16,32 +16,41 @@ namespace tempest::job
     enum class event_reset_mode : uint8_t
     {
         auto_reset,
-        manual
+        manual,
     };
 
     struct async_event_waiter : treiber_node<async_event_waiter>
     {
-        coroutine_handle<> handle{nullptr};
-        atomic<wait_state> state{wait_state::completed};
+        coroutine_handle<> handle;
+        atomic<wait_state> state = wait_state::completed;
 
         async_event_waiter() noexcept = default;
-        async_event_waiter(coroutine_handle<> hnd, wait_state st = wait_state::completed) noexcept
-            : handle{hnd}, state{st}
+        async_event_waiter(coroutine_handle<> hnd, wait_state state = wait_state::completed) noexcept
+            : handle{hnd}, state{state}
         {
         }
         async_event_waiter(const async_event_waiter&) = delete;
-        auto operator=(const async_event_waiter&) -> async_event_waiter& = delete;
+
         async_event_waiter(async_event_waiter&& other) noexcept
-            : handle{other.handle}, state{other.state.load(memory_order::relaxed)}
+            : handle{tempest::exchange(other.handle, nullptr)},
+              state{other.state.exchange(wait_state::completed, memory_order::relaxed)}
         {
+            next = tempest::exchange(other.next, nullptr);
         }
+
+        ~async_event_waiter() = default;
+
+        auto operator=(const async_event_waiter&) -> async_event_waiter& = delete;
         auto operator=(async_event_waiter&& other) noexcept -> async_event_waiter&
         {
-            if (this != &other)
+            if (this == &other)
             {
-                handle = other.handle;
-                state.store(other.state.load(memory_order::relaxed), memory_order::relaxed);
+                return *this;
             }
+
+            next = tempest::exchange(other.next, nullptr);
+            handle = tempest::exchange(other.handle, nullptr);
+            state.store(other.state.exchange(wait_state::completed, memory_order::relaxed), memory_order::relaxed);
             return *this;
         }
     };
@@ -68,30 +77,40 @@ namespace tempest::job
         struct TEMPEST_API event_awaiter
         {
             non_null<async_event> event;
-            async_event_waiter waiter{};
+            async_event_waiter waiter;
 
             explicit event_awaiter(non_null<async_event> evt) noexcept : event{evt}
             {
             }
+            
             event_awaiter(const event_awaiter&) = delete;
-            auto operator=(const event_awaiter&) -> event_awaiter& = delete;
-            event_awaiter(event_awaiter&& other) noexcept
-                : event{other.event}, waiter{tempest::move(other.waiter)}
+            event_awaiter(event_awaiter&& other) noexcept : event{other.event}, waiter{tempest::move(other.waiter)}
             {
             }
+
+            ~event_awaiter() noexcept;
+
+            auto operator=(const event_awaiter&) -> event_awaiter& = delete;
             auto operator=(event_awaiter&& other) noexcept -> event_awaiter&
             {
-                if (this != &other)
+                if (this == &other)
                 {
-                    event = other.event;
-                    waiter = tempest::move(other.waiter);
+                    return *this;
                 }
+
+                if (waiter.state.load(memory_order::acquire) != wait_state::completed)
+                {
+                    event->_cancel_waiter(&waiter);
+                }
+
+                event = other.event;
+                waiter = tempest::move(other.waiter);
                 return *this;
             }
-            ~event_awaiter() noexcept;
 
             [[nodiscard]] auto await_ready() const noexcept -> bool;
             auto await_suspend(coroutine_handle<> hnd) noexcept -> bool;
+            
             constexpr auto await_resume() const noexcept -> void
             {
             }
@@ -127,13 +146,13 @@ namespace tempest::job
             return &_sentinel;
         }
 
-        event_reset_mode _mode{event_reset_mode::auto_reset};
+        event_reset_mode _mode = event_reset_mode::auto_reset;
 
         intrusive_mpsc_stack<async_event_waiter> _waiters_in;
-        async_event_waiter* _waiters_out{nullptr};
+        async_event_waiter* _waiters_out = nullptr;
         atomic<bool> _claim{false};
 
-        job_system* _sys{nullptr};
+        job_system* _sys = nullptr;
 
         auto _resume(coroutine_handle<> hnd) noexcept -> void;
         auto _cancel_waiter(async_event_waiter* waiter) noexcept -> void;

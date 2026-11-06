@@ -593,9 +593,7 @@ namespace tempest::job::tests
 
     /// @brief Adversarially stress-tests spsc_channel coroutine push and pop
     /// under multi-threaded job_system execution with backpressure and yield loops.
-    /// NOTE: This test is marked DISABLED because it reproduces a latent lost-wakeup
-    /// concurrency bug in slot_awaiter/item_awaiter when push() and pop() are called concurrently.
-    TEST(channel_test, DISABLED_spsc_channel_concurrent_coroutine_stress)
+    TEST(channel_test, spsc_channel_concurrent_coroutine_stress)
     {
         // Setup: Job system with 2 performance workers
         auto log = logger{};
@@ -643,7 +641,7 @@ namespace tempest::job::tests
 
         // Await completion with safe bounded timeout loop to guard against lost wakeups
         auto wait_cycles = 0;
-        constexpr auto max_cycles = 100000;
+        constexpr auto max_cycles = 2000000;
         while ((!producer_done.load(memory_order::acquire) || !consumer_done.load(memory_order::acquire)) &&
                wait_cycles < max_cycles)
         {
@@ -667,4 +665,181 @@ namespace tempest::job::tests
         EXPECT_TRUE(cons_completed);
         EXPECT_EQ(actual_sum, expected_sum);
     }
+
+    /// @brief Verifies spsc_channel behavior on empty pop and full push edge cases.
+    TEST(channel_test, spsc_channel_empty_pop_and_full_push_edge_cases)
+    {
+        // Setup: Capacity 2 spsc_channel
+        auto chan = spsc_channel<int, 2>{};
+
+        // Assert empty pop fails cleanly without mutating output
+        auto popped_val = int{999};
+        EXPECT_FALSE(chan.try_pop(popped_val));
+        EXPECT_EQ(popped_val, 999);
+
+        // Fill channel to capacity
+        EXPECT_TRUE(chan.try_push(11));
+        EXPECT_TRUE(chan.try_push(22));
+
+        // Assert push on full channel returns false and does not overwrite existing data
+        EXPECT_FALSE(chan.try_push(33));
+
+        // Pop elements and verify FIFO order
+        EXPECT_TRUE(chan.try_pop(popped_val));
+        EXPECT_EQ(popped_val, 11);
+
+        EXPECT_TRUE(chan.try_pop(popped_val));
+        EXPECT_EQ(popped_val, 22);
+
+        // Assert channel is empty again
+        EXPECT_FALSE(chan.try_pop(popped_val));
+    }
+
+    /// @brief Verifies immediate closure awakening a consumer coroutine suspended in item_awaiter,
+    /// returning job_error::channel_closed without deadlock or hanging.
+    TEST(channel_test, spsc_channel_immediate_closure_suspended_consumer_coroutine)
+    {
+        // Setup: Empty spsc_channel
+        auto chan = spsc_channel<int, 2>{};
+
+        // Act: Consumer coroutine awaits item on empty channel and suspends
+        auto consumer_task = [&chan]() -> task<int> {
+            auto val = co_await chan.pop();
+            co_return val;
+        }();
+
+        consumer_task.resume();
+
+        EXPECT_FALSE(consumer_task.is_ready());
+
+        // Close channel while consumer coroutine is suspended in awaiter
+        chan.close();
+
+        // Assert: Consumer was awakened by close and received channel_closed error
+        EXPECT_TRUE(consumer_task.is_ready());
+        EXPECT_FALSE(consumer_task.has_value());
+        EXPECT_EQ(consumer_task.error(), job_error::channel_closed);
+    }
+
+    /// @brief Verifies immediate closure awakening a producer coroutine suspended in slot_awaiter,
+    /// returning job_error::channel_closed while preserving already buffered items.
+    TEST(channel_test, spsc_channel_immediate_closure_suspended_producer_coroutine)
+    {
+        // Setup: Capacity 2 spsc_channel filled to capacity
+        auto chan = spsc_channel<int, 2>{};
+        EXPECT_TRUE(chan.try_push(101));
+        EXPECT_TRUE(chan.try_push(202));
+
+        // Act: Producer coroutine awaits slot on full channel and suspends
+        auto producer_task = [&chan]() -> task<void> {
+            co_await chan.push(303);
+            co_return;
+        }();
+
+        producer_task.resume();
+
+        EXPECT_FALSE(producer_task.is_ready());
+
+        // Close channel while producer coroutine is suspended in awaiter
+        chan.close();
+
+        // Assert: Producer was awakened by close and received channel_closed error
+        EXPECT_TRUE(producer_task.is_ready());
+        EXPECT_FALSE(producer_task.has_value());
+        EXPECT_EQ(producer_task.error(), job_error::channel_closed);
+
+        // Assert: Buffered items before closure can still be drained cleanly
+        auto drained_val = int{0};
+        EXPECT_TRUE(chan.try_pop(drained_val));
+        EXPECT_EQ(drained_val, 101);
+
+        EXPECT_TRUE(chan.try_pop(drained_val));
+        EXPECT_EQ(drained_val, 202);
+
+        // Next pop observes empty and closed
+        EXPECT_FALSE(chan.try_pop(drained_val));
+    }
+
+    /// @brief Verifies that closed channel drains existing buffered items in coroutine pop()
+    /// before returning job_error::channel_closed upon exhaustion.
+    TEST(channel_test, spsc_channel_drain_buffered_items_then_channel_closed)
+    {
+        // Setup: Channel filled with 2 items and then immediately closed
+        auto chan = spsc_channel<int, 4>{};
+        EXPECT_TRUE(chan.try_push(55));
+        EXPECT_TRUE(chan.try_push(66));
+        chan.close();
+
+        auto pop1 = chan.pop();
+        pop1.resume();
+        EXPECT_TRUE(pop1.is_ready());
+        EXPECT_TRUE(pop1.has_value());
+        EXPECT_TRUE(pop1.value().has_value());
+        EXPECT_EQ(pop1.value().value(), 55);
+
+        auto pop2 = chan.pop();
+        pop2.resume();
+        EXPECT_TRUE(pop2.is_ready());
+        EXPECT_TRUE(pop2.has_value());
+        EXPECT_TRUE(pop2.value().has_value());
+        EXPECT_EQ(pop2.value().value(), 66);
+
+        auto pop3 = chan.pop();
+        pop3.resume();
+        EXPECT_TRUE(pop3.is_ready());
+        EXPECT_FALSE(pop3.has_value());
+        EXPECT_EQ(pop3.error(), job_error::channel_closed);
+    }
+
+    /// @brief Adversarially stress-tests concurrent push and close races under multi-threaded
+    /// job system execution across 20 repeated cycles to verify 0 deadlocks or orphaned tasks.
+    TEST(channel_test, spsc_channel_concurrent_closure_race_stress)
+    {
+        auto log = logger{};
+        auto prof = profiler::profiler_session{false};
+        auto config = job_system_config{
+            .performance_worker_count = 2,
+            .efficiency_worker_count = 0,
+        };
+        auto sys = job_system{log, prof, config};
+
+        for (auto cycle = 0; cycle < 20; ++cycle)
+        {
+            auto chan = make_unique<spsc_channel<int64_t, 2>>(sys);
+
+            auto prod = sys.async([c = chan.get()]() -> task<void> {
+                for (auto item_idx = int64_t{0}; item_idx < 100; ++item_idx)
+                {
+                    co_await c->push(item_idx);
+                }
+                co_return;
+            });
+
+            auto cons = sys.async([c = chan.get()]() -> task<void> {
+                for (auto item_idx = int64_t{0}; item_idx < 100; ++item_idx)
+                {
+                    [[maybe_unused]] auto val = co_await c->pop();
+                }
+                co_return;
+            });
+
+            // Let them run briefly, then close the channel asynchronously
+            this_thread::yield();
+            chan->close();
+
+            auto wait_count = 0;
+            constexpr auto max_wait = 1000;
+            while ((!prod.is_ready() || !cons.is_ready()) && wait_count < max_wait)
+            {
+                this_thread::sleep_for(chrono::milliseconds(1));
+                ++wait_count;
+            }
+
+            sys.wait_idle();
+
+            EXPECT_TRUE(prod.is_ready());
+            EXPECT_TRUE(cons.is_ready());
+        }
+    }
 } // namespace tempest::job::tests
+

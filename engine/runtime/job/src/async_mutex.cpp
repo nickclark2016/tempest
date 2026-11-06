@@ -82,22 +82,23 @@ namespace tempest::job
         }
     }
 
-    scoped_lock_guard::scoped_lock_guard(scoped_lock_guard&& other) noexcept : _mutex{other._mutex}
+    scoped_lock_guard::scoped_lock_guard(scoped_lock_guard&& other) noexcept
+        : _mutex{tempest::exchange(other._mutex, nullptr)}
     {
-        other._mutex = nullptr;
     }
 
     auto scoped_lock_guard::operator=(scoped_lock_guard&& other) noexcept -> scoped_lock_guard&
     {
-        if (this != &other)
+        if (this == &other)
         {
-            if (_mutex != nullptr)
-            {
-                _mutex->unlock();
-            }
-            _mutex = other._mutex;
-            other._mutex = nullptr;
+            return *this;
         }
+
+        if (_mutex != nullptr)
+        {
+            _mutex->unlock();
+        }
+        _mutex = tempest::exchange(other._mutex, nullptr);
         return *this;
     }
 
@@ -161,10 +162,10 @@ namespace tempest::job
         }
     }
 
-    auto async_mutex::_cancel_waiter(async_mutex_waiter* target) noexcept -> void
+    auto async_mutex::_cancel_waiter(async_mutex_waiter* waiter) noexcept -> void
     {
         auto expected = wait_state::pending;
-        if (!target->state.compare_exchange_strong(expected, wait_state::cancelled, memory_order::acq_rel))
+        if (!waiter->state.compare_exchange_strong(expected, wait_state::cancelled, memory_order::acq_rel))
         {
             if (expected == wait_state::completed)
             {
@@ -191,15 +192,15 @@ namespace tempest::job
         auto** curr = &_waiters_out;
         while (*curr != nullptr)
         {
-            if (*curr == target)
+            if (*curr == waiter)
             {
-                *curr = target->next;
+                *curr = waiter->next;
                 break;
             }
-            curr = &((*curr)->next);
+            curr = addressof((*curr)->next);
         }
 
-        target->state.store(wait_state::retired, memory_order::release);
+        waiter->state.store(wait_state::retired, memory_order::release);
         _claim.store(false, memory_order::release);
     }
 

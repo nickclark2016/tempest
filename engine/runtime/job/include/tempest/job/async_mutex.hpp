@@ -15,27 +15,37 @@ namespace tempest::job
 {
     struct async_mutex_waiter : treiber_node<async_mutex_waiter>
     {
-        coroutine_handle<> handle{nullptr};
+        coroutine_handle<> handle;
         atomic<wait_state> state{wait_state::completed};
 
         async_mutex_waiter() noexcept = default;
-        async_mutex_waiter(coroutine_handle<> hnd, wait_state st = wait_state::completed) noexcept
-            : handle{hnd}, state{st}
+        async_mutex_waiter(coroutine_handle<> hnd, wait_state state = wait_state::completed) noexcept
+            : handle{hnd}, state{state}
         {
         }
+
         async_mutex_waiter(const async_mutex_waiter&) = delete;
-        auto operator=(const async_mutex_waiter&) -> async_mutex_waiter& = delete;
         async_mutex_waiter(async_mutex_waiter&& other) noexcept
-            : handle{other.handle}, state{other.state.load(memory_order::relaxed)}
+            : handle{tempest::exchange(other.handle, nullptr)},
+              state{other.state.exchange(wait_state::completed, memory_order::relaxed)}
         {
+            next = tempest::exchange(other.next, nullptr);
         }
+
+        ~async_mutex_waiter() = default;
+
+        auto operator=(const async_mutex_waiter&) -> async_mutex_waiter& = delete;
+
         auto operator=(async_mutex_waiter&& other) noexcept -> async_mutex_waiter&
         {
-            if (this != &other)
+            if (this == &other)
             {
-                handle = other.handle;
-                state.store(other.state.load(memory_order::relaxed), memory_order::relaxed);
+                return *this;
             }
+
+            next = tempest::exchange(other.next, nullptr);
+            handle = tempest::exchange(other.handle, nullptr);
+            state.store(other.state.exchange(wait_state::completed, memory_order::relaxed), memory_order::relaxed);
             return *this;
         }
     };
@@ -58,7 +68,7 @@ namespace tempest::job
 
         explicit scoped_lock_guard(async_mutex& mtx) noexcept;
 
-        async_mutex* _mutex{nullptr};
+        async_mutex* _mutex = nullptr;
     };
 
     class job_system;
@@ -83,27 +93,36 @@ namespace tempest::job
         struct TEMPEST_API lock_awaiter
         {
             non_null<async_mutex> mutex;
-            async_mutex_waiter waiter{};
+            async_mutex_waiter waiter;
 
             explicit lock_awaiter(non_null<async_mutex> mtx) noexcept : mutex{mtx}
             {
             }
+
             lock_awaiter(const lock_awaiter&) = delete;
-            auto operator=(const lock_awaiter&) -> lock_awaiter& = delete;
-            lock_awaiter(lock_awaiter&& other) noexcept
-                : mutex{other.mutex}, waiter{tempest::move(other.waiter)}
+
+            lock_awaiter(lock_awaiter&& other) noexcept : mutex{other.mutex}, waiter{tempest::move(other.waiter)}
             {
-            }
-            auto operator=(lock_awaiter&& other) noexcept -> lock_awaiter&
-            {
-                if (this != &other)
-                {
-                    mutex = other.mutex;
-                    waiter = tempest::move(other.waiter);
-                }
-                return *this;
             }
             ~lock_awaiter() noexcept;
+
+            auto operator=(const lock_awaiter&) -> lock_awaiter& = delete;
+            auto operator=(lock_awaiter&& other) noexcept -> lock_awaiter&
+            {
+                if (this == &other)
+                {
+                    return *this;
+                }
+
+                if (waiter.state.load(memory_order::acquire) != wait_state::completed)
+                {
+                    mutex->_cancel_waiter(&waiter);
+                }
+
+                mutex = other.mutex;
+                waiter = tempest::move(other.waiter);
+                return *this;
+            }
 
             [[nodiscard]] auto await_ready() const noexcept -> bool
             {
@@ -125,7 +144,7 @@ namespace tempest::job
         struct TEMPEST_API scoped_lock_awaiter
         {
             non_null<async_mutex> mutex;
-            async_mutex_waiter waiter{};
+            async_mutex_waiter waiter;
 
             explicit scoped_lock_awaiter(non_null<async_mutex> mtx) noexcept : mutex{mtx}
             {
@@ -138,11 +157,18 @@ namespace tempest::job
             }
             auto operator=(scoped_lock_awaiter&& other) noexcept -> scoped_lock_awaiter&
             {
-                if (this != &other)
+                if (this == &other)
                 {
-                    mutex = other.mutex;
-                    waiter = tempest::move(other.waiter);
+                    return *this;
                 }
+
+                if (waiter.state.load(memory_order::acquire) != wait_state::completed)
+                {
+                    mutex->_cancel_waiter(&waiter);
+                }
+
+                mutex = other.mutex;
+                waiter = tempest::move(other.waiter);
                 return *this;
             }
             ~scoped_lock_awaiter() noexcept;
@@ -181,7 +207,7 @@ namespace tempest::job
 
         auto _enqueue_waiter(async_mutex_waiter* waiter, coroutine_handle<> hnd) noexcept -> bool;
 
-        async_mutex_waiter _sentinel{};
+        async_mutex_waiter _sentinel;
 
         [[nodiscard]] auto _locked_sentinel() noexcept -> async_mutex_waiter*
         {
@@ -194,9 +220,9 @@ namespace tempest::job
         }
 
         intrusive_mpsc_stack<async_mutex_waiter> _waiters_in;
-        async_mutex_waiter* _waiters_out{nullptr};
+        async_mutex_waiter* _waiters_out = nullptr;
         atomic<bool> _claim{false};
-        job_system* _sys{nullptr};
+        job_system* _sys = nullptr;
 
         auto _resume(coroutine_handle<> hnd) noexcept -> void;
         auto _drain_in_to_out_locked() noexcept -> void;

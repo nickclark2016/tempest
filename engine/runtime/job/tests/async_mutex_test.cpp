@@ -467,4 +467,99 @@ namespace tempest::job::tests
         // Assert: Did not crash or hang
         EXPECT_FALSE(ran);
     }
+
+    // =========================================================================
+    // SECTION: Move Semantics & Self-Assignment Invariants
+    // =========================================================================
+
+    /// @brief Verifies that scoped_lock_guard move construction transfers lock
+    ///        ownership and resets the source guard to null via tempest::exchange.
+    TEST(async_mutex_test, scoped_lock_guard_move_construction)
+    {
+        // Setup
+        auto mtx = async_mutex{};
+
+        // Act & Assert in coroutine
+        auto test_coro = [&mtx]() -> task<void> {
+            auto guard1 = co_await mtx.scoped_lock();
+            EXPECT_FALSE(mtx.try_lock());
+
+            // Move construct guard2 from guard1
+            auto guard2 = tempest::move(guard1);
+            EXPECT_FALSE(mtx.try_lock()); // Mutex remains held by guard2
+
+            co_return;
+        };
+
+        auto t = test_coro();
+        t.resume();
+        EXPECT_TRUE(t.is_ready());
+        EXPECT_TRUE(mtx.try_lock()); // Released upon guard2 destruction
+        mtx.unlock();
+    }
+
+    /// @brief Verifies that scoped_lock_guard move assignment releases any previous
+    ///        lock and adopts the new lock, cleanly resetting the source.
+    TEST(async_mutex_test, scoped_lock_guard_move_assignment)
+    {
+        // Setup
+        auto mtx1 = async_mutex{};
+        auto mtx2 = async_mutex{};
+
+        auto test_coro = [&mtx1, &mtx2]() -> task<void> {
+            auto guard1 = co_await mtx1.scoped_lock();
+            auto guard2 = co_await mtx2.scoped_lock();
+
+            EXPECT_FALSE(mtx1.try_lock());
+            EXPECT_FALSE(mtx2.try_lock());
+
+            // Move-assign guard2 into guard1: mtx1 should be unlocked, mtx2 transferred
+            guard1 = tempest::move(guard2);
+
+            EXPECT_TRUE(mtx1.try_lock());  // mtx1 was released by guard1
+            EXPECT_FALSE(mtx2.try_lock()); // mtx2 is still held by guard1
+            mtx1.unlock();
+
+            co_return;
+        };
+
+        auto t = test_coro();
+        t.resume();
+        EXPECT_TRUE(t.is_ready());
+        EXPECT_TRUE(mtx2.try_lock()); // Released upon guard1 destruction
+        mtx2.unlock();
+    }
+
+    /// @brief Verifies that scoped_lock_guard self-assignment is an idempotent no-op
+    ///        handled by the inverted guard clause without unlocking the mutex.
+    TEST(async_mutex_test, scoped_lock_guard_self_assignment_noop)
+    {
+        // Setup
+        auto mtx = async_mutex{};
+
+        auto test_coro = [&mtx]() -> task<void> {
+            auto guard = co_await mtx.scoped_lock();
+            EXPECT_FALSE(mtx.try_lock());
+
+            // Self-move assignment
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wself-move"
+#endif
+            guard = tempest::move(guard);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+
+            // Mutex must still be held
+            EXPECT_FALSE(mtx.try_lock());
+            co_return;
+        };
+
+        auto t = test_coro();
+        t.resume();
+        EXPECT_TRUE(t.is_ready());
+        EXPECT_TRUE(mtx.try_lock());
+        mtx.unlock();
+    }
 } // namespace tempest::job::tests
