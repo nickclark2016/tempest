@@ -3,9 +3,11 @@
 
 #include <tempest/api.hpp>
 #include <tempest/functional.hpp>
+#include <tempest/int.hpp>
 #include <tempest/meta.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
+
 
 namespace tempest
 {
@@ -447,7 +449,7 @@ namespace std
     template <typename T>
     struct tuple_size;
 
-    template <size_t I, typename T>
+    template <tempest::size_t I, typename T>
     struct tuple_element;
 
     template <typename... Ts>
@@ -460,13 +462,13 @@ namespace std
     {
     };
 
-    template <size_t I, typename... Ts>
+    template <tempest::size_t I, typename... Ts>
     struct tuple_element<I, tempest::tuple<Ts...>>
     {
         using type = tempest::tuple_element<I, tempest::tuple<Ts...>>::type;
     };
 
-    template <size_t I, typename... Ts>
+    template <tempest::size_t I, typename... Ts>
     struct tuple_element<I, const tempest::tuple<Ts...>>
     {
         using type = tempest::tuple_element<I, const tempest::tuple<Ts...>>::type;
