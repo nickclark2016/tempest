@@ -359,3 +359,41 @@ TEST(project_workspace_tests, cache_rebuild_preserves_guids)
     // Teardown: Clean up test files
     tempest::filesystem::remove_all(temp_dir);
 }
+
+/// @brief Verifies that load_from_file gracefully recovers when root_directory points
+/// to a non-existent or foreign path, falling back to the .tproject file's parent directory.
+TEST(project_workspace_test, load_from_file_recovers_from_non_existent_root_directory)
+{
+    // Setup: Create a temporary directory and a .tproject with a non-existent root_directory
+    const auto temp_dir = tempest::filesystem::temp_directory_path() / "tempest_test_nonexistent_root";
+    tempest::filesystem::create_directories(temp_dir);
+
+    const auto project_file_path = (temp_dir / "game.tproject").generic_string();
+
+    auto original_workspace = tempest::assets::project_workspace{};
+    original_workspace.name = "ForeignProject";
+    original_workspace.root_directory = "Z:/NonExistent/Drive/Foreign/Path";
+    original_workspace.mounts.push_back(tempest::assets::mount_point{
+        .path = "assets",
+        .priority = 0,
+        .alias = "assets",
+    });
+
+    const auto save_result = original_workspace.save_to_file(project_file_path);
+    ASSERT_TRUE(save_result);
+
+    // Act: Load the workspace from file
+    auto loaded_workspace = tempest::assets::project_workspace{};
+    const auto load_result = loaded_workspace.load_from_file(project_file_path);
+    ASSERT_TRUE(load_result);
+
+    // Assert: root_directory fell back to the .tproject file's parent directory
+    EXPECT_EQ(loaded_workspace.root_directory, temp_dir.generic_string());
+    EXPECT_EQ(loaded_workspace.name, original_workspace.name);
+    ASSERT_EQ(loaded_workspace.mounts.size(), 1u);
+    EXPECT_EQ(loaded_workspace.mounts[0].path, "assets");
+
+    // Teardown: Clean up test files
+    tempest::filesystem::remove_all(temp_dir);
+}
+

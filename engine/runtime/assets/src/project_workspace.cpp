@@ -255,9 +255,19 @@ namespace tempest::assets
         }
 
         *this = tempest::move(*ws_opt);
-        if (root_directory.empty())
+        const auto tproject_parent = filesystem::path(tproject_path).parent_path();
+        if (root_directory.empty() || !filesystem::exists(filesystem::path(root_directory)))
         {
-            root_directory = filesystem::path(tproject_path).parent_path().generic_string();
+            if (!root_directory.empty() && filesystem::path(root_directory).is_relative() && !tproject_parent.empty())
+            {
+                const auto combined = tproject_parent / filesystem::path(root_directory);
+                if (filesystem::exists(combined))
+                {
+                    root_directory = combined.generic_string();
+                    return true;
+                }
+            }
+            root_directory = tproject_parent.empty() ? "." : tproject_parent.generic_string();
         }
 
         return true;

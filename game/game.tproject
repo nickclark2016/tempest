@@ -1,6 +1,6 @@
 {
   "name": "game",
-  "root_directory": "D:/Code/tempest/game",
+  "root_directory": "",
   "mounts": [
     {
       "path": "assets",
@@ -9,7 +9,7 @@
     }
   ],
   "startup_scene": {
-    "path": ""
+    "path": "assets/scenes/main.tscene"
   },
   "bake_settings": {
     "output_directory": "baked",

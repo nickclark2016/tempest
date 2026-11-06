@@ -389,6 +389,58 @@ namespace tempest::editor::tests
         static_cast<void>(fs::remove_all(base_dir));
     }
 
+    /// @brief Verifies that rebuild_from_workspace correctly discovers and populates nested subdirectories
+    /// and files under mount roots.
+    TEST(project_tree_model_test, rebuild_from_workspace_populates_subdirectories)
+    {
+        // Setup: Create a directory structure with subdirectories and scene files
+        const auto base_dir = fs::temp_directory_path() / "tempest_test_tree_subdirs";
+        static_cast<void>(fs::remove_all(base_dir));
+        const auto assets_dir = base_dir / "assets";
+        const auto scenes_dir = assets_dir / "scenes";
+        ASSERT_TRUE(fs::create_directories(scenes_dir));
+        ASSERT_TRUE(write_dummy_file(scenes_dir / "main.tscene"));
+
+        auto workspace = assets::project_workspace{};
+        workspace.name = "GameProject";
+        workspace.root_directory = base_dir.generic_string();
+        workspace.mounts.push_back(assets::mount_point{
+            .path = "assets",
+            .alias = "assets",
+        });
+
+        // Act: Rebuild model from workspace
+        auto model = project_tree_model{};
+        model.rebuild_from_workspace(workspace);
+
+        // Assert: Mount root has scenes subdirectory as child
+        ASSERT_EQ(model.roots().size(), 1u);
+        const auto* root = model.roots().front().get();
+        ASSERT_NE(root, nullptr);
+        EXPECT_EQ(root->name, "assets");
+        ASSERT_EQ(root->children.size(), 1u);
+
+        const auto* scenes_node = root->children.front().get();
+        ASSERT_NE(scenes_node, nullptr);
+        EXPECT_EQ(scenes_node->name, "scenes");
+        EXPECT_EQ(scenes_node->kind, tree_node_kind::directory);
+        ASSERT_EQ(scenes_node->children.size(), 1u);
+
+        const auto* scene_file_node = scenes_node->children.front().get();
+        ASSERT_NE(scene_file_node, nullptr);
+        EXPECT_EQ(scene_file_node->name, "main.tscene");
+
+        // Assert: scenes is in visible rows because root is expanded by default
+        const auto rows = model.visible_rows();
+        ASSERT_GE(rows.size(), 2u);
+        EXPECT_EQ(rows[0].display_label, "assets");
+        EXPECT_EQ(rows[1].display_label, "scenes");
+        EXPECT_TRUE(rows[1].has_children);
+
+        // Teardown
+        static_cast<void>(fs::remove_all(base_dir));
+    }
+
     /// @brief Verifies that move construction and move assignment transfer root nodes and asset database pointer,
     /// while resetting the source model to an empty state.
     TEST(project_tree_model_test, move_operations_transfer_roots_and_db)
