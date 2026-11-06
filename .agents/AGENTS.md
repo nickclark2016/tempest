@@ -99,10 +99,10 @@ When executing multi-milestone plans or tasks with sync gates:
 ### 3. Subagent Delegation, Dual/Triple-Toolchain Verification & Audit Gates
 When delegating work to subagents or executing multi-component milestones:
 - **Sequential Subagent Execution**: Subagents for interdependent components must run sequentially so each subagent builds upon verified, stable code.
-- **Multi-Toolchain Build & Test Gate**: At the completion of every subagent task and milestone, verify that all three supported toolchains compile cleanly with 0 warnings and execute their test suites:
+- **Multi-Toolchain Build & Test Gate**: At the completion of every subagent task and milestone, verify that all three supported toolchains compile cleanly with 0 warnings and execute their test suites (run MSBuild builds and test executables with `BypassSandbox: true`):
   1. **Ninja + Clang**: `& "C:\Program Files\Git\bin\bash.exe" -l -c "ninja -C build/ninja <target>"`
-  2. **Visual Studio 2022 (MSVC `v143`)**: `msbuild build/vs2022/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
-  3. **Visual Studio 2026 (MSVC `v145`)**: `& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" build/vs2026/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
+  2. **Visual Studio 2022 (MSVC `v143`) [BypassSandbox: true]**: `msbuild build/vs2022/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
+  3. **Visual Studio 2026 (MSVC `v145`) [BypassSandbox: true]**: `& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" build/vs2026/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
 - **Parent Agent Audit Gate (Senior Reviewer Role)**: The parent agent must NEVER passively merge or rubber-stamp a subagent's changes simply because tests pass. The parent agent must explicitly inspect the subagent's diff and audit for:
   1. *Subagent Shortcuts & Compiler Hacks*: Watch for `const_cast` on immutable/storage pointers, unvalidated bounds, unchecked optional dereferences, or swallowed error codes introduced to force compilation.
   2. *Engine Idioms & Invariants*: Enforce proper ECS mutator APIs (`assign_or_replace`), copy-initialization syntax (`=`), named default constants, and strict prohibition of `std::` symbols.
@@ -142,15 +142,20 @@ Whenever modifying the job system, thread pool, work queues, coroutines, or sync
 - **Ninja on Windows**: Ninja build files contain POSIX shell pre/post-build steps (`sh -c 'mkdir -p ...'`). Always invoke Ninja via Git Bash with a login shell:
   `& "C:\Program Files\Git\bin\bash.exe" -l -c "ninja -C build/ninja <target>"`
   *(Do NOT use plain `ninja` from PowerShell, and do NOT invoke WSL `bash.exe` which lacks Windows LLVM/Clang in PATH).*
-- **Visual Studio (MSBuild)**: Build the specific target project directly rather than passing `/t:<target>` to `Tempest.sln` (which fails on dependencies with `MSB4057`):
-  - **VS 2022 (`v143`)**: `msbuild build/vs2022/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
-  - **VS 2026 (`v145`)**: `& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" build/vs2026/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
+- **Visual Studio (MSBuild) [Mandatory Unsandboxed Execution `BypassSandbox: true`]**: Always run MSBuild with `BypassSandbox: true`. MSBuild requires access to external Visual Studio toolsets, system registries, temporary folders, and multi-process worker nodes (`/m`) which fail or hang inside the standard sandbox. Build the specific target project directly rather than passing `/t:<target>` to `Tempest.sln` (which fails on dependencies with `MSB4057`):
+  - **VS 2022 (`v143`) [BypassSandbox: true]**: `msbuild build/vs2022/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
+  - **VS 2026 (`v145`) [BypassSandbox: true]**: `& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\amd64\MSBuild.exe" build/vs2026/<target>.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`
 
 #### Running Test Executables
-- **Clang Outputs**: `bin/Debug/windows-clang/<target>.exe`
-- **MSVC Outputs (VS 2022)**: `bin/Debug/windows-msc-v143/<target>.exe`
-- **MSVC Outputs (VS 2026)**: `bin/Debug/windows-msc-v145/<target>.exe`
-- Run test executables and `git` commands directly in PowerShell without Git Bash.
+- **Mandatory Unsandboxed Execution (`BypassSandbox: true`)**: Always execute test binaries with `BypassSandbox: true`. This ensures test processes run directly in the host user session, allowing host diagnostics, profiling tools, and process monitoring utilities (like `tasklist` and `Get-Process`) to observe and manage them.
+  - **Clang Outputs**: `bin/Debug/windows-clang/<target>.exe`
+  - **MSVC Outputs (VS 2022)**: `bin/Debug/windows-msc-v143/<target>.exe`
+  - **MSVC Outputs (VS 2026)**: `bin/Debug/windows-msc-v145/<target>.exe`
+  - Pass any `--gtest_filter=...` or `--gtest_brief=1` flags directly.
+  - Run test executables directly in PowerShell without Git Bash.
+
+#### Process Inspection & Diagnostics
+- When checking on running tests or inspecting background test runs, run `tasklist` or `Get-Process` with `BypassSandbox: true` so it queries the host session.
 
 #### Commit Messages
 - Single line under 80 characters.
