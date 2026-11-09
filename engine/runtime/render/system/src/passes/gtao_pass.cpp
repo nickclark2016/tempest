@@ -73,7 +73,7 @@ namespace tempest::render_system
                                                                     .store_op = rhi::store_op::store,
                                                                     .clear_value =
                                                                         rhi::clear_color_value{
-                                                                            .r = 0.0F,
+                                                                            .r = 1.0F, // GTAO raw red channel, 1.0 = no occlusion
                                                                             .g = 0.0F,
                                                                             .b = 0.0F,
                                                                             .a = 0.0F,
