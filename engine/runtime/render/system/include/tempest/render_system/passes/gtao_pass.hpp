@@ -30,7 +30,14 @@ namespace tempest::render_system
         float radius;
         float thickness;
         float power;
+
+        uint32_t _pad0;
+        uint32_t _pad1;
+        uint32_t _pad2;
     };
+
+    // NOLINTNEXTLINE -- Ensure the size of the push constants struct is as expected for GPU compatibility
+    static_assert(sizeof(gtao_push_constants) == 48, "gtao_push_constants must be 48 bytes in size");
 
     TEMPEST_API auto add_gtao_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
                                    render_graph::rg_texture_id depth_tex, uint32_t slice_count,

@@ -14,8 +14,8 @@ namespace tempest::render_system
         auto gtao_pipeline_handle_res = shaders.find_graphics_pipeline("gtao_pipeline");
         if (!gtao_pipeline_handle_res)
         {
-            auto vert_shader = shaders.register_shader_module("gtao.vert.spv", rhi::shader_stage::vertex);
-            auto frag_shader = shaders.register_shader_module("gtao.frag.spv", rhi::shader_stage::fragment);
+            auto vert_shader = shaders.register_shader_module("gtao.vert.spv", rhi::shader_stage::vertex, "VSMain");
+            auto frag_shader = shaders.register_shader_module("gtao.frag.spv", rhi::shader_stage::fragment, "FSMain");
             auto stages = array{vert_shader, frag_shader};
             auto color_formats = array{rhi::data_format::r8_unorm};
 
@@ -26,7 +26,7 @@ namespace tempest::render_system
                 .rasterization_state =
                     {
                         .polygon_mode = rhi::polygon_mode::fill,
-                        .cull_mode = rhi::cull_mode::back,
+                        .cull_mode = rhi::cull_mode::none,
                         .front_face = rhi::vertex_winding_order::counter_clockwise,
                     },
                 .depth_stencil_state =
