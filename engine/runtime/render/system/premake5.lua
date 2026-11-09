@@ -105,7 +105,7 @@ scoped.project('render-system', function()
             'options:debug-shaders'
         }, function()
             buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O0 -g3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O0 -g3 -Wno-39001',
             }
         end)
 
@@ -114,7 +114,7 @@ scoped.project('render-system', function()
             'configurations:Release'
         }, function()
             buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3 -Wno-39001',
             }
         end)
 
@@ -123,7 +123,7 @@ scoped.project('render-system', function()
             'configurations:not Release'
         }, function()
             buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3 -g3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3 -g3 -Wno-39001',
             }
         end)
 
@@ -143,8 +143,8 @@ scoped.project('render-system', function()
             'options:debug-shaders'
         }, function()
             buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O0 -g3',
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.frag.spv -entry FSMain -O0 -g3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O0 -g3 -Wno-39001',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.frag.spv -entry FSMain -O0 -g3 -Wno-39001',
             }
         end)
 
@@ -153,8 +153,8 @@ scoped.project('render-system', function()
             'configurations:Release'
         }, function()
             buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3',
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.frag.spv -entry FSMain -O3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3 -Wno-39001',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.frag.spv -entry FSMain -O3 -Wno-39001',
             }
         end)
 
@@ -163,8 +163,8 @@ scoped.project('render-system', function()
             'configurations:not Release'
         }, function()
             buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3 -g3',
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.frag.spv -entry FSMain -O3 -g3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3 -g3 -Wno-39001',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.frag.spv -entry FSMain -O3 -g3 -Wno-39001',
             }
         end)
 

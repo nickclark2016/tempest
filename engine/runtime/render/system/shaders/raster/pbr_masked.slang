@@ -28,6 +28,7 @@ struct FragmentOutput {
 };
 
 [shader("vertex")]
+[require(spvGroupNonUniformBallot)]
 VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID,
                     uint start_instance : SV_StartInstanceLocation) {
     SceneGlobals* scene = (SceneGlobals*)push_constants.scene_constants_address;
@@ -37,6 +38,7 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 
 [shader("fragment")]
 [earlydepthstencil]
+[require(spvGroupNonUniformBallot)]
 FragmentOutput FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
     SceneGlobals* scene = (SceneGlobals*)push_constants.scene_constants_address;
     Material* mat = (Material*)input.material_address;
