@@ -4,22 +4,40 @@
 
 namespace tempest::render_system
 {
+    namespace
+    {
+        struct transparency_resolve_push_constants
+        {
+            uint64_t scene_constants_address{0};
+            uint64_t objects_address{0};
+            uint64_t instance_indices_address{0};
+            uint64_t directional_shadow_address{0};
+            uint64_t light_bitmask_address{0};
+            int32_t moments_storage_index{-1};
+            int32_t zeroth_moment_storage_index{-1};
+            int32_t linear_sampler_index{0};
+            int32_t point_sampler_index{-1};
+            int32_t ao_texture_index{-1};
+            int32_t shadow_atlas_index{-1};
+        };
+    } // namespace
+
     auto add_transparency_resolve_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
-                                       render_graph::rg_texture_id accum_tex, render_graph::rg_texture_id moments_tex,
-                                       render_graph::rg_texture_id zeroth_moment_tex,
-                                       render_graph::rg_texture_id depth_tex, uint32_t draw_count, uint32_t draw_offset,
-                                       render_graph::rg_texture_id shadow_atlas,
-                                       render_graph::rg_buffer_id light_bitmask_buf,
-                                       enum_mask<rhi::pipeline_statistic_flags> pipeline_stats,
-                                       uint64_t directional_shadow_address)
+                                       transparency_resolve_inputs inputs,
+                                       enum_mask<rhi::pipeline_statistic_flags> pipeline_stats)
         -> const transparency_resolve_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_oit_resolve_pipeline");
         if (!pipe_h.has_value())
         {
-            auto vs = shaders.register_shader_module("pbr_oit_resolve.vert.spv", rhi::shader_stage::vertex, "VSMain");
-            auto fs = shaders.register_shader_module("pbr_oit_resolve.frag.spv", rhi::shader_stage::fragment, "FSMain");
-            auto stages = array{vs, fs};
+            auto vert_shader =
+                shaders.register_shader_module("pbr_oit_resolve.vert.spv", rhi::shader_stage::vertex, "VSMain");
+            auto frag_shader =
+                shaders.register_shader_module("pbr_oit_resolve.frag.spv", rhi::shader_stage::fragment, "FSMain");
+            auto stages = array{
+                vert_shader,
+                frag_shader,
+            };
             auto color_formats = array{rhi::data_format::rgba16_float};
             auto blend_states = array{
                 rhi::attachment_blend_state{
@@ -58,37 +76,40 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<transparency_resolve_pass_data>(
             "TransparencyResolvePass",
-            [&pool, accum_tex, moments_tex, zeroth_moment_tex, depth_tex, shadow_atlas, draw_count, draw_offset,
-             light_bitmask_buf,
-             pipeline_stats](render_graph::pass_builder& builder, transparency_resolve_pass_data& data) {
+            [&pool, inputs, pipeline_stats](render_graph::pass_builder& builder, transparency_resolve_pass_data& data) {
                 if (pipeline_stats != rhi::pipeline_statistic_flags::none)
                 {
                     builder.enable_pipeline_statistics(pipeline_stats);
                 }
 
                 data.accum_texture = builder.set_color_attachment(0, render_graph::rg_color_attachment{
-                                                                         .texture = accum_tex,
+                                                                         .texture = inputs.accum_texture,
                                                                          .load_op = rhi::load_op::clear,
                                                                          .store_op = rhi::store_op::store,
                                                                          .clear_value = {0.0F, 0.0F, 0.0F, 0.0F},
                                                                      });
 
                 data.depth_texture = builder.set_depth_stencil_attachment(render_graph::rg_depth_stencil_attachment{
-                    .texture = depth_tex,
+                    .texture = inputs.depth_texture,
                     .depth_load_op = rhi::load_op::load,
                     .depth_store_op = rhi::store_op::store,
                 });
 
-                data.moments_texture = builder.read(moments_tex, rhi::pipeline_stage::fragment,
+                data.moments_texture = builder.read(inputs.moments_texture, rhi::pipeline_stage::fragment,
                                                     rhi::resource_access::read, rhi::image_layout::general);
-                data.zeroth_moment_texture = builder.read(zeroth_moment_tex, rhi::pipeline_stage::fragment,
+                data.zeroth_moment_texture = builder.read(inputs.zeroth_moment_texture, rhi::pipeline_stage::fragment,
                                                           rhi::resource_access::read, rhi::image_layout::general);
 
-                if (shadow_atlas.id != 0)
+                if (inputs.shadow_atlas.id != 0)
                 {
-                    data.shadow_atlas =
-                        builder.read(shadow_atlas, rhi::pipeline_stage::fragment, rhi::resource_access::read,
-                                     rhi::image_layout::general);
+                    data.shadow_atlas = builder.read(inputs.shadow_atlas, rhi::pipeline_stage::fragment,
+                                                     rhi::resource_access::read, rhi::image_layout::general);
+                }
+
+                if (inputs.ao_texture.is_valid())
+                {
+                    data.ao_texture = builder.read(inputs.ao_texture, rhi::pipeline_stage::fragment,
+                                                   rhi::resource_access::read, rhi::image_layout::general);
                 }
 
                 data.scene_constants = builder.import_buffer(pool.get_scene_constants_buffer());
@@ -109,18 +130,17 @@ namespace tempest::render_system
                 data.vertex_buffer =
                     builder.read(data.vertex_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
 
-                if (light_bitmask_buf.is_valid())
+                if (inputs.light_bitmask_buffer.is_valid())
                 {
-                    data.light_bitmask_buffer =
-                        builder.read(light_bitmask_buf, rhi::pipeline_stage::fragment, rhi::resource_access::read);
+                    data.light_bitmask_buffer = builder.read(inputs.light_bitmask_buffer, rhi::pipeline_stage::fragment,
+                                                             rhi::resource_access::read);
                 }
 
-                data.draw_count = draw_count;
-                data.draw_offset = draw_offset;
+                data.draw_count = inputs.draw_count;
+                data.draw_offset = inputs.draw_offset;
             },
-            [&pool, &shaders, pipe, directional_shadow_address](const transparency_resolve_pass_data& data,
-                                                                render_graph::pass_execution_context& ctx,
-                                                                rhi::command_list& pass_cmd) {
+            [&pool, &shaders, pipe, inputs](const transparency_resolve_pass_data& data,
+                                            render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0)
                 {
                     return;
@@ -154,8 +174,9 @@ namespace tempest::render_system
                     bitmask_gpu_addr = ctx.get_buffer(data.light_bitmask_buffer).gpu_address;
                 }
 
-                const auto shadow_addr = (directional_shadow_address != 0) ? directional_shadow_address
-                                                                           : pool.get_directional_shadow_address();
+                const auto shadow_addr = (inputs.directional_shadow_address != 0)
+                                             ? inputs.directional_shadow_address
+                                             : pool.get_directional_shadow_address();
 
                 const auto constants = transparency_resolve_push_constants{
                     .scene_constants_address = pool.get_scene_constants_address(),
@@ -166,8 +187,10 @@ namespace tempest::render_system
                     .moments_storage_index = moments_idx,
                     .zeroth_moment_storage_index = zeroth_idx,
                     .linear_sampler_index = static_cast<int32_t>(pool.get_linear_sampler_descriptor().index),
-                    .point_sampler_index = -1,
-                    .ssao_texture_index = -1,
+                    .point_sampler_index = static_cast<int32_t>(pool.get_point_sampler_descriptor().index),
+                    .ao_texture_index = (data.ao_texture.id != 0)
+                                            ? static_cast<int32_t>(ctx.get_texture_descriptor(data.ao_texture))
+                                            : -1,
                     .shadow_atlas_index = shadow_atlas_idx,
                 };
 
@@ -175,7 +198,7 @@ namespace tempest::render_system
                                         span<const byte>{reinterpret_cast<const byte*>(&constants), sizeof(constants)});
 
                 const auto byte_offset = pool.get_draw_commands_buffer_offset() +
-                                         static_cast<uint64_t>(data.draw_offset) * sizeof(indexed_indirect_command);
+                                         (static_cast<uint64_t>(data.draw_offset) * sizeof(indexed_indirect_command));
                 pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset, data.draw_count,
                                                sizeof(indexed_indirect_command));
             });

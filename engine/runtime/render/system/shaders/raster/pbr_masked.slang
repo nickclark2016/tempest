@@ -16,6 +16,7 @@ struct PBRPushConstants {
     uint64_t instance_indices_address;
     uint64_t directional_shadow_address;
     uint64_t light_bitmask_address;
+    int32_t ao_texture_index;
     int32_t linear_sampler_index;
     int32_t shadow_atlas_index;
 };
@@ -58,6 +59,12 @@ FragmentOutput FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
     pd.ambient_occlusion = 1.0h;
 
     fetch_pixel_data<AlphaPolicy::Masked>(mat_state, pd);
+
+    if (push_constants.ao_texture_index >= 0) {
+        let ao = bindless_textures[push_constants.ao_texture_index];
+        let ao_uv_location = input.position.xy * scene.inv_screen_size;
+        pd.ambient_occlusion *= (half)ao.SampleLevel(mat_state.linear_sampler, ao_uv_location, 0).r;
+    }
 
     if (pd.diffuse.w < mat.alpha_cutoff) {
         discard;

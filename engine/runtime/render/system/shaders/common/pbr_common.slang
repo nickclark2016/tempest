@@ -174,6 +174,19 @@ void evaluate_clustered_point_lights(
     }
 }
 
+// Jimenez et al., "Real-Time Approximation of Multi-Bounce Ambient Occlusion"
+float3 multi_bounce_ao(float ao, float3 albedo) {
+    let a = 2.0404f * albedo - 0.3324f;
+    let b = -4.7951f * albedo + 0.6417f;
+    let c = 2.7552f * albedo + 0.6903f;
+    return max(float3(ao), ((ao * a + b) * ao + c) * ao);
+}
+
+// Lagarde & de Rousiers, "Moving Frostbite to Physically Based Rendering 3.0"
+float compute_specular_occlusion(float n_dot_v, float ao, float roughness) {
+    return saturate(pow(n_dot_v + ao, exp2(-16.0f * roughness - 1.0f)) - 1.0f + ao);
+}
+
 float4 evaluate_material_openpbr(
     const PixelData px,
     const MaterialState mat_state,
@@ -187,16 +200,28 @@ float4 evaluate_material_openpbr(
 {
     // Ambient light with directional hemisphere response (soft sky fill)
     let up_factor = saturate(float(px.shading_normal.y) * 0.5 + 0.5);
-    let sky_ambient = scene.ambient_light.rgb * (0.7 + 0.3 * up_factor) * float(px.ambient_occlusion);
-    var color = px.diffuse * half4(half3(sky_ambient), 1.0h);
-    
+    let sky_ambient = scene.ambient_light.rgb * (0.7 + 0.3 * up_factor);
+
+    let ao = float(px.ambient_occlusion);
+    let diffuse_ao = multi_bounce_ao(ao, float3(px.diffuse.rgb));
+
     let n_dot_v = max(1e-4, dot(float3(px.shading_normal), wo));
+    let specular_ao = compute_specular_occlusion(n_dot_v, ao, float(px.roughness));
+
+    var color = half4(0.0h, 0.0h, 0.0h, px.diffuse.a);
+    
     if (mat_state.mat.type == MaterialType::TRANSMISSIVE) {
-        half dielectric_f0 = 0.16h * half(mat_state.mat.reflectance) * half(mat_state.mat.reflectance);
-        float roughness = float(px.roughness);
-        float fresnel = float(dielectric_f0) + (max(1.0 - roughness, float(dielectric_f0)) - float(dielectric_f0)) * pow(1.0 - n_dot_v, 5.0);
-        float3 diffuse_ambient = px.diffuse.rgb * sky_ambient * (1.0 - px.transmission_factor);
-        float3 specular_ambient = sky_ambient * fresnel * (1.0 - roughness);
+        let dielectric_f0 = 0.16h * half(mat_state.mat.reflectance) * half(mat_state.mat.reflectance);
+        let roughness = float(px.roughness);
+        let fresnel = float(dielectric_f0) + (max(1.0 - roughness, float(dielectric_f0)) - float(dielectric_f0)) * pow(1.0 - n_dot_v, 5.0);
+        let diffuse_ambient = px.diffuse.rgb * sky_ambient * diffuse_ao * (1.0f - fresnel) * (1.0 - px.transmission_factor);
+        let specular_ambient = sky_ambient * fresnel * specular_ao;
+        color.rgb = half3(diffuse_ambient + specular_ambient);
+    } else {
+        let roughness = float(px.roughness);
+        let fresnel = float3(px.f0) + (max(float3(1.0f - roughness), float3(px.f0)) - float3(px.f0)) * pow(1.0f - n_dot_v, 5.0);
+        let diffuse_ambient = px.diffuse.rgb * sky_ambient * diffuse_ao * (1.0f - fresnel) * (1.0 - px.transmission_factor);
+        let specular_ambient = sky_ambient * fresnel * specular_ao;
         color.rgb = half3(diffuse_ambient + specular_ambient);
     }
     

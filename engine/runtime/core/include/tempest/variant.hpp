@@ -9,6 +9,12 @@
 namespace tempest
 {
     template <typename... Ts>
+    struct visitor_set : Ts...
+    {
+        using Ts::operator()...;
+    };
+
+    template <typename... Ts>
     class variant;
 
     template <typename T>

@@ -8,6 +8,8 @@
 #include <tempest/relationship_component.hpp>
 #include <tempest/render_system/passes/depth_prepass.hpp>
 #include <tempest/render_system/passes/frame_upload_pass.hpp>
+#include <tempest/render_system/passes/gtao_blur_pass.hpp>
+#include <tempest/render_system/passes/gtao_pass.hpp>
 #include <tempest/render_system/passes/light_clustering_pass.hpp>
 #include <tempest/render_system/passes/light_culling_pass.hpp>
 #include <tempest/render_system/passes/pbr_masked_pass.hpp>
@@ -119,8 +121,7 @@ namespace tempest::render_system
         : _device{&dev}, _log{&log}, _cfg{cfg}, _inputs{inputs}, _owned_camera_system{tempest::move(camera_sys)},
           _camera_system{(_inputs.camera_sys != nullptr) ? _inputs.camera_sys : _owned_camera_system.get()},
           _frames_in_flight{math::max(1U, cfg.pool_config.frames_in_flight)}, _pool{dev, cfg.pool_config},
-          _shaders{dev, inputs.asset_db}, _fallback_profiler{false},
-          _graph{cfg.render_width, cfg.render_height},
+          _shaders{dev, inputs.asset_db}, _fallback_profiler{false}, _graph{cfg.render_width, cfg.render_height},
           _shadow_debug_mode{cfg.shadow_debug}, _pipeline_statistics{cfg.pipeline_statistics}
     {
         _flight_slots.resize(_frames_in_flight);
@@ -200,18 +201,14 @@ namespace tempest::render_system
 
     renderer::renderer(renderer&& other) noexcept
         : _device{tempest::exchange(other._device, nullptr)}, _log{tempest::exchange(other._log, nullptr)},
-          _cfg{tempest::exchange(other._cfg, renderer_config{})},
-          _inputs{other._inputs},
+          _cfg{tempest::exchange(other._cfg, renderer_config{})}, _inputs{other._inputs},
           _owned_camera_system{tempest::move(other._owned_camera_system)},
           _camera_system{tempest::exchange(other._camera_system, nullptr)},
           _frames_in_flight{tempest::exchange(other._frames_in_flight, 0)},
-          _frame_index{tempest::exchange(other._frame_index, 0)},
-          _flight_slots{tempest::move(other._flight_slots)},
-          _frame_begun{tempest::exchange(other._frame_begun, false)},
-          _surfaces{tempest::move(other._surfaces)},
+          _frame_index{tempest::exchange(other._frame_index, 0)}, _flight_slots{tempest::move(other._flight_slots)},
+          _frame_begun{tempest::exchange(other._frame_begun, false)}, _surfaces{tempest::move(other._surfaces)},
           _active_surface_window{tempest::exchange(other._active_surface_window, window_handle{})},
-          _pool{tempest::move(other._pool)}, _shaders{tempest::move(other._shaders)},
-          _fallback_profiler{false},
+          _pool{tempest::move(other._pool)}, _shaders{tempest::move(other._shaders)}, _fallback_profiler{false},
           _graph{tempest::move(other._graph)},
           _directional_shadow_atlas_texture{tempest::exchange(other._directional_shadow_atlas_texture, {})},
           _directional_shadow_atlas_view{tempest::exchange(other._directional_shadow_atlas_view, {})},
@@ -222,8 +219,7 @@ namespace tempest::render_system
           _punctual_shadow_atlas_target{tempest::exchange(other._punctual_shadow_atlas_target, {})},
           _hdr_color_target{tempest::exchange(other._hdr_color_target, {})},
           _depth_target{tempest::exchange(other._depth_target, {})},
-          _ssao_target{tempest::exchange(other._ssao_target, {})},
-          _ssao_blurred_target{tempest::exchange(other._ssao_blurred_target, {})},
+          _ao_target{tempest::exchange(other._ao_target, {})},
           _moments_target{tempest::exchange(other._moments_target, {})},
           _zeroth_moment_target{tempest::exchange(other._zeroth_moment_target, {})},
           _transparency_accum_target{tempest::exchange(other._transparency_accum_target, {})},
@@ -359,8 +355,7 @@ namespace tempest::render_system
         _punctual_shadow_atlas_target = tempest::exchange(other._punctual_shadow_atlas_target, {});
         _hdr_color_target = tempest::exchange(other._hdr_color_target, {});
         _depth_target = tempest::exchange(other._depth_target, {});
-        _ssao_target = tempest::exchange(other._ssao_target, {});
-        _ssao_blurred_target = tempest::exchange(other._ssao_blurred_target, {});
+        _ao_target = tempest::exchange(other._ao_target, {});
         _moments_target = tempest::exchange(other._moments_target, {});
         _zeroth_moment_target = tempest::exchange(other._zeroth_moment_target, {});
         _transparency_accum_target = tempest::exchange(other._transparency_accum_target, {});
@@ -527,9 +522,11 @@ namespace tempest::render_system
         }
 
         _active_renderables.clear();
-        _active_renderables.reserve(opaque_entities.size() + alpha_masked_entities.size() + transparent_entities.size());
+        _active_renderables.reserve(opaque_entities.size() + alpha_masked_entities.size() +
+                                    transparent_entities.size());
         _active_renderables.insert(_active_renderables.end(), opaque_entities.begin(), opaque_entities.end());
-        _active_renderables.insert(_active_renderables.end(), alpha_masked_entities.begin(), alpha_masked_entities.end());
+        _active_renderables.insert(_active_renderables.end(), alpha_masked_entities.begin(),
+                                   alpha_masked_entities.end());
         _active_renderables.insert(_active_renderables.end(), transparent_entities.begin(), transparent_entities.end());
 
         // Build dynamic Instance Indices and Indirect Draw Commands
@@ -559,7 +556,8 @@ namespace tempest::render_system
             auto command = indexed_indirect_command{
                 .index_count = mesh_layout.index_count,
                 .instance_count = 1,
-                .first_index = (mesh_layout.mesh_start_offset + mesh_layout.index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+                .first_index = (mesh_layout.mesh_start_offset + mesh_layout.index_offset) /
+                               static_cast<uint32_t>(sizeof(uint32_t)),
                 .vertex_offset = 0,
                 .first_instance = instance_index,
             };
@@ -1111,8 +1109,7 @@ namespace tempest::render_system
                     auto new_surf = _device->create_render_surface(new_desc);
                     if (new_surf)
                     {
-                        enqueue_surface_retirement(surf->window, surf->raw_surface,
-                                                   tempest::move(surf->render_surface),
+                        enqueue_surface_retirement(surf->window, surf->raw_surface, tempest::move(surf->render_surface),
                                                    tempest::move(surf->render_semaphores));
                         surf->render_surface = tempest::move(new_surf);
                         surf->render_semaphores.clear();
@@ -1251,9 +1248,10 @@ namespace tempest::render_system
         if (_point_light_entities.empty() && !_lights_reconciled && _inputs.entity_registry != nullptr)
         {
             auto has_point_lights = false;
-            _inputs.entity_registry->each([&has_point_lights](const ecs::self_component&, const point_light_component&) {
-                has_point_lights = true;
-            });
+            _inputs.entity_registry->each(
+                [&has_point_lights](const ecs::self_component&, const point_light_component&) {
+                    has_point_lights = true;
+                });
             if (has_point_lights)
             {
                 _init_lights_from_registry();
@@ -1464,27 +1462,25 @@ namespace tempest::render_system
                 };
 
                 _directional_shadow_atlas_texture = _device->create_texture(req_desc);
-                _directional_shadow_atlas_view = _device->create_texture_view(
-                    _directional_shadow_atlas_texture,
-                    rhi::texture_view_desc{
-                        .override_format = nullopt,
-                        .base_mip_level = 0,
-                        .mip_level_count = 1,
-                        .base_array_layer = 0,
-                        .array_layer_count = 1,
-                    });
+                _directional_shadow_atlas_view =
+                    _device->create_texture_view(_directional_shadow_atlas_texture, rhi::texture_view_desc{
+                                                                                        .override_format = nullopt,
+                                                                                        .base_mip_level = 0,
+                                                                                        .mip_level_count = 1,
+                                                                                        .base_array_layer = 0,
+                                                                                        .array_layer_count = 1,
+                                                                                    });
                 _directional_shadow_atlas_descriptor =
                     _device->allocate_descriptor(rhi::descriptor_type::sampled_image);
                 _device->write_sampled_image_descriptor(_directional_shadow_atlas_descriptor,
-                                                        _directional_shadow_atlas_view,
-                                                        rhi::image_layout::general);
+                                                        _directional_shadow_atlas_view, rhi::image_layout::general);
                 _directional_shadow_atlas_width = dir_shadow_plan.atlas_size.x;
                 _directional_shadow_atlas_height = dir_shadow_plan.atlas_size.y;
             }
 
             const auto atlas_desc = render_graph::rg_texture_desc{
-                .size = render_graph::rg_texture_size::absolute(dir_shadow_plan.atlas_size.x,
-                                                                dir_shadow_plan.atlas_size.y),
+                .size =
+                    render_graph::rg_texture_size::absolute(dir_shadow_plan.atlas_size.x, dir_shadow_plan.atlas_size.y),
                 .format = rhi::data_format::depth32_float,
                 .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
                 .mip_levels = 1,
@@ -1492,12 +1488,9 @@ namespace tempest::render_system
                 .name = "DirectionalShadowAtlasTarget",
             };
 
-            _directional_shadow_atlas_target = _graph.import_texture(
-                _directional_shadow_atlas_texture,
-                _directional_shadow_atlas_view,
-                rhi::image_layout::undefined,
-                _directional_shadow_atlas_descriptor,
-                atlas_desc);
+            _directional_shadow_atlas_target =
+                _graph.import_texture(_directional_shadow_atlas_texture, _directional_shadow_atlas_view,
+                                      rhi::image_layout::undefined, _directional_shadow_atlas_descriptor, atlas_desc);
         }
         else
         {
@@ -1516,8 +1509,8 @@ namespace tempest::render_system
             }
 
             _directional_shadow_atlas_target = _graph.create_texture(render_graph::rg_texture_desc{
-                .size = render_graph::rg_texture_size::absolute(dir_shadow_plan.atlas_size.x,
-                                                                dir_shadow_plan.atlas_size.y),
+                .size =
+                    render_graph::rg_texture_size::absolute(dir_shadow_plan.atlas_size.x, dir_shadow_plan.atlas_size.y),
                 .format = rhi::data_format::depth32_float,
                 .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
                 .mip_levels = 1,
@@ -1554,27 +1547,6 @@ namespace tempest::render_system
             .array_layers = 1,
             .name = "DepthTarget",
         });
-
-        if (_cfg.enable_ssao)
-        {
-            _ssao_target = _graph.create_texture(render_graph::rg_texture_desc{
-                .size = render_graph::rg_texture_size::surface_relative(1.0F, 1.0F),
-                .format = rhi::data_format::r8_unorm,
-                .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
-                .mip_levels = 1,
-                .array_layers = 1,
-                .name = "SSAORawTarget",
-            });
-
-            _ssao_blurred_target = _graph.create_texture(render_graph::rg_texture_desc{
-                .size = render_graph::rg_texture_size::surface_relative(1.0F, 1.0F),
-                .format = rhi::data_format::r8_unorm,
-                .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
-                .mip_levels = 1,
-                .array_layers = 1,
-                .name = "SSAOBlurredTarget",
-            });
-        }
 
         _moments_target = _graph.create_texture(render_graph::rg_texture_desc{
             .size = render_graph::rg_texture_size::surface_relative(1.0F, 1.0F),
@@ -1652,8 +1624,7 @@ namespace tempest::render_system
 
         const auto& cluster_data =
             add_light_clustering_pass(_graph, _pool, _shaders, _cluster_bounds_target, active_cam, width, height,
-                                      valid_near, far_plane,
-                                      grid_dims.x, grid_dims.y, grid_dims.z, cs_stats);
+                                      valid_near, far_plane, grid_dims.x, grid_dims.y, grid_dims.z, cs_stats);
 
         auto lights_buf = _graph.import_buffer(_pool.get_lights_buffer());
         const auto& culling_data =
@@ -1702,34 +1673,80 @@ namespace tempest::render_system
             add_depth_prepass(_graph, _pool, _shaders, _depth_target, _opaque_draw_count, _opaque_draw_offset,
                               _alpha_masked_draw_count, _alpha_masked_draw_offset, gfx_stats);
 
-        if (_cfg.enable_ssao)
-        {
-            const auto& ssao_data = add_ssao_pass(_graph, _pool, _shaders, depth_data.depth_texture, _ssao_target, 0.5F,
-                                                  0.025F, 1.5F, gfx_stats);
-            add_ssao_blur_pass(_graph, _pool, _shaders, ssao_data.ssao_raw, depth_data.depth_texture,
-                               _ssao_blurred_target, width, height);
-        }
+        // Handle Ambient Occlusion
+        visit(visitor_set{
+                  [&](const gtao_settings& settings) -> void {
+                      const auto gtao_raw = add_gtao_pass(
+                          _graph, _pool, _shaders, depth_data.depth_texture, settings.slice_count,
+                          settings.steps_per_slice, settings.radius, settings.thickness, settings.power, gfx_stats);
+                      const auto gtao_blurred =
+                          add_gtao_blur_pass(_graph, _pool, _shaders, gtao_raw.gtao_raw, depth_data.depth_texture,
+                                             settings.depth_discontinuity_threshold, gfx_stats);
+
+                      _ao_target = gtao_blurred.gtao_blurred;
+                  },
+                  [&]([[maybe_unused]] const auto& settings) -> void {
+                      _ao_target = {}; // Force AO off if the settings indicate no AO or the AO is not supported
+                  },
+              },
+              _cfg.ao_settings);
 
         const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target, -1, gfx_stats);
-        const auto& pbr_opaque_data = add_pbr_opaque_pass(
-            _graph, _pool, _shaders, skybox_data.hdr_color, depth_data.depth_texture, shadow_read_target,
-            _opaque_draw_count, _opaque_draw_offset, culling_data.light_bitmask_buffer, gfx_stats,
-            shadow_data_address);
-        const auto& pbr_masked_data = add_pbr_masked_pass(
-            _graph, _pool, _shaders, pbr_opaque_data.hdr_color, depth_data.depth_texture,
-            shadow_read_target, _alpha_masked_draw_count, _alpha_masked_draw_offset,
-            culling_data.light_bitmask_buffer, gfx_stats, shadow_data_address);
+        const auto& pbr_opaque_data = add_pbr_opaque_pass(_graph, _pool, _shaders,
+                                                          {
+                                                              .hdr_color_tex = skybox_data.hdr_color,
+                                                              .depth_tex = depth_data.depth_texture,
+                                                              .shadow_atlas = shadow_read_target,
+                                                              .ao_texture = _ao_target,
+                                                              .light_bitmask_buf = culling_data.light_bitmask_buffer,
+                                                              .draw_count = _opaque_draw_count,
+                                                              .draw_offset = _opaque_draw_offset,
+                                                              .directional_shadow_address = shadow_data_address,
+                                                          },
+                                                          gfx_stats);
+        const auto& pbr_masked_data = add_pbr_masked_pass(_graph, _pool, _shaders,
+                                                          {
+                                                              .hdr_color_tex = pbr_opaque_data.hdr_color,
+                                                              .depth_tex = depth_data.depth_texture,
+                                                              .shadow_atlas = shadow_read_target,
+                                                              .ao_texture = _ao_target,
+                                                              .light_bitmask_buf = culling_data.light_bitmask_buffer,
+                                                              .draw_count = _alpha_masked_draw_count,
+                                                              .draw_offset = _alpha_masked_draw_offset,
+                                                              .directional_shadow_address = shadow_data_address,
+                                                          },
+                                                          gfx_stats);
 
         const auto& clear_data =
             add_transparency_clear_pass(_graph, _shaders, _moments_target, _zeroth_moment_target, width, height);
-        const auto& gather_data = add_transparency_gather_pass(
-            _graph, _pool, _shaders, clear_data.moments_texture, clear_data.zeroth_moment_texture,
-            depth_data.depth_texture, _transparent_draw_count, _transparent_draw_offset, gfx_stats);
-        const auto& resolve_data = add_transparency_resolve_pass(
-            _graph, _pool, _shaders, _transparency_accum_target, gather_data.moments_texture,
-            gather_data.zeroth_moment_texture, depth_data.depth_texture, _transparent_draw_count,
-            _transparent_draw_offset, shadow_read_target, culling_data.light_bitmask_buffer, gfx_stats,
-            shadow_data_address);
+        const auto& gather_data =
+            add_transparency_gather_pass(_graph, _pool, _shaders,
+                                         {
+                                             .moments_texture = clear_data.moments_texture,
+                                             .zeroth_moment_texture = clear_data.zeroth_moment_texture,
+                                             .depth_texture = depth_data.depth_texture,
+                                             .shadow_atlas = shadow_read_target,
+                                             .ao_texture = _ao_target,
+                                             .light_bitmask_buf = culling_data.light_bitmask_buffer,
+                                             .draw_count = _transparent_draw_count,
+                                             .draw_offset = _transparent_draw_offset,
+                                         },
+                                         gfx_stats);
+        const auto& resolve_data =
+            add_transparency_resolve_pass(_graph, _pool, _shaders,
+                                          {
+                                              .accum_texture = _transparency_accum_target,
+                                              .moments_texture = gather_data.moments_texture,
+                                              .zeroth_moment_texture = gather_data.zeroth_moment_texture,
+                                              .depth_texture = depth_data.depth_texture,
+                                              .shadow_atlas = shadow_read_target,
+                                              .ao_texture = _ao_target,
+                                              .light_bitmask_buffer = culling_data.light_bitmask_buffer,
+                                              .draw_count = _transparent_draw_count,
+                                              .draw_offset = _transparent_draw_offset,
+                                              .directional_shadow_address = shadow_data_address,
+                                          },
+                                          gfx_stats);
         const auto& blend_data =
             add_transparency_blend_pass(_graph, _pool, _shaders, pbr_masked_data.hdr_color, resolve_data.accum_texture,
                                         gather_data.zeroth_moment_texture, rhi::data_format::rgba16_float, gfx_stats);
@@ -1770,16 +1787,17 @@ namespace tempest::render_system
                                   rhi::resource_access::write, rhi::image_layout::general);
                     builder.mark_sink();
                 },
-                [ui_cb = tempest::move(ui_callback), view = *effective_sc_view, ui_width,
-                 ui_height]([[maybe_unused]] const ui_pass_data& data,
-                            [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& cmd) -> void {
+                [ui_cb = tempest::move(ui_callback), view = *effective_sc_view, ui_width, ui_height](
+                    [[maybe_unused]] const ui_pass_data& data,
+                    [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& cmd) -> void {
                     auto color_att = rhi::color_attachment{
                         .view = view,
                         .load_op = rhi::load_op::clear,
                         .store_op = rhi::store_op::store,
                         .clear_value = rhi::clear_color_value{.r = 0.0F, .g = 0.0F, .b = 0.0F, .a = 1.0F},
                     };
-                    cmd.begin_render_pass(span<const rhi::color_attachment>{&color_att, 1}, nullopt, ui_width, ui_height);
+                    cmd.begin_render_pass(span<const rhi::color_attachment>{&color_att, 1}, nullopt, ui_width,
+                                          ui_height);
                     ui_cb(cmd, ui_width, ui_height);
                     cmd.end_render_pass();
                 });
@@ -1891,8 +1909,7 @@ namespace tempest::render_system
     }
 
     auto renderer::render_frame(window_handle win, optional<render_camera> camera_override,
-                                ui_render_callback ui_callback,
-                                optional<uint64_t> frame_index,
+                                ui_render_callback ui_callback, optional<uint64_t> frame_index,
                                 optional<render_graph::pass_dispatcher_fn> pass_dispatcher)
         -> expected<void, render_graph::execution_error>
     {

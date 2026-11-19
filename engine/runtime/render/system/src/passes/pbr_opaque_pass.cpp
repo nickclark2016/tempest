@@ -1,15 +1,37 @@
+#include <tempest/render_graph/types.hpp>
 #include <tempest/render_system/passes/pbr_opaque_pass.hpp>
 
 #include <tempest/array.hpp>
 
 namespace tempest::render_system
 {
+    namespace
+    {
+        struct pbr_opaque_push_constants
+        {
+            uint64_t scene_constants_address{0};
+            uint64_t objects_address{0};
+            uint64_t instance_indices_address{0};
+            uint64_t directional_shadow_address{0};
+            uint64_t light_bitmask_address{0};
+            int32_t ao_texture_index{-1};
+            int32_t linear_sampler_index{-1};
+            int32_t shadow_atlas_index{-1};
+        };
+
+        static_assert(TEMPEST_OFFSETOF(pbr_opaque_push_constants, scene_constants_address) == 0);
+        static_assert(TEMPEST_OFFSETOF(pbr_opaque_push_constants, objects_address) == 8U);
+        static_assert(TEMPEST_OFFSETOF(pbr_opaque_push_constants, instance_indices_address) == 16U);
+        static_assert(TEMPEST_OFFSETOF(pbr_opaque_push_constants, directional_shadow_address) == 24U);
+        static_assert(TEMPEST_OFFSETOF(pbr_opaque_push_constants, light_bitmask_address) == 32U);
+        static_assert(TEMPEST_OFFSETOF(pbr_opaque_push_constants, ao_texture_index) == 40U);
+        static_assert(TEMPEST_OFFSETOF(pbr_opaque_push_constants, linear_sampler_index) == 44U);
+        static_assert(TEMPEST_OFFSETOF(pbr_opaque_push_constants, shadow_atlas_index) == 48U);
+    } // namespace
+
     auto add_pbr_opaque_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
-                             render_graph::rg_texture_id hdr_color_tex, render_graph::rg_texture_id depth_tex,
-                             render_graph::rg_texture_id shadow_atlas, uint32_t draw_count, uint32_t draw_offset,
-                             render_graph::rg_buffer_id light_bitmask_buf,
-                             enum_mask<rhi::pipeline_statistic_flags> pipeline_stats,
-                             uint64_t directional_shadow_address) -> const pbr_opaque_pass_data&
+                             pbr_opaque_inputs inputs, enum_mask<rhi::pipeline_statistic_flags> pipeline_stats)
+        -> const pbr_opaque_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_opaque_pipeline");
         if (!pipe_h.has_value())
@@ -44,28 +66,32 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<pbr_opaque_pass_data>(
             "PBROpaquePass",
-            [&pool, hdr_color_tex, depth_tex, shadow_atlas, draw_count, draw_offset, light_bitmask_buf,
-             pipeline_stats](render_graph::pass_builder& builder, pbr_opaque_pass_data& data) {
+            [&pool, inputs, pipeline_stats](render_graph::pass_builder& builder, pbr_opaque_pass_data& data) -> void {
                 if (pipeline_stats != rhi::pipeline_statistic_flags::none)
                 {
                     builder.enable_pipeline_statistics(pipeline_stats);
                 }
 
                 data.hdr_color = builder.set_color_attachment(0, render_graph::rg_color_attachment{
-                                                                     .texture = hdr_color_tex,
+                                                                     .texture = inputs.hdr_color_tex,
                                                                      .load_op = rhi::load_op::load,
                                                                      .store_op = rhi::store_op::store,
                                                                  });
 
                 data.depth_texture = builder.set_depth_stencil_attachment(render_graph::rg_depth_stencil_attachment{
-                    .texture = depth_tex,
+                    .texture = inputs.depth_tex,
                     .depth_load_op = rhi::load_op::load,
                     .depth_store_op = rhi::store_op::store,
                 });
 
-                data.shadow_atlas =
-                    builder.read(shadow_atlas, rhi::pipeline_stage::fragment, rhi::resource_access::read,
-                                 rhi::image_layout::general);
+                data.shadow_atlas = builder.read(inputs.shadow_atlas, rhi::pipeline_stage::fragment,
+                                                 rhi::resource_access::read, rhi::image_layout::general);
+
+                if (inputs.ao_texture.is_valid())
+                {
+                    data.ao_texture = builder.read(inputs.ao_texture, rhi::pipeline_stage::fragment,
+                                                   rhi::resource_access::read, rhi::image_layout::general);
+                }
 
                 data.scene_constants = builder.import_buffer(pool.get_scene_constants_buffer());
                 data.object_buffer = builder.import_buffer(pool.get_object_buffer());
@@ -85,18 +111,17 @@ namespace tempest::render_system
                 data.vertex_buffer =
                     builder.read(data.vertex_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
 
-                if (light_bitmask_buf.is_valid())
+                if (inputs.light_bitmask_buf.is_valid())
                 {
-                    data.light_bitmask_buffer =
-                        builder.read(light_bitmask_buf, rhi::pipeline_stage::fragment, rhi::resource_access::read);
+                    data.light_bitmask_buffer = builder.read(inputs.light_bitmask_buf, rhi::pipeline_stage::fragment,
+                                                             rhi::resource_access::read);
                 }
 
-                data.draw_count = draw_count;
-                data.draw_offset = draw_offset;
+                data.draw_count = inputs.draw_count;
+                data.draw_offset = inputs.draw_offset;
             },
-            [&pool, &shaders, pipe, directional_shadow_address](const pbr_opaque_pass_data& data,
-                                                                render_graph::pass_execution_context& ctx,
-                                                                rhi::command_list& pass_cmd) {
+            [&pool, &shaders, pipe, inputs](const pbr_opaque_pass_data& data, render_graph::pass_execution_context& ctx,
+                                            rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0)
                 {
                     return;
@@ -113,15 +138,19 @@ namespace tempest::render_system
 
                 const auto shadow_desc_idx = ctx.get_texture_descriptor(data.shadow_atlas);
                 const auto shadow_atlas_idx = (shadow_desc_idx != ~0U) ? static_cast<int32_t>(shadow_desc_idx) : -1;
-                const auto shadow_addr = (directional_shadow_address != 0) ? directional_shadow_address
-                                                                           : pool.get_directional_shadow_address();
+
+                const auto ao_desc_idx = ctx.get_texture_descriptor(data.ao_texture);
+                const auto ao_texture_idx = (ao_desc_idx != ~0U) ? static_cast<int32_t>(ao_desc_idx) : -1;
 
                 const auto constants = pbr_opaque_push_constants{
                     .scene_constants_address = pool.get_scene_constants_address(),
                     .objects_address = pool.get_object_buffer_address(),
                     .instance_indices_address = pool.get_instance_buffer_address(),
-                    .directional_shadow_address = shadow_addr,
+                    .directional_shadow_address = (inputs.directional_shadow_address != 0)
+                                                      ? inputs.directional_shadow_address
+                                                      : pool.get_directional_shadow_address(),
                     .light_bitmask_address = ctx.get_buffer_device_address(data.light_bitmask_buffer),
+                    .ao_texture_index = ao_texture_idx,
                     .linear_sampler_index = static_cast<int32_t>(pool.get_linear_sampler_descriptor().index),
                     .shadow_atlas_index = shadow_atlas_idx,
                 };
@@ -130,7 +159,7 @@ namespace tempest::render_system
                                         span<const byte>{reinterpret_cast<const byte*>(&constants), sizeof(constants)});
 
                 const auto byte_offset = pool.get_draw_commands_buffer_offset() +
-                                         static_cast<uint64_t>(data.draw_offset) * sizeof(indexed_indirect_command);
+                                         (static_cast<uint64_t>(data.draw_offset) * sizeof(indexed_indirect_command));
                 pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset, data.draw_count,
                                                sizeof(indexed_indirect_command));
             });

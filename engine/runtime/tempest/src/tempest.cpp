@@ -109,6 +109,7 @@ namespace tempest
                 .render_width = default_render_width,
                 .render_height = default_render_height,
                 .tonemapped_color_format = rhi::data_format::rgba8_srgb,
+                .ao_settings = render_system::medium_gtao_settings,
                 .pipeline_statistics = render_system::full_pipeline_statistics,
             });
             builder.set_inputs(render_system::renderer_inputs{

@@ -1,22 +1,43 @@
 #include <tempest/render_system/passes/transparency_gather_pass.hpp>
 
 #include <tempest/array.hpp>
+#include <tempest/rhi.hpp>
 
 namespace tempest::render_system
 {
+    namespace
+    {
+        struct transparency_gather_push_constants
+        {
+            uint64_t scene_constants_address{0};
+            uint64_t objects_address{0};
+            uint64_t instance_indices_address{0};
+            uint64_t directional_shadow_address{0};
+            int32_t moments_storage_index{-1};
+            int32_t zeroth_moment_storage_index{-1};
+            int32_t linear_sampler_index{0};
+            int32_t point_sampler_index{-1};
+            int32_t ao_texture_index{-1};
+            int32_t shadow_atlas_index{-1};
+        };
+    } // namespace
+
     auto add_transparency_gather_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
-                                      render_graph::rg_texture_id moments_tex,
-                                      render_graph::rg_texture_id zeroth_moment_tex,
-                                      render_graph::rg_texture_id depth_tex, uint32_t draw_count, uint32_t draw_offset,
+                                      transparency_gather_inputs inputs,
                                       enum_mask<rhi::pipeline_statistic_flags> pipeline_stats)
         -> const transparency_gather_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_oit_gather_pipeline");
         if (!pipe_h.has_value())
         {
-            auto vs = shaders.register_shader_module("pbr_oit_gather.vert.spv", rhi::shader_stage::vertex, "VSMain");
-            auto fs = shaders.register_shader_module("pbr_oit_gather.frag.spv", rhi::shader_stage::fragment, "FSMain");
-            auto stages = array{vs, fs};
+            auto vert_shader =
+                shaders.register_shader_module("pbr_oit_gather.vert.spv", rhi::shader_stage::vertex, "VSMain");
+            auto frag_shader =
+                shaders.register_shader_module("pbr_oit_gather.frag.spv", rhi::shader_stage::fragment, "FSMain");
+            auto stages = array{
+                vert_shader,
+                frag_shader,
+            };
 
             auto tmpl = graphics_pipeline_template{
                 .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
@@ -43,24 +64,30 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<transparency_gather_pass_data>(
             "TransparencyGatherPass",
-            [&pool, moments_tex, zeroth_moment_tex, depth_tex, draw_count, draw_offset,
-             pipeline_stats](render_graph::pass_builder& builder, transparency_gather_pass_data& data) {
+            [&pool, inputs, pipeline_stats](render_graph::pass_builder& builder,
+                                            transparency_gather_pass_data& data) -> void {
                 if (pipeline_stats != rhi::pipeline_statistic_flags::none)
                 {
                     builder.enable_pipeline_statistics(pipeline_stats);
                 }
 
                 data.depth_texture = builder.set_depth_stencil_attachment(render_graph::rg_depth_stencil_attachment{
-                    .texture = depth_tex,
+                    .texture = inputs.depth_texture,
                     .depth_load_op = rhi::load_op::load,
                     .depth_store_op = rhi::store_op::store,
                 });
 
-                data.moments_texture = builder.read_write(moments_tex, rhi::pipeline_stage::fragment,
+                if (inputs.ao_texture.is_valid())
+                {
+                    data.ao_texture = builder.read(inputs.ao_texture, rhi::pipeline_stage::fragment,
+                                                   rhi::resource_access::read, rhi::image_layout::general);
+                }
+
+                data.moments_texture = builder.read_write(inputs.moments_texture, rhi::pipeline_stage::fragment,
                                                           rhi::resource_access::read | rhi::resource_access::write,
                                                           rhi::image_layout::general);
                 data.zeroth_moment_texture = builder.read_write(
-                    zeroth_moment_tex, rhi::pipeline_stage::fragment,
+                    inputs.zeroth_moment_texture, rhi::pipeline_stage::fragment,
                     rhi::resource_access::read | rhi::resource_access::write, rhi::image_layout::general);
 
                 data.scene_constants = builder.import_buffer(pool.get_scene_constants_buffer());
@@ -80,11 +107,12 @@ namespace tempest::render_system
                                                   rhi::resource_access::read);
                 data.vertex_buffer =
                     builder.read(data.vertex_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
-                data.draw_count = draw_count;
-                data.draw_offset = draw_offset;
+                data.draw_count = inputs.draw_count;
+                data.draw_offset = inputs.draw_offset;
             },
-            [&pool, &shaders, pipe](const transparency_gather_pass_data& data,
-                                    render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
+            [&pool, &shaders, pipe, inputs](const transparency_gather_pass_data& data,
+                                            render_graph::pass_execution_context& ctx,
+                                            rhi::command_list& pass_cmd) -> void {
                 if (data.draw_count == 0)
                 {
                     return;
@@ -105,6 +133,12 @@ namespace tempest::render_system
                 const auto zeroth_desc_idx = ctx.get_storage_texture_descriptor(data.zeroth_moment_texture);
                 const auto zeroth_idx = (zeroth_desc_idx != ~0U) ? static_cast<int32_t>(zeroth_desc_idx) : -1;
 
+                const auto shadow_desc_idx = ctx.get_texture_descriptor(inputs.shadow_atlas);
+                const auto shadow_idx = (shadow_desc_idx != ~0U) ? static_cast<int32_t>(shadow_desc_idx) : -1;
+
+                const auto ao_desc_idx = ctx.get_texture_descriptor(data.ao_texture);
+                const auto ao_idx = (ao_desc_idx != ~0U) ? static_cast<int32_t>(ao_desc_idx) : -1;
+
                 const auto constants = transparency_gather_push_constants{
                     .scene_constants_address = pool.get_scene_constants_address(),
                     .objects_address = pool.get_object_buffer_address(),
@@ -113,16 +147,16 @@ namespace tempest::render_system
                     .moments_storage_index = moments_idx,
                     .zeroth_moment_storage_index = zeroth_idx,
                     .linear_sampler_index = static_cast<int32_t>(pool.get_linear_sampler_descriptor().index),
-                    .point_sampler_index = -1,
-                    .ssao_texture_index = -1,
-                    .shadow_atlas_index = -1,
+                    .point_sampler_index = static_cast<int32_t>(pool.get_point_sampler_descriptor().index),
+                    .ao_texture_index = ao_idx,
+                    .shadow_atlas_index = shadow_idx,
                 };
 
                 pass_cmd.push_constants(rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,
                                         span<const byte>{reinterpret_cast<const byte*>(&constants), sizeof(constants)});
 
                 const auto byte_offset = pool.get_draw_commands_buffer_offset() +
-                                         static_cast<uint64_t>(data.draw_offset) * sizeof(indexed_indirect_command);
+                                         (static_cast<uint64_t>(data.draw_offset) * sizeof(indexed_indirect_command));
                 pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset, data.draw_count,
                                                sizeof(indexed_indirect_command));
             });

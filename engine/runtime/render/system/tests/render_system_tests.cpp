@@ -2620,42 +2620,6 @@ namespace tempest::render_system::tests
         }
     }
 
-    /// @brief Verifies memory layout, field offsets, and total byte size of pbr_opaque_push_constants.
-    TEST(render_system_tests, pbr_opaque_push_constants_layout)
-    {
-        // Assert: verify struct size is exactly 48 bytes
-        EXPECT_EQ(sizeof(pbr_opaque_push_constants), 48U);
-
-        // Assert: verify 64-bit BDA buffer addresses
-        EXPECT_EQ(offsetof(pbr_opaque_push_constants, scene_constants_address), 0U);
-        EXPECT_EQ(offsetof(pbr_opaque_push_constants, objects_address), 8U);
-        EXPECT_EQ(offsetof(pbr_opaque_push_constants, instance_indices_address), 16U);
-        EXPECT_EQ(offsetof(pbr_opaque_push_constants, directional_shadow_address), 24U);
-        EXPECT_EQ(offsetof(pbr_opaque_push_constants, light_bitmask_address), 32U);
-
-        // Assert: verify descriptor table indices
-        EXPECT_EQ(offsetof(pbr_opaque_push_constants, linear_sampler_index), 40U);
-        EXPECT_EQ(offsetof(pbr_opaque_push_constants, shadow_atlas_index), 44U);
-    }
-
-    /// @brief Verifies memory layout, field offsets, and total byte size of pbr_masked_push_constants.
-    TEST(render_system_tests, pbr_masked_push_constants_layout)
-    {
-        // Assert: verify struct size matches 48 bytes
-        EXPECT_EQ(sizeof(pbr_masked_push_constants), 48U);
-
-        // Assert: verify 64-bit BDA buffer addresses
-        EXPECT_EQ(offsetof(pbr_masked_push_constants, scene_constants_address), 0U);
-        EXPECT_EQ(offsetof(pbr_masked_push_constants, objects_address), 8U);
-        EXPECT_EQ(offsetof(pbr_masked_push_constants, instance_indices_address), 16U);
-        EXPECT_EQ(offsetof(pbr_masked_push_constants, directional_shadow_address), 24U);
-        EXPECT_EQ(offsetof(pbr_masked_push_constants, light_bitmask_address), 32U);
-
-        // Assert: verify descriptor table indices
-        EXPECT_EQ(offsetof(pbr_masked_push_constants, linear_sampler_index), 40U);
-        EXPECT_EQ(offsetof(pbr_masked_push_constants, shadow_atlas_index), 44U);
-    }
-
     /// @brief Verifies memory layout, field offsets, and total byte size of scene_constants.
     TEST(render_system_tests, scene_constants_layout)
     {
@@ -3052,21 +3016,6 @@ namespace tempest::render_system::tests
         dev->destroy_buffer(moments_readback_buf);
     }
 
-    TEST(render_system_tests, transparency_gather_push_constants_layout)
-    {
-        EXPECT_EQ(sizeof(transparency_gather_push_constants), 56U);
-        EXPECT_EQ(offsetof(transparency_gather_push_constants, scene_constants_address), 0U);
-        EXPECT_EQ(offsetof(transparency_gather_push_constants, objects_address), 8U);
-        EXPECT_EQ(offsetof(transparency_gather_push_constants, instance_indices_address), 16U);
-        EXPECT_EQ(offsetof(transparency_gather_push_constants, directional_shadow_address), 24U);
-        EXPECT_EQ(offsetof(transparency_gather_push_constants, moments_storage_index), 32U);
-        EXPECT_EQ(offsetof(transparency_gather_push_constants, zeroth_moment_storage_index), 36U);
-        EXPECT_EQ(offsetof(transparency_gather_push_constants, linear_sampler_index), 40U);
-        EXPECT_EQ(offsetof(transparency_gather_push_constants, point_sampler_index), 44U);
-        EXPECT_EQ(offsetof(transparency_gather_push_constants, ssao_texture_index), 48U);
-        EXPECT_EQ(offsetof(transparency_gather_push_constants, shadow_atlas_index), 52U);
-    }
-
     TEST(render_system_tests, transparency_gather_pass_execution)
     {
         auto fixture = create_test_device();
@@ -3177,8 +3126,12 @@ namespace tempest::render_system::tests
         const auto& clear_data =
             add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
         const auto& gather_data =
-            add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
-                                         clear_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+            add_transparency_gather_pass(graph, pool, shaders,
+                                         {.moments_texture = clear_data.moments_texture,
+                                          .zeroth_moment_texture = clear_data.zeroth_moment_texture,
+                                          .depth_texture = depth_data.depth_texture,
+                                          .draw_count = 1,
+                                          .draw_offset = 0});
 
         EXPECT_TRUE(gather_data.moments_texture.is_valid());
         EXPECT_TRUE(gather_data.zeroth_moment_texture.is_valid());
@@ -3424,8 +3377,14 @@ namespace tempest::render_system::tests
         const auto& clear_data =
             add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
         const auto& gather_data =
-            add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
-                                         clear_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+            add_transparency_gather_pass(graph, pool, shaders,
+                                         {
+                                             .moments_texture = clear_data.moments_texture,
+                                             .zeroth_moment_texture = clear_data.zeroth_moment_texture,
+                                             .depth_texture = depth_data.depth_texture,
+                                             .draw_count = 1,
+                                             .draw_offset = 0,
+                                         });
 
         struct gather_sink_data
         {
@@ -3495,22 +3454,6 @@ namespace tempest::render_system::tests
         EXPECT_GT(zeroth_pixels[center_idx], 0.0F);
 
         dev->destroy_buffer(zeroth_readback_buf);
-    }
-
-    TEST(render_system_tests, transparency_resolve_push_constants_layout)
-    {
-        EXPECT_EQ(sizeof(transparency_resolve_push_constants), 64U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, scene_constants_address), 0U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, objects_address), 8U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, instance_indices_address), 16U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, directional_shadow_address), 24U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, light_bitmask_address), 32U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, moments_storage_index), 40U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, zeroth_moment_storage_index), 44U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, linear_sampler_index), 48U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, point_sampler_index), 52U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, ssao_texture_index), 56U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, shadow_atlas_index), 60U);
     }
 
     TEST(render_system_tests, transparency_resolve_pass_execution)
@@ -3634,11 +3577,24 @@ namespace tempest::render_system::tests
         const auto& clear_data =
             add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
         const auto& gather_data =
-            add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
-                                         clear_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+            add_transparency_gather_pass(graph, pool, shaders,
+                                         {
+                                             .moments_texture = clear_data.moments_texture,
+                                             .zeroth_moment_texture = clear_data.zeroth_moment_texture,
+                                             .depth_texture = depth_data.depth_texture,
+                                             .draw_count = 1,
+                                             .draw_offset = 0,
+                                         });
         const auto& resolve_data =
-            add_transparency_resolve_pass(graph, pool, shaders, accum_tex, gather_data.moments_texture,
-                                          gather_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+            add_transparency_resolve_pass(graph, pool, shaders,
+                                          {
+                                              .accum_texture = accum_tex,
+                                              .moments_texture = gather_data.moments_texture,
+                                              .zeroth_moment_texture = gather_data.zeroth_moment_texture,
+                                              .depth_texture = depth_data.depth_texture,
+                                              .draw_count = 1,
+                                              .draw_offset = 0,
+                                          });
 
         EXPECT_TRUE(resolve_data.accum_texture.is_valid());
         EXPECT_TRUE(resolve_data.moments_texture.is_valid());
@@ -3840,11 +3796,24 @@ namespace tempest::render_system::tests
         const auto& clear_data =
             add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
         const auto& gather_data =
-            add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
-                                         clear_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+            add_transparency_gather_pass(graph, pool, shaders,
+                                         {
+                                             .moments_texture = clear_data.moments_texture,
+                                             .zeroth_moment_texture = clear_data.zeroth_moment_texture,
+                                             .depth_texture = depth_data.depth_texture,
+                                             .draw_count = 1,
+                                             .draw_offset = 0,
+                                         });
         const auto& resolve_data =
-            add_transparency_resolve_pass(graph, pool, shaders, accum_tex, gather_data.moments_texture,
-                                          gather_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+            add_transparency_resolve_pass(graph, pool, shaders,
+                                          {
+                                              .accum_texture = accum_tex,
+                                              .moments_texture = gather_data.moments_texture,
+                                              .zeroth_moment_texture = gather_data.zeroth_moment_texture,
+                                              .depth_texture = depth_data.depth_texture,
+                                              .draw_count = 1,
+                                              .draw_offset = 0,
+                                          });
 
         struct resolve_sink_data
         {
@@ -4059,11 +4028,23 @@ namespace tempest::render_system::tests
         const auto& clear_data =
             add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
         const auto& gather_data =
-            add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
-                                         clear_data.zeroth_moment_texture, depth_data.depth_texture, 2);
+            add_transparency_gather_pass(graph, pool, shaders,
+                                         {
+                                             .moments_texture = clear_data.moments_texture,
+                                             .zeroth_moment_texture = clear_data.zeroth_moment_texture,
+                                             .depth_texture = depth_data.depth_texture,
+                                             .draw_count = 2,
+
+                                         });
         const auto& resolve_data =
-            add_transparency_resolve_pass(graph, pool, shaders, accum_tex, gather_data.moments_texture,
-                                          gather_data.zeroth_moment_texture, depth_data.depth_texture, 2);
+            add_transparency_resolve_pass(graph, pool, shaders,
+                                          {
+                                              .accum_texture = accum_tex,
+                                              .moments_texture = gather_data.moments_texture,
+                                              .zeroth_moment_texture = gather_data.zeroth_moment_texture,
+                                              .depth_texture = depth_data.depth_texture,
+                                              .draw_count = 2,
+                                          });
 
         struct resolve_sink_data
         {
@@ -4384,11 +4365,23 @@ namespace tempest::render_system::tests
         const auto& clear_data =
             add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
         const auto& gather_data =
-            add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
-                                         clear_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+            add_transparency_gather_pass(graph, pool, shaders,
+                                         {
+                                             .moments_texture = clear_data.moments_texture,
+                                             .zeroth_moment_texture = clear_data.zeroth_moment_texture,
+                                             .depth_texture = depth_data.depth_texture,
+                                             .draw_count = 1,
+
+                                         });
         const auto& resolve_data =
-            add_transparency_resolve_pass(graph, pool, shaders, accum_tex, gather_data.moments_texture,
-                                          gather_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+            add_transparency_resolve_pass(graph, pool, shaders,
+                                          {
+                                              .accum_texture = accum_tex,
+                                              .moments_texture = gather_data.moments_texture,
+                                              .zeroth_moment_texture = gather_data.zeroth_moment_texture,
+                                              .depth_texture = depth_data.depth_texture,
+                                              .draw_count = 1,
+                                          });
         const auto& blend_data = add_transparency_blend_pass(
             graph, pool, shaders, skybox_data.hdr_color, resolve_data.accum_texture, gather_data.zeroth_moment_texture);
 
@@ -6271,7 +6264,14 @@ namespace tempest::render_system::tests
         add_frame_upload_pass(graph, pool);
 
         // Act: Add PBR opaque pass with draw commands
-        const auto& opaque_data = add_pbr_opaque_pass(graph, pool, shaders, hdr_tex, depth_tex, shadow_atlas, 1, 0);
+        const auto& opaque_data = add_pbr_opaque_pass(graph, pool, shaders,
+                                                      {
+                                                          .hdr_color_tex = hdr_tex,
+                                                          .depth_tex = depth_tex,
+                                                          .shadow_atlas = shadow_atlas,
+                                                          .draw_count = 1,
+                                                          .draw_offset = 0,
+                                                      });
 
         // Assert: Output texture and draw parameters are valid
         EXPECT_TRUE(opaque_data.hdr_color.is_valid());
@@ -6356,7 +6356,12 @@ namespace tempest::render_system::tests
         add_frame_upload_pass(graph, pool);
 
         // Act: Add PBR masked pass with draw commands
-        const auto& masked_data = add_pbr_masked_pass(graph, pool, shaders, hdr_tex, depth_tex, shadow_atlas, 1, 0);
+        const auto& masked_data = add_pbr_masked_pass(graph, pool, shaders,
+                                                      {.hdr_color_tex = hdr_tex,
+                                                       .depth_tex = depth_tex,
+                                                       .shadow_atlas = shadow_atlas,
+                                                       .draw_count = 1,
+                                                       .draw_offset = 0});
 
         // Assert: Output texture and draw parameters are valid
         EXPECT_TRUE(masked_data.hdr_color.is_valid());
@@ -6856,7 +6861,7 @@ namespace tempest::render_system::tests
         builder.set_config(renderer_config{
             .render_width = 1920,
             .render_height = 1080,
-            .enable_ssao = false,
+            .ao_settings = ambient_occlusion_off{},
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,

@@ -19,7 +19,7 @@ struct OitResolvePushConstants {
     int32_t zeroth_moment_storage_index;
     int32_t linear_sampler_index;
     int32_t point_sampler_index;
-    int32_t ssao_texture_index;
+    int32_t ao_texture_index;
     int32_t shadow_atlas_index;
 };
 
@@ -62,7 +62,13 @@ FragmentOutput FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
     pd.front_face = is_front_face;
     pd.ambient_occlusion = 1.0h;
 
-    fetch_pixel_data(mat_state, pd);
+    fetch_pixel_data<AlphaPolicy::Transparent>(mat_state, pd);
+
+    if (push_constants.ao_texture_index >= 0) {
+        let ao = bindless_textures[push_constants.ao_texture_index];
+        let ao_uv_location = input.position.xy * scene.inv_screen_size;
+        pd.ambient_occlusion *= (half)ao.SampleLevel(mat_state.linear_sampler, ao_uv_location, 0).r;
+    }
 
     float alpha = float(pd.diffuse.a);
     if (mat.type == MaterialType::TRANSMISSIVE) {

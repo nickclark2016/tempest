@@ -28,27 +28,68 @@
 namespace tempest::render_system
 {
     static constexpr auto full_pipeline_statistics = rhi::pipeline_statistic_flags::input_assembly_vertices |
-                                                    rhi::pipeline_statistic_flags::input_assembly_primitives |
-                                                    rhi::pipeline_statistic_flags::vertex_shader_invocations |
-                                                    rhi::pipeline_statistic_flags::clipping_input_primitives |
-                                                    rhi::pipeline_statistic_flags::clipping_output_primitives |
-                                                    rhi::pipeline_statistic_flags::fragment_shader_invocations |
-                                                    rhi::pipeline_statistic_flags::compute_shader_invocations;
+                                                     rhi::pipeline_statistic_flags::input_assembly_primitives |
+                                                     rhi::pipeline_statistic_flags::vertex_shader_invocations |
+                                                     rhi::pipeline_statistic_flags::clipping_input_primitives |
+                                                     rhi::pipeline_statistic_flags::clipping_output_primitives |
+                                                     rhi::pipeline_statistic_flags::fragment_shader_invocations |
+                                                     rhi::pipeline_statistic_flags::compute_shader_invocations;
     static constexpr auto all_pipeline_statistics = full_pipeline_statistics;
+
+    struct gtao_settings
+    {
+        uint32_t slice_count;
+        uint32_t steps_per_slice;
+        float radius;
+        float thickness;
+        float power;
+        float depth_discontinuity_threshold;
+    };
+
+    inline constexpr auto low_gtao_settings = gtao_settings{
+        .slice_count = 2,
+        .steps_per_slice = 4,
+        .radius = 0.5F,
+        .thickness = 0.25F,
+        .power = 1.0F,
+        .depth_discontinuity_threshold = 0.05F,
+    };
+
+    inline constexpr auto medium_gtao_settings = gtao_settings{
+        .slice_count = 3,
+        .steps_per_slice = 4,
+        .radius = 0.5F,
+        .thickness = 0.25F,
+        .power = 1.0F,
+        .depth_discontinuity_threshold = 0.05F,
+    };
+
+    inline constexpr auto high_gtao_settings = gtao_settings{
+        .slice_count = 3,
+        .steps_per_slice = 6,
+        .radius = 0.5F,
+        .thickness = 0.25F,
+        .power = 1.0F,
+        .depth_discontinuity_threshold = 0.05F,
+    };
+
+    struct ambient_occlusion_off {};
+
+    using ambient_occlusion_settings = variant<ambient_occlusion_off, gtao_settings>;
 
     struct TEMPEST_API renderer_config
     {
-        uint32_t render_width{1920};
-        uint32_t render_height{1080};
-        rhi::data_format hdr_color_format{rhi::data_format::rgba16_float};
-        rhi::data_format depth_format{rhi::data_format::depth32_float};
-        rhi::data_format tonemapped_color_format{rhi::data_format::rgba8_srgb};
-        bool enable_ssao{false};
-        shadow_debug_mode shadow_debug{shadow_debug_mode::none};
-        float cluster_far_plane{1000.0F};
-        resource_pool_config pool_config{};
-        enum_mask<rhi::pipeline_statistic_flags> pipeline_statistics{rhi::pipeline_statistic_flags::none};
-        uint32_t max_shadow_atlas_dimension{16384};
+        uint32_t render_width = 1920;
+        uint32_t render_height = 1080;
+        rhi::data_format hdr_color_format = rhi::data_format::rgba16_float;
+        rhi::data_format depth_format = rhi::data_format::depth32_float;
+        rhi::data_format tonemapped_color_format = rhi::data_format::rgba8_srgb;
+        ambient_occlusion_settings ao_settings = ambient_occlusion_off{};
+        shadow_debug_mode shadow_debug = shadow_debug_mode::none;
+        float cluster_far_plane = 1000.0F;
+        resource_pool_config pool_config = {};
+        enum_mask<rhi::pipeline_statistic_flags> pipeline_statistics = rhi::pipeline_statistic_flags::none;
+        uint32_t max_shadow_atlas_dimension = 16384;
     };
 
     struct TEMPEST_API renderer_inputs
@@ -147,8 +188,7 @@ namespace tempest::render_system
 
         /// @brief Complete frame execution: begins frame, prepares DAG, renders, and presents to window surface.
         auto render_frame(window_handle win = null_window_handle, optional<render_camera> camera_override = nullopt,
-                          ui_render_callback ui_callback = nullptr,
-                          optional<uint64_t> frame_index = nullopt,
+                          ui_render_callback ui_callback = nullptr, optional<uint64_t> frame_index = nullopt,
                           optional<render_graph::pass_dispatcher_fn> pass_dispatcher = nullopt)
             -> expected<void, render_graph::execution_error>;
 
@@ -406,8 +446,7 @@ namespace tempest::render_system
         render_graph::rg_texture_id _punctual_shadow_atlas_target{};
         render_graph::rg_texture_id _hdr_color_target{};
         render_graph::rg_texture_id _depth_target{};
-        render_graph::rg_texture_id _ssao_target{};
-        render_graph::rg_texture_id _ssao_blurred_target{};
+        render_graph::rg_texture_id _ao_target{};
         render_graph::rg_texture_id _moments_target{};
         render_graph::rg_texture_id _zeroth_moment_target{};
         render_graph::rg_texture_id _transparency_accum_target{};

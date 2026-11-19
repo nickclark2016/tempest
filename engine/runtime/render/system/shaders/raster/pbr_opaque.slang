@@ -16,6 +16,7 @@ struct PBRPushConstants {
     uint64_t instance_indices_address;
     uint64_t directional_shadow_address;
     uint64_t light_bitmask_address;
+    int32_t ao_texture_index;
     int32_t linear_sampler_index;
     int32_t shadow_atlas_index;
 };
@@ -54,10 +55,16 @@ FragmentOutput FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
 
     fetch_pixel_data<AlphaPolicy::Opaque>(mat_state, pd);
     
+    let scene = (SceneGlobals*)WaveReadLaneFirst(push_constants.scene_constants_address);
+
+    if (push_constants.ao_texture_index >= 0) {
+        let ao = bindless_textures[push_constants.ao_texture_index];
+        let ao_uv_location = input.position.xy * scene.inv_screen_size;
+        pd.ambient_occlusion *= (half)ao.SampleLevel(mat_state.linear_sampler, ao_uv_location, 0).r;
+    }
     
     float view_depth = -input.view_position.z;
     let shadow_atlas = bindless_textures[push_constants.shadow_atlas_index];
-    let scene = (SceneGlobals*)WaveReadLaneFirst(push_constants.scene_constants_address);
     let shadow_comparison_sampler_idx = WaveReadLaneFirst(scene.shadow_comparison_sampler_index);
     let cmp_sampler = bindless_comparison_samplers[shadow_comparison_sampler_idx];
     let shadow_data = (DirectionalShadowData*)WaveReadLaneFirst(push_constants.directional_shadow_address);
